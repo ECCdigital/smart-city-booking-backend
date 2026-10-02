@@ -9,6 +9,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ### Added
 
+- Archive the HTML prototype of the 4.3 release-check list (ECCdigital/tickets#115) on a throwaway branch; no production behavior changes.
 - The refund state of a cancelled booking (glossary „Erstattungsstand“, ECCdigital/tickets#15): a booking cancelled from `confirmed` with a refund amount above zero carries `cancellationRefund.refundState`, `open` from the cancellation on (single and group, whoever cancels); a reinstatement drops it, bookings cancelled before stay without. `PUT /api/:tenant/bookings/:id/refund-state` (`booking.update`) sets `completed` with moment and person or back to `open` - a repeated `completed` keeps the first mark - and answers `409 refund_state_not_applicable` for a booking without one; `GET /api/:tenant/bookings?refundState=open|completed` filters the list. The booker reads their bookings without the refund state, and the filter answers them nothing. The rule engine lists the field, so a scheduled rule with the query `{ "cancellationRefund.refundState": "open" }` and the action `sendAggregatedEmail` mails each tenant its open refunds; a new partial index on the bookings serves both. Route snapshot updated on purpose. The Admin UI shows and sets the state from its matching release ([smart-city-booking-vue-app](https://github.com/ECCdigital/smart-city-booking-vue-app))
 
 ### Changed

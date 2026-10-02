@@ -1,0 +1,1130 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PROTOTYP · Prüfliste der Release-Prüfung 4.3 (#115)</title>
+<!--
+  PROTOTYPE, throwaway. Answers ECCdigital/tickets#115: which flows does the
+  release check of 4.3 cover, how deep, and who checks them (agent in the
+  browser on ibus, or a human). One file, no build, state lives in the URL hash.
+  The checklist data and the ReleaseCheck module are the parts worth keeping;
+  the page around them is a shell.
+-->
+<style>
+  :root {
+    --accent: #3b5bdb; --accent-soft: #edf2ff; --ink: #1f2328; --muted: #656d76;
+    --line: #e3e5e8; --bg: #f7f7f8; --card: #fff;
+    --red: #c92a2a; --red-soft: #fff5f5; --amber: #b35c00; --amber-soft: #fff8e1; --grey: #adb5bd;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--ink); background: var(--bg); }
+  code { font: 12.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; background: #f1f3f5; padding: 0 3px; border-radius: 3px; }
+  button { font: inherit; cursor: pointer; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+  .proto { background: #212529; color: #f8f9fa; font-size: 12px; padding: 6px 0; }
+  .proto b { color: #ffd43b; }
+  header h1 { font-size: 24px; margin: 28px 0 6px; letter-spacing: -0.01em; }
+  .lead { font-size: 15px; color: #343a40; max-width: 860px; margin: 0 0 10px; }
+  details.frame { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 16px; margin: 12px 0 20px; }
+  details.frame summary { cursor: pointer; font-weight: 600; }
+  details.frame ul { margin: 8px 0; padding-left: 20px; }
+  details.frame li { margin: 3px 0; }
+
+  /* State panel */
+  .summary { position: sticky; top: 0; z-index: 5; background: #f7f7f8; border-bottom: 1px solid var(--line); }
+  .summary .wrap { padding-top: 10px; padding-bottom: 10px; }
+  .stats { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; min-width: 112px; }
+  .stat .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .stat .v { font-size: 17px; font-weight: 600; }
+  .stat .d { font-size: 12px; font-weight: 600; margin-left: 4px; }
+  .stat .d.up { color: var(--red); } .stat .d.down { color: #2b8a3e; }
+  .stat.bad { border-color: var(--red); background: var(--red-soft); }
+  .stat.warn { border-color: #f0b46a; background: var(--amber-soft); }
+  .stat.flash { box-shadow: 0 0 0 2px var(--accent); }
+  .stat-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .last { font-size: 13px; color: var(--muted); margin-top: 6px; min-height: 24px; display: flex; gap: 12px; align-items: center; }
+  .last b { color: var(--ink); }
+
+  .btn { border: 1px solid var(--line); background: var(--card); border-radius: 6px; padding: 5px 10px; color: var(--ink); }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.small { padding: 2px 8px; font-size: 12px; }
+  .btn[disabled] { opacity: 0.45; cursor: default; }
+
+  /* Walkthroughs */
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 10px; margin: 20px 0; }
+  .panel > h2 { font-size: 15px; margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .wt-tabs { display: flex; gap: 4px; padding: 10px 16px 0; flex-wrap: wrap; }
+  .wt-tab { border: 1px solid var(--line); border-bottom: none; background: #f8f9fa; border-radius: 6px 6px 0 0; padding: 6px 12px; }
+  .wt-tab[aria-selected="true"] { background: var(--card); color: var(--accent); font-weight: 600; box-shadow: inset 0 2px 0 var(--accent); }
+  .wt-body { border-top: 1px solid var(--line); padding: 14px 16px 16px; }
+  .wt-body p { margin: 0 0 8px; max-width: 860px; }
+  .wt-watch { color: var(--muted); }
+  .steps { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; max-width: 640px; }
+  .step { text-align: left; border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 7px 12px; }
+  .step .n { display: inline-block; width: 20px; color: var(--muted); }
+  .step.next { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+  .step.done { color: var(--muted); }
+  .step.done .n::before { content: "✓"; color: #2b8a3e; }
+  .step.done .n span { display: none; }
+
+  /* Main tabs */
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-top: 8px; flex-wrap: wrap; }
+  .tab { border: none; background: none; padding: 9px 14px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab .cnt { font-size: 11px; background: #e9ecef; border-radius: 10px; padding: 0 6px; margin-left: 4px; }
+  .tab .cnt.bad { background: var(--red); color: #fff; }
+  #view { padding: 16px 0 80px; }
+
+  .filters { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; font-size: 13px; }
+  .filters label { display: inline-flex; gap: 5px; align-items: center; }
+  .filters input[type=search] { border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; min-width: 200px; }
+  .legend { font-size: 12.5px; color: var(--muted); margin: 0 0 14px; }
+
+  .area { margin-bottom: 22px; }
+  .area-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 0 2px 6px; }
+  .area-head h3 { margin: 0; font-size: 16px; }
+  .area-head .meta { color: var(--muted); font-size: 12.5px; }
+  .area-head .added { font-size: 11.5px; color: var(--amber); background: var(--amber-soft); border-radius: 4px; padding: 0 6px; }
+  .area-head .acts { margin-left: auto; display: flex; gap: 4px; }
+
+  .row { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin-bottom: 6px; }
+  .row.out .title { color: var(--muted); }
+  .row.conflict { border-color: var(--red); }
+  .row.just { box-shadow: 0 0 0 2px var(--accent); }
+  .row-top { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .row-name { flex: 1 1 340px; min-width: 260px; display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+  .risk { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; transform: translateY(-1px); }
+  .risk.hoch { background: var(--red); } .risk.mittel { background: #f59f00; } .risk.niedrig { background: var(--grey); }
+  .title { border: none; background: none; padding: 0; font-weight: 600; text-align: left; color: var(--ink); }
+  .title:hover { color: var(--accent); }
+  .tag { font-size: 11px; border-radius: 4px; padding: 0 6px; background: #f1f3f5; color: #495057; white-space: nowrap; }
+  .tag.w1 { background: #e7f5ff; color: #1864ab; }
+  .tag.w2 { background: #f3f0ff; color: #5f3dc4; }
+  .tag.smoke { background: #ebfbee; color: #2b8a3e; }
+  .tag.need { background: #fff; border: 1px solid var(--line); }
+  .tag.changed { background: var(--accent-soft); color: var(--accent); }
+  .tag.q { background: var(--amber-soft); color: var(--amber); }
+  .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .seg button { border: none; background: #fff; padding: 3px 8px; font-size: 12.5px; color: #495057; border-right: 1px solid var(--line); }
+  .seg button:last-child { border-right: none; }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+  .seg button.prop:not([aria-pressed="true"]) { box-shadow: inset 0 -2px 0 #bac8ff; }
+  select { font: inherit; font-size: 12.5px; border: 1px solid var(--line); border-radius: 6px; padding: 3px 4px; background: #fff; }
+  .chk { font-size: 12.5px; display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
+  .alerts { margin-top: 6px; display: flex; flex-direction: column; gap: 3px; }
+  .alert { font-size: 12.5px; border-radius: 5px; padding: 3px 8px; }
+  .alert.c { background: var(--red-soft); color: var(--red); }
+  .alert.w { background: var(--amber-soft); color: var(--amber); }
+  .details { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); display: grid; grid-template-columns: 130px 1fr; gap: 4px 12px; font-size: 13px; }
+  .details .k { color: var(--muted); }
+  .details input[type=text] { width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font: inherit; }
+
+  .groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+  .group { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
+  .group h4 { margin: 0 0 2px; font-size: 14.5px; }
+  .group .meta { color: var(--muted); font-size: 12.5px; margin-bottom: 6px; }
+  .group ul { margin: 0; padding-left: 18px; font-size: 13px; }
+  .group li { margin: 2px 0; }
+  .group li .m { color: var(--muted); }
+  .note { color: var(--muted); max-width: 860px; margin: 0 0 14px; }
+  .area-picks { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 14px; font-size: 13px; }
+  .issue-list { list-style: none; padding: 0; margin: 0 0 20px; }
+  .issue-list li { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; margin-bottom: 5px; font-size: 13px; }
+  .issue-list li.c { border-left: 3px solid var(--red); }
+  .issue-list li.w { border-left: 3px solid #f59f00; }
+  .issue-list li.q { border-left: 3px solid var(--accent); }
+  .link { display: inline; border: none; background: none; padding: 0; color: var(--accent); font-weight: 600; text-align: left; }
+  textarea.md { width: 100%; min-height: 460px; font: 12.5px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+</style>
+</head>
+<body>
+
+<div class="proto"><div class="wrap"><b>PROTOTYP zum Wegwerfen</b> · Klärung <a style="color:#a5d8ff" href="https://github.com/ECCdigital/tickets/issues/115">ECCdigital/tickets#115</a> zur Karte <a style="color:#a5d8ff" href="https://github.com/ECCdigital/tickets/issues/113">#113</a> · Jede Änderung steht in der Adresse dieser Seite: Link kopieren reicht zum Teilen.</div></div>
+
+<header class="wrap">
+  <h1>Prüfliste der Release-Prüfung 4.3 – erster Entwurf</h1>
+  <p class="lead"><b>Frage aus #115:</b> Welche Abläufe gehören in die Prüfliste, wie tief wird jeder geprüft, und prüft ihn der Agent im Browser auf ibus oder ein Mensch? Unten steht ein Vorschlag für jeden Ablauf. Stell um, was nicht passt. Die Leiste oben zeigt nach jedem Klick, was das für Aufwand, Konflikte mit den Regeln von ibus und offene Fragen heißt.</p>
+  <details class="frame">
+    <summary>Rahmen aus der Karte #113 (aufklappen)</summary>
+    <ul>
+      <li><b>Release-Kandidat, eingefroren:</b> Backend <code>v4.3.0-rc.4</code> (Build 36992305147), Admin UI <code>v4.3.0-rc.5</code> (36992281792), Storefront <code>v1.2.0-rc.3</code> (36992243261).</li>
+      <li><b>Welle 1</b> (Guben, Kielregion, Rostock, Bad Belzig) fährt rc.1 bis rc.3 und ist migriert. <b>Welle 2</b> (Ulm, Ilzerland, Ha-Py, Hameln-Pyrmont, Kreis Höxter, demo1, Kusel, Süderbrarup) steht auf 4.2 und durchläuft alle 13 neuen Migrationen.</li>
+      <li><b>ibus</b>: frei schreiben bei Buchungen, Stornos, Mandanten, Mails, Medien, Regeln. <b>Verboten</b>: Zahlungen im Live-Modus, echte Nuki-Schlösser, Änderungen an der Instanz selbst (#105).</li>
+      <li><b>Wer prüft:</b> Der Agent prüft API und Abläufe in Storefront und Admin UI im Browser auf ibus. Menschen prüfen, was Wissen über die Kunden braucht. Kunden prüfen nicht mit.</li>
+      <li><b>Blocker</b>: Fehlerklasse 1 oder 2, Datenverlust, Sicherheitslücke, jede fehlgeschlagene Migration. Fehlerklasse 3 geht in 4.3.1.</li>
+      <li><b>Tiefe</b> in diesem Entwurf: <b>Smoke</b> = geht es überhaupt, ein Durchlauf (≈ 10 min). <b>Ablauf</b> = der Hauptweg samt seinen Varianten von Anfang bis Ende (≈ 30 min). <b>Gründlich</b> = dazu Randfälle, Fehlerwege, Rechte (≈ 90 min). <b>Anderswo</b> = gehört nicht an den Release-Kandidaten, sondern z. B. in #117. Die Minuten sind grob und nur zum Vergleichen.</li>
+      <li><b>Smoke-Test</b>: die Abläufe, die nach jedem neuen Release-Kandidaten erneut laufen, zusammen mit den betroffenen Bereichen.</li>
+    </ul>
+  </details>
+</header>
+
+<div class="summary" id="summary"></div>
+
+<main class="wrap">
+  <section class="panel" id="walkthroughs"></section>
+  <nav class="tabs" id="tabs"></nav>
+  <section id="view"></section>
+</main>
+
+<!-- ===================== Checklist data (the draft itself) ===================== -->
+<script>
+const AREAS = [
+  { key: 'upgrade', title: 'Upgrade und Migrationen', added: true },
+  { key: 'rights', title: 'Umbau der Berechtigungen' },
+  { key: 'supervision', title: 'Mandanten-Aufsicht' },
+  { key: 'lifecycle', title: 'Buchungs-Lifecycle' },
+  { key: 'refund', title: 'Erstattungsstand und Höchstmenge je Buchung' },
+  { key: 'mail', title: 'Mail-Stack' },
+  { key: 'media', title: 'Mediathek' },
+  { key: 'access', title: 'Zugang (Nuki, Schließfächer, Grants)' },
+  { key: 'hero', title: 'Hero-Layout und Theme' },
+  { key: 'sso', title: 'SSO und Keycloak („Realm prüfen“)' },
+  { key: 'dashboard', title: 'Dashboard' },
+  { key: 'storefront', title: 'Storefront 1.2 (Suche, Karte, i18n, Mobile Key)' },
+  { key: 'admin', title: 'Redesign des Admin UI' },
+  { key: 'misc', title: 'Kleinkram (vatId, copyright, Pareva, IFBS_CITY_IDS)' },
+];
+
+// p: "<depth> <who> <where> [+smoke]"
+function P(spec) {
+  const [depth, who, where, smoke] = spec.split(' ');
+  return { depth, who, where, smoke: smoke === '+smoke' };
+}
+function I(id, area, title, risk, p, how, why, extra) {
+  return Object.assign({ id, area, title, risk, p: P(p), how, why, needs: [], w1: null, onlyW2: false, question: null, riskWhy: null }, extra || {});
+}
+
+const ITEMS = [
+  // --- Upgrade und Migrationen (added: not in the area list of #115)
+  I('up-tests', 'upgrade', 'Testsuiten auf dem eingefrorenen Stand', 'hoch', 'smoke agent local +smoke',
+    '`npm test` im Backend auf `v4.3.0-rc.4`, in der Admin UI auf `v4.3.0-rc.5`, in der Storefront auf `v1.2.0-rc.3`. Darin stecken die Abnahme-Matrix der Mandanten-Aufsicht, die Charakterisierungstests von Lifecycle und Mails und die Invarianten der Rechte.',
+    'Läuft in keiner CI. Kostet Minuten und deckt viele Bereiche ab, deshalb auch im Smoke-Test.',
+    { riskWhy: 'Ein roter Test auf dem Kandidaten zeigt auf einen Blocker.' }),
+  I('up-ibus', 'upgrade', 'ibus fährt den eingefrorenen Kandidaten', 'mittel', 'smoke agent ibus +smoke',
+    'Builds auf ibus gegen die drei Build-Nummern abgleichen, `/healthz/ready` antwortet 200. Der Bump-Commit der Admin UI rc.5 fehlt auf `origin/version/4.3.x`, also über die Build-Nummer gehen.',
+    'Voraussetzung für alles auf ibus.',
+    { riskWhy: 'Sonst prüfen wir den falschen Stand.' }),
+  I('up-w2-migrate', 'upgrade', 'Welle 2: Upgrade 4.2 → 4.3 an Kopien der Datenbanken', 'hoch', 'deep agent local',
+    'Dump wiederherstellen, Backend rc.4 starten: 13 Migrationen laufen durch, Log `All migrations completed`, `/healthz/ready` geht von 503 auf 200; ein zweiter Prozess migriert nichts doppelt. Lokal liegen Dumps von Ulm, Ilzerland, Ha-Py, Kreis Höxter, demo1 und Süderbrarup.',
+    'Welle 2 durchläuft alle 13 Migrationen, ibus nicht mehr. Die Dumps liegen lokal, dafür braucht es kein Wissen über die Kunden.',
+    { onlyW2: true, needs: ['customerData'], riskWhy: 'Jede fehlgeschlagene Migration ist Blocker; ein Rollback geht nur über einen Restore.',
+      question: 'Die Dumps sind von Mai und Juni, für Kusel und Hameln-Pyrmont liegt keiner. Reicht das, oder ziehen wir frische?' }),
+  I('up-w2-data', 'upgrade', 'Welle 2: Daten nach der Migration prüfen', 'hoch', 'flow agent local',
+    'Die Zählungen aus Schritt 1 und die Abfragen aus Schritt 4 von `docs/tenant-supervision-cutover.md`, vorher und nachher. Die Abfrage nach den Migrationen sucht den Namen ohne `.js` und findet deshalb nichts: mit `.js` suchen.',
+    'Gehört zum Upgrade-Lauf an derselben Kopie.',
+    { onlyW2: true, needs: ['customerData'], riskWhy: 'Datenverlust ist Blocker.' }),
+  I('up-w2-media', 'upgrade', 'Welle 2: Medienimport und Backfill', 'hoch', 'flow agent local',
+    '`media-cli import --dry-run`, dann `import`, `verify` und `backfill-dimensions` an einer Kopie samt Dateibestand. Danach sind Bilder, Anhänge und Belege alter Buchungen in Storefront und Admin UI zu sehen; der Bericht nennt, was nicht platziert wurde.',
+    'Welle 2 hat noch den alten Dateibaum, der Import läuft nach dem Boot von Hand.',
+    { onlyW2: true, needs: ['customerData'], riskWhy: 'Fehlende Bilder und Belege wären Störung; `purge-legacy` löscht.',
+      question: 'Kommen wir lokal an den Dateibestand (Nextcloud oder S3) einer Welle-2-Instanz, oder nur auf der Instanz selbst?' }),
+  I('up-w1-delta', 'upgrade', 'Welle 1: vom laufenden RC auf rc.4', 'mittel', 'smoke agent local',
+    'Welle 1 steht auf rc.1 bis rc.3. Seit rc.2 kommt die Migration `30-09-2026-restore-booking-user-cancellable` dazu, seit rc.3 Erstattungsstand, Höchstmenge, „Realm prüfen“, die SSO-Fixes und `vatId`. Einen Dump von Guben, Kielregion oder Bad Belzig auf rc.4 heben.',
+    'Klein, aber der einzige Nachweis für den Sprung, den Welle 1 macht.',
+    { w1: 'new', needs: ['customerData'], question: 'Welche Welle-1-Instanz steht auf welchem RC (#117)?' }),
+  I('up-w1-feedback', 'upgrade', 'Welle 1: Rückmeldungen seit rc.1 sammeln', 'mittel', 'smoke human customer',
+    'Support-Anfragen, Fehler in den Logs und Beobachtungen der vier Welle-1-Instanzen. Was dort seit Wochen ohne Befund läuft, braucht auf ibus weniger Tiefe.',
+    'Billig, und das einzige Signal aus echtem Betrieb.',
+    { needs: ['customerKnowledge'] }),
+  I('up-ops', 'upgrade', 'Betrieb je Instanz: Node, Proxy, Env, SMTP-Zertifikat', 'hoch', 'elsewhere human customer',
+    'Node ab 22.22.2 bei Bare-Metal oder PM2; der Proxy routet nach `/healthz/ready` und reicht `X-Forwarded-For` durch (sonst teilen sich alle Nutzer die Rate-Limits einer IP); neue Env-Variablen; Mailserver mit gültigem Zertifikat.',
+    'Das ist Deploy-Bereitschaft je Instanz und steht in #117, nicht am Release-Kandidaten.',
+    { needs: ['customerKnowledge'] }),
+
+  // --- Umbau der Berechtigungen
+  I('r-roles', 'rights', 'Rollen im Alltag: wer sieht und darf was', 'hoch', 'deep agent ibus',
+    'Mit je einem Testkonto im Admin UI arbeiten: Instanzbesitzer, Mandantenbesitzer, Rolle nur mit eigenen Datensätzen, Rolle mit allen Datensätzen, Kunde. Je Konto Buchungen, Angebote, Veranstaltungen, Medien und Gutscheine öffnen, anlegen, ändern.',
+    '253 Routen tragen neue Marker. Die Tests prüfen die Regeln, nicht das Zusammenspiel mit der Admin UI.',
+    { riskWhy: 'Ausgesperrte Verwaltung ist Störung, zu viel Sicht eine Sicherheitslücke.' }),
+  I('r-tenants', 'rights', 'Mandantengrenzen halten', 'hoch', 'deep agent ibus',
+    'Als Mitglied von Mandant A über die API Datensätze von Mandant B anfragen (IDs tauschen): Buchungen, Angebote, Medien, Rollen, Nutzer. Erwartet: 403 oder 404, nie Daten.',
+    'Die eine Stelle, an der ein Fehler sofort Blocker ist.',
+    { riskWhy: 'Sicherheitslücke.' }),
+  I('r-post', 'rights', 'Anlegen geht über POST', 'hoch', 'flow agent ibus +smoke',
+    'Angebot, Veranstaltung, Buchung, Gutschein und Rolle im Admin UI neu anlegen; der PUT auf denselben Pfad legt nichts mehr an.',
+    'Admin UI und Backend müssen hier zusammenpassen. „Angebot anlegen“ kommt in den Smoke-Test.',
+    { riskWhy: 'Wenn Anlegen nicht geht, ist das Störung.' }),
+  I('r-users', 'rights', 'Nutzerverzeichnis nur noch für Instanzbesitzer', 'mittel', 'flow agent ibus',
+    'Als Mandantenbesitzer die Stellen öffnen, die Nutzer suchen oder zeigen: Rollen zuweisen, Einladungen, Buchung für einen Kunden anlegen. Früher las er alle Nutzer, jetzt antwortet das Verzeichnis 403.',
+    'Gewollte Verhaltensänderung. Die Frage ist, ob die Admin UI darüber stolpert.'),
+  I('r-public', 'rights', 'Öffentliche Wege ohne Anmeldung', 'hoch', 'flow agent ibus',
+    'Anonym: Mandantenliste, Angebot per Liste und Direktlink, Preise, Verfügbarkeit, iCal, HTML- und JSON-Einbettung für Kundenwebsites (Bilder als absolute URL).',
+    'Die öffentlichen Wege lesen jetzt über die Manager, und Kundenwebsites betten ein.',
+    { riskWhy: 'Leere Kundenwebsites wären Störung.' }),
+  I('r-integrations', 'rights', 'Eigene Anbindungen der Kunden', 'mittel', 'elsewhere human customer',
+    '404 statt 403, entfernte Routen (`/locker/*`, `…/unlatch`, `/api/files/list`), Storefront 1.1 gegen Backend 4.3.',
+    'Steht auf der Karte als offen und braucht Wissen über die Kunden.',
+    { needs: ['customerKnowledge'] }),
+
+  // --- Mandanten-Aufsicht
+  I('s-free', 'supervision', 'Bestand bleibt frei und läuft wie vorher', 'hoch', 'flow agent ibus +smoke',
+    'Ein Mandant aus dem Bestand: öffentliche Liste, Direktlink auf ein nicht gelistetes Angebot, Preise, Verfügbarkeit, Testbuchung (Cutover Schritt 6).',
+    'Das, was jeder Kunde am Tag nach dem Deploy tut.',
+    { riskWhy: 'Verschwundene Angebote wären Störung.' }),
+  I('s-supervised', 'supervision', 'Beaufsichtigt: nur Freigegebenes ist erreichbar', 'hoch', 'flow agent ibus',
+    'Testmandanten auf beaufsichtigt setzen: Ein nicht freigegebenes Angebot fehlt in Liste und Direktlink, der Checkout lehnt mit `checkout.offer_not_reachable` ab. Einreichen, freigeben, es ist wieder da. Freigabe zurückziehen.',
+    'Kern der Mandanten-Aufsicht. Läuft in Welle 1, wird dort aber kaum genutzt.',
+    { w1: 'known' }),
+  I('s-pending', 'supervision', 'Freigabe ausstehend und abgewiesen', 'hoch', 'deep agent ibus',
+    'Mandant verschwindet aus `/api/tenants/public`, seine Pfade antworten 404, eine neue Buchung wird abgelehnt; die Statusseite einer bestehenden Buchung geht; der Besitzer kommt in die Verwaltung (ausstehend) oder bekommt `403 tenant_declined` (abgewiesen); `blocked` antwortet 400.',
+    'Viele Kanten, alle öffentlich sichtbar.'),
+  I('s-selfcreate', 'supervision', 'Selbst-Anlage über „Angebote bereitstellen“', 'mittel', 'flow agent ibus',
+    'Neues Konto in der Storefront, Bestätigungsmail mit Rückkehrziel, geführte Einrichtung bis zum ersten Angebot. Der Mandant landet auf der Startstufe von ibus, der Instanzbesitzer bekommt die Aufsichtsmitteilung.',
+    'Neuer Weg für neue Kunden, und er braucht keine Änderung der Startstufe.',
+    { needs: ['mailbox'] }),
+  I('s-initial', 'supervision', 'Startstufe umstellen', 'mittel', 'smoke agent local',
+    'Startstufe auf frei, beaufsichtigt und Freigabe ausstehend setzen, je eine Selbst-Anlage.',
+    'Schreibt an der Instanz, also lokal statt auf ibus.',
+    { needs: ['instanceWrite'] }),
+  I('s-queues', 'supervision', 'Prüfliste, Freigabeliste, Historie, Aufsichtsmitteilungen', 'mittel', 'flow agent ibus',
+    'Als Instanzbesitzer im Admin UI: Prüfliste „Angebote | Mandanten“, freigeben und ablehnen, Mandanten abweisen, Historie, Panel der Aufsichtsmitteilungen mit „erneut senden“.',
+    'Das nutzen nur Instanzbesitzer, Fehler träfen also zuerst uns.'),
+  I('s-signup', 'supervision', 'Registrierung verrät keine Adressen, Rate-Limits greifen', 'mittel', 'smoke agent ibus',
+    'Bekannte Adresse registrieren: 201, kein zweites Konto. Elfte Registrierung je Stunde und IP: 429 mit Retry-After. Bestätigungsmail erneut senden: ab der zweiten in einer Minute 429. Zuletzt prüfen, sonst sperrt sich der Agent eine Stunde selbst aus.',
+    'Kurz über die API.'),
+
+  // --- Buchungs-Lifecycle
+  I('l-free', 'lifecycle', 'Kostenlose Selbstbuchung', 'hoch', 'flow agent ibus +smoke',
+    'Storefront: Angebot buchen, die Buchung ist bestätigt; Mail an Kunde und Mandant, Beleg; die Buchung steht im Admin UI und im Kundenkonto.',
+    'Häufigster Ablauf. Im Smoke-Test.',
+    { riskWhy: 'Wenn Buchen nicht geht, ist das Fehlerklasse 1.' }),
+  I('l-paid', 'lifecycle', 'Kostenpflichtige Selbstbuchung, Zahlung im Testmodus', 'hoch', 'flow agent ibus +smoke',
+    'Angebot mit Preis: Zahlung fällig, bezahlt, bestätigt; Rechnung oder Quittung mit fortlaufender Nummer.',
+    'Zweithäufigster Ablauf. Im Smoke-Test.',
+    { question: 'Welcher Zahlungsanbieter läuft auf ibus im Testmodus?' }),
+  I('l-request', 'lifecycle', 'Anfrage mit Bestätigung durch die Verwaltung', 'hoch', 'flow agent ibus',
+    'Angebot mit Bestätigungspflicht: angefragt, die Verwaltung bestätigt, Zahlungsaufforderung (mit Preis), bezahlt. Zweiter Zweig: Die Verwaltung lehnt ab.',
+    'Als neue Übergänge `confirm` und `cancel` gebaut.'),
+  I('l-cancel', 'lifecycle', 'Stornieren und Wiederherstellen', 'hoch', 'deep agent ibus',
+    'Kunde storniert selbst, auch eine Buchung von vor 4.2.0 (Fix aus rc.2); die Verwaltung storniert; Stornobeleg und erneuter Druck; eine stornierte und eine abgelehnte Buchung wiederherstellen; doppeltes Stornieren antwortet 409.',
+    'Die meisten Kanten im Lifecycle, und hier gab es schon einen Fix.'),
+  I('l-group', 'lifecycle', 'Gruppenbuchung', 'hoch', 'flow agent ibus',
+    'Mehrere Angebote in einem Checkout: Aufnahme, Bestätigung, Zahlung, Storno der Gruppe; ein Sammelbeleg für alle.',
+    'Seit 4.3 ein eigener Lifecycle.'),
+  I('l-manual', 'lifecycle', 'Manuelle Buchung und Änderung durch die Verwaltung', 'mittel', 'flow agent ibus',
+    'Buchung im Admin UI anlegen, auch mit manuellem Preis; eine bestätigte Buchung ändern, ohne dass der Status springt; „bezahlt, aber nicht bestätigt“ wird abgelehnt.',
+    'Täglich bei den Kunden. Der PUT liest fehlende Flags jetzt als „unverändert“.'),
+  I('l-providers', 'lifecycle', 'Zahlungsanbieter der Kunden', 'hoch', 'flow human ibus',
+    'Je Anbieter, den eine Instanz der Wellen nutzt (ePayBL, GiroCockpit, pmPayment, …), eine Zahlung im Testmodus bis zur Bestätigung.',
+    'rc.3 hat genau hier einen Blocker behoben. Welche Anbieter wo laufen, wissen Menschen.',
+    { needs: ['customerKnowledge'], question: 'Welche Anbieter nutzen die Wellen (#117), und gibt es Test-Zugänge?' }),
+
+  // --- Erstattungsstand und Höchstmenge
+  I('e-refund', 'refund', 'Erstattungsstand setzen und filtern', 'mittel', 'flow agent ibus',
+    'Bezahlte Buchung mit Erstattung stornieren: „Rückerstattung offen“. Auf „erfolgt“ setzen (wann, wer), zurück auf offen; die Buchungsliste nach offen und erfolgt filtern; der Kunde sieht den Stand nicht.',
+    'Neu in rc.4, Welle 1 kennt es noch nicht.',
+    { w1: 'new' }),
+  I('e-rule', 'refund', 'Regel für offene Erstattungen', 'niedrig', 'smoke agent ibus',
+    'Geplante Regel mit der Abfrage `{ "cancellationRefund.refundState": "open" }` und `sendAggregatedEmail` anlegen und auslösen; jeder Mandant bekommt seine offenen Erstattungen.',
+    'Nur wichtig, wenn ein Kunde das nutzen will.',
+    { w1: 'new', needs: ['mailbox'] }),
+  I('e-max', 'refund', 'Höchstmenge je Buchung', 'mittel', 'flow agent ibus',
+    'Angebot mit Höchstmenge 2: Die Storefront begrenzt die Position, die API lehnt 3 ab; ein Pflicht-Zusatz zählt nicht mit; eine manuelle Buchung ist nicht begrenzt; ein leeres Feld heißt unbegrenzt.',
+    'Neu in rc.4, Backend und Storefront müssen zusammenpassen.',
+    { w1: 'new' }),
+
+  // --- Mail-Stack
+  I('m-booking', 'mail', 'Mitteilungen der Buchungsabläufe', 'hoch', 'deep agent ibus',
+    'Bei den Buchungsabläufen mitlesen: Eingang, Bestätigung, Zahlungsaufforderung, Zahlungseingang, Ablehnung, Storno. Richtiger Empfänger, richtiger Absender (Mandant oder Instanz), Belege angehängt, Variablen gefüllt.',
+    'Der Mail-Stack ist neu gebaut, und jede Mail hängt an einem Ablauf.',
+    { needs: ['mailbox'], riskWhy: 'Wenn keine Mails rausgehen, ist das Störung.',
+      question: 'Kann der Agent die Mails von ibus lesen (Testpostfach, Mailpit o. ä.)?' }),
+  I('m-tenant', 'mail', 'Versand über die Mailkonfiguration des Mandanten', 'mittel', 'flow agent ibus',
+    'Ein Mandant mit eigener, vollständiger Mailkonfiguration schickt Einladung und Workflow-Mitteilung über sein Konto; bei unvollständiger Konfiguration geht es über die Instanz.',
+    'Gewollte Verhaltensänderung, betrifft Mandanten mit eigenem SMTP.',
+    { needs: ['mailbox'], question: 'Gibt es ein zweites SMTP-Konto für einen Testmandanten auf ibus?' }),
+  I('m-editor', 'mail', 'Mailvorlagen-Editor mit Variablen', 'mittel', 'flow agent ibus',
+    'Im Admin UI eine Vorlage öffnen, eine Variable in Betreff, Text und URL-Feld einsetzen, Vorschau, speichern, die Mail auslösen.',
+    'Die Admin UI braucht dafür das neue Backend, sonst steht dort nur „konnten nicht geladen werden“.'),
+  I('m-smtp', 'mail', 'SMTP prüft das Zertifikat jetzt strikt', 'hoch', 'elsewhere human customer',
+    'Je Instanz: Hat der Mailserver ein gültiges Zertifikat, auch bei STARTTLS? Sonst geht keine Mail raus.',
+    'Hängt am Mailserver der Kunden und steht in #117.',
+    { needs: ['customerKnowledge'] }),
+  I('m-suederbrarup', 'mail', 'Regeln von Süderbrarup', 'hoch', 'deep human local',
+    '#79: Die Regeln von Süderbrarup laufen nach dem Umbau des Mail-Stacks weiter. Mit dem Dump vom 22.06. lokal starten, die Regeln auslösen, die Mails ansehen.',
+    'Welche Regel was soll, weiß nur ein Mensch.',
+    { needs: ['customerKnowledge', 'customerData'], question: 'Auf der Karte offen: Wie geht das ohne Daten von Süderbrarup? Reicht der Dump vom 22.06.?' }),
+  I('m-supervision', 'mail', 'Aufsichtsmitteilungen', 'niedrig', 'smoke agent ibus',
+    'Selbst-Anlage, Stufenwechsel, Abweisen, Prüfentscheidung: Mail an Instanzbesitzer oder Mandantenbesitzer mit dem Wort „Freigabestufe“; eine fehlgeschlagene lässt sich im Panel erneut senden.',
+    'Fällt bei den Abläufen der Aufsicht ohnehin an.',
+    { needs: ['mailbox'] }),
+
+  // --- Mediathek
+  I('d-library', 'media', 'Mediathek im Admin UI', 'mittel', 'flow agent ibus',
+    'JPEG, PNG, WebP, SVG und PDF hochladen; Liste, Suche, Tags; Metadaten ändern; ein verwendetes Medium löschen zeigt den Verwendungsnachweis, ein unbenutztes geht.',
+    'Läuft in Welle 1, auf ibus reicht der Hauptweg.',
+    { w1: 'known' }),
+  I('d-offers', 'media', 'Bilder und Anhänge an Angeboten und Veranstaltungen', 'hoch', 'flow agent ibus +smoke',
+    'Bildliste mit Titelbild, Reihenfolge ändern; Anhang mit „an Mail hängen“. In der Storefront in passender Größe, im Checkout, in der Mail und in der Einbettung als absolute URL.',
+    'Sieht jeder Besucher. Im Smoke-Test.',
+    { riskWhy: 'Eine Storefront ohne Bilder ist Störung.' }),
+  I('d-legacy', 'media', 'Welle 2: alte Dateiadressen bleiben erreichbar', 'hoch', 'smoke agent local',
+    'An der Kopie nach dem Import: `/api/:tenant/files/get` liefert alte Adressen (Links auf Kundenwebsites, alte Mails); Belege alter Buchungen öffnen.',
+    'Gehört zum Importlauf.',
+    { onlyW2: true, needs: ['customerData'] }),
+  I('d-legal', 'media', 'Rechtliche Dokumente des Mandanten', 'niedrig', 'smoke agent ibus',
+    'Datenschutz, Impressum, AGB und Widerruf am Mandanten hinterlegen; in der Storefront und im Checkout erreichbar.',
+    'Neu und klein.'),
+  I('d-instance', 'media', 'Logo, Favicon und Rechtliches der Instanz', 'niedrig', 'smoke agent ibus',
+    'Nur ansehen: Storefront, Admin UI, Mails. Ändern hieße an der Instanz schreiben.',
+    'Ansehen reicht.'),
+  I('d-storage', 'media', 'Speicher je Instanz', 'hoch', 'elsewhere human customer',
+    'Nextcloud läuft jetzt über `/remote.php/dav/files/{user}`, die Zugangsdaten je Instanz müssen dazu passen; wer nutzt S3?',
+    'Konfiguration je Instanz, steht in #117.',
+    { needs: ['customerKnowledge'] }),
+
+  // --- Zugang
+  I('z-nuki-hw', 'access', 'Nuki am echten Schloss', 'hoch', 'deep human device',
+    'Öffnen, Schließen, Status, Öffnungsart je Gerätetyp, Lock Busy (423), der Opener öffnet die Tür, ein Schloss offline bietet kein „abschließen“; Mobile Key in der Storefront.',
+    'Auf ibus gibt es keine echten Schlösser, also Hardware und eine Hand.',
+    { needs: ['realNuki'], riskWhy: 'Geht die Tür nicht auf, ist das beim Kunden Fehlerklasse 1.',
+      question: 'Welche Instanzen der Wellen nutzen Nuki (#117)? Gibt es ein Testschloss?' }),
+  I('z-grants', 'access', 'Zugangscodes entstehen und verschwinden mit der Buchung', 'hoch', 'flow human device',
+    'Eine bestätigte Buchung legt den Code beim Anbieter an, ein Storno widerruft ihn; scheitert das Anlegen, bekommt der Mandant eine Mitteilung. Der Aufräum-Job heißt jetzt `GRANT_CLEANUP_*` statt `SALTO_KS_CLEANUP_*`.',
+    'Braucht ein echtes Schloss.',
+    { needs: ['realNuki'] }),
+  I('z-admin', 'access', 'Zugangspunkte im Admin UI ohne echtes Schloss', 'niedrig', 'smoke agent ibus',
+    'Auswahl der Öffnungsart, Kontakt des Kundenservice, Admin Override (Schließen und Status nach dem Zugangsfenster), Meldung bei nicht erreichbarem Anbieter (503 oder 502 statt 500).',
+    'Die Oberfläche lässt sich ohne Hardware ansehen.'),
+  I('z-lockers', 'access', 'Schließfächer (iFBS, Pareva)', 'hoch', 'flow human customer',
+    'Checkout mit Fach; ein volles System antwortet `checkout.compartments_unavailable`; Fachnummer in Buchung und Storefront; eine Pareva-Anlage wird im Checkout live gefragt.',
+    'Nur wichtig, wenn eine Instanz der Wellen Schließfächer hat.',
+    { needs: ['customerKnowledge'], question: 'Nutzt eine Instanz der Wellen Schließfächer (#117)?' }),
+  I('z-migration', 'access', 'Welle 2: Zugang nach den Migrationen', 'hoch', 'flow agent local',
+    'An der Kopie: Zugangspunkte angelegt, Schließfächer als Zugangspunkte (`fold-lockers-into-access-points`), Grants umgezogen (`move-access-grants`); Buchungen mit Zugang zeigen ihn weiter.',
+    'Fünf der 13 Migrationen betreffen den Zugang.',
+    { onlyW2: true, needs: ['customerData'] }),
+
+  // --- Hero-Layout und Theme
+  I('h-default', 'hero', 'Welle 2: Portal-Name und Standard-Hero', 'mittel', 'smoke agent local',
+    'An der Kopie: Aus dem Hero-Titel wurde der Portal-Name; die Startseite zeigt Logo, Portal-Name und Slogan; der Browsertitel stimmt.',
+    'Läuft von selbst, sieht aber jeder Besucher.',
+    { onlyW2: true, needs: ['customerData'] }),
+  I('h-editor', 'hero', 'Hero-Editor und Live-Vorschau', 'mittel', 'flow agent local',
+    'Blöcke, Fläche, Lage, Schriftgröße, Hintergrund; Live-Vorschau in der Storefront; zu tief verschachtelter Rich-Text wird abgelehnt.',
+    'Katalog und Hintergrund liegen an der Instanz, also lokal.',
+    { needs: ['instanceWrite'], question: 'Zählt der Instanz-Katalog (`PUT /catalog…`) als Änderung an der Instanz? Der Hintergrund liegt sicher an der Instanz.' }),
+  I('h-theme', 'hero', 'Theme in Hell und Dunkel', 'niedrig', 'smoke agent ibus',
+    'Storefront und Admin UI in beiden Farbmodi; Primär- und Sekundärfarbe der Instanz bleiben lesbar.',
+    'Nur ansehen.'),
+
+  // --- SSO und Keycloak
+  I('k-ibus', 'sso', 'SSO-Anmeldung auf ibus', 'hoch', 'flow agent ibus +smoke',
+    'ibus hat Keycloak (Realm `Biletado`): Anmelden und Abmelden in Storefront und Admin UI, neue Sitzung nach Ablauf.',
+    'rc.4 bringt zwei SSO-Fixes, die Welle 1 noch nicht hat. Im Smoke-Test.',
+    { w1: 'new', riskWhy: 'Wenn die Anmeldung nicht geht, ist das Fehlerklasse 1.' }),
+  I('k-check', 'sso', '„Realm prüfen“ und Anleitung', 'niedrig', 'flow agent ibus',
+    'Tab „Single Sign-On“: Statuskarte, Anleitung (direkt oder BFF), „Anleitung kopieren“, „Realm prüfen“ mit allen zehn Zeilen.',
+    'Neu in rc.4. Ein Werkzeug für uns, nicht für Kunden.',
+    { w1: 'new' }),
+  I('k-customers', 'sso', 'Keycloak der Kunden', 'hoch', 'flow human customer',
+    'Je Instanz mit SSO: Keycloak-Version (ab 26.6.2 braucht es die Audience), Keycloak-URL mit Schrägstrich am Ende, Modus direkt oder BFF; nach dem Deploy „Realm prüfen“.',
+    'Die Keycloaks der Kunden kennt nur ein Mensch. #103 hat 26.7.3 und 26.8.x schon live geprüft.',
+    { needs: ['customerKnowledge'] }),
+
+  // --- Dashboard
+  I('db-kpi', 'dashboard', 'Dashboards laden mit plausiblen Zahlen', 'niedrig', 'smoke agent ibus',
+    'Dashboard der Instanz und des Mandanten: Umsatz, regulärer Umsatz, Zeitraum und Granularität, je Angebot (auch ein gelöschtes).',
+    'Fehler hier wären Fehlerklasse 3.'),
+  I('db-legacy', 'dashboard', 'Welle 2: Dashboard auf Altdaten', 'niedrig', 'smoke agent local',
+    'An der Kopie: Das Dashboard öffnet ohne Fehler (alte Buchungen mit `timePaid` 0).',
+    'Gleicher Lauf wie die Migration.',
+    { onlyW2: true, needs: ['customerData'] }),
+
+  // --- Storefront 1.2
+  I('f-search', 'storefront', 'Startseite, Ergebnisseite, Angebot', 'hoch', 'flow agent ibus +smoke',
+    'Suche nach Art (Angebote, Veranstaltungen), Filter (Mandant, Kategorie, Mehrfachauswahl), Seiten; alte Listen-Routen leiten auf die Ergebnisseite um (Links von Kundenwebsites).',
+    'Der Einstieg jedes Besuchers. Im Smoke-Test.'),
+  I('f-map', 'storefront', 'Karte', 'niedrig', 'smoke agent ibus',
+    'Angebote und Veranstaltungen auf der Karte, Vollbild, Kacheln laden, Farbmodus.',
+    'Nur ansehen.'),
+  I('f-i18n', 'storefront', 'Sprachen', 'niedrig', 'smoke agent ibus',
+    'Deutsch und Englisch umschalten; Preise und Datumsformate; keine rohen Schlüssel.',
+    'Nur ansehen.'),
+  I('f-account', 'storefront', 'Kundenkonto', 'mittel', 'flow agent ibus',
+    'Buchungsliste, Statusseite einer Buchung, Zahlungsdokumente, USt-ID; Abmelden verlässt den Kontobereich.',
+    'Liest den Status jetzt aus `booking.status`.'),
+  I('f-mobilekey', 'storefront', 'Mobile Key ohne echtes Schloss', 'mittel', 'smoke agent ibus',
+    'In einer Buchung mit Zugang: Zugangsfenster, Schlüsselzeile, Öffnen-Knopf nur an fernbedienbaren Türen, Hilfe mit Fachnummer und Kontakt.',
+    'Die Oberfläche auf ibus; das Schloss selbst prüft ein Mensch.'),
+  I('f-mobile', 'storefront', 'Telefon-Ansicht', 'mittel', 'smoke agent ibus',
+    'Schmale Ansicht: Navigation, Suche, Checkout; kein Zoom beim Tippen.',
+    'Viele Besucher kommen mit dem Telefon.'),
+
+  // --- Redesign des Admin UI
+  I('u-tour', 'admin', 'Rundgang durch alle Seiten', 'mittel', 'flow agent ibus +smoke',
+    'Als Instanzbesitzer und als Mandantenbesitzer jede Seite im Menü öffnen: Sie lädt, die Konsole bleibt ohne Fehler; Suchleiste und Filter der Listen; die Suche bleibt beim Zurück zur Liste.',
+    'Breit und billig. Im Smoke-Test.'),
+  I('u-booking', 'admin', 'Buchungsseite und Serienseite', 'hoch', 'flow agent ibus',
+    'Alle Aktionen erreichbar: bestätigen, ablehnen, stornieren, Zahlung, Belege, Zugang, Erstattungsstand.',
+    'Neu gestaltet, und die Verwaltung arbeitet hier täglich.'),
+  I('u-readiness', 'admin', 'Bereitschafts-Check', 'niedrig', 'smoke agent ibus',
+    'Tab „Bereitschaft“ für Mandantenbesitzer und Instanzbesitzer.',
+    'Neu und klein.'),
+  I('u-tenants', 'admin', 'Meine Mandanten und Mandantenliste', 'niedrig', 'smoke agent ibus',
+    'Kacheln und Liste, Mandanten im Dialog anlegen, Filter nach Stufe.',
+    'Neu gestaltet.'),
+
+  // --- Kleinkram
+  I('x-vat', 'misc', 'USt-ID (`vatId`)', 'niedrig', 'smoke agent ibus',
+    'In der Admin UI (Kontaktdaten) und in der Storefront (Konto) setzen; bleibt gespeichert.',
+    'Neu in rc.4.',
+    { w1: 'new' }),
+  I('x-copyright', 'misc', 'Copyright im Footer', 'niedrig', 'smoke agent ibus',
+    'Der Footer der Storefront zeigt „© <Jahr> ECC Digital“. Ändern hieße an der Instanz schreiben.',
+    'Nur ansehen.'),
+  I('x-pareva', 'misc', 'Pareva', 'niedrig', 'skip human customer',
+    'Siehe Schließfächer. Dazu: Die Admin UI bietet bei Pareva keine Liste der Zugangspunkte mehr an.',
+    'Nur wichtig, wenn eine Instanz der Wellen Pareva hat.',
+    { needs: ['customerKnowledge'], question: 'Nutzt eine Instanz der Wellen Pareva?' }),
+  I('x-ifbs', 'misc', '`IFBS_CITY_IDS`', 'niedrig', 'elsewhere human customer',
+    'Neue Env-Variable; ohne sie listet iFBS alle Städte statt fest CityID 35.',
+    'Konfiguration je Instanz, steht in #117.',
+    { needs: ['customerKnowledge'] }),
+  I('x-cardlink', 'misc', 'Karten-Registrierung: Link in der Mail', 'niedrig', 'smoke agent ibus',
+    'Karten-Registrierung im Admin UI auslösen; der Link in der Mail öffnet die Bestätigung (war 404, Fix aus rc.1).',
+    'Klein; Welle 1 hat den Fix seit rc.1.',
+    { needs: ['mailbox'] }),
+];
+</script>
+
+<!-- ===================== ReleaseCheck: the pure model (no DOM) ===================== -->
+<script>
+const ReleaseCheck = (() => {
+  const DEPTHS = [
+    { key: 'skip', label: 'Nicht prüfen', short: 'nein', minutes: 0 },
+    { key: 'elsewhere', label: 'Anderswo', short: 'anderswo', minutes: 0 },
+    { key: 'smoke', label: 'Smoke', short: 'Smoke', minutes: 10 },
+    { key: 'flow', label: 'Ablauf', short: 'Ablauf', minutes: 30 },
+    { key: 'deep', label: 'Gründlich', short: 'Gründlich', minutes: 90 },
+  ];
+  const DEPTH = Object.fromEntries(DEPTHS.map((d) => [d.key, d]));
+  const WHO = { agent: 'Agent', human: 'Mensch' };
+  const WHERE = { ibus: 'ibus', local: 'lokal', customer: 'bei Kunden', device: 'Testgerät' };
+  const RISK_ORDER = { hoch: 0, mittel: 1, niedrig: 2 };
+  const SMOKE_MINUTES = DEPTH.smoke.minutes;
+  const FIELDS = ['depth', 'who', 'where', 'smoke', 'note'];
+
+  // What an item needs, and when a decision breaks the rules of #113.
+  const NEEDS = {
+    instanceWrite: { label: 'schreibt an der Instanz',
+      conflict: (d) => (d.where === 'ibus' ? 'Auf ibus sind Änderungen an der Instanz verboten (#105).' : null) },
+    realNuki: { label: 'echtes Schloss',
+      conflict: (d) => (d.where === 'ibus' ? 'Auf ibus gibt es keine echten Nuki-Schlösser.' : d.who === 'agent' ? 'Ein echtes Schloss bedient nur ein Mensch.' : null) },
+    customerKnowledge: { label: 'Wissen über Kunden',
+      conflict: (d) => (d.who === 'agent' ? 'Braucht Wissen über die Kunden, das prüft ein Mensch.' : null) },
+    customerData: { label: 'Kundendaten (Dump)',
+      conflict: (d) => (d.where === 'ibus' ? 'Kundendaten gehören nicht auf ibus.' : null) },
+    mailbox: { label: 'Postfach', conflict: () => null },
+  };
+  const GENERAL_RULES = [
+    (it, d) => (d.who === 'agent' && d.where === 'customer' ? 'Der Agent hat keinen Zugang zu Kundeninstanzen.' : null),
+    (it, d) => (d.who === 'agent' && d.where === 'device' && !it.needs.includes('realNuki') ? 'Ein Testgerät bedient nur ein Mensch.' : null),
+  ];
+
+  function create(items, areas) {
+    const byId = Object.fromEntries(items.map((it) => [it.id, it]));
+    const proposalOf = (it) => ({ depth: it.p.depth, who: it.p.who, where: it.p.where, smoke: it.p.smoke, note: '' });
+    const inScope = (d) => d.depth === 'smoke' || d.depth === 'flow' || d.depth === 'deep';
+
+    function initialState(overrides) {
+      const decisions = {};
+      for (const it of items) decisions[it.id] = Object.assign(proposalOf(it), (overrides && overrides[it.id]) || {});
+      return { decisions, recheckAreas: [], last: null };
+    }
+
+    function applyChanges(state, changes, label) {
+      const decisions = Object.assign({}, state.decisions);
+      const ids = [];
+      for (const c of changes) {
+        if (!decisions[c.id] || decisions[c.id][c.field] === c.value) continue;
+        decisions[c.id] = Object.assign({}, decisions[c.id], { [c.field]: c.value });
+        if (!ids.includes(c.id)) ids.push(c.id);
+      }
+      return Object.assign({}, state, { decisions, last: { label, ids } });
+    }
+
+    function reduce(state, action) {
+      switch (action.type) {
+        case 'set':
+          return applyChanges(state, [{ id: action.id, field: action.field, value: action.value }], action.label);
+        case 'bulk':
+          return applyChanges(state, action.changes, action.label);
+        case 'resetItem': {
+          const p = proposalOf(byId[action.id]);
+          return applyChanges(state, FIELDS.map((f) => ({ id: action.id, field: f, value: p[f] })), action.label);
+        }
+        case 'resetAll':
+          return Object.assign(initialState(), { last: { label: action.label, ids: [] } });
+        case 'setRecheckAreas':
+          return Object.assign({}, state, { recheckAreas: action.areas.slice(), last: { label: action.label, ids: [] } });
+        default:
+          return state;
+      }
+    }
+
+    // Bulk helpers: build change lists for many items at once.
+    function changesWhere(state, predicate, field, value) {
+      return items.filter((it) => predicate(it, state.decisions[it.id])).map((it) => ({ id: it.id, field, value }));
+    }
+
+    function conflictsOf(it, d) {
+      if (!inScope(d)) return [];
+      const out = it.needs.map((n) => NEEDS[n].conflict(d)).concat(GENERAL_RULES.map((r) => r(it, d)));
+      return out.filter(Boolean);
+    }
+
+    function warningsOf(it, d) {
+      const out = [];
+      if (it.risk === 'hoch' && d.depth === 'skip') out.push('Hohes Blocker-Risiko, aber nicht geprüft.');
+      if (d.smoke && !inScope(d)) out.push('Steht im Smoke-Test, ist selbst aber nicht im Umfang.');
+      if (it.onlyW2 && d.where === 'ibus' && inScope(d)) out.push('Daten der Welle 2 gibt es auf ibus nicht.');
+      return out;
+    }
+
+    function isChanged(it, d) {
+      const p = proposalOf(it);
+      return FIELDS.some((f) => p[f] !== d[f]);
+    }
+
+    function minutesOf(d) { return DEPTH[d.depth].minutes; }
+
+    function summarize(state) {
+      const s = {
+        total: items.length, inScope: 0,
+        agent: { count: 0, minutes: 0 }, human: { count: 0, minutes: 0 },
+        smoke: { count: 0, minutes: 0 },
+        conflicts: [], warnings: [], questions: [], changed: 0, skipped: 0, elsewhere: 0,
+      };
+      for (const it of items) {
+        const d = state.decisions[it.id];
+        if (isChanged(it, d)) s.changed++;
+        if (d.depth === 'skip') s.skipped++;
+        if (d.depth === 'elsewhere') s.elsewhere++;
+        if (inScope(d)) {
+          s.inScope++;
+          s[d.who].count++;
+          s[d.who].minutes += minutesOf(d);
+          if (it.question) s.questions.push({ item: it, text: it.question });
+        }
+        if (d.smoke && inScope(d)) { s.smoke.count++; s.smoke.minutes += SMOKE_MINUTES; }
+        for (const text of conflictsOf(it, d)) s.conflicts.push({ item: it, text });
+        for (const text of warningsOf(it, d)) s.warnings.push({ item: it, text });
+      }
+      return s;
+    }
+
+    // The checklist cut into prework (Vorarbeiten): one group per area, or per person and place.
+    function prework(state, groupBy) {
+      const groups = new Map();
+      for (const it of items) {
+        const d = state.decisions[it.id];
+        if (!inScope(d)) continue;
+        let key, title;
+        if (groupBy === 'person') {
+          key = d.who + '·' + d.where;
+          title = WHO[d.who] + ' · ' + WHERE[d.where];
+        } else {
+          key = it.area;
+          title = areas.find((a) => a.key === it.area).title;
+        }
+        if (!groups.has(key)) groups.set(key, { key, title, entries: [], minutes: 0, who: new Set() });
+        const g = groups.get(key);
+        g.entries.push({ item: it, d });
+        g.minutes += minutesOf(d);
+        g.who.add(d.who);
+      }
+      const order = groupBy === 'person' ? ['agent·ibus', 'agent·local', 'human·ibus', 'human·local', 'human·customer', 'human·device'] : areas.map((a) => a.key);
+      return [...groups.values()].sort((a, b) => {
+        const ia = order.indexOf(a.key), ib = order.indexOf(b.key);
+        return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+      });
+    }
+
+    // After a blocker fix there is a new release candidate: re-check the affected areas plus the smoke test.
+    function recheck(state) {
+      const affected = [], smoke = [];
+      for (const it of items) {
+        const d = state.decisions[it.id];
+        if (!inScope(d)) continue;
+        if (state.recheckAreas.includes(it.area)) affected.push({ item: it, d, minutes: minutesOf(d) });
+        else if (d.smoke) smoke.push({ item: it, d, minutes: SMOKE_MINUTES });
+      }
+      const minutes = affected.concat(smoke).reduce((m, e) => m + e.minutes, 0);
+      return { affected, smoke, minutes };
+    }
+
+    function diffFromProposal(state) {
+      const diff = {};
+      for (const it of items) {
+        const p = proposalOf(it), d = state.decisions[it.id];
+        for (const f of FIELDS) if (p[f] !== d[f]) (diff[it.id] = diff[it.id] || {})[f] = d[f];
+      }
+      return diff;
+    }
+
+    function hours(min) { return (min / 60).toLocaleString('de-DE', { maximumFractionDigits: 1 }) + ' h'; }
+
+    function toMarkdown(state, today) {
+      const s = summarize(state);
+      const cell = (t) => String(t || '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+      const L = [];
+      L.push('## Prüfliste der Release-Prüfung 4.3');
+      L.push('');
+      L.push('Stand ' + today + ', aus dem Prototyp zu #115. Release-Kandidat: Backend `v4.3.0-rc.4`, Admin UI `v4.3.0-rc.5`, Storefront `v1.2.0-rc.3`.');
+      L.push('');
+      L.push('Tiefe: **Smoke** = geht es überhaupt, ein Durchlauf (≈ 10 min). **Ablauf** = Hauptweg samt Varianten (≈ 30 min). **Gründlich** = dazu Randfälle, Fehlerwege, Rechte (≈ 90 min). **Anderswo** = nicht am Release-Kandidaten, z. B. #117.');
+      L.push('');
+      L.push('**Umfang:** ' + s.inScope + ' von ' + s.total + ' Abläufen · Agent ' + s.agent.count + ' (≈ ' + hours(s.agent.minutes) + ') · Mensch ' + s.human.count + ' (≈ ' + hours(s.human.minutes) + ') · Smoke-Test ' + s.smoke.count + ' · anderswo ' + s.elsewhere + ' · nicht geprüft ' + s.skipped);
+      for (const a of areas) {
+        L.push('');
+        L.push('### ' + a.title);
+        L.push('');
+        L.push('| Ablauf | Tiefe | Wer | Wo | Smoke-Test | Notiz |');
+        L.push('| --- | --- | --- | --- | --- | --- |');
+        for (const it of items.filter((x) => x.area === a.key)) {
+          const d = state.decisions[it.id];
+          const out = !inScope(d);
+          L.push('| ' + [cell(it.title), DEPTH[d.depth].label, out ? '' : WHO[d.who], out ? '' : WHERE[d.where], d.smoke && !out ? 'ja' : '', cell(d.note)].join(' | ') + ' |');
+        }
+      }
+      if (s.conflicts.length || s.warnings.length) {
+        L.push('');
+        L.push('### Konflikte und Warnungen');
+        L.push('');
+        for (const c of s.conflicts) L.push('- Konflikt, ' + c.item.title + ': ' + c.text);
+        for (const w of s.warnings) L.push('- Warnung, ' + w.item.title + ': ' + w.text);
+      }
+      if (s.questions.length) {
+        L.push('');
+        L.push('### Offene Fragen');
+        L.push('');
+        for (const q of s.questions) L.push('- ' + q.item.title + ': ' + q.text);
+      }
+      return L.join('\n');
+    }
+
+    return {
+      DEPTHS, DEPTH, WHO, WHERE, NEEDS, RISK_ORDER, SMOKE_MINUTES,
+      byId, proposalOf, inScope, initialState, reduce, changesWhere,
+      conflictsOf, warningsOf, isChanged, summarize, prework, recheck, diffFromProposal, toMarkdown, hours,
+    };
+  }
+
+  return { create };
+})();
+</script>
+
+<!-- ===================== Page shell (throwaway) ===================== -->
+<script>
+const M = ReleaseCheck.create(ITEMS, AREAS);
+const areaTitle = (key) => AREAS.find((a) => a.key === key).title;
+
+function readHash() {
+  const m = location.hash.match(/^#s=(.*)$/);
+  if (!m) return {};
+  try { return JSON.parse(decodeURIComponent(m[1])); } catch (e) { return {}; }
+}
+function writeHash() {
+  const diff = M.diffFromProposal(state);
+  const url = location.pathname + location.search + (Object.keys(diff).length ? '#s=' + encodeURIComponent(JSON.stringify(diff)) : '');
+  history.replaceState(null, '', url);
+}
+
+let state = M.initialState(readHash());
+let prevSummary = null;
+const view = {
+  tab: 'list', who: 'all', risk: 'all', onlyFlagged: false, onlyChanged: false, onlyW1New: false, q: '',
+  groupBy: 'area', open: new Set(), wt: { scenario: 0, step: -1 },
+};
+
+function dispatch(action) {
+  const before = M.summarize(state);
+  state = M.reduce(state, action);
+  prevSummary = before;
+  writeHash();
+  render();
+}
+
+// ---------- helpers ----------
+const esc = (t) => String(t == null ? '' : t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmt = (t) => esc(t).replace(/`([^`]+)`/g, '<code>$1</code>');
+const h = M.hours;
+
+// ---------- walkthroughs ----------
+const ALL = () => true;
+const SCENARIOS = [
+  {
+    title: 'Die Regeln von ibus greifen',
+    text: 'Der Agent prüft auf ibus. Dort sind Änderungen an der Instanz, echte Nuki-Schlösser und Zahlungen im Live-Modus verboten, und Wissen über die Kunden hat er nicht. Was passiert, wenn wir ihm zu viel geben?',
+    watch: 'Achte auf „Konflikte“ in der Leiste oben und auf rot umrandete Zeilen. Der letzte Schritt räumt auf.',
+    steps: [
+      { label: 'Hero-Editor auf ibus statt lokal prüfen', run: () => ({ type: 'set', id: 'h-editor', field: 'where', value: 'ibus', label: 'Hero-Editor: Wo → ibus' }) },
+      { label: 'Startstufe auf ibus umstellen', run: () => ({ type: 'set', id: 's-initial', field: 'where', value: 'ibus', label: 'Startstufe umstellen: Wo → ibus' }) },
+      { label: 'Nuki am echten Schloss dem Agenten geben', run: () => ({ type: 'set', id: 'z-nuki-hw', field: 'who', value: 'agent', label: 'Nuki am echten Schloss: Wer → Agent' }) },
+      { label: 'Keycloak der Kunden dem Agenten geben', run: () => ({ type: 'bulk', label: 'Keycloak der Kunden: Wer → Agent, Wo → ibus', changes: [{ id: 'k-customers', field: 'who', value: 'agent' }, { id: 'k-customers', field: 'where', value: 'ibus' }] }) },
+      { label: 'Alles zurück auf den Entwurf', run: () => ({ type: 'resetAll', label: 'Zurück auf den Entwurf: keine Konflikte mehr' }) },
+    ],
+  },
+  {
+    title: 'Die Zeit wird knapp',
+    text: 'Am 02.10. hieß es zur Prüfung „heute fertig“, der Deploy ist in KW 41. Der Entwurf kostet Stunden, vor allem beim Agenten. Wo lässt sich kürzen, ohne ein hohes Blocker-Risiko ungeprüft zu lassen?',
+    watch: 'Achte auf „Agent“ und „Mensch“ (Stunden) und auf „Warnungen“.',
+    steps: [
+      { label: 'Alles im Umfang auf Gründlich', run: () => ({ type: 'bulk', label: 'Alles im Umfang auf Gründlich', changes: M.changesWhere(state, (it, d) => M.inScope(d), 'depth', 'deep') }) },
+      { label: 'Zurück auf den Entwurf', run: () => ({ type: 'resetAll', label: 'Zurück auf den Entwurf' }) },
+      { label: 'Alles mit niedrigem Risiko streichen', run: () => ({ type: 'bulk', label: 'Niedriges Risiko: Tiefe → nicht prüfen', changes: M.changesWhere(state, (it, d) => it.risk === 'niedrig' && M.inScope(d), 'depth', 'skip') }) },
+      { label: 'Alles mit mittlerem Risiko auf Smoke', run: () => ({ type: 'bulk', label: 'Mittleres Risiko: Tiefe → Smoke', changes: M.changesWhere(state, (it, d) => it.risk === 'mittel' && M.inScope(d), 'depth', 'smoke') }) },
+      { label: 'Auch die Aufgaben der Menschen streichen', run: () => ({ type: 'bulk', label: 'Alle Aufgaben der Menschen: Tiefe → nicht prüfen', changes: M.changesWhere(state, (it, d) => d.who === 'human' && M.inScope(d), 'depth', 'skip') }) },
+    ],
+  },
+  {
+    title: 'Ein Blocker erzwingt rc.5',
+    text: 'Ein Blocker im Mail-Stack wird gefixt, das ergibt einen neuen Release-Kandidaten. Nachgeprüft werden laut Karte die betroffenen Bereiche plus ein Smoke-Test. Wie groß ist das?',
+    watch: 'Der Durchgang schaltet auf den Reiter „Nachprüfung“. Achte auf dessen Umfang und Stunden.',
+    steps: [
+      { label: 'Blocker im Mail-Stack melden', tab: 'recheck', run: () => ({ type: 'setRecheckAreas', areas: ['mail'], label: 'Nachprüfung: Mail-Stack betroffen' }) },
+      { label: 'Der Fix berührt auch den Buchungs-Lifecycle', tab: 'recheck', run: () => ({ type: 'setRecheckAreas', areas: ['mail', 'lifecycle'], label: 'Nachprüfung: Mail-Stack und Buchungs-Lifecycle betroffen' }) },
+      { label: 'Smoke-Test um „Mitteilungen der Buchungsabläufe“ erweitern', tab: 'recheck', run: () => ({ type: 'set', id: 'm-booking', field: 'smoke', value: true, label: 'Mitteilungen der Buchungsabläufe: in den Smoke-Test' }) },
+      { label: 'Nur noch der Lifecycle ist betroffen', tab: 'recheck', run: () => ({ type: 'setRecheckAreas', areas: ['lifecycle'], label: 'Nachprüfung: nur Buchungs-Lifecycle betroffen' }) },
+    ],
+  },
+];
+
+function renderWalkthroughs() {
+  const sc = SCENARIOS[view.wt.scenario];
+  const running = view.wt.step >= 0;
+  const done = running && view.wt.step >= sc.steps.length;
+  let html = '<h2>Geführte Durchgänge</h2><div class="wt-tabs" role="tablist">';
+  SCENARIOS.forEach((s, i) => {
+    html += '<button class="wt-tab" role="tab" aria-selected="' + (i === view.wt.scenario) + '" data-act="wtPick" data-i="' + i + '">' + esc(s.title) + '</button>';
+  });
+  html += '</div><div class="wt-body"><p>' + esc(sc.text) + '</p><p class="wt-watch">' + esc(sc.watch) + '</p>';
+  html += '<button class="btn primary" data-act="wtStart">' + (running ? 'Neu starten' : 'Durchgang starten') + '</button> <span class="wt-watch" style="font-size:12.5px">Setzt die Prüfliste auf den Entwurf zurück.</span>';
+  html += '<div class="steps">';
+  sc.steps.forEach((st, i) => {
+    const cls = !running ? '' : i < view.wt.step ? 'done' : i === view.wt.step ? 'next' : '';
+    const disabled = !running || i !== view.wt.step;
+    html += '<button class="step ' + cls + '" data-act="wtStep" data-i="' + i + '"' + (disabled ? ' disabled' : '') + '><span class="n"><span>' + (i + 1) + '.</span></span> ' + esc(st.label) + '</button>';
+  });
+  html += '</div>';
+  if (done) html += '<p style="margin-top:10px"><b>Fertig.</b> Spiel frei weiter, oder starte einen anderen Durchgang.</p>';
+  html += '</div>';
+  document.getElementById('walkthroughs').innerHTML = html;
+}
+
+// ---------- summary (the state panel) ----------
+function stat(key, label, value, opts) {
+  opts = opts || {};
+  let delta = '';
+  if (prevSummary && opts.num !== undefined && opts.prev !== undefined && opts.num !== opts.prev) {
+    const diff = opts.num - opts.prev;
+    const text = opts.isMinutes ? (diff > 0 ? '+' : '−') + h(Math.abs(diff)) : (diff > 0 ? '+' : '−') + Math.abs(diff);
+    delta = '<span class="d ' + (diff > 0 ? 'up' : 'down') + '">' + text + '</span>';
+  }
+  const changed = delta ? ' flash' : '';
+  return '<div class="stat ' + (opts.cls || '') + changed + '" title="' + esc(opts.title || '') + '"><div class="k">' + label + '</div><div class="v">' + value + delta + '</div></div>';
+}
+
+function renderSummary(s) {
+  const p = prevSummary;
+  let html = '<div class="wrap"><div class="stats">';
+  html += stat('scope', 'Im Umfang', s.inScope + ' <span style="font-weight:400;color:var(--muted);font-size:13px">von ' + s.total + '</span>', { num: s.inScope, prev: p && p.inScope });
+  html += stat('agent', 'Agent', s.agent.count + ' · ' + h(s.agent.minutes), { num: s.agent.minutes, prev: p && p.agent.minutes, isMinutes: true, title: 'Abläufe und grob geschätzte Zeit' });
+  html += stat('human', 'Mensch', s.human.count + ' · ' + h(s.human.minutes), { num: s.human.minutes, prev: p && p.human.minutes, isMinutes: true, title: 'Abläufe und grob geschätzte Zeit' });
+  html += stat('smoke', 'Smoke-Test', s.smoke.count + ' · ' + h(s.smoke.minutes), { num: s.smoke.count, prev: p && p.smoke.count });
+  html += stat('conf', 'Konflikte', s.conflicts.length, { num: s.conflicts.length, prev: p && p.conflicts.length, cls: s.conflicts.length ? 'bad' : '' });
+  html += stat('warn', 'Warnungen', s.warnings.length, { num: s.warnings.length, prev: p && p.warnings.length, cls: s.warnings.length ? 'warn' : '' });
+  html += stat('q', 'Offene Fragen', s.questions.length, { num: s.questions.length, prev: p && p.questions.length });
+  html += stat('chg', 'Geändert', s.changed, { num: s.changed, prev: p && p.changed, title: 'Abläufe, die vom Entwurf abweichen' });
+  html += '</div><div class="last"><span>';
+  if (state.last) {
+    const names = state.last.ids.map((id) => M.byId[id].title);
+    html += 'Zuletzt: <b>' + esc(state.last.label) + '</b>';
+    if (names.length) html += ' · betrifft ' + (names.length > 4 ? names.length + ' Abläufe' : names.map(esc).join(', '));
+  } else if (s.changed) {
+    html += 'Stand aus dem Link geladen: ' + s.changed + ' Abläufe weichen vom Entwurf ab („nur geänderte“ zeigt sie).';
+  } else {
+    html += 'Noch nichts geändert. Klick dich durch die Prüfliste oder starte einen Durchgang.';
+  }
+  html += '</span><span class="stat-actions"><button class="btn small" data-act="copyLink">Link kopieren</button><button class="btn small" data-act="resetAll">Alles auf Entwurf</button></span></div></div>';
+  document.getElementById('summary').innerHTML = html;
+}
+
+// ---------- tabs ----------
+function renderTabs(s) {
+  const tabs = [
+    ['list', 'Prüfliste', ITEMS.length],
+    ['prework', 'Vorarbeiten', null],
+    ['recheck', 'Nachprüfung', null],
+    ['issues', 'Konflikte und Fragen', s.conflicts.length + s.warnings.length + s.questions.length, s.conflicts.length > 0],
+    ['markdown', 'Als Antwort für #115', null],
+  ];
+  document.getElementById('tabs').innerHTML = tabs.map(([k, label, cnt, bad]) =>
+    '<button class="tab" role="tab" aria-selected="' + (view.tab === k) + '" data-act="tab" data-tab="' + k + '">' + label + (cnt != null ? '<span class="cnt' + (bad ? ' bad' : '') + '">' + cnt + '</span>' : '') + '</button>'
+  ).join('');
+}
+
+// ---------- tab: checklist ----------
+function seg(id, field, options, current, proposal) {
+  return '<span class="seg">' + options.map(([value, label]) =>
+    '<button data-act="set" data-id="' + id + '" data-field="' + field + '" data-value="' + value + '" aria-pressed="' + (current === value) + '"' + (proposal === value ? ' class="prop" title="Vorschlag"' : '') + '>' + label + '</button>'
+  ).join('') + '</span>';
+}
+
+function rowHtml(it) {
+  const d = state.decisions[it.id];
+  const p = M.proposalOf(it);
+  const conflicts = M.conflictsOf(it, d);
+  const warnings = M.warningsOf(it, d);
+  const changed = M.isChanged(it, d);
+  const out = !M.inScope(d);
+  const just = state.last && state.last.ids.includes(it.id);
+  const open = view.open.has(it.id);
+  let tags = '';
+  if (it.w1 === 'new') tags += '<span class="tag w1">Welle 1: neu seit rc.3</span>';
+  if (it.w1 === 'known') tags += '<span class="tag w1">Welle 1: läuft seit rc.1–3</span>';
+  if (it.onlyW2) tags += '<span class="tag w2">nur Welle 2</span>';
+  for (const n of it.needs) tags += '<span class="tag need">' + esc(M.NEEDS[n].label) + '</span>';
+  if (it.question && !out) tags += '<span class="tag q" title="' + esc(it.question) + '">Frage offen</span>';
+  if (changed) tags += '<span class="tag changed">geändert</span>';
+
+  let html = '<div class="row' + (out ? ' out' : '') + (conflicts.length ? ' conflict' : '') + (just ? ' just' : '') + '" id="row-' + it.id + '">';
+  html += '<div class="row-top"><div class="row-name"><span class="risk ' + it.risk + '" title="Blocker-Risiko ' + it.risk + (it.riskWhy ? ': ' + esc(it.riskWhy) : '') + '"></span>';
+  html += '<button class="title" data-act="toggleOpen" data-id="' + it.id + '">' + fmt(it.title) + '</button>' + tags + '</div>';
+  html += '<div class="controls">';
+  html += seg(it.id, 'depth', M.DEPTHS.map((x) => [x.key, x.short]), d.depth, p.depth);
+  if (!out) {
+    html += seg(it.id, 'who', [['agent', 'Agent'], ['human', 'Mensch']], d.who, p.who);
+    html += '<select data-act="setSelect" data-id="' + it.id + '" data-field="where" title="Wo">' +
+      Object.entries(M.WHERE).map(([k, l]) => '<option value="' + k + '"' + (d.where === k ? ' selected' : '') + '>' + l + (p.where === k ? ' ·' : '') + '</option>').join('') + '</select>';
+    html += '<label class="chk"><input type="checkbox" data-act="setCheck" data-id="' + it.id + '" data-field="smoke"' + (d.smoke ? ' checked' : '') + '> Smoke-Test</label>';
+  }
+  html += '</div></div>';
+  if (conflicts.length || warnings.length) {
+    html += '<div class="alerts">' + conflicts.map((c) => '<div class="alert c">Konflikt: ' + esc(c) + '</div>').join('') + warnings.map((w) => '<div class="alert w">Warnung: ' + esc(w) + '</div>').join('') + '</div>';
+  }
+  if (open) {
+    html += '<div class="details">';
+    html += '<div class="k">Wie</div><div>' + fmt(it.how) + '</div>';
+    html += '<div class="k">Warum so</div><div>' + fmt(it.why) + '</div>';
+    html += '<div class="k">Blocker-Risiko</div><div>' + it.risk + (it.riskWhy ? ': ' + fmt(it.riskWhy) : '') + '</div>';
+    if (it.question) html += '<div class="k">Offene Frage</div><div>' + fmt(it.question) + '</div>';
+    html += '<div class="k">Vorschlag</div><div>' + M.DEPTH[p.depth].label + (M.inScope(p) ? ' · ' + M.WHO[p.who] + ' · ' + M.WHERE[p.where] + (p.smoke ? ' · im Smoke-Test' : '') : '') +
+      (changed ? ' <button class="btn small" data-act="resetItem" data-id="' + it.id + '">Auf Vorschlag zurück</button>' : '') + '</div>';
+    html += '<div class="k">Notiz</div><div><input type="text" data-act="setNote" data-id="' + it.id + '" value="' + esc(d.note) + '" placeholder="Kommt in die Antwort für #115"></div>';
+    html += '</div>';
+  }
+  return html + '</div>';
+}
+
+function matchesFilter(it) {
+  const d = state.decisions[it.id];
+  if (view.who !== 'all' && !(M.inScope(d) && d.who === view.who)) return false;
+  if (view.risk === 'hoch' && it.risk !== 'hoch') return false;
+  if (view.risk === 'hochmittel' && it.risk === 'niedrig') return false;
+  if (view.onlyChanged && !M.isChanged(it, d)) return false;
+  if (view.onlyW1New && it.w1 !== 'new') return false;
+  if (view.onlyFlagged && !(M.conflictsOf(it, d).length || M.warningsOf(it, d).length || (it.question && M.inScope(d)))) return false;
+  if (view.q) {
+    const hay = (it.title + ' ' + it.how + ' ' + it.why + ' ' + areaTitle(it.area)).toLowerCase();
+    if (!hay.includes(view.q.toLowerCase())) return false;
+  }
+  return true;
+}
+
+function renderList() {
+  let html = '<div class="filters">';
+  html += '<label>Wer <select data-act="view" data-key="who"><option value="all">alle</option><option value="agent"' + (view.who === 'agent' ? ' selected' : '') + '>Agent</option><option value="human"' + (view.who === 'human' ? ' selected' : '') + '>Mensch</option></select></label>';
+  html += '<label>Risiko <select data-act="view" data-key="risk"><option value="all">alle</option><option value="hoch"' + (view.risk === 'hoch' ? ' selected' : '') + '>nur hoch</option><option value="hochmittel"' + (view.risk === 'hochmittel' ? ' selected' : '') + '>hoch und mittel</option></select></label>';
+  html += '<label><input type="checkbox" data-act="viewCheck" data-key="onlyFlagged"' + (view.onlyFlagged ? ' checked' : '') + '> mit Konflikt, Warnung oder Frage</label>';
+  html += '<label><input type="checkbox" data-act="viewCheck" data-key="onlyChanged"' + (view.onlyChanged ? ' checked' : '') + '> nur geänderte</label>';
+  html += '<label><input type="checkbox" data-act="viewCheck" data-key="onlyW1New"' + (view.onlyW1New ? ' checked' : '') + '> neu für Welle 1</label>';
+  html += '<input type="search" data-act="search" placeholder="Suchen …" value="' + esc(view.q) + '">';
+  html += '<button class="btn small" data-act="openAll">Alle aufklappen</button><button class="btn small" data-act="closeAll">Alle zuklappen</button>';
+  html += '</div>';
+  html += '<p class="legend">Punkt = Blocker-Risiko (rot hoch, gelb mittel, grau niedrig). Unterstrichener Knopf und „·“ in der Auswahl = Vorschlag. Titel anklicken für Wie, Warum und Notiz.</p>';
+  let shown = 0;
+  for (const a of AREAS) {
+    const its = ITEMS.filter((it) => it.area === a.key && matchesFilter(it));
+    if (!its.length) continue;
+    shown += its.length;
+    const all = ITEMS.filter((it) => it.area === a.key);
+    const scope = all.filter((it) => M.inScope(state.decisions[it.id]));
+    const mins = scope.reduce((m, it) => m + M.DEPTH[state.decisions[it.id].depth].minutes, 0);
+    html += '<section class="area"><div class="area-head"><h3>' + esc(a.title) + '</h3>';
+    if (a.added) html += '<span class="added">Vorschlag: nicht in der Bereichsliste von #115</span>';
+    html += '<span class="meta">' + scope.length + ' von ' + all.length + ' im Umfang · ≈ ' + h(mins) + '</span>';
+    html += '<span class="acts"><button class="btn small" data-act="areaDepth" data-area="' + a.key + '" data-value="smoke">Bereich nur Smoke</button><button class="btn small" data-act="areaDepth" data-area="' + a.key + '" data-value="skip">Bereich streichen</button><button class="btn small" data-act="areaReset" data-area="' + a.key + '">Bereich auf Vorschlag</button></span></div>';
+    html += its.map(rowHtml).join('') + '</section>';
+  }
+  if (!shown) html += '<p class="note">Kein Ablauf passt zu den Filtern.</p>';
+  return html;
+}
+
+// ---------- tab: prework ----------
+function renderPrework() {
+  const groups = M.prework(state, view.groupBy);
+  let html = '<p class="note">Die Karte #113 sagt: Ist #115 entschieden, wird die Prüfliste in Vorarbeiten zerlegt, je Bereich oder je Person, und die Vorarbeiten blockieren beide Go/No-Go-Klärungen. So sähe der Schnitt mit dem heutigen Stand aus. Eine Karte = eine Vorarbeit.</p>';
+  html += '<div class="filters"><span class="seg"><button data-act="groupBy" data-value="area" aria-pressed="' + (view.groupBy === 'area') + '">je Bereich</button><button data-act="groupBy" data-value="person" aria-pressed="' + (view.groupBy === 'person') + '">je Person und Ort</button></span><span class="legend" style="margin:0">' + groups.length + ' Vorarbeiten</span></div>';
+  html += '<div class="groups">';
+  for (const g of groups) {
+    const who = [...g.who].map((w) => M.WHO[w]).join(' und ');
+    html += '<div class="group"><h4>' + esc(g.title) + '</h4><div class="meta">' + g.entries.length + ' Abläufe · ≈ ' + h(g.minutes) + (view.groupBy === 'area' ? ' · ' + who : '') + '</div><ul>';
+    for (const e of g.entries) {
+      const extra = view.groupBy === 'area' ? M.WHO[e.d.who] + ' · ' + M.WHERE[e.d.where] : areaTitle(e.item.area);
+      html += '<li><button class="link" data-act="goto" data-id="' + e.item.id + '">' + fmt(e.item.title) + '</button> <span class="m">' + M.DEPTH[e.d.depth].label + ' · ' + esc(extra) + '</span></li>';
+    }
+    html += '</ul></div>';
+  }
+  return html + '</div>';
+}
+
+// ---------- tab: recheck ----------
+function renderRecheck() {
+  const r = M.recheck(state);
+  let html = '<p class="note">Ein Fix für einen Blocker ergibt einen neuen Release-Kandidaten. Nachgeprüft werden die betroffenen Bereiche in ihrer Tiefe, dazu der Smoke-Test (je ≈ ' + M.SMOKE_MINUTES + ' min). Welche Bereiche berührt der Fix?</p>';
+  html += '<div class="area-picks">' + AREAS.map((a) => '<label><input type="checkbox" data-act="recheckArea" data-area="' + a.key + '"' + (state.recheckAreas.includes(a.key) ? ' checked' : '') + '> ' + esc(a.title) + '</label>').join('') + '</div>';
+  html += '<div class="stats" style="margin-bottom:14px">' +
+    '<div class="stat"><div class="k">Nachprüfung</div><div class="v">' + (r.affected.length + r.smoke.length) + ' · ' + h(r.minutes) + '</div></div>' +
+    '<div class="stat"><div class="k">Betroffene Bereiche</div><div class="v">' + r.affected.length + '</div></div>' +
+    '<div class="stat"><div class="k">Smoke-Test</div><div class="v">' + r.smoke.length + '</div></div></div>';
+  html += '<div class="groups">';
+  html += '<div class="group"><h4>Betroffene Bereiche</h4><ul>' + (r.affected.length ? r.affected.map((e) => '<li><button class="link" data-act="goto" data-id="' + e.item.id + '">' + fmt(e.item.title) + '</button> <span class="m">' + M.DEPTH[e.d.depth].label + ' · ' + M.WHO[e.d.who] + ' · ' + M.WHERE[e.d.where] + '</span></li>').join('') : '<li class="m">Noch kein Bereich gewählt.</li>') + '</ul></div>';
+  html += '<div class="group"><h4>Smoke-Test</h4><ul>' + r.smoke.map((e) => '<li><button class="link" data-act="goto" data-id="' + e.item.id + '">' + fmt(e.item.title) + '</button> <span class="m">' + M.WHO[e.d.who] + ' · ' + M.WHERE[e.d.where] + '</span></li>').join('') + '</ul></div>';
+  return html + '</div>';
+}
+
+// ---------- tab: issues ----------
+function renderIssues(s) {
+  const li = (cls, e, prefix) => '<li class="' + cls + '">' + prefix + ' <button class="link" data-act="goto" data-id="' + e.item.id + '">' + fmt(e.item.title) + '</button>: ' + fmt(e.text) + '</li>';
+  let html = '<h3>Konflikte <span class="legend">(Regeln von ibus und #113 verletzt)</span></h3><ul class="issue-list">' + (s.conflicts.length ? s.conflicts.map((e) => li('c', e, '')).join('') : '<li>Keine.</li>') + '</ul>';
+  html += '<h3>Warnungen</h3><ul class="issue-list">' + (s.warnings.length ? s.warnings.map((e) => li('w', e, '')).join('') : '<li>Keine.</li>') + '</ul>';
+  html += '<h3>Offene Fragen <span class="legend">(nur Abläufe im Umfang)</span></h3><ul class="issue-list">' + (s.questions.length ? s.questions.map((e) => li('q', e, '')).join('') : '<li>Keine.</li>') + '</ul>';
+  return html;
+}
+
+// ---------- tab: markdown ----------
+function renderMarkdown() {
+  const today = new Date().toLocaleDateString('de-DE');
+  return '<p class="note">Die Prüfliste mit deinen Änderungen als Markdown, zum Einfügen als Antwort in #115. Der Link oben hält denselben Stand.</p>' +
+    '<p><button class="btn primary" data-act="copyMd">Markdown kopieren</button></p><textarea class="md" id="md" readonly>' + esc(M.toMarkdown(state, today)) + '</textarea>';
+}
+
+// ---------- render ----------
+function render() {
+  const s = M.summarize(state);
+  renderSummary(s);
+  renderWalkthroughs();
+  renderTabs(s);
+  const v = document.getElementById('view');
+  v.innerHTML = view.tab === 'list' ? renderList()
+    : view.tab === 'prework' ? renderPrework()
+    : view.tab === 'recheck' ? renderRecheck()
+    : view.tab === 'issues' ? renderIssues(s)
+    : renderMarkdown();
+}
+
+function gotoItem(id) {
+  view.tab = 'list';
+  view.open.add(id);
+  Object.assign(view, { who: 'all', risk: 'all', onlyFlagged: false, onlyChanged: false, onlyW1New: false, q: '' });
+  render();
+  const el = document.getElementById('row-' + id);
+  if (el) el.scrollIntoView({ block: 'center' });
+}
+
+function copy(text, btn) {
+  const done = () => { const t = btn.textContent; btn.textContent = 'Kopiert'; setTimeout(() => (btn.textContent = t), 1200); };
+  if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, () => prompt('Zum Kopieren:', text));
+  else prompt('Zum Kopieren:', text);
+}
+
+// ---------- events ----------
+const DEPTH_LABEL = (k) => M.DEPTH[k].label;
+document.addEventListener('click', (ev) => {
+  const el = ev.target.closest('[data-act]');
+  if (!el || el.disabled) return;
+  const { act, id, field, value } = el.dataset;
+  switch (act) {
+    case 'set': {
+      const it = M.byId[id];
+      const label = it.title + ': ' + (field === 'depth' ? 'Tiefe → ' + DEPTH_LABEL(value) : 'Wer → ' + M.WHO[value]);
+      dispatch({ type: 'set', id, field, value, label });
+      break;
+    }
+    case 'resetItem': dispatch({ type: 'resetItem', id, label: M.byId[id].title + ': auf Vorschlag zurück' }); break;
+    case 'resetAll': dispatch({ type: 'resetAll', label: 'Alles auf den Entwurf zurückgesetzt' }); break;
+    case 'areaDepth':
+      dispatch({ type: 'bulk', label: areaTitle(el.dataset.area) + ': alles → ' + DEPTH_LABEL(value),
+        changes: ITEMS.filter((it) => it.area === el.dataset.area && (value === 'skip' || M.inScope(state.decisions[it.id]))).map((it) => ({ id: it.id, field: 'depth', value })) });
+      break;
+    case 'areaReset': {
+      const changes = [];
+      for (const it of ITEMS.filter((x) => x.area === el.dataset.area)) {
+        const p = M.proposalOf(it);
+        for (const f of ['depth', 'who', 'where', 'smoke']) changes.push({ id: it.id, field: f, value: p[f] });
+      }
+      dispatch({ type: 'bulk', label: areaTitle(el.dataset.area) + ': auf Vorschlag zurück', changes });
+      break;
+    }
+    case 'toggleOpen': view.open.has(id) ? view.open.delete(id) : view.open.add(id); render(); break;
+    case 'openAll': ITEMS.forEach((it) => view.open.add(it.id)); render(); break;
+    case 'closeAll': view.open.clear(); render(); break;
+    case 'tab': view.tab = el.dataset.tab; render(); break;
+    case 'groupBy': view.groupBy = value; render(); break;
+    case 'goto': gotoItem(id); break;
+    case 'copyLink': copy(location.href, el); break;
+    case 'copyMd': copy(document.getElementById('md').value, el); break;
+    case 'wtPick': view.wt = { scenario: +el.dataset.i, step: -1 }; render(); break;
+    case 'wtStart':
+      view.wt.step = 0;
+      dispatch({ type: 'resetAll', label: 'Durchgang „' + SCENARIOS[view.wt.scenario].title + '“ gestartet: Entwurf geladen' });
+      break;
+    case 'wtStep': {
+      const st = SCENARIOS[view.wt.scenario].steps[+el.dataset.i];
+      view.wt.step++;
+      if (st.tab) view.tab = st.tab;
+      dispatch(st.run());
+      break;
+    }
+  }
+});
+
+document.addEventListener('change', (ev) => {
+  const el = ev.target.closest('[data-act]');
+  if (!el) return;
+  const { act, id, field, key } = el.dataset;
+  const it = id && M.byId[id];
+  switch (act) {
+    case 'setSelect': dispatch({ type: 'set', id, field, value: el.value, label: it.title + ': Wo → ' + M.WHERE[el.value] }); break;
+    case 'setCheck': dispatch({ type: 'set', id, field, value: el.checked, label: it.title + (el.checked ? ': in den Smoke-Test' : ': aus dem Smoke-Test') }); break;
+    case 'setNote': dispatch({ type: 'set', id, field: 'note', value: el.value.trim(), label: it.title + ': Notiz' }); break;
+    case 'view': view[key] = el.value; render(); break;
+    case 'viewCheck': view[key] = el.checked; render(); break;
+    case 'recheckArea': {
+      const areas = el.checked ? state.recheckAreas.concat(el.dataset.area) : state.recheckAreas.filter((a) => a !== el.dataset.area);
+      dispatch({ type: 'setRecheckAreas', areas, label: 'Nachprüfung: ' + (areas.length ? areas.map(areaTitle).join(', ') : 'kein Bereich') });
+      break;
+    }
+  }
+});
+
+document.addEventListener('input', (ev) => {
+  if (ev.target.dataset.act !== 'search') return;
+  view.q = ev.target.value;
+  const pos = ev.target.selectionStart;
+  render();
+  const s = document.querySelector('[data-act="search"]');
+  s.focus();
+  s.setSelectionRange(pos, pos);
+});
+
+render();
+</script>
+</body>
+</html>
