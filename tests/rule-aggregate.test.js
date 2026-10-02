@@ -118,7 +118,7 @@ describe("RuleEngine aggregate actions & $$TENANT_MAIL", () => {
       enabled: true,
       resource: "Booking",
       schedule: "0 7 * * *",
-      query: { "cancellationRefund.refundStatus": "open" },
+      query: { "cancellationRefund.refundState": "open" },
       actions: [
         {
           type: "sendAggregatedEmail",
@@ -153,7 +153,7 @@ describe("RuleEngine aggregate actions & $$TENANT_MAIL", () => {
       const log = await RuleEngine.runRule(OPEN_REFUNDS_RULE);
 
       expect(asked).to.deep.equal({
-        "cancellationRefund.refundStatus": "open",
+        "cancellationRefund.refundState": "open",
       });
       expect(fakeAggregateActions.sendAggregatedEmail.calledOnce).to.be.true;
       const [docs, params] =

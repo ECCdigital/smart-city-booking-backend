@@ -39,7 +39,6 @@ const {
 } = require("./booking-lifecycle");
 const {
   CancellationRefundService,
-  REFUND_STATUS,
   sanitizeBankDetails,
 } = require("../payment/cancellation-refund-service");
 const { ConflictError, NotFoundError } = require("../../../errors/BaseError");
@@ -473,13 +472,10 @@ function createGroupBookingLifecycle(adapters) {
         refundPercentage,
         cancelledByUserId,
       });
-      booking.cancellationRefund =
-        booking.status === STATUS.CANCELLED
-          ? { ...refund, cancelledFrom: from }
-          : { ...refund };
-      if (CancellationRefundService.isRefundDue(refund, from)) {
-        booking.cancellationRefund.refundStatus = REFUND_STATUS.OPEN;
-      }
+      booking.cancellationRefund = CancellationRefundService.toBookingAudit(
+        refund,
+        { status: booking.status, cancelledFrom: from },
+      );
       return { bookingId: booking.id, ...refund };
     });
     const rejection = from === STATUS.REQUESTED;

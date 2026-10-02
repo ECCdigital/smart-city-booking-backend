@@ -6,7 +6,7 @@ const {
   CANCELLED_FROM_STATUSES,
 } = require("../services/booking-lifecycle/booking-state");
 const {
-  REFUND_STATUS,
+  REFUND_STATE,
 } = require("../services/payment/cancellation-refund-service");
 
 const bookingHookSchemaDefinition = {
@@ -78,9 +78,9 @@ const cancellationAuditSchema = new Schema(
 // (glossary "Erstattungsstand"), present only where a refund is due. The
 // audit a cancellation document carries has none.
 const cancellationRefundSchema = cancellationAuditSchema.clone().add({
-  refundStatus: {
+  refundState: {
     type: String,
-    enum: Object.values(REFUND_STATUS),
+    enum: Object.values(REFUND_STATE),
     default: undefined,
   },
   refundCompletedAt: { type: Double, default: undefined },

@@ -15,7 +15,7 @@ const {
 } = require("../services/authorization/reach");
 const { REACH } = require("../services/authorization/policy");
 const {
-  REFUND_STATUS,
+  REFUND_STATE,
 } = require("../services/payment/cancellation-refund-service");
 
 /**
@@ -56,7 +56,7 @@ class BookingManager {
     const bookings = rawBookings.map((doc) => doc.toEntity());
     await BookingManager._enrichBookingsWithCustomFields(bookings);
     if (scope?.reach === REACH.OWN) {
-      bookings.forEach((booking) => booking.hideRefundStatus());
+      bookings.forEach((booking) => booking.hideRefundState());
     }
     return bookings;
   }
@@ -131,19 +131,25 @@ class BookingManager {
    * @param {boolean} [options.populate=false] Carry the primary bookable
    *   and the workflow status of each booking as `_populated`, read by
    *   the domain: a booking within reach brings its dependents along
-   * @param {string} [options.refundStatus] Only the bookings in this
+   * @param {string} [options.refundState] Only the bookings in this
    *   refund state (glossary "Erstattungsstand")
    * @returns {Promise<Booking[]>} List of bookings
    */
   static async getTenantBookings(
     tenantId,
     scope,
-    { populate = false, refundStatus } = {},
+    { populate = false, refundState } = {},
   ) {
+    const reach = condition(scope);
+    // The booker's view has no refund state, so under `own` nothing is in
+    // one: the filter must not tell what the booking itself does not.
+    if (refundState && scope?.reach === REACH.OWN) {
+      return [];
+    }
     const rawBookings = await BookingModel.find({
       tenantId: tenantId,
-      ...(refundStatus && { "cancellationRefund.refundStatus": refundStatus }),
-      ...condition(scope),
+      ...(refundState && { "cancellationRefund.refundState": refundState }),
+      ...reach,
     });
     let bookings = await BookingManager._toEntities(rawBookings, scope);
     if (scope?.reach === REACH.PUBLIC) {
@@ -295,6 +301,9 @@ class BookingManager {
       ...condition(scope),
     });
     const bookings = await BookingManager._toEntities(rawBookings, scope);
+    // The assigned user is the booker, whatever reach the read runs under:
+    // the refund state is the administration's.
+    bookings.forEach((booking) => booking.hideRefundState());
     if (populate) {
       await BookingManager._populate(bookings);
     }
@@ -413,20 +422,21 @@ class BookingManager {
    * Sets the refund state of a booking that carries one (glossary
    * "Erstattungsstand") with one atomic write of those fields alone: a
    * booking without a refund state - not cancelled, nothing to refund,
-   * reinstated in between - is no match and answers `null`. `completed`
+   * reinstated in between - is no match and answers `null`, and so is one
+   * already in that state, whose moment and person stay. `completed`
    * records the moment and the person; `open` drops both.
    *
    * @param {string} tenantId Tenant ID
    * @param {string} bookingId Booking ID
-   * @param {{ refundStatus: string, completedAt?: number, completedByUserId?: string|null }} state
+   * @param {{ refundState: string, completedAt?: number, completedByUserId?: string|null }} state
    * @param {{reach: string, userId?: string|null}} scope The reach the
    *   caller writes under (ADR 0002)
    * @returns {Promise<Booking|null>} The booking as written, or null
    */
-  static async setRefundStatus(
+  static async setRefundState(
     tenantId,
     bookingId,
-    { refundStatus, completedAt, completedByUserId = null },
+    { refundState, completedAt, completedByUserId = null },
     scope,
   ) {
     const completion = {
@@ -437,18 +447,18 @@ class BookingManager {
       {
         id: bookingId,
         tenantId: tenantId,
-        "cancellationRefund.refundStatus": { $exists: true },
+        "cancellationRefund.refundState": { $exists: true, $ne: refundState },
         ...condition(scope),
       },
-      refundStatus === REFUND_STATUS.COMPLETED
+      refundState === REFUND_STATE.COMPLETED
         ? {
             $set: {
-              "cancellationRefund.refundStatus": refundStatus,
+              "cancellationRefund.refundState": refundState,
               ...completion,
             },
           }
         : {
-            $set: { "cancellationRefund.refundStatus": refundStatus },
+            $set: { "cancellationRefund.refundState": refundState },
             $unset: Object.fromEntries(
               Object.keys(completion).map((field) => [field, ""]),
             ),

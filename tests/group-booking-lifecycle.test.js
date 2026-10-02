@@ -753,7 +753,7 @@ describe("group booking lifecycle: cancel", function () {
         ...options,
       });
       return ["B-1", "B-2"].map(
-        (id) => adapters.store.rows.get(id).cancellationRefund.refundStatus,
+        (id) => adapters.store.rows.get(id).cancellationRefund.refundState,
       );
     };
 

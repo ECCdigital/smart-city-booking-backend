@@ -187,7 +187,7 @@ describe("booking lifecycle: cancel", function () {
       ]) {
         const { refund } = await refundAfterCancel(booking(), { trigger });
 
-        expect(refund.refundStatus, trigger).to.equal("open");
+        expect(refund.refundState, trigger).to.equal("open");
         expect(refund).to.not.have.property("refundCompletedAt");
         expect(refund).to.not.have.property("refundCompletedByUserId");
       }
@@ -197,18 +197,18 @@ describe("booking lifecycle: cancel", function () {
       for (const status of ["payment_due", "requested"]) {
         const { refund } = await refundAfterCancel(booking({ status }));
 
-        expect(refund, status).to.not.have.property("refundStatus");
+        expect(refund, status).to.not.have.property("refundState");
       }
     });
 
     it("is absent where nothing is refunded: a refund of 0 %, a free booking", async function () {
       const kept = await refundAfterCancel(booking(), { refundPercentage: 0 });
-      expect(kept.refund).to.not.have.property("refundStatus");
+      expect(kept.refund).to.not.have.property("refundState");
 
       const free = await refundAfterCancel(
         booking({ priceEur: 0, paymentProvider: "" }),
       );
-      expect(free.refund).to.not.have.property("refundStatus");
+      expect(free.refund).to.not.have.property("refundState");
     });
 
     it("stays out of the cancellation document: the refund calculation carries no state", async function () {
@@ -216,7 +216,7 @@ describe("booking lifecycle: cancel", function () {
 
       expect(
         adapters.documents.calls[0].args[0].options.refundCalculation,
-      ).to.not.have.property("refundStatus");
+      ).to.not.have.property("refundState");
     });
 
     it("goes with the reinstatement, and a new cancellation starts open again", async function () {
@@ -225,7 +225,7 @@ describe("booking lifecycle: cancel", function () {
           cancelled({
             cancellationRefund: {
               ...cancelled().cancellationRefund,
-              refundStatus: "completed",
+              refundState: "completed",
               refundCompletedAt: NOW,
               refundCompletedByUserId: "admin-1",
             },
@@ -240,7 +240,7 @@ describe("booking lifecycle: cancel", function () {
 
       await lifecycle.cancel(TENANT, "B-1", { trigger: TRIGGER.ADMIN });
       const refund = adapters.store.rows.get("B-1").cancellationRefund;
-      expect(refund.refundStatus).to.equal("open");
+      expect(refund.refundState).to.equal("open");
       expect(refund).to.not.have.property("refundCompletedAt");
       expect(refund).to.not.have.property("refundCompletedByUserId");
     });

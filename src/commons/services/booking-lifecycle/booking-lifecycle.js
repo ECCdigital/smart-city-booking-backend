@@ -38,7 +38,6 @@ const {
 const {
   CancellationRefundService,
   CANCELLATION_ORIGINS,
-  REFUND_STATUS,
   sanitizeBankDetails,
 } = require("../payment/cancellation-refund-service");
 const { BOOKING_HOOK_TYPES } = require("../../entities/booking/bookingHook");
@@ -494,13 +493,10 @@ function createBookingLifecycle(adapters) {
       refundPercentage,
       cancelledByUserId,
     });
-    booking.cancellationRefund =
-      booking.status === STATUS.CANCELLED
-        ? { ...refund, cancelledFrom: from }
-        : { ...refund };
-    if (CancellationRefundService.isRefundDue(refund, from)) {
-      booking.cancellationRefund.refundStatus = REFUND_STATUS.OPEN;
-    }
+    booking.cancellationRefund = CancellationRefundService.toBookingAudit(
+      refund,
+      { status: booking.status, cancelledFrom: from },
+    );
 
     const rejection = booking.status === STATUS.REJECTED && !hookId;
     const files = [];

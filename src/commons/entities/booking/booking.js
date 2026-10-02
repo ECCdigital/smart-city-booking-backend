@@ -253,10 +253,10 @@ class Booking {
    * whether the refund was paid out.
    * @returns {Booking} this (for chaining)
    */
-  hideRefundStatus() {
+  hideRefundState() {
     if (this.cancellationRefund) {
       const audit = { ...this.cancellationRefund };
-      delete audit.refundStatus;
+      delete audit.refundState;
       delete audit.refundCompletedAt;
       delete audit.refundCompletedByUserId;
       this.cancellationRefund = audit;

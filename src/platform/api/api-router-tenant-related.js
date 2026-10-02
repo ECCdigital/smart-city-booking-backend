@@ -268,9 +268,9 @@ router.post(
   BookingController.reinstateBooking,
 );
 router.put(
-  "/bookings/:id/refund-status",
+  "/bookings/:id/refund-state",
   authorize("booking", "update"),
-  BookingController.setRefundStatus,
+  BookingController.setRefundState,
 );
 router.get(
   "/bookings/:id/cancellation-refund-preview",

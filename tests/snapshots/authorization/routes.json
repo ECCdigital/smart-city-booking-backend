@@ -1133,7 +1133,7 @@
     "tenantOwner": 409,
     "instanceOwner": 409
   },
-  "PUT /api/:tenant/bookings/:id/refund-status": {
+  "PUT /api/:tenant/bookings/:id/refund-state": {
     "anonymous": 401,
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 400,

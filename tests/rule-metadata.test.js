@@ -23,12 +23,12 @@ describe("ruleMetadata", () => {
     const booking = RuleMetadata.getResources().find(
       (r) => r.name === "Booking",
     );
-    const refundStatus = booking.fields.find(
-      (f) => f.name === "cancellationRefund.refundStatus",
+    const refundState = booking.fields.find(
+      (f) => f.name === "cancellationRefund.refundState",
     );
 
-    expect(refundStatus).to.include({ type: "string" });
-    expect(refundStatus.note).to.include("open").and.to.include("completed");
+    expect(refundState).to.include({ type: "string" });
+    expect(refundState.note).to.include("open").and.to.include("completed");
   });
 
   it("keeps the engine allowlist in sync with the catalog", () => {

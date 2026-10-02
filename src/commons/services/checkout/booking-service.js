@@ -446,14 +446,9 @@ class BookingService {
     userId,
     { tenantId = null, populate = false } = {},
   ) {
-    const bookings = await BookingManager.getAssignedBookings(
-      userId,
-      tenantId,
-      DOMAIN,
-      { populate },
-    );
-    // The booker's own view: the refund state is the administration's.
-    return bookings.map((booking) => booking.hideRefundStatus());
+    return await BookingManager.getAssignedBookings(userId, tenantId, DOMAIN, {
+      populate,
+    });
   }
 
   /**
@@ -464,26 +459,26 @@ class BookingService {
    *
    * @param {string} tenantId
    * @param {string} bookingId
-   * @param {{ refundStatus: string, userId?: string|null }} state
+   * @param {{ refundState: string, userId?: string|null }} state
    * @param {{reach: string, userId?: string|null}} scope The route's reach
    * @returns {Promise<Booking>} The booking as written
-   * @throws {BadRequestError} `invalid_refund_status`
+   * @throws {BadRequestError} `invalid_refund_state`
    * @throws {NotFoundError} `booking_not_found`
-   * @throws {ConflictError} `refund_status_not_applicable` for a booking
+   * @throws {ConflictError} `refund_state_not_applicable` for a booking
    *   that carries no refund state
    */
-  static async setRefundStatus(
+  static async setRefundState(
     tenantId,
     bookingId,
-    { refundStatus, userId = null },
+    { refundState, userId = null },
     scope,
   ) {
-    CancellationRefundService.validateRefundStatus(refundStatus);
+    CancellationRefundService.validateRefundState(refundState);
 
-    const booking = await BookingManager.setRefundStatus(
+    const booking = await BookingManager.setRefundState(
       tenantId,
       bookingId,
-      { refundStatus, completedAt: Date.now(), completedByUserId: userId },
+      { refundState, completedAt: Date.now(), completedByUserId: userId },
       scope,
     );
     if (booking) {
@@ -498,7 +493,11 @@ class BookingService {
     if (!existing) {
       throw new NotFoundError("booking_not_found", { bookingId });
     }
-    throw new ConflictError("refund_status_not_applicable", { bookingId });
+    // Already in that state: nothing was written, the first mark stands.
+    if (existing.cancellationRefund?.refundState === refundState) {
+      return existing;
+    }
+    throw new ConflictError("refund_state_not_applicable", { bookingId });
   }
 
   /**

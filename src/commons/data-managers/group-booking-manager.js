@@ -21,7 +21,7 @@ const condition = (scope) =>
 function toEntity(rawGroupBooking, scope) {
   const groupBooking = rawGroupBooking.toEntity();
   if (scope?.reach === REACH.OWN) {
-    groupBooking.bookings.forEach((booking) => booking.hideRefundStatus());
+    groupBooking.bookings.forEach((booking) => booking.hideRefundState());
   }
   return groupBooking;
 }

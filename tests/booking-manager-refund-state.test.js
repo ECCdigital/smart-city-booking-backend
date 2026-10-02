@@ -34,7 +34,7 @@ function cancelledBooking(refund = {}) {
       cancelledAt: 1,
       refundAmountEur: 40,
       cancelledFrom: "confirmed",
-      refundStatus: "completed",
+      refundState: "completed",
       refundCompletedAt: 2,
       refundCompletedByUserId: "admin-1",
       ...refund,
@@ -56,17 +56,17 @@ describe("the refund state at the booking managers", function () {
     sinon.restore();
   });
 
-  describe("BookingManager.setRefundStatus", function () {
+  describe("BookingManager.setRefundState", function () {
     it("completes with one write of the refund state alone, matching only a booking that carries one", async function () {
       const update = sinon
         .stub(BookingModel, "findOneAndUpdate")
         .resolves(doc(cancelledBooking()));
 
-      const booking = await BookingManager.setRefundStatus(
+      const booking = await BookingManager.setRefundState(
         "t1",
         "B-1",
         {
-          refundStatus: "completed",
+          refundState: "completed",
           completedAt: 2,
           completedByUserId: "admin-1",
         },
@@ -77,34 +77,37 @@ describe("the refund state at the booking managers", function () {
         {
           id: "B-1",
           tenantId: "t1",
-          "cancellationRefund.refundStatus": { $exists: true },
+          "cancellationRefund.refundState": {
+            $exists: true,
+            $ne: "completed",
+          },
         },
         {
           $set: {
-            "cancellationRefund.refundStatus": "completed",
+            "cancellationRefund.refundState": "completed",
             "cancellationRefund.refundCompletedAt": 2,
             "cancellationRefund.refundCompletedByUserId": "admin-1",
           },
         },
         { new: true },
       ]);
-      assert.strictEqual(booking.cancellationRefund.refundStatus, "completed");
+      assert.strictEqual(booking.cancellationRefund.refundState, "completed");
     });
 
     it("reopens by dropping the moment and the person", async function () {
       const update = sinon
         .stub(BookingModel, "findOneAndUpdate")
-        .resolves(doc(cancelledBooking({ refundStatus: "open" })));
+        .resolves(doc(cancelledBooking({ refundState: "open" })));
 
-      await BookingManager.setRefundStatus(
+      await BookingManager.setRefundState(
         "t1",
         "B-1",
-        { refundStatus: "open", completedAt: 2, completedByUserId: "admin-1" },
+        { refundState: "open", completedAt: 2, completedByUserId: "admin-1" },
         ANY,
       );
 
       assert.deepStrictEqual(update.firstCall.args[1], {
-        $set: { "cancellationRefund.refundStatus": "open" },
+        $set: { "cancellationRefund.refundState": "open" },
         $unset: {
           "cancellationRefund.refundCompletedAt": "",
           "cancellationRefund.refundCompletedByUserId": "",
@@ -118,18 +121,18 @@ describe("the refund state at the booking managers", function () {
         .resolves(null);
 
       assert.strictEqual(
-        await BookingManager.setRefundStatus(
+        await BookingManager.setRefundState(
           "t1",
           "B-1",
-          { refundStatus: "completed" },
+          { refundState: "completed" },
           ANY,
         ),
         null,
       );
       await assert.rejects(
         () =>
-          BookingManager.setRefundStatus("t1", "B-1", {
-            refundStatus: "completed",
+          BookingManager.setRefundState("t1", "B-1", {
+            refundState: "completed",
           }),
         /without a reach/,
       );
@@ -142,15 +145,26 @@ describe("the refund state at the booking managers", function () {
       const find = sinon.stub(BookingModel, "find").resolves([]);
 
       await BookingManager.getTenantBookings("t1", ANY, {
-        refundStatus: "open",
+        refundState: "open",
       });
       await BookingManager.getTenantBookings("t1", ANY);
 
       assert.deepStrictEqual(find.firstCall.args[0], {
         tenantId: "t1",
-        "cancellationRefund.refundStatus": "open",
+        "cancellationRefund.refundState": "open",
       });
       assert.deepStrictEqual(find.secondCall.args[0], { tenantId: "t1" });
+    });
+
+    it("answers no booking to a refund state filter under own, without asking the store", async function () {
+      const find = sinon.stub(BookingModel, "find").resolves([]);
+
+      const bookings = await BookingManager.getTenantBookings("t1", OWN, {
+        refundState: "completed",
+      });
+
+      assert.deepStrictEqual(bookings, []);
+      assert.strictEqual(find.called, false);
     });
   });
 
@@ -160,7 +174,7 @@ describe("the refund state at the booking managers", function () {
       ...WITHOUT_STATE,
       "refundCompletedAt",
       "refundCompletedByUserId",
-      "refundStatus",
+      "refundState",
     ].sort();
 
     it("under own a booking comes without the refund state; the administration and the domain get it", async function () {

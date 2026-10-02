@@ -18,7 +18,7 @@ const CANCELLATION_TIME_ZONE = "Europe/Berlin";
  * whether the administration has paid the refund out. Kept at the booking's
  * refund audit, set by hand; the platform pays nothing out itself.
  */
-const REFUND_STATUS = Object.freeze({
+const REFUND_STATE = Object.freeze({
   OPEN: "open",
   COMPLETED: "completed",
 });
@@ -101,9 +101,34 @@ class CancellationRefundService {
     );
   }
 
-  static validateRefundStatus(refundStatus) {
-    if (!Object.values(REFUND_STATUS).includes(refundStatus)) {
-      throw new BadRequestError("invalid_refund_status", { refundStatus });
+  /**
+   * The refund audit a booking carries from its cancellation on: the
+   * calculation, the state it was cancelled from where it is cancelled
+   * (glossary "Wiederherstellung" returns to it; a rejected request has
+   * none), and the open refund state where a refund is due.
+   *
+   * @param {Object} calculation What `calculate` answered
+   * @param {{ status: string, cancelledFrom: string }} transition The state
+   *   the cancellation lands on and the one it comes from
+   * @returns {Object} The audit to store as `booking.cancellationRefund`
+   */
+  static toBookingAudit(calculation, { status, cancelledFrom }) {
+    return {
+      ...calculation,
+      ...(status === STATUS.CANCELLED && { cancelledFrom }),
+      ...(this.isRefundDue(calculation, cancelledFrom) && {
+        refundState: REFUND_STATE.OPEN,
+      }),
+    };
+  }
+
+  /**
+   * @param {*} refundState The value a request names as refund state
+   * @throws {BadRequestError} `invalid_refund_state` unless it is one
+   */
+  static validateRefundState(refundState) {
+    if (!Object.values(REFUND_STATE).includes(refundState)) {
+      throw new BadRequestError("invalid_refund_state", { refundState });
     }
   }
 
@@ -267,6 +292,6 @@ module.exports = {
   CancellationRefundService,
   CANCELLATION_ORIGINS,
   CANCELLATION_TIME_ZONE,
-  REFUND_STATUS,
+  REFUND_STATE,
   sanitizeBankDetails,
 };

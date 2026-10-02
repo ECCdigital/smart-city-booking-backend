@@ -516,7 +516,7 @@ async function installHarness({
    */
   const entityFor = (doc, scope) => {
     const booking = new Booking(clone(doc));
-    return scope?.reach === "own" ? booking.hideRefundStatus() : booking;
+    return scope?.reach === "own" ? booking.hideRefundState() : booking;
   };
   sinon
     .stub(BookingManager, "getBooking")
@@ -604,21 +604,23 @@ async function installHarness({
       return clone(previous);
     });
   // The atomic write of the refund state: only a booking that carries one
-  // matches; `completed` records moment and person, `open` drops both.
+  // and is not in the asked state yet matches; `completed` records moment
+  // and person, `open` drops both.
   sinon
-    .stub(BookingManager, "setRefundStatus")
+    .stub(BookingManager, "setRefundState")
     .callsFake(async (tenantId, id, state, scope) => {
       const doc = store.get(id);
       if (
         !ofTenant(doc, tenantId) ||
         !withinReach(doc, scope) ||
-        doc.cancellationRefund?.refundStatus === undefined
+        doc.cancellationRefund?.refundState === undefined ||
+        doc.cancellationRefund.refundState === state.refundState
       ) {
         return null;
       }
       const refund = { ...doc.cancellationRefund };
-      refund.refundStatus = state.refundStatus;
-      if (state.refundStatus === "completed") {
+      refund.refundState = state.refundState;
+      if (state.refundState === "completed") {
         refund.refundCompletedAt = state.completedAt;
         refund.refundCompletedByUserId = state.completedByUserId;
       } else {
@@ -650,13 +652,15 @@ async function installHarness({
   // world's `getBookables`, which throws the public's `tenant_not_found`).
   sinon
     .stub(BookingManager, "getTenantBookings")
-    .callsFake(async (tenantId, scope, { refundStatus } = {}) => {
+    .callsFake(async (tenantId, scope, { refundState } = {}) => {
+      if (refundState && scope?.reach === "own") {
+        return [];
+      }
       const bookings = [...store.values()]
         .filter((doc) => doc.tenantId === tenantId && withinReach(doc, scope))
         .filter(
           (doc) =>
-            !refundStatus ||
-            doc.cancellationRefund?.refundStatus === refundStatus,
+            !refundState || doc.cancellationRefund?.refundState === refundState,
         )
         .map((doc) => entityFor(doc, scope));
       return scope?.reach === "public"
