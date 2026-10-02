@@ -12,6 +12,8 @@ class EventService {
     const event = new Event(rawEvent);
 
     event.id = uuidv4();
+    // The event and its ticket belong to `tenantId`, never to the body's.
+    event.tenantId = tenantId;
     event.ownerUserId = user?.id;
     // The review is the review service's alone (supervision spec §3).
     event.review = emptyReview();
@@ -46,7 +48,8 @@ class EventService {
   /**
    * Stores an edited event. The review is the review service's alone
    * (supervision spec §3): the edit keeps the stored one, whatever the
-   * body carried, and an `isPublic` toggle is no transition.
+   * body carried, and an `isPublic` toggle is no transition. The event
+   * stays in `tenantId`, whatever tenant the body names.
    *
    * @param {string} tenantId
    * @param {Event} event The edited event
@@ -54,6 +57,7 @@ class EventService {
    * @param {string|null} actorUserId Who edits (server-determined)
    */
   static async updateEvent(tenantId, event, existingEvent, actorUserId) {
+    event.tenantId = tenantId;
     event.review = existingEvent.review ?? emptyReview();
     await EventManager.storeEvent(event);
     await EventService.submitPublicationWish(tenantId, event, actorUserId);
