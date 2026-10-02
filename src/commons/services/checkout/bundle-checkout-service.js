@@ -5,7 +5,10 @@ const { BookableManager } = require("../../data-managers/bookable-manager");
 const BookingManager = require("../../data-managers/booking-manager");
 const CouponManager = require("../../data-managers/coupon-manager");
 const { COUPON_TYPE } = require("../../entities/coupon/coupon");
-const { primaryEmailFromMail } = require("../../utilities/checkout-utils");
+const {
+  primaryEmailFromMail,
+  countAmountsInBooking,
+} = require("../../utilities/checkout-utils");
 const {
   STATUS,
   LIVE_STATUSES,
@@ -179,7 +182,26 @@ class BundleCheckoutService {
     return this.couponCode;
   }
 
+  /**
+   * Units of each bookable the booking counts against its maximum per
+   * booking, or null where no checks run.
+   * @returns {Promise<Map<string, number>|null>}
+   */
+  async _amountsInBooking() {
+    if (!checkoutPolicy.runsChecks(this.policy)) {
+      return null;
+    }
+    if (!this._countedAmounts) {
+      this._countedAmounts = await countAmountsInBooking(
+        this.bookableItems,
+        this.tenant,
+      );
+    }
+    return this._countedAmounts;
+  }
+
   async createItemCheckoutService(bookableItem) {
+    const amountsInBooking = await this._amountsInBooking();
     const itemCheckoutService = new ItemCheckoutService(
       {
         user: this.user,
@@ -193,6 +215,7 @@ class BundleCheckoutService {
         checkoutId: this.checkoutId,
         excludeBookingIds: this.amendedBookingId ? [this.amendedBookingId] : [],
         externalCache: this.externalCache,
+        amountInBooking: amountsInBooking?.get(bookableItem.bookableId),
         manualPriceEur: bookableItem.manualPriceEur,
       },
       this.policy,

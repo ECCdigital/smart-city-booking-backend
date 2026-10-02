@@ -43,6 +43,7 @@ const CHECKOUT_REASONS = {
   // pricing / amount
   NO_PRICE_CATEGORY: "checkout.no_price_category",
   MAX_AMOUNT_EXCEEDED: "checkout.max_amount_exceeded",
+  MAX_AMOUNT_PER_BOOKING_EXCEEDED: "checkout.max_amount_per_booking_exceeded",
 
   // group booking
   BOOKING_ATTEMPTS_MISSING: "checkout.booking_attempts_missing",

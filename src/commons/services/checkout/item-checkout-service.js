@@ -10,6 +10,7 @@ const { formatISO } = require("date-fns");
 const {
   BOOKABLE_TYPES,
   Bookable,
+  PRICE_TYPES,
 } = require("../../entities/bookable/bookable");
 const CouponService = require("../coupon-service");
 const providerRegistry = require("./providers/checkout-provider-registry");
@@ -67,6 +68,10 @@ class ItemCheckoutService {
    * @param {string|string[]|null} [excludeBookingIds] Booking IDs to ignore in capacity checks (e.g. the booking being edited).
    * @param {Map} externalCache An optional Map instance for caching data across multiple service instances, particularly useful for external provider data. If not provided, a new Map will be created for each instance.
    *                                Defaults to `false` (discounts are applied when configured).
+   * @param {number} [amountInBooking] Units of this bookable the whole booking
+   *   counts against the bookable's maximum per booking: the sum over the
+   *   booking's chosen positions of it, 0 for a mandatory addon. Defaults to
+   *   `amount`, the item alone.
    * @param {number|null} [manualPriceEur] Explicit net price per unit entered by
    *   the admin. Honored only under ADMIN_MANUAL, where it replaces the
    *   category/provider price; VAT, amount and coupons apply as usual.
@@ -86,6 +91,7 @@ class ItemCheckoutService {
       checkoutId,
       excludeBookingIds,
       externalCache,
+      amountInBooking,
       manualPriceEur,
     },
     policy = CheckoutPolicy.SELF_SERVICE,
@@ -106,6 +112,8 @@ class ItemCheckoutService {
     this.timeEnd = timeEnd;
     this.bookableId = bookableId;
     this.amount = Number(amount);
+    this.amountInBooking =
+      amountInBooking === undefined ? this.amount : Number(amountInBooking);
     this.couponCode = couponCode;
     this.originBookable = null;
     this.bookWithoutDiscount = checkoutPolicy.bookWithoutDiscount(
@@ -923,17 +931,34 @@ class ItemCheckoutService {
   }
 
   async checkMaxAmount() {
+    // The bookable's own maximum per booking and an external provider's
+    // maximum both apply; the capacity itself is the availability check's.
+    this._checkMaxAmountPerBooking();
     if (this.hasExternalMaxAmount) {
       return await this._checkExternalMaxAmount();
     }
-    return await this._checkInternalMaxAmount();
-  }
-
-  async _checkInternalMaxAmount() {
-    // right now max amount is handles by availability check for bookables with amount.
     return {
       checkType: CHECK_TYPES.MAX_AMOUNT,
       available: true,
+    };
+  }
+
+  _checkMaxAmountPerBooking() {
+    const max = this.originBookable.maxAmountPerBooking;
+    if (!max || this.amountInBooking <= max) return;
+
+    const unit =
+      this.originBookable.priceType === PRICE_TYPES.PER_SQUARE_METER
+        ? "m²"
+        : "Stück";
+    throw {
+      checkType: CHECK_TYPES.MAX_AMOUNT,
+      reason: CHECKOUT_REASONS.MAX_AMOUNT_PER_BOOKING_EXCEEDED,
+      available: false,
+      message: `Von ${this.originBookable.title} können höchstens ${max} ${unit} je Buchung gebucht werden.`,
+      maxAmountPerBooking: max,
+      bookableId: this.originBookable.id,
+      title: this.originBookable.title,
     };
   }
 
