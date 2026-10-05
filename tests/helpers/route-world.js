@@ -43,6 +43,7 @@ const {
   NextcloudManager,
 } = require("../../src/commons/data-managers/file-manager");
 const EventManager = require("../../src/commons/data-managers/event-manager");
+const FavoriteManager = require("../../src/commons/data-managers/favorite-manager");
 const GroupBookingManager = require("../../src/commons/data-managers/group-booking-manager");
 const InstanceManager = require("../../src/commons/data-managers/instance-manager");
 const InvitationManager = require("../../src/commons/data-managers/invitation-manager");
@@ -63,6 +64,7 @@ const { Catalog } = require("../../src/commons/entities/catalog/catalog");
 const Challenge = require("../../src/commons/entities/tenant/challenge");
 const { Coupon } = require("../../src/commons/entities/coupon/coupon");
 const { Event } = require("../../src/commons/entities/event/event");
+const { Favorite } = require("../../src/commons/entities/favorite/favorite");
 const Invitation = require("../../src/commons/entities/tenant/invitation");
 const { Media } = require("../../src/commons/entities/media/media");
 const Workflow = require("../../src/commons/entities/workflow/workflow");
@@ -511,7 +513,107 @@ function installRouteWorld({
     only: {
       getEvents: (tenantId, scope) =>
         manyOffers(events, "event")(tenantId, scope),
+      // The events of some (tenant, id) references, as the real manager
+      // answers them: within the reach per tenant, `reached` under
+      // `public`, and a tenant without a public projection contributes
+      // none instead of the public's 404.
+      getEventsByIds: async (refs, scope) => {
+        const byTenant = new Map();
+        for (const ref of refs) {
+          if (!ref?.tenantId || !ref?.id) continue;
+          byTenant.set(ref.tenantId, [
+            ...(byTenant.get(ref.tenantId) ?? []),
+            ref.id,
+          ]);
+        }
+        const found = [];
+        for (const [tenantId, ids] of byTenant) {
+          const records = events.filter(
+            (record) =>
+              ids.includes(record.id) &&
+              reaches(record, "event", tenantId, scope),
+          );
+          if (!isPublic(scope)) {
+            found.push(...records);
+            continue;
+          }
+          try {
+            found.push(...(await reached(tenantId, records)));
+          } catch (err) {
+            if (err?.code !== "tenant_not_found") throw err;
+          }
+        }
+        return found;
+      },
       getMediaUsage: async () => [],
+    },
+  });
+  // The favorites: an in-memory store with the semantics of the real
+  // manager - one entry per user and target, a second store finds it, a
+  // remove of nothing is nothing, a read without a reach throws. Empty at
+  // the start; a test reads it back through the stubbed manager.
+  const favorites = [];
+  const favoriteKey = (userId, tenantId, targetType, targetId) => (record) =>
+    record.userId === userId &&
+    record.tenantId === tenantId &&
+    record.targetType === targetType &&
+    record.targetId === targetId;
+  const requireReach = (scope) => {
+    if (scope?.reach === undefined) {
+      throw new Error("authorization: favorite read without a reach");
+    }
+  };
+  stubManager(FavoriteManager, {
+    one: () => null,
+    many: () => [],
+    only: {
+      getFavorites: async (userId, tenantId, scope) => {
+        requireReach(scope);
+        return favorites
+          .filter(
+            (record) =>
+              record.userId === userId &&
+              (!tenantId || record.tenantId === tenantId),
+          )
+          .map((record) => new Favorite(record));
+      },
+      getFavorite: async (userId, tenantId, targetType, targetId, scope) => {
+        requireReach(scope);
+        const record = favorites.find(
+          favoriteKey(userId, tenantId, targetType, targetId),
+        );
+        return record ? new Favorite(record) : null;
+      },
+      countFavorites: async (userId) =>
+        favorites.filter((record) => record.userId === userId).length,
+      storeFavorite: async (favorite) => {
+        const entity =
+          favorite instanceof Favorite ? favorite : new Favorite(favorite);
+        entity.validate();
+        const { userId, tenantId, targetType, targetId } = entity;
+        const existing = favorites.find(
+          favoriteKey(userId, tenantId, targetType, targetId),
+        );
+        if (existing) return new Favorite(existing);
+        favorites.push(entity.toDocument());
+        return new Favorite(entity.toDocument());
+      },
+      removeFavorite: async (userId, tenantId, targetType, targetId) => {
+        const index = favorites.findIndex(
+          favoriteKey(userId, tenantId, targetType, targetId),
+        );
+        if (index !== -1) favorites.splice(index, 1);
+      },
+      reassignUserId: async (previousUserId, newUserId) => {
+        for (const record of favorites) {
+          if (record.userId === previousUserId) record.userId = newUserId;
+        }
+      },
+      removeFavoritesOfUser: async (userId) => {
+        for (let i = favorites.length - 1; i >= 0; i--) {
+          if (favorites[i].userId === userId) favorites.splice(i, 1);
+        }
+      },
     },
   });
   // The groups of the harness within the reach; the harness itself

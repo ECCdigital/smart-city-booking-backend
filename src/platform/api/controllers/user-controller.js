@@ -271,7 +271,7 @@ class UserController {
       }
 
       const userObject = rawUser.toEntity();
-      await UserManager.deleteUser(userObject.id);
+      await UserService.deleteUser(userObject.id);
       logger.info(
         `Instance -- removed user ${userObject.id} by user ${user?.id}`,
       );

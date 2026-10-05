@@ -9,7 +9,7 @@ Routes are mounted as follows:
 
 - `/api/...` — instance-level (`src/platform/api/api-router.js`)
 - `/api/:tenant/...` — tenant-scoped (`src/platform/api/api-router-tenant-related.js`)
-- `/api/v2/...` — checkout, coupons, booking status, dashboard KPIs (v2 controllers)
+- `/api/v2/...` — checkout, coupons, booking status, dashboard KPIs, favorites (v2 controllers)
 
 Authentication details: [authentication.md](authentication.md)
 

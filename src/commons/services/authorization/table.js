@@ -190,6 +190,15 @@ const TABLE = {
     read: { any: "manageBookings.readAny" },
   },
 
+  // A favorite (glossary "Favorit") is the signed-in user's alone: `self`
+  // at both entries, no owner key, no `any` - no other principal, the
+  // instance owner included, reads or writes it over these routes. The
+  // service reads for the user under `DOMAIN`, as "my bookings" does.
+  favorite: {
+    readMine: { self: "signedIn" },
+    write: { self: "signedIn" },
+  },
+
   accessScan: {
     resolve: { self: "signedIn" },
   },

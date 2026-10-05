@@ -90,6 +90,8 @@ Set secure values for `CRYPTO_SECRET`, `JWT_SECRET`, and `JWT_REFRESH_SECRET`.
 
 For file uploads and payment documents (receipts, invoices), configure [Nextcloud](docs/nextcloud.md) in `.env`.
 
+Optional limits live in `.env` too: `MAX_TENANTS`, `MAX_BOOKABLES`, `MAX_EVENTS`, and `FAVORITES_MAX_PER_USER` (how many offers one signed-in user may mark as favorites across all tenants, default 200).
+
 Start in development mode (MongoDB must be running):
 
 ```bash

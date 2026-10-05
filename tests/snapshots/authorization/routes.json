@@ -734,6 +734,20 @@
     "tenantOwner": 200,
     "instanceOwner": 200
   },
+  "GET /api/v2/favorites/": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/v2/favorites/offers": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
   "POST /api/v2/:tenant/checkout/validate-group": {
     "anonymous": 200,
     "signedIn": 200,
@@ -838,6 +852,20 @@
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
+  },
+  "PUT /api/v2/:tenant/favorites/:targetType/:targetId": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "DELETE /api/v2/:tenant/favorites/:targetType/:targetId": {
+    "anonymous": 401,
+    "signedIn": 204,
+    "roleHolder": 204,
+    "tenantOwner": 204,
+    "instanceOwner": 204
   },
   "GET /api/:tenant/bookables/public": {
     "anonymous": 200,

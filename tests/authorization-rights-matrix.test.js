@@ -77,6 +77,7 @@ const {
   TIME_END,
 } = require("./helpers/booking-lifecycle-harness");
 const { installRouteWorld, FIXTURE_ID } = require("./helpers/route-world");
+const FavoriteManager = require("../src/commons/data-managers/favorite-manager");
 const { Booking } = require("../src/commons/entities/booking/booking");
 
 const A = TENANT;
@@ -134,8 +135,11 @@ describe("authorization rights matrix: the core routes by principal, stage and t
       ),
     );
 
-  /** Puts the bookings and groups back: a request may remove them. */
-  function reseed() {
+  /** Puts the bookings and groups back, and the favorites away: a request may remove or add them. */
+  async function reseed() {
+    for (const userId of Object.values(PRINCIPALS)) {
+      if (userId) await FavoriteManager.removeFavoritesOfUser(userId);
+    }
     h.store.clear();
     h.store.set(FX, bookingOf(FX, A, CUSTOMER));
     h.store.set(
@@ -182,7 +186,7 @@ describe("authorization rights matrix: the core routes by principal, stage and t
     allBookablesOfA = Object.values(h.bookables)
       .filter((record) => record.tenantId === A)
       .map((record) => record.id);
-    reseed();
+    await reseed();
   });
 
   after(async function () {
@@ -204,7 +208,7 @@ describe("authorization rights matrix: the core routes by principal, stage and t
   }
 
   async function call(method, path, userId, body) {
-    reseed();
+    await reseed();
     let req = h.api()[method](path).timeout({ response: 5000 });
     if (userId) req = req.set(h.as(userId));
     if (body) req = req.send(body);
@@ -731,8 +735,72 @@ describe("authorization rights matrix: the core routes by principal, stage and t
     }),
   ];
 
+  /**
+   * The favorites (`favorite.write` and `favorite.readMine`, `self`):
+   * every signed-in user marks for themselves and reads their own list,
+   * whoever they are in the tenant - and marks only what they reach at
+   * this moment, the offer read with the reach of its entry (`also` on
+   * the marker). A reader holds `own` at `event.read`, so an event they
+   * do not own is not there for them, as at the event routes; removing
+   * touches the user's own mark alone and never looks at the offer. The
+   * list is empty for everyone here: every call starts without favorites,
+   * and nobody reads anyone else's.
+   */
+  const favoriteOf = (tenant, targetType, targetId) =>
+    `/api/v2/${tenant}/favorites/${targetType}/${targetId}`;
+  const FAVORITES = "/api/v2/favorites";
+  const FAVORITE_OFFERS = "/api/v2/favorites/offers";
+  /** The own list of every signed-in principal: empty, never refused. */
+  const ownList = (anonymous) => ({
+    ...(anonymous !== undefined && { anonymous }),
+    customer: [],
+    reader: [],
+    staff: [],
+    owner: [],
+    admin: [],
+    foreignOwner: [],
+  });
+  const favoriteRows = () => [
+    row("get", FAVORITES, ownList(401)),
+    row("get", FAVORITE_OFFERS, ownList(401)),
+    row("get", `${FAVORITES}?tenant=${A}`, ownList()),
+    row("put", favoriteOf(A, "bookable", FX), {
+      anonymous: 401,
+      customer: 200,
+      reader: 200,
+      staff: 200,
+      owner: 200,
+      admin: 200,
+      foreignOwner: 200,
+    }),
+    row("put", favoriteOf(A, "event", FX), {
+      anonymous: 401,
+      customer: 200,
+      reader: 404,
+      staff: 200,
+      owner: 200,
+      admin: 200,
+      foreignOwner: 200,
+    }),
+    row("put", favoriteOf(A, "event", MINE), {
+      customer: 200,
+      reader: 200,
+      staff: 200,
+    }),
+    row("delete", favoriteOf(A, "bookable", FX), {
+      anonymous: 401,
+      customer: 204,
+      reader: 204,
+      staff: 204,
+      owner: 204,
+      admin: 204,
+      foreignOwner: 204,
+    }),
+  ];
+
   describe("tenant A, free", function () {
     itHolds("free", freeRows());
+    itHolds("free", favoriteRows());
   });
 
   describe("tenant A, waiting for approval: nothing rests for the signed in", function () {
@@ -762,6 +830,26 @@ describe("authorization rights matrix: the core routes by principal, stage and t
         anonymous: 404,
         customer: 404,
       }),
+      // Nothing to mark for the public, the staff keep their view; the own
+      // mark is removed whatever the tenant's level.
+      row("put", favoriteOf(A, "bookable", FX), {
+        customer: 404,
+        reader: 404,
+        staff: 200,
+        owner: 200,
+        admin: 200,
+        foreignOwner: 404,
+      }),
+      row("delete", favoriteOf(A, "bookable", FX), {
+        customer: 204,
+        reader: 204,
+        staff: 204,
+        owner: 204,
+        admin: 204,
+        foreignOwner: 204,
+      }),
+      row("get", FAVORITES, ownList()),
+      row("get", FAVORITE_OFFERS, ownList()),
     ]);
   });
 
@@ -895,12 +983,43 @@ describe("authorization rights matrix: the core routes by principal, stage and t
         admin: [],
         foreignOwner: [],
       }),
+      // The favorites are the user's own (`self`), never refused: a member
+      // whose membership rests is the public at the offer and has nothing
+      // to mark (404, not the declination); the instance owner keeps `any`
+      // at the offer and marks; everyone removes their own mark.
+      row("put", favoriteOf(A, "bookable", FX), {
+        customer: 404,
+        reader: 404,
+        staff: 404,
+        owner: 404,
+        admin: 200,
+        foreignOwner: 404,
+      }),
+      row("delete", favoriteOf(A, "bookable", FX), {
+        customer: 204,
+        reader: 204,
+        staff: 204,
+        owner: 204,
+        admin: 204,
+        foreignOwner: 204,
+      }),
+      row("get", FAVORITES, ownList()),
+      row("get", FAVORITE_OFFERS, ownList()),
     ]);
   });
 
   describe("across the tenant border: tenant B", function () {
     const inB = (path) => `/api/${B}${path}`;
     itHolds("free", [
+      // A favorite needs no membership: a member of A marks what the public
+      // reaches in B, for themselves.
+      row("put", favoriteOf(B, "bookable", FX_B), {
+        customer: 200,
+        staff: 200,
+        owner: 200,
+        foreignOwner: 200,
+        admin: 200,
+      }),
       // A member of A is nobody in B: the management routes refuse them.
       row("get", inB("/bookables"), {
         customer: 403,
