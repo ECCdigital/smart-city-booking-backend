@@ -1,6 +1,6 @@
 # Authorization: how to apply it
 
-How to protect a route, extend the rights table and read records within a reach. For developers who add or change endpoints. The terms are the glossary's (section "Rechte" in [`CONTEXT.md`](../CONTEXT.md)); the German term follows the English one on first use. The decisions behind the model are in the ADRs [0001](adr/0001-reach-has-one-meaning.md) to [0004](adr/0004-membership-picture.md).
+How to protect a route, extend the rights table and read records within a reach. For developers who add or change endpoints. The terms are the glossary's (section "Rechte" in [`GLOSSARY.md`](../GLOSSARY.md)); the German term follows the English one on first use. The decisions behind the model are in the ADRs [0001](adr/0001-reach-has-one-meaning.md) to [0004](adr/0004-membership-picture.md).
 
 Everything lives in `src/commons/services/authorization/` and is exported from its `index.js`:
 
