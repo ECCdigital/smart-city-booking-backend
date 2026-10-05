@@ -28,6 +28,10 @@ _Avoid_: Admin-Buchung (auch Eigentümer-Updates sind manuell), Buchung ohne Pr�
 Der vom Erfassenden ausdrücklich festgelegte Netto-Stückpreis eines Items einer manuellen Buchung. Ersetzt den Preis, der sich sonst aus Preiskategorien oder externen Anbietern ergäbe; Mehrwertsteuer, Stückzahl und Coupons gelten weiterhin. Bleibt am Item, bis er ausdrücklich entfernt wird — ein Verschieben der Buchung rechnet ihn nicht neu. Nur unter der Checkout-Policy _manuelle Buchung_ wirksam; in einer Selbstbuchung wird er verworfen, nie gespeichert.
 _Avoid_: Preisüberschreibung (technischer Jargon), Fixpreis (das ist die Eigenschaft einer Preiskategorie), Kategorie-Trick (der Alt-Weg über manipulierte Preiskategorien)
 
+**Höchstmenge je Buchung (eines Bookables)**:
+Wie viele Einheiten eines Bookables eine einzelne Buchung höchstens enthalten darf, über alle ihre Positionen dieses Bookables zusammengezählt. Leer heißt unbegrenzt. Gilt für jede vom Buchenden gewählte Position, ob Hauptposition, Addon oder Teil eines Bundles; Pflicht-Addons nicht, ihre Menge folgt der Position, zu der sie gehören. Eine Buchbarkeits-Prüfung: Sie gilt in der Selbstbuchung, nicht in der manuellen Buchung. Unabhängig von der Kapazität des Bookables und von einer Höchstmenge, die ein externer Anbieter vorgibt. Gelten mehrere Grenzen, gilt jede, die strengere entscheidet.
+_Avoid_: maxAmount (so heißt die Grenze eines externen Anbieters und die des Coupons), Kapazität, verfügbare Anzahl (das ist die Obergrenze gleichzeitiger Buchungen insgesamt)
+
 ### Mediathek
 
 **Medium**:
@@ -244,6 +248,10 @@ _Avoid_: Reject-Hook (das ist die Speicherform), Kündigung, Stornierung (das is
 **Wiederherstellung (einer Buchung)**:
 Der Lebenszyklus-Übergang, der eine abgelehnte oder stornierte Buchung in den Zustand zurückholt, den sie vor dem Storno hatte, mit Preis und Positionen von damals; die Erstattung fällt weg, der Zugang wird neu gewährt. Der Zustand vor dem Storno wird beim Storno festgehalten.
 _Avoid_: Unreject, Reaktivierung, Rücknahme des Stornos (das ist die Handlung, nicht der Übergang)
+
+**Erstattungsstand**:
+Der Vermerk an einer stornierten Buchung, ob das Geld schon zurückgezahlt wurde: _offen_ oder _erfolgt_. Entsteht beim Storno, und nur, wenn eine Erstattung fällig ist: die Buchung war bestätigt, die Zahlung ist eingegangen, und der Erstattungsbetrag liegt über null. Die Verwaltung setzt ihn von Hand auf _erfolgt_ und kann das zurücknehmen; die Plattform zahlt nichts aus und erfährt von keiner Auszahlung. Kein Buchungszustand und kein Lebenszyklus-Übergang: mit der Wiederherstellung fällt er weg, ein neues Storno beginnt wieder bei _offen_. Der Buchende sieht ihn nicht.
+_Avoid_: Rückerstattungsstatus, Refund-Status, erstattet (als Buchungszustand)
 
 **Änderung (einer Buchung)**:
 Der Lebenszyklus-Übergang, der den Inhalt einer Buchung ändert — Zeiten, Positionen, Kontaktdaten, Preis —, ohne ihren Zustand zu wechseln: die neue Buchung wird im Zustand der gespeicherten geschrieben, und der Zugang folgt dem Inhalt (bei _bestätigt_ verschoben, bei _angefragt_ oder _Zahlung offen_ neu vorgemerkt). Der Admin-PUT ist ein Plan: erst die Änderung, dann die Übergänge, die die Flags verlangen, jeder für sich und ohne Rücknahme über Übergangsgrenzen.

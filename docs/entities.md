@@ -180,6 +180,7 @@ Example:
   "zipCode": "12345",
   "city": "Example City",
   "company": "Example Company",
+  "vatId": "DE123456789",
   "secret": "<hash>",
   "hooks": [],
   "isVerified": true,
@@ -192,7 +193,7 @@ Example:
 }
 ```
 
-`authType` values include `local` and SSO types. `keycloakId` links SSO users. `cardAuth` stores card-based auth metadata. `legalAcceptance` records accepted legal documents per key.
+`vatId` holds the VAT identification number (Umsatzsteuer-ID) of the user or their company; a free-form string, empty by default. `authType` values include `local` and SSO types. `keycloakId` links SSO users. `cardAuth` stores card-based auth metadata. `legalAcceptance` records accepted legal documents per key.
 
 ### Bookable
 

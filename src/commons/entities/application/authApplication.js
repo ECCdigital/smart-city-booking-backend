@@ -4,7 +4,10 @@ const SecurityUtils = require("../../utilities/security-utils");
 class AuthApplication extends TenantApplication {
   constructor(params) {
     super({ type: "auth", ...params });
-    this.serverUrl = params.serverUrl || "";
+    // Without a trailing slash: the URL is joined with `/realms/…` for the
+    // issuer and every endpoint. The model rebuilds the application on read
+    // and on save, so a URL stored with the slash loses it without migration.
+    this.serverUrl = (params.serverUrl || "").replace(/\/+$/, "");
     this.realm = params.realm || "";
     this.publicClient = params.publicClient || "";
     this.privateClient = params.privateClient || "";

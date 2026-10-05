@@ -1,12 +1,12 @@
 # Issue-Tracker: GitHub ECC, Produkt-Repo
 
-Erzeugt vom Setup der ECC-Fassung (`/setup-matt-pocock-skills`, Vorlage „GitHub ECC, Produkt-Repo“), Stand `ecc-5`. Nicht von Hand ändern: Die Vorlage liegt im Fork `ECCdigital/skills`. Nach einem neuen Stand führst du das Setup neu aus.
+Erzeugt vom Setup der ECC-Fassung (`/setup-matt-pocock-skills`, Vorlage „GitHub ECC, Produkt-Repo“), Stand `ecc-8`. Nicht von Hand ändern: Die Vorlage liegt im Fork `ECCdigital/skills`. Nach einem neuen Stand führst du das Setup neu aus.
 
 Dieses Repo enthält Code eines Produkts. Die Tickets dazu liegen nicht hier, sondern als Issues in `ECCdigital/tickets`, zusammen mit Anforderungen, Karten und Klärungen. Issues dieses Repos sind keine Tickets.
 
 - Jeder `gh`-Befehl an Tickets bekommt `-R ECCdigital/tickets`. Ohne ihn meint `gh` dieses Repo.
 - Eine Nummer wie `#42`, `ECCdigital/tickets#42` oder die URL `https://github.com/ECCdigital/tickets/issues/42` meint ein Issue in `ECCdigital/tickets`.
-- Die Begriffe der Arbeitsweise (Ticket, Zustand, Definition of Ready, Board) stehen in `CONTEXT.md` von `ECCdigital/tickets`: `gh api repos/ECCdigital/tickets/contents/CONTEXT.md -H "Accept: application/vnd.github.raw"`.
+- Die Begriffe der Arbeitsweise (Ticket, Zustand, Definition of Ready, Board) stehen in `GLOSSARY.md` von `ECCdigital/tickets`: `gh api repos/ECCdigital/tickets/contents/GLOSSARY.md -H "Accept: application/vnd.github.raw"`.
 
 ## Ein Ticket
 

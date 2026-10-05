@@ -8,7 +8,7 @@
  *
  * Written for the first ticket of the BookingLifecycle chain (Wayfinder,
  * "BookingLifecycle (1): Charakterisierungstests ..."); the vocabulary of
- * the states is the glossary in `CONTEXT.md`, "Buchungslebenszyklus". It
+ * the states is the glossary in `GLOSSARY.md`, "Buchungslebenszyklus". It
  * pins, it does not judge: each case lists the effects at the seam as a
  * table - store writes, access calls, documents, mails, workflow events -
  * in the order they happen today. The known defects are pinned as today's

@@ -66,7 +66,7 @@ Instance (global deployment config)
 The authorization lives in `src/commons/services/authorization/`: a principal loaded once per request, the rights table (`table.js`), and one marker per route that decides the reach the managers turn into their query condition. Nothing here repeats it:
 
 - How to apply it, with examples: [docs/authorization.md](../authorization.md) (marking a route, a new table entry, reading with a reach, what a handler does not do)
-- Terms: glossary section "Rechte" in `CONTEXT.md` (Reichweite, Prinzipal, Rechtetabelle, Berechtigung, …)
+- Terms: glossary section "Rechte" in `GLOSSARY.md` (Reichweite, Prinzipal, Rechtetabelle, Berechtigung, …)
 - Request flow and how to mark a route: [api.md](api.md)
 - Decisions: [ADR 0001](../adr/0001-reach-has-one-meaning.md) (one meaning of `own`), [ADR 0002](../adr/0002-reach-is-required.md) (no read without a reach), [ADR 0003](../adr/0003-public-projection-behind-the-managers.md) (public projection behind the managers)
 

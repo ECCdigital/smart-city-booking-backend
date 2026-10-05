@@ -109,6 +109,7 @@ class CardAuthService {
     firstName,
     lastName,
     company,
+    vatId,
     nextUrl,
     verifyUrl,
     linkUrl,
@@ -195,6 +196,7 @@ class CardAuthService {
       firstName,
       lastName,
       company,
+      vatId,
       authType: "card",
       cardAuth: {
         appId,

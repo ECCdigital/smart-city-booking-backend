@@ -19,6 +19,18 @@ describe("ruleMetadata", () => {
     ]);
   });
 
+  it("exposes the refund state of a booking as a queryable field", () => {
+    const booking = RuleMetadata.getResources().find(
+      (r) => r.name === "Booking",
+    );
+    const refundState = booking.fields.find(
+      (f) => f.name === "cancellationRefund.refundState",
+    );
+
+    expect(refundState).to.include({ type: "string" });
+    expect(refundState.note).to.include("open").and.to.include("completed");
+  });
+
   it("keeps the engine allowlist in sync with the catalog", () => {
     expect(RuleEngine.getAllowedResources()).to.deep.equal(["Booking"]);
   });

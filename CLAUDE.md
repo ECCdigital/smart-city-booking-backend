@@ -8,4 +8,4 @@ GitHub ECC, Produkt-Repo: Tickets liegen als Issues in `ECCdigital/tickets`, nic
 
 ### Domain docs
 
-Single-context: one `CONTEXT.md` plus `docs/adr/` at the root. See `docs/agents/domain.md`.
+Single-context: one `GLOSSARY.md` plus `docs/adr/` at the root. See `docs/agents/domain.md`.

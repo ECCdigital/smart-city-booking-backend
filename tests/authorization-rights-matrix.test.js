@@ -1,6 +1,6 @@
 /**
  * The rights matrix: what each kind of principal gets on the core routes,
- * written down from the glossary ("Rechte" in `CONTEXT.md`) and not
+ * written down from the glossary ("Rechte" in `GLOSSARY.md`) and not
  * derived from the rights table - where the two disagree, this test is
  * the one to believe until someone decides otherwise.
  *

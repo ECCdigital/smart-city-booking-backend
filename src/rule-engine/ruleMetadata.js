@@ -35,6 +35,12 @@ const RESOURCE_CATALOG = {
       { name: "isRejected", label: "Abgelehnt", type: "boolean" },
       { name: "priceEur", label: "Preis (EUR)", type: "number" },
       {
+        name: "cancellationRefund.refundState",
+        label: "Erstattungsstand",
+        type: "string",
+        note: "open (Erstattung offen) oder completed (Erstattung erfolgt); nur an stornierten Buchungen mit fälliger Erstattung",
+      },
+      {
         name: "timeBegin",
         label: "Buchungsbeginn",
         type: "datetime",

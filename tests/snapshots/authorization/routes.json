@@ -657,6 +657,13 @@
     "tenantOwner": 200,
     "instanceOwner": 200
   },
+  "POST /api/instances/keycloak/check": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": 400
+  },
   "GET /api/instances/": {
     "anonymous": 401,
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
@@ -1153,6 +1160,13 @@
     "roleHolder": 409,
     "tenantOwner": 409,
     "instanceOwner": 409
+  },
+  "PUT /api/:tenant/bookings/:id/refund-state": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
   },
   "GET /api/:tenant/bookings/:id/cancellation-refund-preview": {
     "anonymous": 401,

@@ -53,6 +53,8 @@ Register a new user. The answer is account-neutral: `201` whether or not the add
   "password": "your-password",
   "firstName": "First Name",
   "lastName": "Last Name",
+  "company": "Example Company",
+  "vatId": "DE123456789",
   "verifyUrl": "https://store.example.com/auth/verify",
   "nextUrl": "/tenants/new"
 }

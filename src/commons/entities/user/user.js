@@ -125,6 +125,7 @@ class User {
       firstName: this.firstName,
       lastName: this.lastName,
       company: this.company,
+      vatId: this.vatId,
       phone: this.phone,
       address: this.address,
       zipCode: this.zipCode,

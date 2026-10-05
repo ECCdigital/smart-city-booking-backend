@@ -187,6 +187,7 @@ class AuthenticationController {
         firstName,
         lastName,
         company,
+        vatId,
         nextUrl,
         verifyUrl,
         legalAcceptance,
@@ -204,6 +205,7 @@ class AuthenticationController {
         firstName: firstName,
         lastName: lastName,
         company: company,
+        vatId: vatId,
         legalAcceptance: legalAcceptance,
       });
       user.setPassword(password);
@@ -523,6 +525,7 @@ class AuthenticationController {
         firstName,
         lastName,
         company,
+        vatId,
         nextUrl,
         verifyUrl,
         linkUrl,
@@ -543,6 +546,7 @@ class AuthenticationController {
         firstName,
         lastName,
         company,
+        vatId,
         nextUrl,
         verifyUrl,
         linkUrl,

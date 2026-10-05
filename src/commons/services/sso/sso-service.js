@@ -4,6 +4,7 @@ const UserManager = require("../../data-managers/user-manager");
 const { RoleManager } = require("../../data-managers/role-manager");
 const { User } = require("../../entities/user/user");
 const MembershipManager = require("../../data-managers/membership-manager");
+const KeycloakVerifier = require("../../utilities/keycloak-verifier");
 
 const SSO_PROVIDER = "keycloak";
 
@@ -123,6 +124,12 @@ class SsoService {
         },
       },
     );
+    if (kcResponse.data?.active === false) {
+      KeycloakVerifier.warnIfPrivateClientNotInAudience(
+        userToken,
+        app.privateClient,
+      );
+    }
     return kcResponse.data;
   }
 
