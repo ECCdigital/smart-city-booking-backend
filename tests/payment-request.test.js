@@ -70,6 +70,28 @@ describe("the payment request as a value", function () {
         expect(answer.paymentUrl, Provider.name).to.include("ids=B-1");
       }
     });
+
+    it("pmPayment, GiroCockpit and ePayBL read a single booking under the domain's reach", async function () {
+      const { DOMAIN } = require("../src/commons/services/authorization/reach");
+      const read = sinon
+        .stub(BookingManager, "getBooking")
+        .rejects(new Error("stop after the read"));
+      for (const Provider of [
+        PmPaymentService,
+        GiroCockpitPaymentService,
+        EPayBLPaymentService,
+      ]) {
+        read.resetHistory();
+        await new Provider(TENANT, "B-1")
+          .createSeparatePaymentUrl()
+          .catch(() => {});
+        expect(read.firstCall.args, Provider.name).to.deep.equal([
+          "B-1",
+          TENANT,
+          DOMAIN,
+        ]);
+      }
+    });
   });
 
   describe("the invoice provider", function () {

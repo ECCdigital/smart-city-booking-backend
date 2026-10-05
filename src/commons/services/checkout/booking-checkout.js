@@ -529,7 +529,7 @@ async function runUpdateTransition(tenantId, transition, { booking, userId }) {
 
 /**
  * The admin PUT as the plan of spec part 1, section 6: the checkout
- * prepares the booking as it is to be (a manual booking, see CONTEXT.md),
+ * prepares the booking as it is to be (a manual booking, see GLOSSARY.md),
  * `planUpdate` reads the three flags of the form against the state the
  * booking is in and answers the transitions the update needs - `amend`
  * first, the content change, then what the flags ask for - and each runs
@@ -586,7 +586,7 @@ async function updateBooking(
     tenantId,
   );
 
-  // Every booking update is a manual booking (see CONTEXT.md,
+  // Every booking update is a manual booking (see GLOSSARY.md,
   // "Manuelle Buchung"): the entered values are authoritative, no checks
   // run and no automatic discounts apply. The flags of the form are the
   // plan's, not the checkout's: the content write goes in the state the

@@ -68,6 +68,7 @@ const WorkflowManager = require("../../src/commons/data-managers/workflow-manage
 const OpeningHoursManager = require("../../src/commons/utilities/opening-hours-manager");
 const PaymentUtils = require("../../src/commons/utilities/payment-utils");
 const InstanceManager = require("../../src/commons/data-managers/instance-manager");
+const InstanceModel = require("../../src/commons/data-managers/models/instanceModel");
 const { RoleManager } = require("../../src/commons/data-managers/role-manager");
 const CouponService = require("../../src/commons/services/coupon-service");
 const WorkflowService = require("../../src/commons/services/workflow/workflow-service");
@@ -83,6 +84,7 @@ const PaymentService = require("../../src/commons/services/payment/providers/pay
 const { Bookable } = require("../../src/commons/entities/bookable/bookable");
 const { Role } = require("../../src/commons/entities/role/role");
 const Instance = require("../../src/commons/entities/instance/instance");
+const ApplicationFactory = require("../../src/commons/entities/application/applicationFactory");
 const Tenant = require("../../src/commons/entities/tenant/tenant");
 const {
   ROLE_GROUPS,
@@ -410,14 +412,30 @@ function membershipsOf(userId) {
     : [membershipOf(userId, TENANT)];
 }
 
-/** The instance: the admin owns it, nobody else may open a tenant. */
-function instance() {
-  return new Instance({
+/** The stored instance: the admin owns it, nobody else may open a tenant. */
+function instanceRecord(overrides = {}) {
+  return {
     id: "instance",
     ownerUserIds: [ADMIN],
     allowAllUsersToCreateTenant: false,
     allowedUsersToCreateTenant: [],
     mailEnabled: true,
+    applications: [],
+    ...overrides,
+  };
+}
+
+/**
+ * The instance as `InstanceManager.getInstance` hands it out, a fresh one
+ * per read: its applications are entities, as the model's decryption
+ * makes them.
+ */
+function instanceOf(record) {
+  return new Instance({
+    ...clone(record),
+    applications: record.applications.map((app) =>
+      ApplicationFactory.create(clone(app)),
+    ),
   });
 }
 
@@ -435,8 +453,14 @@ function instance() {
  * @param {Object} [options]
  * @param {Object} [options.tenant] - Overrides of the tenant.
  * @param {Object} [options.bookables] - Additional or replaced bookables.
+ * @param {Object} [options.instance] - Overrides of the stored instance,
+ *   e.g. `{ applications: [keycloakApp] }`.
  */
-async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
+async function installHarness({
+  tenant: tenantOverrides,
+  bookables,
+  instance: instanceOverrides,
+} = {}) {
   const store = new Map();
   const groups = new Map();
   const labels = new Map();
@@ -452,6 +476,7 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
     mail: TENANT_B_MAIL,
   });
   const tenantRecords = { [TENANT]: tenantRecord, [TENANT_B]: tenantBRecord };
+  const storedInstance = instanceRecord(instanceOverrides);
   const paymentSettings = { available: true };
 
   const label = (id) => {
@@ -485,12 +510,20 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
   const ofTenant = (doc, tenantId) =>
     doc && (tenantId === undefined || doc.tenantId === tenantId);
   // Reads the store twice for one load, as the lifecycle tests count on.
+  /**
+   * A stored document as the manager hands it to a reach: under `own`
+   * without the refund state (glossary "Erstattungsstand").
+   */
+  const entityFor = (doc, scope) => {
+    const booking = new Booking(clone(doc));
+    return scope?.reach === "own" ? booking.hideRefundState() : booking;
+  };
   sinon
     .stub(BookingManager, "getBooking")
     .callsFake(async (id, tenantId, scope) => {
       const doc = store.get(id);
       return ofTenant(doc, tenantId) && withinReach(doc, scope)
-        ? new Booking(clone(store.get(id)))
+        ? entityFor(store.get(id), scope)
         : null;
     });
   sinon
@@ -570,6 +603,33 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
       );
       return clone(previous);
     });
+  // The atomic write of the refund state: only a booking that carries one
+  // and is not in the asked state yet matches; `completed` records moment
+  // and person, `open` drops both.
+  sinon
+    .stub(BookingManager, "setRefundState")
+    .callsFake(async (tenantId, id, state, scope) => {
+      const doc = store.get(id);
+      if (
+        !ofTenant(doc, tenantId) ||
+        !withinReach(doc, scope) ||
+        doc.cancellationRefund?.refundState === undefined ||
+        doc.cancellationRefund.refundState === state.refundState
+      ) {
+        return null;
+      }
+      const refund = { ...doc.cancellationRefund };
+      refund.refundState = state.refundState;
+      if (state.refundState === "completed") {
+        refund.refundCompletedAt = state.completedAt;
+        refund.refundCompletedByUserId = state.completedByUserId;
+      } else {
+        delete refund.refundCompletedAt;
+        delete refund.refundCompletedByUserId;
+      }
+      doc.cancellationRefund = refund;
+      return entityFor(doc, scope);
+    });
   sinon.stub(BookingManager, "replaceBooking").callsFake(async (document) => {
     store.set(document.id, clone(document));
     record("store.restore", `${label(document.id)} ${stateOf(document)}`);
@@ -592,10 +652,17 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
   // world's `getBookables`, which throws the public's `tenant_not_found`).
   sinon
     .stub(BookingManager, "getTenantBookings")
-    .callsFake(async (tenantId, scope) => {
+    .callsFake(async (tenantId, scope, { refundState } = {}) => {
+      if (refundState && scope?.reach === "own") {
+        return [];
+      }
       const bookings = [...store.values()]
         .filter((doc) => doc.tenantId === tenantId && withinReach(doc, scope))
-        .map((doc) => new Booking(clone(doc)));
+        .filter(
+          (doc) =>
+            !refundState || doc.cancellationRefund?.refundState === refundState,
+        )
+        .map((doc) => entityFor(doc, scope));
       return scope?.reach === "public"
         ? BookingManager._ofListedBookables(tenantId, bookings)
         : bookings;
@@ -707,7 +774,18 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
   // The rights run for real over the instance, the memberships and the
   // one role: `UserManager.getMembershipPicture` reads these, and the
   // principal of the authorization is built from its answer.
-  sinon.stub(InstanceManager, "getInstance").callsFake(async () => instance());
+  sinon
+    .stub(InstanceManager, "getInstance")
+    .callsFake(async () => instanceOf(storedInstance));
+  // `InstanceManager.getPortalConfig` reads the stored record itself, lean:
+  // as stored, without the schema's defaults (an absent Portal-URL falls
+  // back to the legacy `catalogUrl`, an emptied one does not). Every other
+  // read of the model goes on as before.
+  sinon
+    .stub(InstanceModel, "findOne")
+    .callThrough()
+    .withArgs({}, sinon.match.has("portalUrl"))
+    .returns({ lean: async () => clone(storedInstance) });
   sinon
     .stub(MembershipManager, "getMembershipByTenantAndUserID")
     .callsFake(
@@ -962,6 +1040,12 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
     tenant: tenantRecord,
     /** The second tenant's record, for the questions across tenant borders. */
     tenantB: tenantBRecord,
+    /**
+     * The stored instance's record; every `InstanceManager.getInstance`
+     * and `getPortalConfig({ fresh: true })` reads it afresh, so a test
+     * may change it (`h.instance.applications`, `h.instance.portalUrl`).
+     */
+    instance: storedInstance,
     bookables: catalogue,
     as,
     manualBooking,

@@ -1,7 +1,7 @@
 /**
  * Authorization: one pure policy over a rights table, a principal loaded
  * once per request, and the three route markers. See the glossary section
- * "Rechte" in `CONTEXT.md`, the ADRs under `docs/adr/` and the request
+ * "Rechte" in `GLOSSARY.md`, the ADRs under `docs/adr/` and the request
  * flow in `docs/agents/api.md`.
  */
 

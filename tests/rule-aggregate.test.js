@@ -108,6 +108,72 @@ describe("RuleEngine aggregate actions & $$TENANT_MAIL", () => {
     expect(log.actionResults).to.have.lengthOf(2);
   });
 
+  // The rule a tenant builds for its open refunds (ECCdigital/tickets#15):
+  // once a day, one mail per tenant with every cancelled booking whose
+  // refund is still to be paid out (glossary "Erstattungsstand").
+  describe("the daily mail of open refunds", () => {
+    const OPEN_REFUNDS_RULE = {
+      _id: "refunds1",
+      name: "Offene Rückerstattungen",
+      enabled: true,
+      resource: "Booking",
+      schedule: "0 7 * * *",
+      query: { "cancellationRefund.refundState": "open" },
+      actions: [
+        {
+          type: "sendAggregatedEmail",
+          params: {
+            to: "$$TENANT_MAIL",
+            subject: "Offene Rückerstattungen",
+            body: "{{tenant}}: {{#each bookings}}{{id}} {{/each}}",
+          },
+        },
+      ],
+    };
+
+    it("is a valid rule and asks the store for the open refund state", async () => {
+      let asked;
+      mongoose.model.returns({
+        find: (query) => {
+          asked = query;
+          return { lean: async () => foundDocs };
+        },
+      });
+      foundDocs = [
+        { id: "b1", tenantId: "t1" },
+        { id: "b2", tenantId: "t1" },
+      ];
+
+      expect(
+        RuleEngine.validateRuleDefinition(OPEN_REFUNDS_RULE, {
+          validateSchedule: true,
+        }),
+      ).to.deep.equal({ valid: true, errors: [] });
+
+      const log = await RuleEngine.runRule(OPEN_REFUNDS_RULE);
+
+      expect(asked).to.deep.equal({
+        "cancellationRefund.refundState": "open",
+      });
+      expect(fakeAggregateActions.sendAggregatedEmail.calledOnce).to.be.true;
+      const [docs, params] =
+        fakeAggregateActions.sendAggregatedEmail.firstCall.args;
+      expect(docs.map((doc) => doc.id)).to.deep.equal(["b1", "b2"]);
+      expect(params.to).to.equal("admin-t1@example.com");
+      expect(log.status).to.equal("success");
+    });
+
+    it("sends nothing while no refund is open", async () => {
+      foundDocs = [];
+
+      const log = await RuleEngine.runRule(OPEN_REFUNDS_RULE);
+
+      expect(fakeAggregateActions.sendAggregatedEmail.called).to.be.false;
+      expect(log.matchedCount).to.equal(0);
+      expect(log.status).to.equal("success");
+    });
+  });
+
   it("skips aggregate actions on a dry run", async () => {
     foundDocs = [{ id: "b1", tenantId: "t1" }];
 

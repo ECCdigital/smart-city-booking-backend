@@ -13,6 +13,19 @@ const { REACH } = require("../services/authorization/policy");
 const condition = (scope) =>
   scope?.reach === REACH.PUBLIC ? {} : ownCondition("groupBooking", scope);
 
+/**
+ * The entity of a document as a reach sees it: under `own` - the booker
+ * reading their group - the populated members come without the refund
+ * state (glossary "Erstattungsstand"), which is the administration's.
+ */
+function toEntity(rawGroupBooking, scope) {
+  const groupBooking = rawGroupBooking.toEntity();
+  if (scope?.reach === REACH.OWN) {
+    groupBooking.bookings.forEach((booking) => booking.hideRefundState());
+  }
+  return groupBooking;
+}
+
 class GroupBookingManager {
   /**
    * Get all group bookings for a tenant
@@ -58,7 +71,7 @@ class GroupBookingManager {
 
     const rawGroupBooking = await query.exec();
 
-    return rawGroupBooking ? rawGroupBooking.toEntity() : null;
+    return rawGroupBooking ? toEntity(rawGroupBooking, scope) : null;
   }
 
   /**
@@ -99,7 +112,7 @@ class GroupBookingManager {
     }
 
     const rawGroupBooking = await query.exec();
-    return rawGroupBooking ? rawGroupBooking.toEntity() : null;
+    return rawGroupBooking ? toEntity(rawGroupBooking, scope) : null;
   }
 
   /**
@@ -217,7 +230,7 @@ class GroupBookingManager {
     }
 
     const rawGroupBookings = await query.exec();
-    return rawGroupBookings.map((doc) => doc.toEntity());
+    return rawGroupBookings.map((doc) => toEntity(doc, scope));
   }
 
   static async reassignUserReferences(

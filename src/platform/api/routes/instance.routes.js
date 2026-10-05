@@ -19,6 +19,12 @@ router.get(
   InstanceController.getBookableCustomFields,
 );
 
+router.post(
+  "/keycloak/check",
+  authorize("instance", "checkRealm"),
+  InstanceController.checkKeycloakRealm,
+);
+
 router.get("/", authorize("instance", "read"), InstanceController.getInstance);
 router.put(
   "/",

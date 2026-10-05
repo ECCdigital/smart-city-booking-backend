@@ -2,7 +2,7 @@
  * Checkout-Policy: the single value that crosses the checkout interface.
  *
  * What a policy means is decided here and nowhere else. Callers pick a value
- * and pass it down; they never compose behaviour flags. See CONTEXT.md
+ * and pass it down; they never compose behaviour flags. See GLOSSARY.md
  * ("Checkout-Policy", "Selbstbuchung", "Manuelle Buchung").
  */
 const CheckoutPolicy = Object.freeze({
