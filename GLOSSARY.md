@@ -475,3 +475,41 @@ _Avoid_: Merkliste (das ist die Favoritenliste), Bookmark, Wishlist, Watchlist, 
 **Favoritenliste (eines Nutzers)**:
 Alle Favoriten eines Nutzers über alle Mandanten hinweg, gelesen nur vom Nutzer selbst — die Reichweite _self_, keine Datensätze anderer.
 _Avoid_: Merkliste, Favorites (als Sprechbegriff), Wunschliste
+
+### Plattform und Distribution
+
+**Instanz**:
+Eine laufende Installation der Plattform: genau ein Backend mit genau einer Datenbank, darin ein oder mehrere Mandanten. Was eine Instanz enthält, entscheidet ihr Betreiber.
+_Avoid_: Installation, Deployment, Umgebung, Kunde
+
+**Betreiber (einer Instanz)**:
+Wer eine Instanz technisch betreibt (Server, Deployment, Updates, Umgebungskonfiguration), etwa ECC, eine Kommune oder ein IT-Dienstleister. Keine Rolle in der Anwendung: der Instanz-Owner ist oft dieselbe Organisation, aber nie derselbe Begriff.
+_Avoid_: Hoster, Admin, Instanz-Owner (das ist die Rolle in der Anwendung), Plattform-Betreiber
+
+**Kern**:
+Der Teil der Plattform, ohne den keine Instanz läuft und der ohne alles andere läuft: Backend, Datenbank und lokale Dateiablage. Über die API headless nutzbar; jede Komponente und jedes Modul darüber hinaus ist optional.
+_Avoid_: Core (als Sprechbegriff), Basis, Minimal-Setup
+
+**Komponente**:
+Ein neben dem Backend separat ausgelieferter und betriebener Dienst der Plattform, etwa Admin UI, Storefront, card-auth-service oder ein Identity-Provider. Eine Instanz enthält eine Komponente oder nicht; ihr Fehlen bricht den Kern nie.
+_Avoid_: Service (unqualifiziert), App, Repo, Modul (das ist ein Funktionsbereich im Backend)
+
+**Modul**:
+Ein optionaler Funktionsbereich innerhalb des Backends, etwa Zahlung, Zugang, Buchungsdokumente, Regel-Engine oder Single Sign-On. Der Betreiber nimmt es in seine Instanz auf oder nicht; hat das Modul einen Erweiterungspunkt, wirkt es für einen Mandanten erst über eine Anbindung.
+_Avoid_: Plugin, Feature, Extension, App, Komponente (das ist ein separater Dienst)
+
+**Erweiterungspunkt**:
+Die festgelegte Schnittstelle eines Moduls, an der austauschbare Anbieter andocken, etwa Dateiablage, Zahlung oder Zugang.
+_Avoid_: Plugin-API, Hook, Extension Point
+
+**Anbieter**:
+Eine konkrete Implementierung eines Erweiterungspunkts, meist an ein externes System gebunden: S3 oder Nextcloud für die Dateiablage, ePayBL für Zahlung, Salto KS für Zugang. In Code und älteren Einträgen _Provider_.
+_Avoid_: Integration, Plugin, Adapter (das ist der Code-Baustein)
+
+**Anbindung**:
+Ein für eine Instanz oder einen Mandanten eingerichteter Anbieter samt Zugangsdaten und Aktiv-Schalter. Ein Modul ist damit auf zwei Ebenen „an“: der Betreiber nimmt es in die Instanz auf, ein Mandant bindet einen Anbieter an.
+_Avoid_: Application/App (Name im Code), Integration, Konfiguration
+
+**Profil**:
+Eine benannte, dokumentierte und getestete Zusammenstellung von Komponenten und Modulen, die ein Betreiber als Ganzes wählen kann, etwa „Kern“, „Standard“ oder „Komplett“. Keine kommerzielle Paketierung.
+_Avoid_: Paket, Edition, Tarif, Bundle (das ist ein Buchungsbegriff)
