@@ -1,5 +1,14 @@
+/**
+ * The tenant router, `/api/:tenant`. Every route carries one marker of the
+ * authorization (glossary "Berechtigung"): `authorize(resource,
+ * action)` decides over the rights table and hands the reach (glossary
+ * "Reichweite") to the handler as `req.reach`, `public(resource, action)`
+ * decides for the anonymous too and never refuses, `public()` is a plainly
+ * public route, `tokenAuthorized()` marks a route that authorizes over a
+ * secret in URL or body. No handler of this router branches over rights.
+ */
+
 const express = require("express");
-const AuthenticationController = require("../authentication/controllers/authentication-controller");
 const BookableController = require("./controllers/bookable-controller");
 const EventController = require("./controllers/event-controller");
 const PaymentController = require("./controllers/payment-controller");
@@ -15,91 +24,129 @@ const { TenantController } = require("./controllers/tenant-controller");
 const {
   GroupBookingController,
 } = require("./controllers/group-booking-controller");
-const { optionalAuth } = require("../../middleware/auth-middleware");
+const {
+  authorize,
+  publicRoute,
+  tokenAuthorized,
+} = require("../../commons/services/authorization");
+const SupervisionController = require("./controllers/supervision-controller");
+const {
+  OFFER_TYPES,
+} = require("../../commons/services/supervision/supervision-constants");
 
 const router = express.Router({ mergeParams: true });
 
 // BOOKABLES
 // =========
 
-//Public
+// Public. What the public sees of the tenant's offers is the managers'
+// projection under the reach `public` (ADR 0003): a route reads with
+// `scopeOf(req)` and needs no gate of its own - a tenant without a public
+// projection is `404 tenant_not_found`, an offer the public cannot reach is
+// not there. Staff get their management view from the entry's `any`.
 router.get(
   "/bookables/public",
-  optionalAuth,
+  publicRoute("bookable", "readPublic"),
   BookableController.getPublicBookables,
 );
 router.get(
   "/bookables/public/:id",
-  optionalAuth,
+  publicRoute("bookable", "readPublic"),
   BookableController.getPublicBookable,
 );
-router.get("/bookables/:id/bookings", BookingController.getRelatedBookings);
-router.get("/bookables/:id/openingHours", BookableController.getOpeningHours);
+router.get(
+  "/bookables/:id/bookings",
+  publicRoute("bookable", "relatedBookings"),
+  BookingController.getRelatedBookings,
+);
+router.get(
+  "/bookables/:id/openingHours",
+  publicRoute("bookable", "readPublic"),
+  BookableController.getOpeningHours,
+);
 router.get(
   "/bookables/:id/availability/v1",
-  optionalAuth,
+  publicRoute(),
   CalendarController.getBookableAvailabilityV1,
 );
 router.get(
   "/bookables/:id/availability/v2",
-  optionalAuth,
+  publicRoute(),
   CalendarController.getBookableAvailabilityV2,
 );
 router.get(
   "/bookables/:id/availability",
-  optionalAuth,
+  publicRoute(),
   CalendarController.getBookableAvailability,
 );
 router.get(
   "/bookables/:id/block-periods",
-  optionalAuth,
+  publicRoute(),
   CalendarController.getBookableBlockPeriods,
 );
-router.get("/bookables/:id/occupancy", BookableController.getBookableOccupancy);
-
+router.get(
+  "/bookables/:id/occupancy",
+  publicRoute("bookable", "readPublic"),
+  BookableController.getBookableOccupancy,
+);
 router.get(
   "/bookables/:id/prices",
+  publicRoute("bookable", "prices"),
   BookableController.getBookablePriceCategories,
 );
 
 // Protected
 router.get(
   "/bookables",
-  AuthenticationController.isSignedIn,
+  authorize("bookable", "read"),
   BookableController.getBookables,
 );
-
 router.get(
   "/bookables/_template",
-  AuthenticationController.isSignedIn,
+  authorize("bookable", "template"),
   BookableController.getBookableTemplate,
 );
-
 router.get(
   "/bookables/:id",
-  AuthenticationController.isSignedIn,
+  authorize("bookable", "read"),
   BookableController.getBookable,
 );
-
+router.post(
+  "/bookables",
+  authorize("bookable", "create", { also: ["media.read"] }),
+  BookableController.createBookable,
+);
 router.put(
   "/bookables",
-  AuthenticationController.isSignedIn,
-  BookableController.storeBookable,
+  authorize("bookable", "update", { also: ["media.read"] }),
+  BookableController.updateBookable,
 );
-
 router.delete(
   "/bookables/:id",
-  AuthenticationController.isSignedIn,
+  authorize("bookable", "delete"),
   BookableController.removeBookable,
 );
+// The review of a bookable (tenant supervision spec §6.2).
+router.post(
+  "/bookables/:id/review/submissions",
+  authorize("bookable", "reviewSubmit"),
+  SupervisionController.submitReview(OFFER_TYPES.BOOKABLE),
+);
+router.post(
+  "/bookables/:id/review/decisions",
+  authorize("bookable", "reviewDecide"),
+  SupervisionController.decideReview(OFFER_TYPES.BOOKABLE),
+);
+// The tags and counters: public aggregates over the public's list, the
+// tenant's whole for the staff (`any`, ADR 0003).
 router.get(
   "/bookables/_meta/tags",
-  AuthenticationController.isSignedIn,
+  publicRoute("bookable", "meta"),
   BookableController.getTags,
 );
 router.get(
   "/bookables/count/check",
-  AuthenticationController.isSignedIn,
+  publicRoute("bookable", "meta"),
   BookableController.countCheck,
 );
 
@@ -107,143 +154,187 @@ router.get(
 // ======
 
 // Public
-router.get("/events", EventController.getEvents);
-router.get("/events/:id", EventController.getEvent);
-router.get("/events/:id/bookings", BookingController.getEventBookings);
+router.get("/events", publicRoute("event", "read"), EventController.getEvents);
+router.get(
+  "/events/:id",
+  publicRoute("event", "read"),
+  EventController.getEvent,
+);
+router.get(
+  "/events/:id/bookings",
+  publicRoute("booking", "list"),
+  BookingController.getEventBookings,
+);
 
 // Protected
+router.post(
+  "/events",
+  authorize("event", "create", { also: ["media.read"] }),
+  EventController.createEvent,
+);
 router.put(
   "/events",
-  AuthenticationController.isSignedIn,
-  EventController.storeEvent,
+  authorize("event", "update", { also: ["media.read"] }),
+  EventController.updateEvent,
 );
 router.delete(
   "/events/:id",
-  AuthenticationController.isSignedIn,
+  authorize("event", "delete"),
   EventController.removeEvent,
+);
+// The review of an event (tenant supervision spec §6.2).
+router.post(
+  "/events/:id/review/submissions",
+  authorize("event", "reviewSubmit"),
+  SupervisionController.submitReview(OFFER_TYPES.EVENT),
+);
+router.post(
+  "/events/:id/review/decisions",
+  authorize("event", "reviewDecide"),
+  SupervisionController.decideReview(OFFER_TYPES.EVENT),
 );
 router.get(
   "/events/_meta/tags",
-  AuthenticationController.isSignedIn,
+  publicRoute("event", "meta"),
   EventController.getTags,
 );
 router.get(
   "/events/count/check",
-  AuthenticationController.isSignedIn,
+  publicRoute("event", "meta"),
   EventController.countCheck,
 );
 router.get(
   "/events/:id/count",
-  AuthenticationController.isSignedIn,
+  authorize("event", "seatCount"),
   EventController.getBookedSeatsCount,
 );
 
 // BOOKINGS
 // ========
 
-router.get("/bookings", optionalAuth, BookingController.getBookings);
-
+router.get(
+  "/bookings",
+  publicRoute("booking", "list"),
+  BookingController.getBookings,
+);
+router.post(
+  "/bookings",
+  authorize("booking", "create"),
+  BookingController.createBooking,
+);
 router.put(
   "/bookings",
-  AuthenticationController.isSignedIn,
-  BookingController.storeBooking,
+  authorize("booking", "update"),
+  BookingController.updateBooking,
 );
 router.get(
   "/bookings/assigned",
-  AuthenticationController.isSignedIn,
+  authorize("booking", "readMine"),
   BookingController.getAssignedBookings,
 );
-
 router.get(
   "/bookings/:id",
-  AuthenticationController.isSignedIn,
+  authorize("booking", "read"),
   BookingController.getBooking,
 );
-
 router.delete(
   "/bookings/:id",
-  AuthenticationController.isSignedIn,
+  authorize("booking", "delete"),
   BookingController.removeBooking,
 );
-
 router.get(
   "/bookings/:ids/status",
-  optionalAuth,
+  publicRoute("booking", "lookup"),
   BookingController.getBookingStatus,
 );
-
 router.get(
   "/bookings/:id/status/public",
+  publicRoute("booking", "lookup"),
   BookingController.getPublicBookingStatus,
 );
-
 router.get(
   "/bookings/:id/commit",
-  AuthenticationController.isSignedIn,
+  authorize("booking", "commit"),
   BookingController.commitBooking,
 );
 router.post(
   "/bookings/:id/pay",
-  AuthenticationController.isSignedIn,
+  authorize("booking", "pay"),
   BookingController.payBooking,
+);
+router.post(
+  "/bookings/:id/reinstate",
+  authorize("booking", "update"),
+  BookingController.reinstateBooking,
+);
+router.put(
+  "/bookings/:id/refund-state",
+  authorize("booking", "update"),
+  BookingController.setRefundState,
 );
 router.get(
   "/bookings/:id/cancellation-refund-preview",
-  AuthenticationController.isSignedIn,
+  authorize("booking", "cancel"),
   BookingController.getCancellationRefundPreview,
 );
 router.get(
   "/bookings/:id/cancellation-refund-preview/public",
+  publicRoute("booking", "lookup"),
   BookingController.getPublicCancellationRefundPreview,
 );
 router.post(
   "/bookings/:id/reject",
-  AuthenticationController.isSignedIn,
+  authorize("booking", "reject"),
   BookingController.rejectBooking,
 );
 router.post(
   "/bookings/:id/request-reject",
+  tokenAuthorized(),
   BookingController.requestRejectBooking,
 );
 router.get(
   "/bookings/:id/verify-ownership",
+  tokenAuthorized(),
   BookingController.verifyBookingOwnership,
 );
 router.get(
   "/bookings/:id/hooks/:hookId/cancellation-refund-preview",
+  tokenAuthorized(),
   BookingController.getHookCancellationRefundPreview,
 );
 router.get(
   "/bookings/:id/hooks/:hookId/release",
+  tokenAuthorized(),
   BookingController.releaseBookingHook,
 );
 router.post(
   "/bookings/:id/receipt",
-  AuthenticationController.isSignedIn,
+  authorize("booking", "reprint"),
   BookingController.createReceipt,
 );
-
 router.get(
   "/bookings/:id/receipt/:receiptId",
-  AuthenticationController.isSignedIn,
+  authorize("booking", "document"),
   BookingController.getReceipt,
 );
-
 router.get(
   "/bookings/:id/invoice/:invoiceId",
-  AuthenticationController.isSignedIn,
+  authorize("booking", "document"),
   BookingController.getInvoice,
 );
-
 router.post(
   "/bookings/:id/invoice",
-  AuthenticationController.isSignedIn,
+  authorize("booking", "invoice"),
   BookingController.createInvoice,
 );
-
+router.post(
+  "/bookings/:id/cancellation-receipt",
+  authorize("booking", "reprint"),
+  BookingController.createCancellationReceipt,
+);
 router.get(
   "/bookings/:id/cancellation-receipt/:cancellationReceiptId",
-  AuthenticationController.isSignedIn,
+  authorize("booking", "document"),
   BookingController.getCancellationReceipt,
 );
 
@@ -251,7 +342,7 @@ router.get(
 // =====
 router.get(
   "/users",
-  AuthenticationController.isSignedIn,
+  authorize("tenantUser", "read"),
   TenantController.getUsers,
 );
 
@@ -259,72 +350,78 @@ router.get(
 // ==============
 router.get(
   "/group-bookings",
-  AuthenticationController.isSignedIn,
+  authorize("groupBooking", "read"),
   GroupBookingController.getGroupBookings,
 );
 router.get(
   "/group-bookings/:id",
-  AuthenticationController.isSignedIn,
+  authorize("groupBooking", "read"),
   GroupBookingController.getGroupBooking,
 );
 router.put(
   "/group-bookings/:id",
-  AuthenticationController.isSignedIn,
+  authorize("groupBooking", "update"),
   GroupBookingController.updateGroupBooking,
 );
 router.post(
   "/group-bookings/:id/commit",
-  AuthenticationController.isSignedIn,
+  authorize("groupBooking", "commit"),
   GroupBookingController.commitGroupBooking,
 );
 router.post(
   "/group-bookings/:id/pay",
-  AuthenticationController.isSignedIn,
+  authorize("groupBooking", "pay"),
   GroupBookingController.payGroupBooking,
 );
+// The preview belongs to the administration's cancellation of the group.
 router.get(
   "/group-bookings/:id/cancellation-refund-preview",
-  AuthenticationController.isSignedIn,
+  authorize("groupBooking", "reject"),
   GroupBookingController.getCancellationRefundPreview,
 );
 router.post(
   "/group-bookings/:id/reject",
-  AuthenticationController.isSignedIn,
+  authorize("groupBooking", "reject"),
   GroupBookingController.rejectGroupBooking,
 );
 router.get(
   "/group-bookings/booking/:bookingId",
-  AuthenticationController.isSignedIn,
+  authorize("groupBooking", "read"),
   GroupBookingController.getGroupBookingByBookingId,
 );
 router.delete(
   "/group-bookings/:id",
-  AuthenticationController.isSignedIn,
+  authorize("groupBooking", "delete"),
   GroupBookingController.removeGroupBooking,
 );
 router.post(
   "/group-bookings/:id/receipt",
-  AuthenticationController.isSignedIn,
+  authorize("groupBooking", "document"),
   GroupBookingController.createGroupBookingReceipt,
 );
 router.post(
   "/group-bookings/:id/invoice",
-  AuthenticationController.isSignedIn,
+  authorize("groupBooking", "invoice"),
   GroupBookingController.createGroupBookingInvoice,
+);
+router.post(
+  "/group-bookings/:id/cancellation-receipt",
+  authorize("groupBooking", "document"),
+  GroupBookingController.createGroupBookingCancellationReceipt,
 );
 
 // CHECKOUT
 // ========
-router.post("/checkout", optionalAuth, CheckoutController.checkout);
-router.post("/checkout/group", optionalAuth, CheckoutController.groupCheckout);
+router.post("/checkout", publicRoute(), CheckoutController.checkout);
+router.post("/checkout/group", publicRoute(), CheckoutController.groupCheckout);
 router.post(
   "/checkout/validateItem",
-  optionalAuth,
+  publicRoute(),
   CheckoutController.validateItem,
 );
 router.get(
   "/checkout/permissions/:id",
-  optionalAuth,
+  publicRoute(),
   CheckoutController.checkoutPermissions,
 );
 
@@ -332,44 +429,81 @@ router.get(
 // ========
 
 // Public
-router.post("/payments", optionalAuth, PaymentController.createPayment);
-router.get("/payments/notify", PaymentController.paymentNotificationGET);
-router.post("/payments/notify", PaymentController.paymentNotificationPOST);
-router.post("/payments/response", PaymentController.paymentResponse);
-router.get("/payments/response", PaymentController.paymentResponse);
+router.post("/payments", publicRoute(), PaymentController.createPayment);
+// The provider's webhooks and return pages authorize over the payment's
+// own reference; the handler checks it as today.
+router.get(
+  "/payments/notify",
+  tokenAuthorized(),
+  PaymentController.paymentNotificationGET,
+);
+router.post(
+  "/payments/notify",
+  tokenAuthorized(),
+  PaymentController.paymentNotificationPOST,
+);
+router.post(
+  "/payments/response",
+  tokenAuthorized(),
+  PaymentController.paymentResponse,
+);
+router.get(
+  "/payments/response",
+  tokenAuthorized(),
+  PaymentController.paymentResponse,
+);
 router.get(
   "/payments/providers/:provider/test",
-  AuthenticationController.isSignedIn,
+  authorize("tenant", "paymentTest"),
   PaymentController.testConnection,
 );
 
 // CALENDAR
 // ========
-router.get("/calendar/occupancy", CalendarController.getOccupancies);
+router.get(
+  "/calendar/occupancy",
+  publicRoute("calendar", "all"),
+  CalendarController.getOccupancies,
+);
 
 // COUPONS
 // =======
-router.get("/coupons", optionalAuth, CouponController.getCoupons);
-router.get("/coupons/:id", CouponController.getCoupon);
+router.get(
+  "/coupons",
+  authorize("coupon", "read"),
+  CouponController.getCoupons,
+);
+router.get(
+  "/coupons/:id",
+  publicRoute("coupon", "lookup"),
+  CouponController.getCoupon,
+);
+router.post(
+  "/coupons",
+  authorize("coupon", "create"),
+  CouponController.createCoupon,
+);
 router.put(
   "/coupons",
-  AuthenticationController.isSignedIn,
-  CouponController.storeCoupon,
+  authorize("coupon", "update"),
+  CouponController.updateCoupon,
 );
 router.delete(
   "/coupons/:id",
-  AuthenticationController.isSignedIn,
+  authorize("coupon", "delete"),
   CouponController.deleteCoupon,
 );
 
-// NEXT CLOUD
-// ==========
-router.get("/files/list", optionalAuth, FileController.getTenantFiles);
-router.get("/files/get", optionalAuth, FileController.getTenantFile);
-router.post(
-  "/files",
-  AuthenticationController.isSignedIn,
-  FileController.createTenantFile,
+// LEGACY FILES
+// ============
+// The tenant listing and upload are gone with the media library — the admin UI
+// picks and uploads media (§4.10). `GET /files/get` stays for good as the
+// resolver of stored legacy addresses; the medium's visibility is the media
+// rights' to decide, from the questions the marker names.
+router.get(
+  "/files/get",
+  publicRoute("media", "file", { also: ["bookingDocument", "intern"] }),
+  FileController.getTenantFile,
 );
 
 // WORKFLOW
@@ -377,156 +511,138 @@ router.post(
 // Protected
 router.get(
   "/workflow/",
-  AuthenticationController.isSignedIn,
+  authorize("workflow", "read"),
   WorkflowController.getWorkflow,
 );
 router.post(
   "/workflow/",
-  AuthenticationController.isSignedIn,
+  authorize("workflow", "manage"),
   WorkflowController.createWorkflow,
 );
 router.put(
   "/workflow/",
-  AuthenticationController.isSignedIn,
+  authorize("workflow", "manage"),
   WorkflowController.updateWorkflow,
 );
 router.get(
   "/workflow/states",
-  AuthenticationController.isSignedIn,
+  authorize("workflow", "read"),
   WorkflowController.getWorkflowStates,
 );
 router.put(
   "/workflow/task",
-  AuthenticationController.isSignedIn,
+  authorize("workflow", "task"),
   WorkflowController.updateTask,
 );
 router.put(
   "/workflow/archive",
-  AuthenticationController.isSignedIn,
+  authorize("workflow", "task"),
   WorkflowController.archiveTask,
 );
 router.get(
   "/workflow/backlog",
-  AuthenticationController.isSignedIn,
+  authorize("workflow", "read"),
   WorkflowController.getBacklog,
 );
+
 // ROLES
 // =====
 
 // Protected
-router.get(
-  "/roles",
-  AuthenticationController.isSignedIn,
-  RoleController.getRoles,
-);
+router.get("/roles", authorize("role", "list"), RoleController.getRoles);
 router.get(
   "/roles/tenant",
-  AuthenticationController.isSignedIn,
+  authorize("role", "readMine"),
   RoleController.getUserRolesByTenant,
 );
-router.put(
-  "/roles",
-  AuthenticationController.isSignedIn,
-  RoleController.storeRole,
-);
-router.get(
-  "/roles/:id",
-  AuthenticationController.isSignedIn,
-  RoleController.getRole,
-);
+router.post("/roles", authorize("role", "create"), RoleController.createRole);
+router.put("/roles", authorize("role", "update"), RoleController.updateRole);
+router.get("/roles/:id", authorize("role", "read"), RoleController.getRole);
 router.delete(
   "/roles/:id",
-  AuthenticationController.isSignedIn,
+  authorize("role", "delete"),
   RoleController.removeRole,
 );
 
 // INVITATIONS
 router.get(
   "/invitations",
-  AuthenticationController.isSignedIn,
+  authorize("invitation", "manage"),
   InvitationController.getInvitationsByTenantID,
 );
-
 router.post(
   "/invitations",
-  AuthenticationController.isSignedIn,
+  authorize("invitation", "manage"),
   InvitationController.createInvitation,
 );
-
 router.delete(
   "/invitations/:token",
-  AuthenticationController.isSignedIn,
+  authorize("invitation", "manage"),
   InvitationController.deleteInvitation,
 );
-
 router.get(
   "/invitations/:token/verify",
-  AuthenticationController.isSignedIn,
+  authorize("invitation", "respond"),
   InvitationController.verifyInvitationToken,
 );
 router.post(
   "/invitations/:token/accept",
-  AuthenticationController.isSignedIn,
+  authorize("invitation", "respond"),
   InvitationController.acceptInvitationToken,
 );
-
 router.post(
   "/invitations/:token/reject",
-  AuthenticationController.isSignedIn,
+  authorize("invitation", "respond"),
   InvitationController.rejectInvitationToken,
 );
-
 router.post(
   "/invitations/resend",
-  AuthenticationController.isSignedIn,
+  authorize("invitation", "manage"),
   InvitationController.resendInvitation,
 );
 
+// CHALLENGES
 router.get(
   "/challenges",
-  AuthenticationController.isSignedIn,
+  authorize("tenant", "challenge"),
   TenantController.getChallenges,
 );
-
 router.post(
   "/challenges",
-  AuthenticationController.isSignedIn,
+  authorize("tenant", "challenge"),
   TenantController.createChallenge,
 );
-
 router.put(
   "/challenges",
-  AuthenticationController.isSignedIn,
+  authorize("tenant", "challenge"),
   TenantController.updateChallenge,
 );
-
 router.delete(
   "/challenges/:id",
-  AuthenticationController.isSignedIn,
+  authorize("tenant", "challenge"),
   TenantController.deleteChallenge,
 );
 
 router.post(
   "/invitations/approve",
-  AuthenticationController.isSignedIn,
+  authorize("invitation", "manage"),
   InvitationController.approveManualChallenge,
 );
-
 router.post(
   "/invitations/reject",
-  AuthenticationController.isSignedIn,
+  authorize("invitation", "manage"),
   InvitationController.rejectManualChallenge,
 );
-
 router.delete(
   "/invitations/user/:userId",
-  AuthenticationController.isSignedIn,
+  authorize("invitation", "manage"),
   InvitationController.deleteUserInvitation,
 );
 
 router.use("/catalog", require("./routes/catalog.routes"));
-router.use("/locker", require("./routes/locker.routes"));
 router.use("/access", require("./routes/access.routes"));
+router.use("/access-apps", require("./routes/access-app.routes"));
+router.use("/accesspoints", require("./routes/access-point.routes"));
 router.use("/ical", require("./routes/ical.routes"));
 
 module.exports = router;

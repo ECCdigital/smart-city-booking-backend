@@ -1,0 +1,115 @@
+From: Buchungsplattform <noreply@plattform.example.test>
+To: erika@example.test
+Bcc: 
+Subject: Abgelehnt: Ihre Buchungsanfrage im Stadthalle Musterstadt wurde abgelehnt
+Attachments: 
+
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <style>
+      .content {
+        text-align: left;
+        background-color: white;
+        border: 1px solid grey;
+        padding: 10px 40px;
+        border-radius: 2px;
+        margin: auto;
+        max-width: 750px;
+      }
+
+      body {
+        align-content: center;
+      }
+
+      .layer {
+        text-align: center;
+      }
+    </style>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+
+  <body>
+    <div class="layer">
+      <div class="content">
+        <p>
+  <div style="font-family: inherit;">
+    
+  <div style="">
+    <!--MAILBLOCKS:v=1;b64=W3siaWQiOiIxZTJjNjMxMC1hM2ZkLTRlZTUtODY5MC00ZDY3MDExMDE0MjgiLCJ0eXBlIjoicm93IiwiY29sdW1ucyI6W3sid2lkdGgiOjEyLCJibG9ja3MiOlt7InR5cGUiOiJ0ZXh0IiwiYWxpZ24iOiJsZWZ0IiwiaHRtbCI6IjxwPkRpZSBuYWNoZm9sZ2VuZGUgQnVjaHVuZyB3dXJkZSBhYmdlbGVobnQ6PC9wPiIsImlkIjoiOWFmNzI1ZTQtZjFlNS00MWU3LTliZWEtZGRmZTI0YTNmZGZiIn1dfV19XQ==-->
+<div style="color:#222222; line-height:1.5; font-size:16px">
+<div style=""><table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%; border-collapse:collapse"><tr><td style="vertical-align:top; width:100%" width="100%"><div style="text-align:left; color:#222222; font-size:16px; line-height:1.5"><p>Die nachfolgende Buchung wurde abgelehnt:</p></div></td></tr></table></div>
+</div>
+    
+  </div>
+<br />
+
+
+  <p>
+    <strong>Ablehnungsgrund:</strong>
+    Keine Kapazität am gewünschten Tag.
+  </p>
+
+
+  <div style="">
+    <strong>Buchungsnummer:</strong> B-1<br>
+<strong>Gesamtbetrag:</strong> 120,50 €<br><br>
+
+
+    <strong>Firma:</strong> Musterfirma GmbH<br>
+    <strong>Name:</strong> Erika Musterfrau<br>
+    <strong>Adresse:</strong> 
+      Musterstraße 1,
+      12345
+      Musterstadt<br>
+    <strong>Telefon:</strong> +49 30 1234567<br>
+    <strong>E-Mail:</strong> erika@example.test
+
+  <br><br><strong>Hinweise zur Buchung:</strong>
+  <br> Bitte klingeln &lt;b&gt;laut&lt;/b&gt;
+
+
+  <br><strong>Anzahl Personen:</strong>
+  4 Erwachsene
+  <br><strong>Catering:</strong>
+  Vegetarisch
+  <br><strong>Sonderwünsche:</strong>
+  <em>nicht angegeben</em>
+  <br><strong>Buchungszeitraum:</strong> 05.10.2026, 10:00 - 05.10.2026, 12:00
+<br>
+<h2>Bestellübersicht</h2>
+
+  <div style="border-bottom: solid 1px grey; margin-bottom: 10px; padding-bottom: 10px">
+    <strong>Großer Saal, Anzahl: 1</strong>
+
+      <p>Der Schlüssel liegt an der Rezeption bereit.</p>
+  </div>
+
+    <div style="color: grey">
+      Gutschein: Frühbucher ( -10 % )<br>
+    </div>
+
+    
+  </div>
+
+
+
+
+
+
+      
+        <hr />
+        <p style="font-size: 0.9em; color: #555;">
+          Falls Sie Fragen haben, können Sie uns gerne 
+          <a href="mailto:buchung@stadthalle.example.test">kontaktieren</a>.
+        </p>
+    
+  </div>
+</p>
+      </div>
+    </div>
+  </body>
+  <footer class="footer"></footer>
+</html>

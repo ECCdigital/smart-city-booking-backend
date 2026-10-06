@@ -7,11 +7,7 @@ const BookingManager = require("../src/commons/data-managers/booking-manager");
 const {
   BookableManager,
 } = require("../src/commons/data-managers/bookable-manager");
-const PermissionsService = require("../src/commons/services/permission-service");
 const WorkflowService = require("../src/commons/services/workflow/workflow-service");
-const InstanceManager = require("../src/commons/data-managers/instance-manager");
-const MembershipManager = require("../src/commons/data-managers/membership-manager");
-const UserManager = require("../src/commons/data-managers/user-manager");
 
 function createMockResponse() {
   return {
@@ -35,68 +31,6 @@ function createMockResponse() {
 describe("Phase 1 booking performance", () => {
   afterEach(() => {
     sinon.restore();
-  });
-
-  describe("PermissionsService.createReadContext", () => {
-    it("allows readOwn only for owned bookings", async () => {
-      sinon.stub(InstanceManager, "getInstance").resolves({
-        ownerUserIds: [],
-      });
-      sinon.stub(MembershipManager, "getMembershipByTenantAndUserID").resolves({
-        owner: false,
-      });
-      sinon.stub(UserManager, "getUserPermissions").resolves({
-        tenants: [
-          {
-            tenantId: "tenant-1",
-            isOwner: false,
-            manageBookings: { readOwn: true, readAny: false },
-          },
-        ],
-      });
-
-      const context = await PermissionsService.createReadContext(
-        "user-1",
-        "tenant-1",
-        "manageBookings",
-      );
-
-      assert.strictEqual(
-        PermissionsService.allowReadWithContext(
-          { tenantId: "tenant-1", assignedUserId: "user-1" },
-          context,
-        ),
-        true,
-      );
-      assert.strictEqual(
-        PermissionsService.allowReadWithContext(
-          { tenantId: "tenant-1", assignedUserId: "other-user" },
-          context,
-        ),
-        false,
-      );
-    });
-
-    it("short-circuits all bookings for tenant owners", async () => {
-      sinon.stub(InstanceManager, "getInstance").resolves({
-        ownerUserIds: [],
-      });
-      sinon.stub(MembershipManager, "getMembershipByTenantAndUserID").resolves({
-        owner: true,
-      });
-      sinon.stub(UserManager, "getUserPermissions").resolves({ tenants: [] });
-
-      const context = await PermissionsService.createReadContext(
-        "user-1",
-        "tenant-1",
-        "manageBookings",
-      );
-
-      assert.strictEqual(
-        PermissionsService.canReadAllWithContext(context),
-        true,
-      );
-    });
   });
 
   describe("WorkflowService.getWorkflowStatusMap", () => {
@@ -127,41 +61,59 @@ describe("Phase 1 booking performance", () => {
     });
   });
 
-  describe("BookingController.getBookings", () => {
-    it("populates only allowed bookings and batches workflow/bookable loads", async () => {
+  describe("BookingManager populate", () => {
+    it("batches the bookable and workflow loads per tenant, as the domain", async () => {
       const bookings = [
         {
-          id: "booking-allowed",
+          id: "booking-1",
           tenantId: "tenant-1",
           bookableItems: [{ bookableId: "bookable-1" }],
         },
         {
-          id: "booking-denied",
+          id: "booking-2",
           tenantId: "tenant-1",
+          bookableItems: [{ bookableId: "bookable-1" }],
+        },
+        {
+          id: "booking-3",
+          tenantId: "tenant-2",
           bookableItems: [{ bookableId: "bookable-2" }],
         },
       ];
 
-      sinon.stub(BookingManager, "getTenantBookings").resolves(bookings);
-      sinon.stub(PermissionsService, "createReadContext").resolves({
-        userId: "user-1",
-        tenantId: "tenant-1",
-        isInstanceOwner: false,
-        isTenantOwner: false,
-        hasReadAny: false,
-        hasReadOwn: true,
-      });
-      sinon.stub(PermissionsService, "canReadAllWithContext").returns(false);
-      sinon
-        .stub(PermissionsService, "allowReadWithContext")
-        .callsFake((booking) => booking.id === "booking-allowed");
-
       const getBookablesStub = sinon
         .stub(BookableManager, "getBookablesByIdsWithCustomFields")
-        .resolves([{ id: "bookable-1", title: "Room A" }]);
+        .callsFake(async (tenantId, ids) =>
+          ids.map((id) => ({ id, title: `${tenantId}/${id}` })),
+        );
       const getWorkflowMapStub = sinon
         .stub(WorkflowService, "getWorkflowStatusMap")
-        .resolves(new Map([["booking-allowed", "open"]]));
+        .resolves(new Map([["booking-1", "open"]]));
+
+      await BookingManager._populate(bookings);
+
+      assert.strictEqual(bookings[0]._populated.bookable.id, "bookable-1");
+      assert.strictEqual(bookings[0]._populated.workflowStatus, "open");
+      assert.strictEqual(bookings[1]._populated.workflowStatus, null);
+      assert.strictEqual(
+        bookings[2]._populated.bookable.title,
+        "tenant-2/bookable-2",
+      );
+      assert.strictEqual(getBookablesStub.callCount, 2);
+      assert.deepStrictEqual(getBookablesStub.firstCall.args.slice(0, 2), [
+        "tenant-1",
+        ["bookable-1"],
+      ]);
+      assert.strictEqual(getBookablesStub.firstCall.args[2].reach, "domain");
+      assert.strictEqual(getWorkflowMapStub.callCount, 2);
+    });
+  });
+
+  describe("BookingController.getBookings", () => {
+    it("reads within the reach and asks the manager to populate on ?populate=true", async () => {
+      const getTenantBookings = sinon
+        .stub(BookingManager, "getTenantBookings")
+        .resolves([{ id: "booking-allowed", tenantId: "tenant-1" }]);
 
       const response = createMockResponse();
       await BookingController.getBookings(
@@ -169,20 +121,20 @@ describe("Phase 1 booking performance", () => {
           params: { tenant: "tenant-1" },
           query: { populate: "true" },
           user: { id: "user-1" },
+          reach: "own",
+          principal: { userId: "user-1" },
         },
         response,
       );
 
+      assert.deepStrictEqual(getTenantBookings.firstCall.args, [
+        "tenant-1",
+        { reach: "own", userId: "user-1" },
+        { populate: true },
+      ]);
       assert.strictEqual(response.statusCode, 200);
       assert.strictEqual(response.body.length, 1);
       assert.strictEqual(response.body[0].id, "booking-allowed");
-      assert.strictEqual(response.body[0]._populated.bookable.id, "bookable-1");
-      assert.strictEqual(response.body[0]._populated.workflowStatus, "open");
-      assert.strictEqual(getBookablesStub.callCount, 1);
-      assert.deepStrictEqual(getBookablesStub.firstCall.args[1], [
-        "bookable-1",
-      ]);
-      assert.strictEqual(getWorkflowMapStub.callCount, 1);
     });
   });
 });

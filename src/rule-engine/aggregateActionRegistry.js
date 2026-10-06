@@ -1,5 +1,6 @@
 const MailerService = require("../commons/mail-service/mail-service");
 const TenantManager = require("../commons/data-managers/tenant-manager");
+const { DOMAIN } = require("../commons/services/authorization/reach");
 
 /**
  * Aggregate actions receive ALL matched documents of a tenant group at once
@@ -21,7 +22,7 @@ module.exports = {
     const tenantId = context.tenantId || docs[0].tenantId;
     const address = params.to || context.tenantMail;
 
-    const tenant = await TenantManager.getTenant(tenantId);
+    const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
 
     if (!tenant) {
       throw new Error("sendAggregatedEmail: tenant not found");
@@ -43,13 +44,10 @@ module.exports = {
       throw new Error("sendAggregatedEmail: body is required");
     }
 
-    await MailerService.send({
-      tenantId,
-      address,
-      subject: params.subject,
-      // The body is a Handlebars template. The matched documents are available
-      // as `bookings` (and `items`), so the template can iterate them:
-      //   {{#each bookings}} ... {{/each}}
+    // The body is a Handlebars template. The matched documents are available
+    // as `bookings` (and `items`), so the template can iterate them:
+    //   {{#each bookings}} ... {{/each}}
+    const html = await MailerService.renderHtml({
       mailTemplate: params.body,
       model: {
         bookings: docs,
@@ -58,7 +56,15 @@ module.exports = {
         now: new Date(),
         tenant: tenantName,
       },
-      useInstanceMail: params.useInstanceMail === true,
+      tenantId,
+    });
+    await MailerService.send({
+      type: "rule-aggregated-email",
+      // A rule that says useInstanceMail sends as the instance.
+      tenantId: params.useInstanceMail === true ? null : tenantId,
+      to: address,
+      subject: params.subject,
+      html,
     });
   },
 };

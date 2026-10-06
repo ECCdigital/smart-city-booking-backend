@@ -1,0 +1,155 @@
+# swagger/routes/catalog.yaml
+#
+# The three routes of the Hero Editor (hero-layout spec §4). They are the only
+# thing the editor reads and writes — it never touches the raw catalog — and
+# they answer the export object itself, not the `{ success, content }`
+# envelope of the catalog stores.
+
+/api/catalog/hero-layout:
+  get:
+    tags:
+      - Catalog
+    summary: Read the Hero of the instance
+    description: |
+      The Hero Layout, the Background and the Portal Name in export form: the
+      stored layout or the derived Default Hero Layout, the stored Background
+      or the default `poly` variant, every media reference enriched with its
+      URL and the dimensions of the original.
+
+      `isDefault` says whether the Hero Layout is derived rather than stored —
+      the state the editor's reset to default lands on. It is about the layout
+      alone: a stored Background does not clear it. Both objects are read as
+      they are stored, not as `GET /api/catalog/themes` delivers them, which
+      hides a stored Background behind `branding.active`.
+
+      Requires `instanceCatalog.read`, the right of `GET /api/catalog`.
+    security:
+      - bearerAuth: []
+    responses:
+      "200":
+        description: The Hero of the instance
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/HeroEditorState"
+                - type: object
+                  required: [isDefault]
+                  properties:
+                    isDefault:
+                      type: boolean
+                      description: |
+                        True while no Hero Layout is stored, whatever the
+                        Background is.
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+      "404":
+        description: No instance catalog exists (`instance_catalog_not_found`)
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MediaApiError"
+  put:
+    tags:
+      - Catalog
+    summary: Save the Hero of the instance
+    description: |
+      Validates both objects completely, then writes the Hero Layout onto the
+      instance catalog, then the Background onto the instance branding, then
+      flushes the theme export cache once — so the next `GET
+      /api/catalog/themes` carries a new `ETag`. There is no transaction
+      between the two writes: only an infrastructure failure can split them,
+      and saving again heals it. Nothing is written when either object is
+      refused.
+
+      Both keys are required; `heroLayout: null` resets to the Default Hero
+      Layout and `background: null` to the default Background. Any other key of
+      the body is ignored rather than refused, so the body of the read or the
+      preview can be handed to the save unchanged: the Portal Name is answered,
+      because the derived default layout is built from it, but it is written
+      through `PUT /api/catalog` and never here.
+
+      Requires `instanceCatalog.store`, the right of `PUT /api/catalog`.
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/HeroEditorWrite"
+    responses:
+      "200":
+        description: The Hero as it was stored, in export form
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HeroEditorState"
+      "400":
+        description: |
+          One or both objects were refused; nothing was written. `details[]`
+          carries every fault of both, in body order.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HeroValidationError"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+      "404":
+        description: No instance catalog exists (`instance_catalog_not_found`)
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MediaApiError"
+
+/api/catalog/hero-layout/preview:
+  post:
+    tags:
+      - Catalog
+    summary: Preview a Hero without saving it
+    description: |
+      Runs the same normaliser, sanitiser and enrichment as the save and
+      answers what a save would produce, without writing to either document,
+      without flushing the theme export cache and without a rate limit of its
+      own. This is what the Live Preview and the editor's reset to default read.
+
+      `name` is the Portal Name the derived default layout is built from, so a
+      name that is not saved yet can be previewed; a body that names none falls
+      back to the stored one. Both nulls answer the derived defaults.
+
+      Requires `instanceCatalog.store`, the right of the save.
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/HeroEditorWrite"
+              - type: object
+                properties:
+                  name:
+                    type: string
+                    description: The Portal Name to render the preview with.
+    responses:
+      "200":
+        description: The Hero as a save would store it, in export form
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HeroEditorState"
+      "400":
+        description: One or both objects were refused
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HeroValidationError"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner

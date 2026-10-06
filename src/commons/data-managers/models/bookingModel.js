@@ -17,6 +17,35 @@ BookingSchema.index(
   { name: "tenant_bookableItems_bookableId" },
 );
 BookingSchema.index({ tenantId: 1, id: 1 }, { name: "tenantId_1_id_1" });
+BookingSchema.index(
+  { tenantId: 1, timeCreated: -1 },
+  { name: "tenantId_1_timeCreated_-1" },
+);
+BookingSchema.index(
+  { tenantId: 1, timePaid: -1 },
+  {
+    name: "tenantId_1_timePaid_-1_paid_not_rejected",
+    partialFilterExpression: { isPayed: true, isRejected: false },
+  },
+);
+BookingSchema.index(
+  { tenantId: 1, "cancellationRefund.cancelledAt": -1 },
+  {
+    name: "tenantId_1_cancellationRefund_cancelledAt_-1",
+    partialFilterExpression: { isRejected: true },
+  },
+);
+// The open refunds (glossary "Erstattungsstand"): the list filter of a
+// tenant and the rule that mails them, which reads across tenants.
+BookingSchema.index(
+  { "cancellationRefund.refundState": 1, tenantId: 1 },
+  {
+    name: "cancellationRefund_refundState_1_tenantId_1",
+    partialFilterExpression: {
+      "cancellationRefund.refundState": { $exists: true },
+    },
+  },
+);
 
 BookingSchema.pre(
   "deleteOne",

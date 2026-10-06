@@ -3,6 +3,7 @@ const { BadRequestError } = require("../../../errors/BaseError");
 const {
   normalizeCancellationRefundTiers,
 } = require("../../utilities/cancellation-refund-tiers");
+const { STATUS } = require("../booking-lifecycle/booking-state");
 
 const CANCELLATION_ORIGINS = Object.freeze({
   USER: "user",
@@ -11,6 +12,16 @@ const CANCELLATION_ORIGINS = Object.freeze({
 });
 
 const CANCELLATION_TIME_ZONE = "Europe/Berlin";
+
+/**
+ * The refund state of a cancelled booking (glossary "Erstattungsstand"):
+ * whether the administration has paid the refund out. Kept at the booking's
+ * refund audit, set by hand; the platform pays nothing out itself.
+ */
+const REFUND_STATE = Object.freeze({
+  OPEN: "open",
+  COMPLETED: "completed",
+});
 
 class CancellationRefundService {
   static calculate({
@@ -74,6 +85,53 @@ class CancellationRefundService {
     };
   }
 
+  /**
+   * Whether a cancellation leaves a refund to pay out (glossary
+   * "Erstattungsstand"): the booking was confirmed - so a priced one was
+   * paid - and the calculation refunds an amount.
+   *
+   * @param {Object} calculation What `calculate` answered
+   * @param {string} cancelledFrom The state the booking is cancelled from
+   * @returns {boolean}
+   */
+  static isRefundDue(calculation, cancelledFrom) {
+    return (
+      cancelledFrom === STATUS.CONFIRMED &&
+      (Number(calculation?.refundAmountEur) || 0) > 0
+    );
+  }
+
+  /**
+   * The refund audit a booking carries from its cancellation on: the
+   * calculation, the state it was cancelled from where it is cancelled
+   * (glossary "Wiederherstellung" returns to it; a rejected request has
+   * none), and the open refund state where a refund is due.
+   *
+   * @param {Object} calculation What `calculate` answered
+   * @param {{ status: string, cancelledFrom: string }} transition The state
+   *   the cancellation lands on and the one it comes from
+   * @returns {Object} The audit to store as `booking.cancellationRefund`
+   */
+  static toBookingAudit(calculation, { status, cancelledFrom }) {
+    return {
+      ...calculation,
+      ...(status === STATUS.CANCELLED && { cancelledFrom }),
+      ...(this.isRefundDue(calculation, cancelledFrom) && {
+        refundState: REFUND_STATE.OPEN,
+      }),
+    };
+  }
+
+  /**
+   * @param {*} refundState The value a request names as refund state
+   * @throws {BadRequestError} `invalid_refund_state` unless it is one
+   */
+  static validateRefundState(refundState) {
+    if (!Object.values(REFUND_STATE).includes(refundState)) {
+      throw new BadRequestError("invalid_refund_state", { refundState });
+    }
+  }
+
   static resolvePolicy({ tiers, timeBegin, cancelledAt }) {
     const normalizedTiers = normalizeCancellationRefundTiers(tiers || []);
     const daysBeforeStart = this.calculateDaysBeforeStart(
@@ -134,6 +192,28 @@ class CancellationRefundService {
   }
 
   /**
+   * The refund calculation as the customer sees it (the preview endpoints,
+   * the verification mail of a cancellation request): the amounts and the
+   * percentages, none of the audit fields.
+   *
+   * @param {Object} calculation What `calculate` answered
+   * @param {string} bookingId
+   * @returns {Object} The customer's preview
+   */
+  static toCustomerPreview(calculation, bookingId) {
+    return {
+      bookingId,
+      originalAmountEur: calculation.originalAmountEur,
+      refundAmountEur: calculation.refundAmountEur,
+      cancellationFeeEur: calculation.cancellationFeeEur,
+      suggestedRefundPercentage: calculation.suggestedRefundPercentage,
+      appliedRefundPercentage: calculation.appliedRefundPercentage,
+      daysBeforeStart: calculation.daysBeforeStart,
+      appliedTierDays: calculation.appliedTierDays,
+    };
+  }
+
+  /**
    * Build Handlebars-friendly refund fields for cancellation mails.
    * Accepts a full calculation or a customer preview object.
    */
@@ -176,8 +256,42 @@ class CancellationRefundService {
   }
 }
 
+/**
+ * The bank details of a refund as they are stored and printed: trimmed,
+ * IBAN and BIC without spaces and upper-cased; `null` where nothing is
+ * given.
+ *
+ * @param {Object} [bankDetails]
+ * @returns {{ accountHolder: string, bankName: string, iban: string, bic: string }|null}
+ */
+function sanitizeBankDetails(bankDetails) {
+  if (!bankDetails || typeof bankDetails !== "object") {
+    return null;
+  }
+
+  const toTrimmedString = (value) =>
+    typeof value === "string" ? value.trim() : "";
+
+  const accountHolder = toTrimmedString(bankDetails.accountHolder);
+  const bankName = toTrimmedString(bankDetails.bankName);
+  const iban = toTrimmedString(bankDetails.iban)
+    .replace(/\s+/g, "")
+    .toUpperCase();
+  const bic = toTrimmedString(bankDetails.bic)
+    .replace(/\s+/g, "")
+    .toUpperCase();
+
+  if (!accountHolder && !bankName && !iban && !bic) {
+    return null;
+  }
+
+  return { accountHolder, bankName, iban, bic };
+}
+
 module.exports = {
   CancellationRefundService,
   CANCELLATION_ORIGINS,
   CANCELLATION_TIME_ZONE,
+  REFUND_STATE,
+  sanitizeBankDetails,
 };

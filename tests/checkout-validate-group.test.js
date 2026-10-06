@@ -10,7 +10,7 @@ const {
   BundleCheckoutService,
 } = require("../src/commons/services/checkout/bundle-checkout-service");
 const {
-  withMandatoryAddons,
+  resolveCheckoutItems,
 } = require("../src/commons/utilities/checkout-utils");
 const {
   CHECKOUT_REASONS,
@@ -193,7 +193,7 @@ describe("CheckoutControllerV2.validateGroup", function () {
   });
 });
 
-describe("withMandatoryAddons", function () {
+describe("resolveCheckoutItems", function () {
   afterEach(function () {
     sinon.restore();
   });
@@ -212,7 +212,7 @@ describe("withMandatoryAddons", function () {
       return { id, checkoutBookableIds: [] };
     });
 
-    const items = await withMandatoryAddons(
+    const items = await resolveCheckoutItems(
       [{ bookableId: "room-a", amount: 2 }],
       TENANT_ID,
     );

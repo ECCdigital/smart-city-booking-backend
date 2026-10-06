@@ -1,4 +1,5 @@
 const { BaseError } = require("../errors/BaseError");
+const ApiResponse = require("../commons/utilities/api-response");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
@@ -9,7 +10,7 @@ const logger = bunyan.createLogger({
 function errorHandler(err, req, res, next) {
   if (err instanceof BaseError) {
     logger.warn({ err: err.toJSON() }, `${err.name}: ${err.code}`);
-    return res.status(err.statusCode).json(err.toJSON());
+    return ApiResponse.fail(res, err);
   }
 
   if (err?.cause?.code && typeof err.cause.code === "number") {

@@ -4,6 +4,7 @@ const {
   BookableManager,
 } = require("../src/commons/data-managers/bookable-manager");
 const BookableModel = require("../src/commons/data-managers/models/bookableModel");
+const { DOMAIN } = require("../src/commons/services/authorization/reach");
 
 describe("BookableManager.getAncestorBookables", () => {
   afterEach(() => {
@@ -14,7 +15,7 @@ describe("BookableManager.getAncestorBookables", () => {
     const aggregateStub = sinon.stub(BookableModel, "aggregate").returns({
       exec: async () => [
         {
-          allAncestors: [
+          reached: [
             { id: "parent-1", title: "Parent 1" },
             { id: "grandparent-1", title: "Grandparent 1" },
             { id: "parent-1", title: "Parent 1 Duplicate" },
@@ -31,6 +32,7 @@ describe("BookableManager.getAncestorBookables", () => {
     const ancestors = await BookableManager.getAncestorBookables(
       "child-1",
       "tenant-1",
+      DOMAIN,
     );
 
     assert.strictEqual(aggregateStub.calledOnce, true);

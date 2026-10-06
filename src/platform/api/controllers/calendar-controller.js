@@ -1,11 +1,16 @@
 const {
   BookableManager,
 } = require("../../../commons/data-managers/bookable-manager");
+const { scopeOf } = require("../../../commons/services/authorization");
 const BookingManager = require("../../../commons/data-managers/booking-manager");
 const CalendarService = require("../../../commons/services/calendar-service");
 const CalendarServiceV2 = require("../../../commons/services/calendar-service-v2");
 const BlockPeriodService = require("../../../commons/services/block-period-service");
-const { NotFoundError, BadRequestError } = require("../../../errors/BaseError");
+const {
+  BaseError,
+  NotFoundError,
+  BadRequestError,
+} = require("../../../errors/BaseError");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
@@ -19,59 +24,85 @@ const logger = bunyan.createLogger({
  * This class is responsible for handling requests related to occupancies in the calendar.
  */
 class CalendarController {
-  static async getOccupancies(request, response) {
-    const tenant = request.params.tenant;
-    const bookableIds = request.query.ids;
-    let occupancies = [];
+  /**
+   * `GET /calendar/occupancy`: the occupancies of the bookables within the
+   * reach of the request (`calendar.all`: the public's, or the tenant's
+   * whole for the staff). The aggregate over the tenant is a list, the
+   * bookables the caller names by id are direct links - the manager
+   * projects either under `public` (ADR 0003), and a tenant without a
+   * public projection is the public's 404.
+   */
+  static async getOccupancies(request, response, next) {
+    try {
+      const tenant = request.params.tenant;
+      const bookableIds = request.query.ids;
+      const occupancies = [];
 
-    let bookables = await BookableManager.getBookables(tenant);
+      const bookables =
+        bookableIds && bookableIds.length > 0
+          ? await BookableManager.getBookablesByIds(
+              tenant,
+              [].concat(bookableIds),
+              scopeOf(request),
+            )
+          : await BookableManager.getBookables(tenant, scopeOf(request));
 
-    if (bookableIds && bookableIds.length > 0) {
-      bookables = bookables.filter((bookable) =>
-        bookableIds.includes(bookable.id),
-      );
-    }
+      for (const bookable of bookables) {
+        const relatedBookables = await BookableManager.getRelatedBookables(
+          bookable.id,
+          tenant,
+          scopeOf(request),
+        );
 
-    for (const bookable of bookables) {
-      const relatedBookables = await BookableManager.getRelatedBookables(
-        bookable.id,
-        tenant,
-      );
+        const relatedIds = relatedBookables.map((rb) => rb.id);
+        relatedIds.push(bookable.id);
 
-      const relatedIds = relatedBookables.map((rb) => rb.id);
-      relatedIds.push(bookable.id);
+        const bookings = await BookingManager.getRelatedBookingsBatch(
+          tenant,
+          relatedIds,
+          scopeOf(request),
+        );
 
-      const bookings = await BookingManager.getRelatedBookingsBatch(
-        tenant,
-        relatedIds,
-      );
+        const bookingMap = new Map();
+        for (const booking of bookings) {
+          bookingMap.set(booking.id, booking);
+        }
+        const uniqueBookings = [...bookingMap.values()];
 
-      const bookingMap = new Map();
-      for (const booking of bookings) {
-        bookingMap.set(booking.id, booking);
+        occupancies.push(
+          ...uniqueBookings
+            .filter(
+              (booking) =>
+                !!booking.timeBegin && !!booking.timeEnd && !booking.isRejected,
+            )
+            .map((booking) => ({
+              bookableId: bookable.id,
+              title: bookable.title,
+              timeBegin: booking.timeBegin,
+              timeEnd: booking.timeEnd,
+            })),
+        );
       }
-      const uniqueBookings = [...bookingMap.values()];
 
-      occupancies.push(
-        ...uniqueBookings
-          .filter(
-            (booking) =>
-              !!booking.timeBegin && !!booking.timeEnd && !booking.isRejected,
-          )
-          .map((booking) => ({
-            bookableId: bookable.id,
-            title: bookable.title,
-            timeBegin: booking.timeBegin,
-            timeEnd: booking.timeEnd,
-          })),
-      );
+      response.status(200).send(occupancies);
+    } catch (err) {
+      if (err instanceof BaseError) {
+        return next(err);
+      }
+      logger.error(err);
+      response.status(500).send("Could not get occupancies");
     }
-
-    response.status(200).send(occupancies);
   }
 
   /**
    * Primary availability endpoint (V2 engine, shared availability-rules).
+   *
+   * The three availability routes (V2 and its alias, V1, block periods)
+   * hand the reach of the request on: the service reads the bookable of
+   * the route with it (ADR 0002) and throws `bookable_not_found` for one
+   * out of reach - the public's 404 for an offer it cannot reach (ADR
+   * 0003) - which the handlers map to `404` here. The handlers read
+   * nothing themselves.
    *
    * @example
    * // GET /api/<tenant>/bookables/<bookableId>/availability?amount=1&startDate=2022-01-01&endDate=2022-01-07
@@ -114,6 +145,7 @@ class CalendarController {
         endDateQuery,
         Number(amount),
         user,
+        scopeOf(request),
       );
 
       response.status(200).send(result);
@@ -180,6 +212,7 @@ class CalendarController {
         endDateQuery,
         Number(amount),
         user,
+        scopeOf(request),
       );
 
       response.status(200).send(availability);
@@ -234,6 +267,7 @@ class CalendarController {
         endDateQuery,
         Number(amount),
         user,
+        scopeOf(request),
       );
 
       CalendarController.#setV2ResponseHeaders(response);

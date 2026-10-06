@@ -31,9 +31,15 @@ const userSchemaDefinition = {
   isVerified: { type: Boolean, default: false },
   created: { type: Double, default: () => Date.now() },
   company: { type: String, default: "" },
+  // VAT identification number (Umsatzsteuer-ID) of the user or their company
+  vatId: { type: String, default: "" },
   isSuspended: { type: Boolean, default: false },
   authType: { type: String, default: "local" },
   keycloakId: { type: String, default: "" },
+  // The identity provider's confirmed e-mail verification (the verification
+  // proof of an SSO account); `null` until a login or signup carried the claim.
+  idpEmailVerifiedAt: { type: Date, default: null },
+  idpEmailVerifiedProvider: { type: String, default: null },
   cardAuth: {
     type: Object,
     default: null,

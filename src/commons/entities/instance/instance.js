@@ -1,5 +1,6 @@
 const { instanceSchemaDefinition } = require("../../schemas/instanceSchema");
 const SchemaUtils = require("../../utilities/schemaUtils");
+const { exportInstanceMedia } = require("../../services/media/instance-media");
 
 class Instance {
   /**
@@ -12,7 +13,10 @@ class Instance {
   }
 
   /**
-   * Remove private data from the instance
+   * Remove private data from the instance. `allowAllUsersToCreateTenant`
+   * stays: it only says that everyone may create a tenant, and public
+   * consumers gate their tenant self-creation entry points on it; the
+   * allow-list and the owners are private.
    */
   removePrivateData() {
     this.applications = this.applications.map((a) => {
@@ -36,8 +40,19 @@ class Instance {
     delete this.mailEnabled;
     delete this.isInitialized;
     delete this.allowedUsersToCreateTenant;
-    delete this.allowAllUsersToCreateTenant;
     delete this.bookableCustomFields;
+  }
+
+  /**
+   * The instance as it goes out: every media reference enriched with the URL
+   * it resolves to, and the legacy read fields (`branding.logoUrl`, the `url`
+   * of each legal document) derived from them (§4.9). What is stored stays
+   * untouched — the derivation happens on the way out only.
+   *
+   * @returns {Object} The instance as it goes out.
+   */
+  exportWithMedia() {
+    return exportInstanceMedia(this);
   }
 
   /**

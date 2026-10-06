@@ -1,6 +1,7 @@
 const BookingManager = require("../../data-managers/booking-manager");
 const WorkflowManager = require("../../data-managers/workflow-manager");
 const { EmailAction, BookingStatusAction } = require("./workflow-action");
+const { DOMAIN } = require("../authorization/reach");
 
 class WorkflowService {
   static async updateWorkflow(tenantId, workflow) {
@@ -150,7 +151,7 @@ class WorkflowService {
         );
       }
     } else {
-      const booking = await BookingManager.getBooking(taskId, tenantId);
+      const booking = await BookingManager.getBooking(taskId, tenantId, DOMAIN);
       if (!booking) {
         throw new Error("Booking not found");
       }
@@ -223,9 +224,11 @@ class WorkflowService {
       trackedBookings.push(booking.id);
     }
 
-    const rawBacklog = await BookingManager.getBookingsCustomFilter(tenantId, {
-      id: { $nin: trackedBookings },
-    });
+    const rawBacklog = await BookingManager.getBookingsCustomFilter(
+      tenantId,
+      { id: { $nin: trackedBookings } },
+      DOMAIN,
+    );
 
     return rawBacklog.map((booking) => {
       return {

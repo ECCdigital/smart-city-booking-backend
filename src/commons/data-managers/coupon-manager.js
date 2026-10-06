@@ -1,4 +1,16 @@
 const CouponModel = require("./models/couponModel");
+const { ownCondition } = require("../services/authorization/reach");
+const { REACH } = require("../services/authorization/policy");
+
+/**
+ * The condition of a reach on the coupons (ADR 0002). Under `public` there
+ * is none: what the public sees of a coupon is the handler's projection
+ * (the validation of one code the caller names), so the manager reads the tenant's records whole and the
+ * handler shapes them - the offers alone have their projection in the
+ * manager (ADR 0003).
+ */
+const condition = (scope) =>
+  scope?.reach === REACH.PUBLIC ? {} : ownCondition("coupon", scope);
 
 /**
  * Data Manager for coupon objects.
@@ -29,7 +41,7 @@ class CouponManager {
    * @param couponID
    * @param tenantID
    */
-  static async getCoupon(couponID, tenantID) {
+  static async getCoupon(couponID, tenantID, scope) {
     if (!couponID || !tenantID) {
       throw new Error("couponID and tenantID are required.");
     }
@@ -37,6 +49,7 @@ class CouponManager {
     const rawCoupon = await CouponModel.findOne({
       id: couponID,
       tenantId: tenantID,
+      ...condition(scope),
     });
 
     if (!rawCoupon) {
@@ -50,13 +63,19 @@ class CouponManager {
    * Get all coupons related to a tenant.
    *
    * @param tenantID
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
    */
-  static async getCoupons(tenantID) {
+  static async getCoupons(tenantID, scope) {
     if (!tenantID) {
       throw new Error("tenantID is required.");
     }
 
-    const rawCoupons = await CouponModel.find({ tenantId: tenantID });
+    const rawCoupons = await CouponModel.find({
+      tenantId: tenantID,
+      ...condition(scope),
+    });
     return rawCoupons.map((doc) => doc.toEntity());
   }
 

@@ -1,5 +1,13 @@
 const { Double } = require("mongodb");
 const { Schema } = require("mongoose");
+const { mediaReferenceSchema } = require("./mediaSchema");
+const {
+  STATUSES,
+  CANCELLED_FROM_STATUSES,
+} = require("../services/booking-lifecycle/booking-state");
+const {
+  REFUND_STATE,
+} = require("../services/payment/cancellation-refund-service");
 
 const bookingHookSchemaDefinition = {
   id: { type: String, required: true },
@@ -51,6 +59,13 @@ const cancellationAuditSchema = new Schema(
     },
     adminOverride: { type: Boolean, required: true },
     cancelledByUserId: { type: String, default: null },
+    // The state the booking was cancelled from; `reinstate` returns to it
+    // and the entity derives `isPayed` of a cancelled booking from it.
+    cancelledFrom: {
+      type: String,
+      enum: CANCELLED_FROM_STATUSES,
+      default: undefined,
+    },
     originalDocumentRef: {
       type: originalCancellationDocumentSchema,
       default: undefined,
@@ -58,6 +73,19 @@ const cancellationAuditSchema = new Schema(
   },
   { _id: false },
 );
+
+// The refund audit as the booking carries it: with the refund state
+// (glossary "Erstattungsstand"), present only where a refund is due. The
+// audit a cancellation document carries has none.
+const cancellationRefundSchema = cancellationAuditSchema.clone().add({
+  refundState: {
+    type: String,
+    enum: Object.values(REFUND_STATE),
+    default: undefined,
+  },
+  refundCompletedAt: { type: Double, default: undefined },
+  refundCompletedByUserId: { type: String, default: undefined },
+});
 
 const attachmentSchemaDefinition = {
   type: {
@@ -67,6 +95,10 @@ const attachmentSchemaDefinition = {
   title: { type: String },
   name: { type: String },
   bookableId: { type: String },
+  // The checkout copies the reference of the bookable attachment through, so
+  // the mail path can load the file from the media library instead of calling
+  // the platform's own public URL (§4.8). `url` stays the legacy address.
+  reference: { type: mediaReferenceSchema, default: undefined },
   url: { type: String },
   accepted: { type: Boolean },
   invoiceId: { type: String },
@@ -97,11 +129,15 @@ const bookingSchemaDefinition = {
   rejectionReason: { type: String, default: "" },
   company: { type: String, default: "" },
   couponCode: { type: String, default: "" },
+  // The booking state, the one source of truth (booking-state.js). The
+  // three flags below are derived from it by the entity on every write and
+  // stay for the readers that query them.
+  status: { type: String, enum: STATUSES, required: true },
   isCommitted: { type: Boolean, default: false },
   isPayed: { type: Boolean, default: false },
   isRejected: { type: Boolean, default: false },
   location: { type: String, default: "" },
-  lockerInfo: { type: [Object], default: [] },
+  accessInfo: { type: [Object], default: [] },
   mail: {
     type: String,
     required: true,
@@ -146,7 +182,7 @@ const bookingSchemaDefinition = {
     type: Object,
     default: { userCancellable: true, contactHint: "" },
   },
-  cancellationRefund: { type: cancellationAuditSchema, default: undefined },
+  cancellationRefund: { type: cancellationRefundSchema, default: undefined },
 };
 
 module.exports = {

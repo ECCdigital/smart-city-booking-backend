@@ -4,39 +4,57 @@ const TenantManager = require("../data-managers/tenant-manager");
 const BookingManager = require("../data-managers/booking-manager");
 const { BookableManager } = require("../data-managers/bookable-manager");
 const { DateTime } = require("luxon");
+const { DOMAIN } = require("./authorization/reach");
+const { NotFoundError } = require("../../errors/BaseError");
 
+/**
+ * The calendars of a tenant: its events and its bookings as iCal. A
+ * calendar a route asks for is read under the route's scope (ADR 0002):
+ * the events and bookings it lists are within that reach, and what hangs
+ * on a booking (its bookables, their events) the domain reads. Under the
+ * public's reach the events are the manager's public projection (ADR
+ * 0003): the calendar lists what the public's list carries, the single
+ * event is what a direct link reaches, and a tenant without a public
+ * projection is `tenant_not_found`.
+ */
 class ICalService {
-  static async getEventCal(
-    eventID,
-    tenantID,
-    { includePast = false, includePrivate = false } = {},
-  ) {
-    const event = await EventManager.getEvent(eventID, tenantID);
-    const tenant = await TenantManager.getTenant(tenantID);
+  /**
+   * @param {string} eventID
+   * @param {string} tenantID
+   * @param {Object} [options]
+   * @param {boolean} [options.includePast=false]
+   * @param {{reach: string, userId?: string|null}} options.scope The
+   *   reach of the route: `PUBLIC` for the public calendar, the reach of
+   *   `ical.events` for a private one
+   */
+  static async getEventCal(eventID, tenantID, { includePast = false, scope }) {
+    const event = await EventManager.getEvent(eventID, tenantID, scope);
+    const tenant = await TenantManager.getTenant(tenantID, DOMAIN);
 
-    if (!event || (!includePrivate && !event.isPublic)) {
-      throw new Error(`Event with ID ${eventID} not found`);
-    }
-
-    if (!includePast && event.isPast()) {
-      throw new Error(`Event with ID ${eventID} not found`);
+    if (!event || (!includePast && event.isPast())) {
+      throw new NotFoundError("event_not_found", { eventId: eventID });
     }
 
     return this.generateEventCal(event, tenant);
   }
 
+  /**
+   * @param {string[]|undefined} eventIDs
+   * @param {string} tenantID
+   * @param {Object} [options]
+   * @param {boolean} [options.includePast=false]
+   * @param {string|null} [options.from]
+   * @param {string|null} [options.to]
+   * @param {{reach: string, userId?: string|null}} options.scope As of
+   *   `getEventCal`
+   */
   static async getMultiEventCal(
     eventIDs,
     tenantID,
-    {
-      includePast = false,
-      from = null,
-      to = null,
-      includePrivate = false,
-    } = {},
+    { includePast = false, from = null, to = null, scope },
   ) {
-    const events = await EventManager.getEvents(tenantID);
-    const tenant = await TenantManager.getTenant(tenantID);
+    const events = await EventManager.getEvents(tenantID, scope);
+    const tenant = await TenantManager.getTenant(tenantID, DOMAIN);
 
     if (!events || events.length === 0) {
       return this.generateMultiEventCal([], tenant);
@@ -46,7 +64,6 @@ class ICalService {
     const toDate = to ? new Date(Number(to)) : null;
 
     const filteredEvents = events.filter((event) => {
-      if (!includePrivate && !event.isPublic) return false;
       if (!includePast && event.isPast()) return false;
       if (eventIDs?.length > 0 && !eventIDs.includes(event.id)) return false;
 
@@ -103,47 +120,87 @@ class ICalService {
     return cal;
   }
 
-  static async getBookingCal(bookingID, tenantID) {
-    const booking = await BookingManager.getBooking(bookingID, tenantID);
-    const tenant = await TenantManager.getTenant(tenantID);
+  /**
+   * @param {string} bookingID
+   * @param {string} tenantID
+   * @param {{reach: string, userId?: string|null}} scope The reach of
+   *   `ical.bookings`
+   */
+  static async getBookingCal(bookingID, tenantID, scope) {
+    const booking = await BookingManager.getBooking(bookingID, tenantID, scope);
+    const tenant = await TenantManager.getTenant(tenantID, DOMAIN);
 
     if (!booking) {
-      throw new Error(`Booking with ID ${bookingID} not found`);
+      throw new NotFoundError("booking_not_found", { bookingID, tenantID });
     }
 
-    const cal = ical({
-      name: tenant?.name ? `${tenant.name} – Buchung` : "Buchung",
-      prodId: {
-        company: tenant?.name || "Buchungsplattform",
-        product: "Booking",
-      },
-    });
-
+    const cal = ICalService._bookingsCalendar(tenant, true);
     await ICalService._addBooking(cal, booking, tenantID);
 
     return cal;
   }
 
-  static async getMultiBookingCal(
-    bookingIDs,
-    tenantID,
-    { from = null, to = null } = {},
-  ) {
-    const bookings = bookingIDs?.length
-      ? await Promise.all(
-          bookingIDs.map((id) => BookingManager.getBooking(id, tenantID)),
-        )
-      : [];
+  /**
+   * The calendar of bookings a caller already loaded, with their
+   * bookables and events - no read of its own. What the mail module
+   * attaches to a confirmation.
+   *
+   * @param {Object} loaded
+   * @param {Object} loaded.tenant
+   * @param {Object[]} loaded.bookings
+   * @param {Object[]} loaded.bookables The bookables of every position
+   * @param {Map<string, Object>} loaded.events The events of the tickets, by id
+   * @returns {Promise<Object>} The calendar
+   */
+  static async bookingsCal({ tenant, bookings, bookables, events }) {
+    const lookups = {
+      bookable: async (id) => bookables.find((b) => b.id === id) ?? null,
+      event: async (id) => events.get(id) ?? null,
+    };
+    const cal = ICalService._bookingsCalendar(tenant, bookings.length === 1);
+    for (const booking of bookings) {
+      await ICalService._addBooking(cal, booking, tenant.id, lookups);
+    }
+    return cal;
+  }
 
-    const tenant = await TenantManager.getTenant(tenantID);
-
-    const cal = ical({
-      name: tenant?.name ? `${tenant.name} – Buchungen` : "Buchungen",
+  /** The empty calendar of a tenant's booking or bookings. */
+  static _bookingsCalendar(tenant, single) {
+    const what = single ? "Buchung" : "Buchungen";
+    return ical({
+      name: tenant?.name ? `${tenant.name} – ${what}` : what,
       prodId: {
         company: tenant?.name || "Buchungsplattform",
         product: "Booking",
       },
     });
+  }
+
+  /**
+   * @param {string[]} bookingIDs
+   * @param {string} tenantID
+   * @param {Object} [options]
+   * @param {string|null} [options.from]
+   * @param {string|null} [options.to]
+   * @param {{reach: string, userId?: string|null}} options.scope The
+   *   reach of `ical.bookings`
+   */
+  static async getMultiBookingCal(
+    bookingIDs,
+    tenantID,
+    { from = null, to = null, scope },
+  ) {
+    const bookings = bookingIDs?.length
+      ? await Promise.all(
+          bookingIDs.map((id) =>
+            BookingManager.getBooking(id, tenantID, scope),
+          ),
+        )
+      : [];
+
+    const tenant = await TenantManager.getTenant(tenantID, DOMAIN);
+
+    const cal = ICalService._bookingsCalendar(tenant, false);
 
     const fromDate = from ? new Date(Number(from)) : null;
     const toDate = to ? new Date(Number(to)) : null;
@@ -171,7 +228,16 @@ class ICalService {
    * @private
    */
 
-  static async _resolveBookingTimes(booking, tenantID) {
+  /** The reads of the bookables and events of a booking, unless given. */
+  static _lookups(tenantID, lookups) {
+    return {
+      bookable: (id) => BookableManager.getBookable(id, tenantID, DOMAIN),
+      event: (id) => EventManager.getEvent(id, tenantID, DOMAIN),
+      ...lookups,
+    };
+  }
+
+  static async _resolveBookingTimes(booking, tenantID, lookups) {
     const EVENT_TZ = process.env.TZ || "Europe/Berlin";
     const hasOwnTimes = booking.timeBegin && booking.timeEnd;
 
@@ -182,13 +248,13 @@ class ICalService {
       };
     }
 
+    const read = ICalService._lookups(tenantID, lookups);
     for (const item of booking.bookableItems || []) {
       const bookable =
-        item._bookableUsed ||
-        (await BookableManager.getBookable(item.bookableId, tenantID));
+        item._bookableUsed || (await read.bookable(item.bookableId));
 
       if (bookable?.type === "ticket" && bookable.eventId) {
-        const event = await EventManager.getEvent(bookable.eventId, tenantID);
+        const event = await read.event(bookable.eventId);
 
         if (event?.information) {
           const info = event.information;
@@ -218,10 +284,11 @@ class ICalService {
   /**
    * @private
    */
-  static async _addBooking(cal, booking, tenantID) {
+  static async _addBooking(cal, booking, tenantID, lookups) {
     const { start, end } = await ICalService._resolveBookingTimes(
       booking,
       tenantID,
+      lookups,
     );
 
     if (!start || !end || isNaN(start.getTime()) || isNaN(end.getTime())) {
@@ -231,10 +298,10 @@ class ICalService {
     const bookableNames = [];
     let location = null;
 
+    const read = ICalService._lookups(tenantID, lookups);
     for (const item of booking.bookableItems || []) {
       const bookable =
-        item._bookableUsed ||
-        (await BookableManager.getBookable(item.bookableId, tenantID));
+        item._bookableUsed || (await read.bookable(item.bookableId));
       if (bookable?.title) {
         bookableNames.push(bookable.title);
       }
@@ -312,7 +379,9 @@ class ICalService {
       .replace(/&nbsp;/g, " ")
       .trim();
 
-    const teaserImage = info.teaserImage || null;
+    // A calendar file is read outside the platform, so the teaser image needs
+    // its absolute address, not the relative one the APIs hand out.
+    const teaserImage = event.teaserImageAbsoluteUrl || null;
 
     const descriptionWithImage = teaserImage
       ? [plainDescription, `Bild: ${teaserImage}`].filter(Boolean).join("\n\n")

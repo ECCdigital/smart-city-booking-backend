@@ -1,0 +1,58 @@
+From: Buchungsplattform <noreply@plattform.example.test>
+To: olga@stadthalle.example.test
+Subject: Ihr Mandant Stadthalle Musterstadt wurde abgewiesen
+
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <style>
+      .content {
+        text-align: left;
+        background-color: white;
+        border: 1px solid grey;
+        padding: 10px 40px;
+        border-radius: 2px;
+        margin: auto;
+        max-width: 750px;
+      }
+
+      body {
+        align-content: center;
+      }
+
+      .layer {
+        text-align: center;
+      }
+    </style>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+
+  <body>
+    <div class="layer">
+      <div class="content">
+        <p>
+  <div style="font-family: inherit;">
+    <p>
+  Die Freigabestufe Ihres Mandanten <strong>Stadthalle Musterstadt</strong> wurde
+  geändert.
+</p>
+<br />
+<p><strong>Bisherige Stufe:</strong> Freigabe ausstehend</p>
+<p><strong>Neue Stufe:</strong> abgewiesen</p>
+  <p><strong>Begründung:</strong> Der Mandant gehört nicht zur Stadt.</p>
+  <br />
+  <p>Ihr Mandant wurde von der Plattform abgewiesen. Er und seine Angebote sind öffentlich nicht sichtbar und nicht buchbar, und Sie und Ihre Mitglieder können ihn im Admin-Bereich derzeit nicht bearbeiten oder einsehen. Bereits getätigte Buchungen bleiben für Ihre Kundinnen und Kunden gültig; Zugang, Belege und Stornierungen laufen weiter. Die Abweisung kann von der Plattform jederzeit zurückgenommen werden.</p>
+  <p>Bei Fragen wenden Sie sich an kontakt@plattform.example.test</p>
+<br />
+<p><a href="https://buchung.example.test/dashboard">Zur Verwaltung Ihres Mandanten</a></p>
+
+    
+  </div>
+</p>
+      </div>
+    </div>
+  </body>
+  <footer class="footer"></footer>
+</html>

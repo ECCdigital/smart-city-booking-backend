@@ -4,13 +4,11 @@ const {
   sendIcalFeed,
 } = require("../../../commons/utilities/ical-response-helper");
 const BookingManager = require("../../../commons/data-managers/booking-manager");
-const UserManager = require("../../../commons/data-managers/user-manager");
-const { RolePermission } = require("../../../commons/entities/role/role");
-const PermissionsService = require("../../../commons/services/permission-service");
 const {
-  authenticateIfNeeded,
-} = require("../../../commons/utilities/auth-utils");
-const EventManager = require("../../../commons/data-managers/event-manager");
+  readsRecords,
+  scopeOf,
+  PUBLIC,
+} = require("../../../commons/services/authorization");
 const {
   UnauthorizedError,
   NotFoundError,
@@ -28,63 +26,28 @@ function parseIds(raw) {
   return ids.length > 0 ? ids : undefined;
 }
 
-async function requireUser(request, useOptionalAuth = false) {
-  const user = useOptionalAuth
-    ? await authenticateIfNeeded(request, true)
-    : request.user;
+/**
+ * The reach that decides which private events a calendar may carry. The event
+ * routes are public - everyone gets the public calendar, staff included (ADR
+ * 0003) - so `?includePrivate` is the one place a reach beyond `public` is
+ * asked for: an anonymous caller is sent to the login, a signed-in one
+ * without any bookable right is refused (`ical.events`).
+ * The one question about the reach here, on the named list of
+ * `tests/authorization-handler-decisions.test.js`.
+ *
+ * @param {Object} request Express request
+ * @returns {{reach: string, userId: string|null}}
+ * @throws {UnauthorizedError|ForbiddenError}
+ */
+function privateScopeOf(request) {
+  const scope = scopeOf(request);
 
-  if (!user) throw new UnauthorizedError();
-  return user;
-}
-
-async function filterByReadPermission(entities, userId, tenant, permission) {
-  const checks = await Promise.all(
-    entities.map(async (entity) => ({
-      entity,
-      allowed: await PermissionsService._allowRead(
-        entity,
-        userId,
-        tenant,
-        permission,
-      ),
-    })),
-  );
-  return checks.filter((c) => c.allowed).map((c) => c.entity);
-}
-
-async function resolveAllowedIds({
-  user,
-  tenant,
-  permission,
-  requestedIds,
-  fetchAll,
-}) {
-  const hasReadAny = await UserManager.hasPermission(
-    user.id,
-    tenant,
-    permission,
-    "readAny",
-  );
-
-  if (hasReadAny) return requestedIds;
-
-  const allEntities = await fetchAll(tenant);
-  const allowed = await filterByReadPermission(
-    allEntities,
-    user.id,
-    tenant,
-    permission,
-  );
-  const allowedIds = allowed.map((e) => e.id);
-
-  if (requestedIds) {
-    const filtered = requestedIds.filter((id) => allowedIds.includes(id));
-    if (filtered.length === 0) throw new ForbiddenError();
-    return filtered;
+  if (readsRecords(scope)) {
+    return scope;
   }
 
-  if (allowedIds.length === 0) throw new ForbiddenError();
-  return allowedIds;
+  if (!scope.userId) throw new UnauthorizedError();
+  throw new ForbiddenError();
 }
 
 class ICalController {
@@ -96,22 +59,12 @@ class ICalController {
     const includePast = toBool(req.query.includePast);
     const includePrivate = toBool(req.query.includePrivate);
 
-    const options = { includePast };
+    // The public calendar, or the event within the reach of the request -
+    // none there is a 404 (the service's).
+    const options = { includePast, scope: PUBLIC };
 
     if (includePrivate) {
-      const user = await requireUser(req, true);
-      const event = await EventManager.getEvent(id, tenant);
-      if (!event) throw new NotFoundError("event_not_found");
-
-      const allowed = await PermissionsService._allowRead(
-        event,
-        user.id,
-        tenant,
-        RolePermission.MANAGE_BOOKABLES,
-      );
-      if (!allowed) throw new ForbiddenError();
-
-      options.includePrivate = true;
+      options.scope = privateScopeOf(req);
     }
 
     const cal = await ICalService.getEventCal(id, tenant, options);
@@ -127,19 +80,14 @@ class ICalController {
     const includePast = toBool(req.query.includePast);
     const includePrivate = toBool(req.query.includePrivate);
 
-    const options = { includePast, from, to };
-    let allowedIds = parseIds(req.query.ids);
+    const options = { includePast, from, to, scope: PUBLIC };
+    const allowedIds = parseIds(req.query.ids);
 
+    // The calendar within the reach: under `any` every event, under `own`
+    // the caller's - the service reads within the reach (ADR 0002), so a
+    // request that names other events gets a calendar without them.
     if (includePrivate) {
-      const user = await requireUser(req, true);
-      allowedIds = await resolveAllowedIds({
-        user,
-        tenant,
-        permission: RolePermission.MANAGE_BOOKABLES,
-        requestedIds: allowedIds,
-        fetchAll: (t) => EventManager.getEvents(t),
-      });
-      options.includePrivate = true;
+      options.scope = privateScopeOf(req);
     }
 
     const cal = await ICalService.getMultiEventCal(allowedIds, tenant, options);
@@ -151,29 +99,12 @@ class ICalController {
    */
   static async getBookingIcal(req, res) {
     const { tenant, id } = req.params;
-    const user = await requireUser(req);
 
-    const booking = await BookingManager.getBooking(id, tenant);
+    // The booking within the reach of the request; none there is a 404.
+    const booking = await BookingManager.getBooking(id, tenant, scopeOf(req));
     if (!booking) throw new NotFoundError("booking_not_found");
 
-    const hasReadAny = await UserManager.hasPermission(
-      user.id,
-      tenant,
-      RolePermission.MANAGE_BOOKINGS,
-      "readAny",
-    );
-
-    if (!hasReadAny) {
-      const allowed = await PermissionsService._allowRead(
-        booking,
-        user.id,
-        tenant,
-        RolePermission.MANAGE_BOOKINGS,
-      );
-      if (!allowed) throw new ForbiddenError();
-    }
-
-    const cal = await ICalService.getBookingCal(id, tenant);
+    const cal = await ICalService.getBookingCal(id, tenant, scopeOf(req));
     sendIcalResponse(res, cal, `buchung-${id}`);
   }
 
@@ -183,38 +114,27 @@ class ICalController {
   static async getBookingsIcal(req, res) {
     const { tenant } = req.params;
     const { from, to } = req.query;
-    const user = await requireUser(req);
 
     const ids = parseIds(req.query.ids);
     if (!ids) throw new BadRequestError("missing_ids");
 
-    const bookings = await BookingManager.getBookings(tenant, ids);
+    // The requested bookings within the reach of the request; a request that
+    // names none of them is refused rather than answered with an empty
+    // calendar (as today).
+    const bookings = await BookingManager.getBookings(
+      tenant,
+      ids,
+      scopeOf(req),
+    );
     if (!bookings || bookings.length === 0) {
       throw new NotFoundError("bookings_not_found");
     }
 
-    const hasReadAny = await UserManager.hasPermission(
-      user.id,
-      tenant,
-      RolePermission.MANAGE_BOOKINGS,
-      "readAny",
-    );
-
-    let allowedBookings = bookings;
-    if (!hasReadAny) {
-      allowedBookings = await filterByReadPermission(
-        bookings,
-        user.id,
-        tenant,
-        RolePermission.MANAGE_BOOKINGS,
-      );
-      if (allowedBookings.length === 0) throw new ForbiddenError();
-    }
-
-    const allowedIds = allowedBookings.map((b) => b.id);
+    const allowedIds = bookings.map((b) => b.id);
     const cal = await ICalService.getMultiBookingCal(allowedIds, tenant, {
       from,
       to,
+      scope: scopeOf(req),
     });
     sendIcalResponse(res, cal, `buchungen-${allowedIds.join(",")}`);
   }
@@ -227,6 +147,7 @@ class ICalController {
 
     const cal = await ICalService.getEventCal(id, tenant, {
       includePast: true,
+      scope: PUBLIC,
     });
 
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
@@ -242,6 +163,7 @@ class ICalController {
 
     const cal = await ICalService.getMultiEventCal(ids, tenant, {
       includePast: true,
+      scope: PUBLIC,
     });
 
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");

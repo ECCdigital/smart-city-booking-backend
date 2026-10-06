@@ -1,5 +1,8 @@
 const assert = require("assert");
 const sinon = require("sinon");
+const {
+  CheckoutPolicy,
+} = require("../src/commons/services/checkout/checkout-policy");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
 const {
   BookableManager,
@@ -9,8 +12,9 @@ const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const EventManager = require("../src/commons/data-managers/event-manager");
 const UserManager = require("../src/commons/data-managers/user-manager");
 const OpeningHoursManager = require("../src/commons/utilities/opening-hours-manager");
-const LockerService = require("../src/commons/services/locker/locker-service");
-const BookingService = require("../src/commons/services/checkout/booking-service");
+const AccessService = require("../src/commons/services/access/access-service");
+const BookingCheckout = require("../src/commons/services/checkout/booking-checkout");
+const { Booking } = require("../src/commons/entities/booking/booking");
 
 const TENANT_ID = "tenant-1";
 const BOOKING_ID = "EDIT-ME";
@@ -109,7 +113,7 @@ function bookingRecord({
   };
 }
 
-describe("BookingService.updateBooking — admin edit self-block & prices", () => {
+describe("BookingCheckout.updateBooking — admin edit self-block & prices", () => {
   /** @type {ReturnType<typeof bookingRecord>[]} */
   let concurrent;
   /** @type {sinon.SinonStub} */
@@ -123,12 +127,18 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
 
     sinon.stub(BookingManager, "getBooking").callsFake(async (id) => {
       if (id === BOOKING_ID) {
-        return concurrent.find((b) => b.id === BOOKING_ID) || bookingRecord();
+        return new Booking(
+          concurrent.find((b) => b.id === BOOKING_ID) || bookingRecord(),
+        );
       }
       return { id: null };
     });
-    storeBooking = sinon
+    sinon
       .stub(BookingManager, "storeBooking")
+      .callsFake(async (value) => value);
+    // The content write of an update is the lifecycle's conditional write.
+    storeBooking = sinon
+      .stub(BookingManager, "storeBookingIfStatus")
       .callsFake(async (value) => value);
     sinon
       .stub(BookingManager, "getConcurrentBookings")
@@ -171,12 +181,10 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
     sinon.stub(UserManager, "getRawUser").resolves(null);
     sinon.stub(OpeningHoursManager, "hasOpeningHoursConflict").resolves(false);
 
-    sinon.stub(LockerService, "getInstance").returns({
-      handleUpdate: sinon.stub().resolves(),
-      handleCreate: sinon.stub().resolves(),
-      handlePreReserve: sinon.stub().resolves(),
-      getAvailableLocker: sinon.stub().resolves([]),
-    });
+    sinon.stub(AccessService, "holdForBooking").resolves([]);
+    sinon.stub(AccessService, "updateForBooking").resolves([]);
+    sinon.stub(AccessService, "provisionForBooking").resolves([]);
+    sinon.stub(AccessService, "revokeForBooking").resolves([]);
   });
 
   afterEach(() => {
@@ -195,7 +203,7 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
   it("allows updating an existing booking that would otherwise conflict with itself", async () => {
     const updated = bookingRecord();
 
-    const result = await BookingService.updateBooking(TENANT_ID, updated);
+    const result = await BookingCheckout.updateBooking(TENANT_ID, updated);
 
     assert.strictEqual(result.id, BOOKING_ID);
     assert.strictEqual(lastPreparedStore().id, BOOKING_ID);
@@ -214,7 +222,7 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
       timeEnd: NEW_TIME_END,
     });
 
-    const result = await BookingService.updateBooking(TENANT_ID, updated);
+    const result = await BookingCheckout.updateBooking(TENANT_ID, updated);
 
     assert.strictEqual(result.id, BOOKING_ID);
     assert.strictEqual(result.timeBegin, NEW_TIME_BEGIN);
@@ -230,7 +238,7 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
       }),
     ];
 
-    const result = await BookingService.updateBooking(
+    const result = await BookingCheckout.updateBooking(
       TENANT_ID,
       bookingRecord(),
     );
@@ -246,7 +254,7 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
     concurrent = [bookingRecord({ snapshot })];
 
     const updated = bookingRecord({ snapshot });
-    const result = await BookingService.updateBooking(TENANT_ID, updated);
+    const result = await BookingCheckout.updateBooking(TENANT_ID, updated);
 
     assert.strictEqual(result.id, BOOKING_ID);
   });
@@ -274,7 +282,7 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
       itemGross: 11.9,
     });
 
-    await BookingService.updateBooking(TENANT_ID, updated);
+    await BookingCheckout.updateBooking(TENANT_ID, updated);
     const stored = lastPreparedStore();
 
     assert.strictEqual(stored.bookableItems[0].userPriceEur, 0);
@@ -307,7 +315,7 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
       itemGross: 11.9,
     });
 
-    await BookingService.updateBooking(TENANT_ID, updated);
+    await BookingCheckout.updateBooking(TENANT_ID, updated);
     const stored = lastPreparedStore();
 
     assert.strictEqual(stored.bookableItems[0].userPriceEur, 20);
@@ -350,7 +358,7 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
     });
     updated.assignedUserId = assigneeId;
 
-    await BookingService.updateBooking(TENANT_ID, updated);
+    await BookingCheckout.updateBooking(TENANT_ID, updated);
     const stored = lastPreparedStore();
 
     // Admin entered list price via priceCategories must win over bookingDiscounts
@@ -371,7 +379,7 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
       }),
     ];
 
-    const result = await BookingService.updateBooking(
+    const result = await BookingCheckout.updateBooking(
       TENANT_ID,
       bookingRecord(),
     );
@@ -380,7 +388,7 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
   });
 });
 
-describe("BookingService.createBooking — admin create never hard-fails checks", () => {
+describe("BookingCheckout.createBooking — admin create never hard-fails checks", () => {
   let clock;
 
   beforeEach(() => {
@@ -390,7 +398,7 @@ describe("BookingService.createBooking — admin create never hard-fails checks"
       preparationLeadTimeMinutes: 120,
     });
 
-    sinon.stub(BookingManager, "getBooking").resolves({ id: null });
+    sinon.stub(BookingManager, "getBooking").resolves(null);
     sinon
       .stub(BookingManager, "storeBooking")
       .callsFake(async (value) => value);
@@ -417,12 +425,10 @@ describe("BookingService.createBooking — admin create never hard-fails checks"
     sinon.stub(UserManager, "getRawUser").resolves(null);
     sinon.stub(OpeningHoursManager, "hasOpeningHoursConflict").resolves(false);
 
-    sinon.stub(LockerService, "getInstance").returns({
-      handleUpdate: sinon.stub().resolves(),
-      handleCreate: sinon.stub().resolves(),
-      handlePreReserve: sinon.stub().resolves(),
-      getAvailableLocker: sinon.stub().resolves([]),
-    });
+    sinon.stub(AccessService, "holdForBooking").resolves([]);
+    sinon.stub(AccessService, "updateForBooking").resolves([]);
+    sinon.stub(AccessService, "provisionForBooking").resolves([]);
+    sinon.stub(AccessService, "revokeForBooking").resolves([]);
   });
 
   afterEach(() => {
@@ -438,11 +444,11 @@ describe("BookingService.createBooking — admin create never hard-fails checks"
       preparationLeadTimeMinutes: 120,
     });
 
-    const result = await BookingService.createBooking({
+    const result = await BookingCheckout.createBooking({
       tenantId: TENANT_ID,
       user: { id: "admin@example.com" },
       simulate: true,
-      manualBooking: true,
+      policy: CheckoutPolicy.ADMIN_MANUAL,
       bookingAttempt: {
         timeBegin: Date.UTC(2026, 5, 15, 10, 0, 0),
         timeEnd: Date.UTC(2026, 5, 15, 11, 0, 0),

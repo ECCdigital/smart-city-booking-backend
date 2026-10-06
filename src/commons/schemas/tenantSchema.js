@@ -3,11 +3,35 @@ const { Schema } = require("mongoose");
 const {
   getCancellationRefundTiersError,
 } = require("../utilities/cancellation-refund-tiers");
+const {
+  LEGAL_DOCUMENT_TYPES,
+  getLegalDocumentsError,
+} = require("../utilities/legal-documents");
+const { mediaReferenceSchema } = require("./mediaSchema");
+const {
+  SUPERVISION_LEVELS,
+  SUPERVISION_LEVEL_VALUES,
+} = require("../services/supervision/supervision-constants");
 
 const cancellationRefundTierSchema = new Schema(
   {
     daysBeforeStart: { type: Number, required: true, min: 0 },
     refundPercentage: { type: Number, required: true, min: 0, max: 100 },
+  },
+  { _id: false },
+);
+
+/**
+ * A legal document of the tenant (spec §2.1). Unlike the instance documents,
+ * this is a typed subdocument: the tenant carries no legacy stock that an
+ * `init` cast could make unreadable, so the warning in `instanceSchema.js` does
+ * not apply here (§3).
+ */
+const legalDocumentSchema = new Schema(
+  {
+    type: { type: String, enum: LEGAL_DOCUMENT_TYPES, required: true },
+    title: { type: String, default: "" },
+    reference: { type: mediaReferenceSchema },
   },
   { _id: false },
 );
@@ -87,9 +111,27 @@ const tenantSchemaDefinition = {
     },
   },
 
+  // The supervision level (glossary "Aufsichtsstufe"), when it last
+  // changed and the reason of that latest change (glossary "Begründung des
+  // jüngsten Stufenwechsels"). Set server-side on creation, changed only by
+  // the supervision service - never taken from a tenant write's body.
+  supervisionLevel: {
+    type: String,
+    enum: SUPERVISION_LEVEL_VALUES,
+    default: SUPERVISION_LEVELS.FREE,
+  },
+  supervisionChangedAt: { type: Date, default: null },
+  supervisionReason: { type: String, default: null },
+
   bookableCustomFields: {
     type: [customFieldDefinitionSchema],
     default: [],
+  },
+
+  legalDocuments: {
+    type: [legalDocumentSchema],
+    default: [],
+    validate: (documents) => !getLegalDocumentsError(documents),
   },
 };
 

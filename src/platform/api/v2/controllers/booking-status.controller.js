@@ -5,6 +5,10 @@ const {
   resolveBookingStatusKey,
 } = require("../../../../commons/services/booking/booking-status-keys");
 const { BookingStatusError } = require("../../../../errors/BookingStatusError");
+const {
+  customerViewOf,
+} = require("../../../../commons/services/booking/booking-customer-view");
+const { scopeOf } = require("../../../../commons/services/authorization");
 
 const logger = bunyan.createLogger({
   name: "booking-status.controller.v2.js",
@@ -54,7 +58,11 @@ class BookingStatusControllerV2 {
 
     let bookings;
     try {
-      bookings = await BookingManager.getBookings(tenantId, splitIds);
+      bookings = await BookingManager.getBookings(
+        tenantId,
+        splitIds,
+        scopeOf(req),
+      );
     } catch (err) {
       logger.error(
         { err, tenantId, splitIds },
@@ -70,6 +78,24 @@ class BookingStatusControllerV2 {
     }
 
     const byId = new Map(bookings.map((b) => [b.id, b]));
+    // The tenant snapshot and the event core data a customer's page renders
+    // from (tenant supervision spec §5.2), one load for the whole answer.
+    let viewOf;
+    try {
+      viewOf = await customerViewOf(bookings);
+    } catch (err) {
+      logger.error(
+        { err, tenantId, splitIds },
+        "getBookingStatus: customer view load failed",
+      );
+      return fail(
+        new BookingStatusError({
+          reason: BOOKING_STATUS_REASONS.INTERNAL_ERROR,
+          statusCode: 500,
+          params: {},
+        }),
+      );
+    }
 
     const items = splitIds.map((bookingId) => {
       const booking = byId.get(bookingId);
@@ -89,12 +115,14 @@ class BookingStatusControllerV2 {
       return {
         bookingId,
         success: true,
+        status: booking.status,
         statusKey: resolveBookingStatusKey(booking),
         paymentProvider: booking.paymentProvider ?? null,
         isCommitted: Boolean(booking.isCommitted),
         isPayed: Boolean(booking.isPayed),
         isRejected: Boolean(booking.isRejected),
         priceEur,
+        ...viewOf(booking),
       };
     });
 

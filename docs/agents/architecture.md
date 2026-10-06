@@ -4,16 +4,16 @@
 
 This repository is the backend API. Related frontend repositories:
 
-| Component | Repository |
-|-----------|------------|
-| Admin UI | https://github.com/ECCdigital/smart-city-booking-vue-app |
+| Component  | Repository                                                   |
+| ---------- | ------------------------------------------------------------ |
+| Admin UI   | https://github.com/ECCdigital/smart-city-booking-vue-app     |
 | Storefront | https://github.com/ECCdigital/smart-city-booking-store-front |
 
 Both frontends consume this API. Changes to endpoints, auth, or response shapes may need updates in those repos.
 
 ## Stack
 
-- **Runtime:** Node.js 20+ (22 LTS recommended)
+- **Runtime:** Node.js 22+ (22 or 24 LTS)
 - **Framework:** Express 4
 - **Database:** MongoDB 6+ via Mongoose 8
 - **Auth:** JWT (access + refresh tokens), Passport strategies
@@ -61,14 +61,23 @@ Instance (global deployment config)
 - Controllers resolve tenant context from route params or auth
 - Cross-tenant data access is a security bug
 
+## Rights
+
+The authorization lives in `src/commons/services/authorization/`: a principal loaded once per request, the rights table (`table.js`), and one marker per route that decides the reach the managers turn into their query condition. Nothing here repeats it:
+
+- How to apply it, with examples: [docs/authorization.md](../authorization.md) (marking a route, a new table entry, reading with a reach, what a handler does not do)
+- Terms: glossary section "Rechte" in `GLOSSARY.md` (Reichweite, Prinzipal, Rechtetabelle, Berechtigung, …)
+- Request flow and how to mark a route: [api.md](api.md)
+- Decisions: [ADR 0001](../adr/0001-reach-has-one-meaning.md) (one meaning of `own`), [ADR 0002](../adr/0002-reach-is-required.md) (no read without a reach), [ADR 0003](../adr/0003-public-projection-behind-the-managers.md) (public projection behind the managers)
+
 ## Key patterns
 
-| Layer | Pattern | Example |
-|-------|---------|---------|
-| Entity | Plain JS class with hooks | `src/commons/entities/booking/booking.js` |
-| Manager | DB CRUD + queries | `src/commons/data-managers/booking-manager.js` |
-| Service | Business logic | `src/commons/services/checkout/booking-service.js` |
-| Controller | HTTP request/response | `src/platform/api/controllers/booking-controller.js` |
+| Layer      | Pattern                   | Example                                              |
+| ---------- | ------------------------- | ---------------------------------------------------- |
+| Entity     | Plain JS class with hooks | `src/commons/entities/booking/booking.js`            |
+| Manager    | DB CRUD + queries         | `src/commons/data-managers/booking-manager.js`       |
+| Service    | Business logic            | `src/commons/services/checkout/booking-service.js`   |
+| Controller | HTTP request/response     | `src/platform/api/controllers/booking-controller.js` |
 
 Controllers should stay thin — delegate to services and managers.
 
@@ -76,15 +85,15 @@ Controllers should stay thin — delegate to services and managers.
 
 - **Payment:** GiroCockpit, PM Payment (provider pattern in `src/commons/services/payment/`)
 - **File storage:** Nextcloud/WebDAV (`docs/nextcloud.md`)
-- **Lockers:** IFBS, Pareva (`src/commons/services/locker/`)
+- **Lockers:** IFBS, Pareva (adapters in `src/commons/services/access/providers/`, clients in `src/commons/services/access/clients/`; locker systems are access points of type `locker`, the checkout runs through `AccessService`; they are administered through the access point routes (`/access-apps`, `/accesspoints`))
 - **SSO:** Keycloak, Azure MSAL
 
 ## Version lines
 
-| Branch | Version | Notes |
-|--------|---------|-------|
-| `develop` | v4.x dev | Active development |
+| Branch        | Version     | Notes               |
+| ------------- | ----------- | ------------------- |
+| `develop`     | v4.x dev    | Active development  |
 | `version/4.x` | v4.x stable | Production releases |
-| `version/3.x` | v3.x LTS | Maintenance only |
+| `version/3.x` | v3.x LTS    | Maintenance only    |
 
 Work on `develop` unless told otherwise.

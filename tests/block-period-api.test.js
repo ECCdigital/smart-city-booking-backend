@@ -10,12 +10,16 @@ const {
 } = require("../src/commons/services/availability/availability-context");
 const checkWindowAvailabilityModule = require("../src/commons/availability/check-window-availability");
 const {
-  ManualItemCheckoutService,
+  ItemCheckoutService,
 } = require("../src/commons/services/checkout/item-checkout-service");
 const {
   generateBlockPeriodInstances,
 } = require("../src/commons/utilities/block-period-generator");
 const { BadRequestError, NotFoundError } = require("../src/errors/BaseError");
+const {
+  DOMAIN,
+  PUBLIC,
+} = require("../src/commons/services/authorization/reach");
 
 const weekendPeriod = {
   id: "weekend",
@@ -83,10 +87,8 @@ describe("BlockPeriodService", () => {
     sinon
       .stub(checkWindowAvailabilityModule, "checkWindowAvailability")
       .resolves({ available: true });
-    sinon.stub(ManualItemCheckoutService.prototype, "init").resolves();
-    sinon
-      .stub(ManualItemCheckoutService.prototype, "regularPriceEur")
-      .resolves(50);
+    sinon.stub(ItemCheckoutService.prototype, "init").resolves();
+    sinon.stub(ItemCheckoutService.prototype, "regularPriceEur").resolves(50);
 
     const result = await BlockPeriodService.getAvailableBlockPeriods(
       "tenant-1",
@@ -95,6 +97,7 @@ describe("BlockPeriodService", () => {
       "2026-06-30",
       1,
       "user-1",
+      DOMAIN,
     );
 
     assert.strictEqual(result.title, "Camping A");
@@ -103,6 +106,16 @@ describe("BlockPeriodService", () => {
     assert.strictEqual(result.blockPeriods[0].available, true);
     assert.strictEqual(result.blockPeriods[0].priceEur, 50);
     assert.strictEqual(result.blockPeriods[0].timeBegin, instance.timeBegin);
+    assert.strictEqual(
+      BookableManager.getBookable.firstCall.args[2],
+      DOMAIN,
+      "reads the bookable of the route with the scope",
+    );
+    assert.strictEqual(
+      AvailabilityContext.create.firstCall.args[4],
+      DOMAIN,
+      "hands the scope to the availability context",
+    );
   });
 
   it("includes reason when a block period is unavailable", async () => {
@@ -121,6 +134,7 @@ describe("BlockPeriodService", () => {
       "2026-06-30",
       1,
       null,
+      DOMAIN,
     );
 
     assert.strictEqual(result.blockPeriods[0].available, false);
@@ -143,6 +157,7 @@ describe("BlockPeriodService", () => {
           "2026-06-30",
           1,
           null,
+          DOMAIN,
         ),
       BadRequestError,
     );
@@ -160,6 +175,7 @@ describe("BlockPeriodService", () => {
           "2026-06-30",
           1,
           null,
+          DOMAIN,
         ),
       NotFoundError,
     );
@@ -177,6 +193,7 @@ describe("BlockPeriodService", () => {
           "2026-06-30",
           1,
           null,
+          DOMAIN,
         ),
       (error) =>
         error instanceof BadRequestError && error.code === "invalid_date_range",
@@ -195,6 +212,7 @@ describe("BlockPeriodService", () => {
           "2026-12-31",
           1,
           null,
+          DOMAIN,
         ),
       (error) =>
         error instanceof BadRequestError &&
@@ -209,6 +227,7 @@ describe("block periods API", () => {
   });
 
   it("returns block periods from the controller", async () => {
+    sinon.stub(BookableManager, "getBookable");
     sinon.stub(BlockPeriodService, "getAvailableBlockPeriods").resolves({
       title: "Camping A",
       blockPeriods: [
@@ -229,6 +248,7 @@ describe("block periods API", () => {
         params: { tenant: "tenant-1", id: "camping-a" },
         query: { amount: 1, startDate: "2026-06-01", endDate: "2026-06-30" },
         user: null,
+        reach: PUBLIC.reach,
       },
       response,
     );
@@ -240,6 +260,12 @@ describe("block periods API", () => {
       BlockPeriodService.getAvailableBlockPeriods.calledOnce,
       true,
     );
+    assert.deepStrictEqual(
+      BlockPeriodService.getAvailableBlockPeriods.firstCall.args[6],
+      { reach: PUBLIC.reach, userId: null },
+      "the controller hands the route's scope on and reads nothing itself",
+    );
+    assert.strictEqual(BookableManager.getBookable.called, false);
   });
 
   it("returns 400 for non block-period bookables", async () => {
@@ -269,6 +295,7 @@ describe("block periods API", () => {
     sinon
       .stub(BlockPeriodService, "getAvailableBlockPeriods")
       .rejects(new NotFoundError("bookable_not_found"));
+    sinon.stub(BookableManager, "getBookable").resolves({ id: "missing" });
 
     const response = createMockResponse();
     await CalendarController.getBookableBlockPeriods(

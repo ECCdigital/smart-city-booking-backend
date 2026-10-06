@@ -1,11 +1,13 @@
 const Invitation = require("../entities/tenant/invitation");
 const MembershipManager = require("../data-managers/membership-manager");
-const MailController = require("../mail-service/mail-controller");
+const mailService = require("../mail-service");
 const crypto = require("crypto");
 const InvitationManager = require("../data-managers/invitation-manager");
 const ChallengeManager = require("../data-managers/challenge-manager");
 const ChallengeService = require("./challenge/challenge-service");
 const { normalizeUserId, userIdsMatch } = require("../utilities/user-id-utils");
+const TenantManager = require("../data-managers/tenant-manager");
+const { DOMAIN } = require("./authorization/reach");
 
 class InvitationService {
   static async createInvitation(
@@ -95,11 +97,11 @@ class InvitationService {
       throw new Error("No recipient email or intended user ID provided");
     }
 
-    await MailController.sendInvitationEmail({
-      sendTo: recipientEmail ? recipientEmail : invitation.intendedUserId,
+    await sendInvitation(
+      tenantID,
+      recipientEmail ? recipientEmail : invitation.intendedUserId,
       token,
-      tenantId: tenantID,
-    });
+    );
 
     return true;
   }
@@ -119,11 +121,11 @@ class InvitationService {
       status: "active",
     });
 
-    await MailController.sendInvitationEmail({
-      sendTo: invitation[0].intendedUserId,
-      token: invitation[0].token,
-      tenantId: tenantID,
-    });
+    await sendInvitation(
+      tenantID,
+      invitation[0].intendedUserId,
+      invitation[0].token,
+    );
 
     await MembershipManager.updateMembership(tenantID, userID, {
       status: "pending",
@@ -562,6 +564,29 @@ class InvitationService {
     );
   }
 
+  /**
+   * The pending invitations of a user as their own list answers them
+   * (`invitation.readMine`): token, tenant and the tenant's name. The
+   * tenants are read by the domain whatever their level - the invitation
+   * vouches for its tenant's name.
+   *
+   * @param {string} userID
+   * @returns {Promise<{token: string, tenantId: string, tenantName: string}[]>}
+   */
+  static async getMyInvitations(userID) {
+    const invitations =
+      await InvitationService.getPendingInvitationsForUser(userID);
+    const tenants = await TenantManager.getTenantsByIds(
+      invitations.map((invitation) => invitation.tenantId),
+      DOMAIN,
+    );
+    return invitations.map((invitation) => ({
+      token: invitation.token,
+      tenantId: invitation.tenantId,
+      tenantName: tenants.find((t) => t.id === invitation.tenantId)?.name || "",
+    }));
+  }
+
   static async rejectInvitation(tenantID, token, userID) {
     const invitation = await InvitationManager.getInvitationByToken(token);
 
@@ -786,6 +811,11 @@ class InvitationService {
 }
 
 module.exports = InvitationService;
+
+/** The invitation, a tenant notice to the address named. */
+function sendInvitation(tenantId, to, token) {
+  return mailService.notify("INVITATION", { tenantId, to, token });
+}
 
 function isDuplicateSingleInvitationError(error) {
   return error && error.code === 11000;

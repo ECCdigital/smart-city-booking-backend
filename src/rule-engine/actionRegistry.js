@@ -1,8 +1,8 @@
-const BookingService = require("../commons/services/checkout/booking-service");
 const MailerService = require("../commons/mail-service/mail-service");
 const {
-  CANCELLATION_ORIGINS,
-} = require("../commons/services/payment/cancellation-refund-service");
+  bookingLifecycle,
+  TRIGGER,
+} = require("../commons/services/booking-lifecycle");
 
 module.exports = {
   test(doc, params) {
@@ -14,16 +14,10 @@ module.exports = {
     const tenantId = doc.tenantId;
     const reason = params.reason || "";
 
-    await BookingService.rejectBooking(
-      tenantId,
-      bookingId,
+    await bookingLifecycle.cancel(tenantId, bookingId, {
+      trigger: TRIGGER.SYSTEM,
       reason,
-      null,
-      false,
-      false,
-      null,
-      { origin: CANCELLATION_ORIGINS.SYSTEM },
-    );
+    });
   },
 
   async sendEmail(doc, params = {}) {
@@ -41,15 +35,20 @@ module.exports = {
     if (!params.body) {
       throw new Error("sendEmail: body is required");
     }
-    await MailerService.send({
-      tenantId,
-      address,
-      subject: params.subject,
-      // The body acts as a Handlebars template; placeholders like {{name}}
-      // are resolved against the matched document.
+    // The body acts as a Handlebars template; placeholders like {{name}}
+    // are resolved against the matched document.
+    const html = await MailerService.renderHtml({
       mailTemplate: params.body,
       model: { ...doc, now: new Date() },
-      useInstanceMail: params.useInstanceMail === true,
+      tenantId,
+    });
+    await MailerService.send({
+      type: "rule-email",
+      // A rule that says useInstanceMail sends as the instance.
+      tenantId: params.useInstanceMail === true ? null : tenantId,
+      to: address,
+      subject: params.subject,
+      html,
     });
   },
 };

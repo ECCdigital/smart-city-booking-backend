@@ -1,7 +1,6 @@
 const InvitationService = require("../../../commons/services/invitation-service");
-const PermissionService = require("../../../commons/services/permission-service");
-const { RolePermission } = require("../../../commons/entities/role/role");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
+const { scopeOf } = require("../../../commons/services/authorization");
 const { normalizeUserId } = require("../../../commons/utilities/user-id-utils");
 const bunyan = require("bunyan");
 
@@ -14,19 +13,6 @@ class InvitationController {
   static async getInvitationsByTenantID(request, response) {
     try {
       const tenantID = request.params.tenant;
-      const user = request.user;
-
-      if (
-        !(await PermissionService._allowUpdateAny(
-          user.id,
-          tenantID,
-          RolePermission.MANAGE_USERS,
-        ))
-      ) {
-        return response
-          .status(403)
-          .send("Forbidden: You don't have permission to access invitations.");
-      }
 
       const invitations =
         await InvitationService.getMultiUseInvitations(tenantID);
@@ -44,22 +30,9 @@ class InvitationController {
     try {
       const user = request.user;
 
-      const invitations = await InvitationService.getPendingInvitationsForUser(
-        user.id,
-      );
+      const invitations = await InvitationService.getMyInvitations(user.id);
 
-      const tenant = await TenantManager.getTenants();
-
-      const invitationsWithTenantNames = invitations.map((invitation) => {
-        return {
-          token: invitation.token,
-          tenantId: invitation.tenantId,
-          tenantName:
-            tenant.find((t) => t.id === invitation.tenantId)?.name || "",
-        };
-      });
-
-      response.status(200).send(invitationsWithTenantNames);
+      response.status(200).send(invitations);
     } catch (error) {
       logger.error(error);
       response
@@ -71,7 +44,6 @@ class InvitationController {
   static async createInvitation(request, response) {
     try {
       const tenantID = request.params.tenant;
-      const user = request.user;
       const {
         type,
         roles,
@@ -84,18 +56,6 @@ class InvitationController {
       const sanitizedUserId = intendedUserId
         ? normalizeUserId(intendedUserId)
         : null;
-
-      if (
-        !(await PermissionService._allowUpdateAny(
-          user.id,
-          tenantID,
-          RolePermission.MANAGE_USERS,
-        ))
-      ) {
-        return response
-          .status(403)
-          .send("Forbidden: You don't have permission to create invitations.");
-      }
 
       if (!type || !["single", "multi"].includes(type)) {
         return response.status(400).send("Invalid or missing invitation type.");
@@ -123,19 +83,6 @@ class InvitationController {
     try {
       const tenantID = request.params.tenant;
       const token = request.params.token;
-      const user = request.user;
-
-      if (
-        !(await PermissionService._allowUpdateAny(
-          user.id,
-          tenantID,
-          RolePermission.MANAGE_USERS,
-        ))
-      ) {
-        return response
-          .status(403)
-          .send("Forbidden: You don't have permission to delete invitations.");
-      }
 
       const success = await InvitationService.deleteInvitation(tenantID, token);
       if (success) {
@@ -160,7 +107,7 @@ class InvitationController {
 
       await InvitationService.verifyInvitation(tenantId, token, user?.id);
 
-      const tenant = await TenantManager.getTenant(tenantId);
+      const tenant = await TenantManager.getTenant(tenantId, scopeOf(request));
 
       return response.status(200).send({ ok: true, tenantName: tenant.name });
     } catch (error) {
@@ -237,24 +184,11 @@ class InvitationController {
   static async resendInvitation(request, response) {
     try {
       const tenantID = request.params.tenant;
-      const user = request.user;
       const { userId: userID } = request.body;
       const normalizedUserId = normalizeUserId(userID);
 
       if (!normalizedUserId) {
         return response.status(400).send("User ID is required");
-      }
-
-      if (
-        !(await PermissionService._allowUpdateAny(
-          user.id,
-          tenantID,
-          RolePermission.MANAGE_USERS,
-        ))
-      ) {
-        return response
-          .status(403)
-          .send("Forbidden: You don't have permission to resend invitations.");
       }
 
       await InvitationService.resendInvitationMail(tenantID, normalizedUserId);
@@ -273,18 +207,6 @@ class InvitationController {
       const tenantID = request.params.tenant;
       const user = request.user;
       const { challengeId, userId, token } = request.body;
-
-      if (
-        !(await PermissionService._allowUpdateAny(
-          user.id,
-          tenantID,
-          RolePermission.MANAGE_USERS,
-        ))
-      ) {
-        return response
-          .status(403)
-          .send("Forbidden: You don't have permission to approve challenges.");
-      }
 
       // Validate required parameters
       if (!challengeId || !userId) {
@@ -331,18 +253,6 @@ class InvitationController {
       const user = request.user;
       const { challengeId, userId, token } = request.body;
 
-      if (
-        !(await PermissionService._allowUpdateAny(
-          user.id,
-          tenantID,
-          RolePermission.MANAGE_USERS,
-        ))
-      ) {
-        return response
-          .status(403)
-          .send("Forbidden: You don't have permission to reject challenges.");
-      }
-
       // Validate required parameters
       if (!challengeId || !userId) {
         return response
@@ -387,21 +297,6 @@ class InvitationController {
       const tenantID = request.params.tenant;
       const userID = request.params.userId;
       const { token } = request.body;
-      const user = request.user;
-
-      if (
-        !(await PermissionService._allowUpdateAny(
-          user.id,
-          tenantID,
-          RolePermission.MANAGE_USERS,
-        ))
-      ) {
-        return response
-          .status(403)
-          .send(
-            "Forbidden: You don't have permission to delete user invitations.",
-          );
-      }
 
       await InvitationService.deleteUserInvitation(tenantID, userID, token);
 

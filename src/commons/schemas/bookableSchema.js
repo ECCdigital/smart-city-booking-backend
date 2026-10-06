@@ -1,6 +1,8 @@
 const { Double } = require("mongodb");
 const { Schema } = require("mongoose");
 const { customFieldDefinitionSchema } = require("./customFieldDefinition");
+const { mediaReferenceSchema } = require("./mediaSchema");
+const { reviewField } = require("./reviewSchema");
 
 const priceCategorySchemaDefinition = {
   priceEur: { type: Number, required: true },
@@ -18,7 +20,11 @@ const attachmentSchemaDefinition = {
   title: { type: String, required: true },
   caption: { type: String, default: "" },
   type: { type: String, required: true },
-  url: { type: String, required: true },
+  // The file of an attachment is a media reference; the context fields around
+  // it stay here, at the usage site. `url` is the legacy raw address the media
+  // import (B7) converts — it is read as an external reference until then.
+  reference: { type: mediaReferenceSchema, default: undefined },
+  url: { type: String, default: "" },
   show: { type: Boolean, default: false },
   required: { type: Boolean, default: false },
   mailAttach: { type: Boolean, default: false },
@@ -103,6 +109,15 @@ const bookableSchemaDefinition = {
   title: { type: String, required: true },
   description: { type: String, default: "" },
   isPublic: { type: Boolean, default: false },
+  // The review of the offer (glossary "Prüfstatus"): the review service's
+  // alone, never taken from a store or update body.
+  review: reviewField,
+  // The ordered image list. Position 0 is the cover image — there is no field
+  // of its own for it, reordering the list changes the cover.
+  images: { type: [mediaReferenceSchema], default: [] },
+  // Legacy single image, kept readable until the media import (B7) has moved
+  // it into `images`. It is the fallback of the derived `imgUrl` export field,
+  // never written by the application.
   imgUrl: { type: String, default: "" },
   flags: { type: [String], default: [] },
   tags: { type: [String], default: [] },
@@ -131,6 +146,17 @@ const bookableSchemaDefinition = {
   // Booking properties
   isBookable: { type: Boolean, default: false },
   amount: { type: Number, default: null },
+  // Units of this bookable one booking may hold at most; null is unlimited.
+  maxAmountPerBooking: {
+    type: Number,
+    default: null,
+    min: 1,
+    validate: (value) =>
+      value === undefined ||
+      value === null ||
+      value === "" ||
+      Number.isInteger(Number(value)),
+  },
   minBookingDuration: { type: Number, default: null },
   maxBookingDuration: { type: Number, default: null },
   autoCommitBooking: { type: Boolean, default: false },
@@ -256,7 +282,17 @@ const bookableSchemaDefinition = {
     type: [new Schema(attachmentSchemaDefinition, { _id: false })],
     default: [],
   },
-  lockerDetails: { type: Object, default: { active: false, units: [] } },
+  // The default is made per bookable - `SchemaUtils.createDefaults` hands a
+  // plain default out by reference, and the details are written into while
+  // a bookable is stored.
+  accessPointDetails: {
+    type: Object,
+    default: () => ({
+      active: false,
+      accessBuffer: { before: 0, after: 0 },
+      accessPointIds: [],
+    }),
+  },
   requiredFields: { type: [String], default: ["address", "zipCode", "city"] },
 
   externalProviders: {

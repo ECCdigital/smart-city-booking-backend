@@ -1,0 +1,57 @@
+From: Buchungsplattform <noreply@plattform.example.test>
+To: olga@stadthalle.example.test
+Subject: Freigabestufe Ihres Mandanten Stadthalle Musterstadt wurde geändert
+
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <style>
+      .content {
+        text-align: left;
+        background-color: white;
+        border: 1px solid grey;
+        padding: 10px 40px;
+        border-radius: 2px;
+        margin: auto;
+        max-width: 750px;
+      }
+
+      body {
+        align-content: center;
+      }
+
+      .layer {
+        text-align: center;
+      }
+    </style>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+
+  <body>
+    <div class="layer">
+      <div class="content">
+        <p>
+  <div style="font-family: inherit;">
+    <p>
+  Die Freigabestufe Ihres Mandanten <strong>Stadthalle Musterstadt</strong> wurde
+  geändert.
+</p>
+<br />
+<p><strong>Bisherige Stufe:</strong> frei</p>
+<p><strong>Neue Stufe:</strong> beaufsichtigt</p>
+  <p><strong>Begründung:</strong> Neue Angebote werden zunächst geprüft.</p>
+  <br />
+  <p>Ihre Angebote werden vor der Veröffentlichung von der Plattform geprüft. Reichen Sie ein Angebot zur Prüfung ein, sobald es fertig ist.</p>
+<br />
+<p><a href="https://buchung.example.test/dashboard">Zur Verwaltung Ihres Mandanten</a></p>
+
+    
+  </div>
+</p>
+      </div>
+    </div>
+  </body>
+  <footer class="footer"></footer>
+</html>

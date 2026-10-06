@@ -1,11 +1,10 @@
 const bunyan = require("bunyan");
-const PermissionService = require("../../../commons/services/permission-service");
 const {
   DEFAULT_MAIL_SNIPPETS,
 } = require("../../../commons/mail-service/templates/default-mail-snippets");
 const {
   OVERRIDABLE_SNIPPETS,
-  OVERRIDE_TEMPLATE_VARIABLES,
+  templateVariableCatalog,
 } = require("../../../commons/mail-service/templates/mail-snippet-overrides");
 
 const logger = bunyan.createLogger({
@@ -13,23 +12,19 @@ const logger = bunyan.createLogger({
   level: process.env.LOG_LEVEL,
 });
 
+/**
+ * Web Controller for the mail templates. The right is the router's
+ * (`tenant.mailTemplates`: the tenant owner).
+ */
 class MailTemplateController {
   static async getDefaultTemplates(request, response) {
     try {
-      const tenantId = request.params.id;
-      const user = request.user;
-
-      if (
-        !(await PermissionService._isTenantOwner(user.id, tenantId)) &&
-        !(await PermissionService._isInstanceOwner(user.id))
-      ) {
-        return response.sendStatus(403);
-      }
-
       response.status(200).send({
         mailSnippets: DEFAULT_MAIL_SNIPPETS,
         overridableSnippets: OVERRIDABLE_SNIPPETS,
-        templateVariables: OVERRIDE_TEMPLATE_VARIABLES,
+        templateVariables: templateVariableCatalog({
+          tenantId: request.params.tenant,
+        }),
       });
     } catch (error) {
       logger.error(error);

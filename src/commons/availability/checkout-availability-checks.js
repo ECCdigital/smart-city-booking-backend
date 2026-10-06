@@ -1,6 +1,7 @@
 const bunyan = require("bunyan");
 const { BOOKABLE_TYPES } = require("../entities/bookable/bookable");
 const { CHECK_TYPES } = require("./checkout-check-types");
+const { CHECKOUT_REASONS } = require("../services/checkout/checkout-reasons");
 const { getBookingsForCapacityCheck } = require("./check-window-availability");
 const {
   isTimeRelatedBookable,
@@ -138,6 +139,7 @@ async function runPermissionCheck({ provider, originBookable, userId }) {
     if (originBookable?.isBookable !== true) {
       throw {
         checkType: CHECK_TYPES.PERMISSION,
+        reason: CHECKOUT_REASONS.BOOKABLE_NOT_BOOKABLE,
         available: false,
         message: `Das Objekt ${originBookable.title}, mit der ID ${originBookable.id} ist nicht buchbar.`,
       };
@@ -413,6 +415,7 @@ function runBookingDurationCheck({ originBookable, timeBegin, timeEnd }) {
   ) {
     throw {
       checkType: CHECK_TYPES.BOOKING_DURATION,
+      reason: CHECKOUT_REASONS.DURATION_TOO_SHORT,
       available: false,
       message: `Die Buchungsdauer für das Objekt ${originBookable.title} muss mindestens ${originBookable.minBookingDuration} Stunden betragen.`,
     };
@@ -424,6 +427,7 @@ function runBookingDurationCheck({ originBookable, timeBegin, timeEnd }) {
   ) {
     throw {
       checkType: CHECK_TYPES.BOOKING_DURATION,
+      reason: CHECKOUT_REASONS.DURATION_TOO_LONG,
       available: false,
       message: `Die Buchungsdauer für das Objekt ${originBookable.title} darf ${originBookable.maxBookingDuration} Stunden nicht überschreiten.`,
     };

@@ -2,7 +2,7 @@ const bunyan = require("bunyan");
 const { chromium } = require("playwright");
 
 const logger = bunyan.createLogger({
-  name: "mail-service.js",
+  name: "LazyBrowser.js",
   level: process.env.LOG_LEVEL,
 });
 

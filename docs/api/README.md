@@ -9,9 +9,13 @@ Routes are mounted as follows:
 
 - `/api/...` — instance-level (`src/platform/api/api-router.js`)
 - `/api/:tenant/...` — tenant-scoped (`src/platform/api/api-router-tenant-related.js`)
-- `/api/v2/...` — checkout, coupons, booking status (v2 controllers)
+- `/api/v2/...` — checkout, coupons, booking status, dashboard KPIs, favorites (v2 controllers)
 
 Authentication details: [authentication.md](authentication.md)
+
+How the permissions are decided and how to apply them when adding a route: [../authorization.md](../authorization.md)
+
+Admin Dashboard KPIs: [dashboard.md](dashboard.md)
 
 ## Tenants
 
@@ -21,13 +25,21 @@ Instance-level routes under `/api/tenants`.
 
 Returns a public list of tenants. **No authentication required.**
 
+Each tenant carries `accessApps[]`: the customer-service contact of every active access application that has one, and nothing else of the application (its credentials never leave). The storefront reads it for the emergency help of a locker compartment.
+
+```json
+"accessApps": [
+  { "id": "ifbs", "customerService": { "name": "…", "phone": "…", "email": "…" } }
+]
+```
+
 ### GET /api/tenants
 
 Returns tenants visible to the authenticated user. **Requires JWT.**
 
 ### GET /api/tenants/:id
 
-Returns a single tenant. **Requires JWT.**
+Returns a single tenant. **Requires JWT.** Carries `supervisionLevel`, `supervisionChangedAt` and `supervisionReason`; the owner of a declined tenant gets `403 tenant_declined` (see [authentication.md](authentication.md#the-management-gate-of-a-declined-tenant)).
 
 ### POST /api/tenants
 
@@ -39,9 +51,20 @@ A tenant can only be created if one of the following conditions is met:
 - The user is included in `instance.allowedUsersToCreateTenant`, or
 - The user is listed in `instance.ownerUserIds`.
 
+The body needs `name`, `contactName` and a formally valid `mail` (the tenant's contact, not the creator's account address); `phone`, `website` and `location` are optional. Answers `201` with an empty body, or:
+
+| Status | `code`                                                 | When                                                                                                                                                                                                                                                   |
+| ------ | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 400    | `missing_name`, `missing_contact_name`, `invalid_mail` | A required contact field is missing or invalid (`params.field`)                                                                                                                                                                                        |
+| 403    | `email_verification_required`                          | A creator who is not an instance owner has no verification proof (`params.method`: `email` or `identity_provider`)                                                                                                                                     |
+| 409    | `max_tenants_reached`                                  | The global `MAX_TENANTS` is reached (instance owners included)                                                                                                                                                                                         |
+| 429    | `too_many_requests`                                    | A creator who is not an instance owner already created three tenants within the last 24 hours (`RATE_LIMIT_TENANT_SELF_CREATION_PER_USER`); `Retry-After` names the wait in seconds. Failed creations do not count, deleting a tenant returns no quota |
+
+The creator becomes the tenant owner. The tenant starts at the instance's initial supervision level (`free` for an instance owner); supervision fields in the body are ignored.
+
 ### PUT /api/tenants
 
-Creates or updates a tenant (upsert). **Requires JWT.** Same creation rules as `POST`.
+Creates or updates a tenant (upsert). **Requires JWT.** Same creation rules and answers as `POST`; an update of an existing tenant does not need the contact fields.
 
 ### DELETE /api/tenants/:id
 
@@ -52,29 +75,62 @@ A tenant can only be deleted if one of the following conditions is met:
 - The user has a `Membership` with `owner: true` for that tenant, or
 - The user is listed in `instance.ownerUserIds`.
 
+## Tenant approval queue
+
+### GET /api/instances/tenant-approval-queue
+
+The tenants waiting for approval (glossary „Freigabeliste der Mandanten“: exactly `supervisionLevel: pending`), longest waiting first, paginated (`?page=&pageSize=`, no filters). A row carries `tenantId`, `tenantName`, `waitingSince`, the `contact`, the `owners` (every owner membership with `userId`, `displayName`, `mail`), the `offerCount` (all bookables plus events) and `lastChange`, the newest history row about the tenant (`tenant.created` = new, `tenant.levelChanged` with `to: pending` = reset, with its reason). `total` is the queue's counter. Approve or decline per tenant with `PUT /api/tenants/:tenant/supervision`. **Instance owner only.**
+
+## Supervision notices
+
+The tenant supervision tells the owners in charge by mail (glossary „Aufsichtsmitteilung“). Every notice goes out over the **instance's** mail account with central templates — never over a tenant's own mail configuration, and a tenant cannot override the texts.
+
+| Occasion                                                                                   | Recipients                                                                                                   |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| Tenant self-creation                                                                       | All instance owners (`instance.ownerUserIds`); the creator gets a confirmation with the actual initial level |
+| Offers newly enter the active review queue (submission, or a level change to `supervised`) | All instance owners — one mail per occasion listing all offers                                               |
+| Supervision level changed                                                                  | All tenant owners (memberships with `owner: true`): old and new level, reason, admin link                    |
+| Review decided (approve, reject, withdraw; bookable or event)                              | All tenant owners: offer, old and new status, reason, admin link                                             |
+
+Pending offers of a `free`, `pending` or `declined` tenant cause no review mail, and repeating an action causes no new mail. Sending follows the recording and never rolls a decision back.
+
+### GET /api/instances/supervision/notifications
+
+The outbox, newest first (`?status=pending|sent|failed&page=&pageSize=`). `status=failed` lists what did not go out with its `lastError` (`mail_disabled` while the instance's mail is off, `no_recipients` where no owner has an account). **Instance owner only.**
+
+### POST /api/instances/supervision/notifications/:id/retry
+
+Sends the mails of a `failed` or `pending` row that are still missing (`deliveries` names who already has theirs) and answers the row — `sent`, or `failed` again. `409` for a row already sent or being dispatched, `404` for an unknown one. Never repeats the decision, never writes history. **Instance owner only.**
+
 ## Roles
 
 ### GET /api/roles
 
-Returns all roles (instance-level). **Requires JWT.**
+Returns all roles of all tenants (instance-level). **Requires JWT. Instance owner only:** without a tenant in the path nobody is a member, so every other signed-in user is refused (`403`). With `?public=true` the public projection `{ id, name, tenantId }`.
 
 ### GET /api/:tenant/roles
 
-Returns all roles for a tenant. **Requires JWT.**
+Returns all roles for a tenant. **Requires JWT and a membership in the tenant** (`role.list`: `own` for a member, `any` under `manageRoles.readAny`). Full roles under `manageRoles.readAny`; a member gets with `?public=true` the public projection `{ id, name, tenantId }` and without the flag an empty list. A non-member is refused (`403`), a member of a declined tenant with `403 tenant_declined`.
 
 ### GET /api/:tenant/roles/tenant
 
-Returns the current user's roles in the tenant. **Requires JWT.**
+Returns the current user's roles in the tenant, from their membership. **Requires JWT.** An empty list without a membership or in a declined tenant.
 
 ### GET /api/:tenant/roles/:id
 
 Returns a single role. **Requires JWT.**
 
+### POST /api/:tenant/roles
+
+Creates a role in the tenant; the id is assigned. **Requires JWT.**
+
+_Required permission:_ `manageRoles.create`
+
 ### PUT /api/:tenant/roles
 
-Creates or updates a role in the tenant. **Requires JWT.**
+Updates a role in the tenant; `404 role_not_found` for an id the tenant does not hold. **Requires JWT.**
 
-_Required permissions:_ `role.allowCreate` / `role.allowUpdate`
+_Required permission:_ `manageRoles.updateAny`
 
 > There is no `PUT /api/roles` at instance level. Role writes are always tenant-scoped.
 
@@ -88,11 +144,11 @@ Tenant-scoped routes under `/api/:tenant/bookables`.
 
 ### GET /api/:tenant/bookables/public
 
-Returns public bookables for a tenant. Optional auth.
+Returns the public list of a tenant's bookables: what asks to be listed and passes the tenant's supervision (ADR 0003). Optional auth; a role holder with `manageBookables.readAny` gets the tenant's bookables whole. A tenant without a public projection answers `404 tenant_not_found`.
 
 ### GET /api/:tenant/bookables/public/:id
 
-Returns a single public bookable. Optional auth.
+Returns a single bookable the public reaches by a direct link (no `isPublic` requirement, under supervision an approval). Optional auth, `manageBookables.readAny` reads whole. `404` for a bookable the public cannot reach, naming no reason.
 
 ### GET /api/:tenant/bookables
 
@@ -102,11 +158,17 @@ Returns all bookables (including non-public). **Requires JWT.**
 
 Returns a single bookable. **Requires JWT.**
 
+### POST /api/:tenant/bookables
+
+Creates a bookable resource; the id is assigned. **Requires JWT.**
+
+_Required permission:_ `manageBookables.create`
+
 ### PUT /api/:tenant/bookables
 
-Creates or updates a bookable resource. **Requires JWT.**
+Updates a bookable resource; `404` for an id out of reach. **Requires JWT.**
 
-_Required permissions:_ `bookable.allowCreate` / `bookable.allowUpdate`
+_Required permission:_ `manageBookables.updateOwn` / `updateAny`
 
 ### DELETE /api/:tenant/bookables/:id
 
@@ -116,7 +178,7 @@ _Required permission:_ `bookable.allowDelete`
 
 ### GET /api/:tenant/bookables/:id/availability
 
-Returns availability intervals for a bookable (V2 engine, shared `availability-rules`).
+Returns availability intervals for a bookable the public reaches (V2 engine, shared `availability-rules`); `404` otherwise, for the block periods too.
 
 Optional auth. _Query parameters:_ `amount` (default: 1), `startDate`, `endDate` (ISO dates)
 
@@ -146,15 +208,15 @@ Returns block-period availability for a bookable. Optional auth.
 
 ### GET /api/:tenant/bookables/:id/openingHours
 
-Returns opening hours for a bookable. No auth middleware.
+Returns opening hours for a bookable the public reaches; `404` otherwise. Optional auth.
 
 ### GET /api/:tenant/bookables/:id/prices
 
-Returns price categories for a bookable. No auth middleware.
+Returns price categories for a bookable the public reaches; `404` otherwise. Optional auth, `manageBookables.readAny` reads whole (a role holder with `readOwn` alone gets the public's view).
 
 ### GET /api/:tenant/bookables/:id/occupancy
 
-Returns occupancy information for a bookable. No auth middleware (uses `user?.id` when present).
+Returns occupancy information for a bookable the public reaches; `404` otherwise. Optional auth (uses `user?.id` when present).
 
 _Parameters:_
 
@@ -171,6 +233,24 @@ _Response:_
 - **totalCapacity** — Total capacity of the bookable
 - **booked** — Number of booked units
 - **remaining** — Number of remaining units
+
+## Bookings
+
+### POST /api/:tenant/bookings
+
+Creates a booking on behalf of a customer (a manual booking). **Requires JWT and `manageBookings.create`.** The form names the state the booking starts in as `status` - `requested`, `payment_due` or `confirmed`; `confirmed` on a priced booking needs `paymentMethod` and `timePaid` (`400 missing_payment_details` otherwise), and an explicit `status` wins over the flags sent with it. Any other `status` is `400 invalid_status`. Without a `status` the three flags decide, as before: none - a request; `isCommitted` - awaiting payment (confirmed for a free booking); `isCommitted` and `isPayed` - confirmed and paid. `isPayed` without `isCommitted` on a priced booking, or `isRejected`, is `400 invalid_status`: no state stands for it, nothing is written. The stored booking is then admitted to the lifecycle: the compartments held or the access granted, the receipt of a paid booking issued, the customer, the tenant and the supervisors mailed; where the hold fails, the booking is deleted again and the hold's error answered.
+
+### PUT /api/:tenant/bookings
+
+Updates a booking; `404 booking_not_found` for an id out of reach. **Requires JWT and `manageBookings.updateAny`.** A `status` in the body is discarded, and the flags are the plan of transitions (`400 invalid_status_change` for flags no transition reaches); a body that carries none of `isCommitted`, `isPayed` and `isRejected` is the content change alone, the state stays.
+
+### POST /api/:tenant/bookings/:id/reinstate
+
+Reinstates a rejected or cancelled booking: back to `requested` from `rejected`, back to the state it was cancelled from otherwise, with price and positions of before; the refund audit is removed. The access is granted again or held. Answers `200 {success: true, data: null, errors: []}`; `409 invalid_transition` on a booking that is not rejected or cancelled, `404 booking_not_found`. **Requires JWT and booking update permission.** Before, the reinstatement was only reachable through the PUT by clearing `isRejected`.
+
+### DELETE /api/:tenant/bookings/:id
+
+Removes a booking for good: its access is taken back, its documents removed, then the booking. Not a cancellation - `POST /bookings/:id/reject` keeps the booking in the state "cancelled".
 
 ## Cancellation refunds
 
@@ -200,12 +280,36 @@ Returns per-booking calculations and aggregate amounts for a group booking. **Re
 
 ### POST /api/:tenant/group-bookings/:id/reject
 
-Cancels or rejects a group booking. Without an override, each booking uses its policy proposal; an optional `refundPercentage` applies to all bookings in the group. Optional `bankDetails` are rendered on the aggregated cancellation PDF when a refund document is generated.
+Cancels or rejects a group booking. Without an override, each booking uses its policy proposal; an optional `refundPercentage` applies to all bookings in the group. Optional `bankDetails` are rendered on the aggregated cancellation PDF when a refund document is generated. A group that is cancelled already, or whose members differ in state, answers `409 invalid_transition`; an unknown group `404`. The same applies to `POST /group-bookings/:id/commit` and `/pay`.
 
 Customer self-cancellations always use the current tenant policy when the verification link is released. Expected refund amounts are exposed via the public/hook preview endpoints and included in verify-rejection and booking-cancel mails. Rule-engine and workflow cancellations retain a full refund. Refunds are documented for manual processing; payment providers are not called automatically.
 
+### POST /api/:tenant/bookings/:id/cancellation-receipt
+
+Reprints the cancellation document of a cancelled booking as a further revision under the same number, from the stored refund audit. Same right as `POST /bookings/:id/receipt` (booking management `updateAny` or the owner); `409 not_cancelled` without a cancellation. Nothing is mailed.
+
+### POST /api/:tenant/group-bookings/:id/cancellation-receipt
+
+Reprints the one aggregated cancellation document of a cancelled group booking as a further revision, attached to every member. Same right as `POST /group-bookings/:id/receipt`; `409 not_cancelled` if a member is not cancelled.
+
+## Media
+
+The media library of a tenant (`/api/v2/:tenant/media`) and of the instance (`/api/v2/instance/media`), and the permanent resolver of legacy file addresses (`/api/:tenant/files/get`, `/api/files/get`).
+
+### GET /api/v2/:tenant/media/:id, PATCH /api/v2/:tenant/media/:id, GET /api/v2/:tenant/media/:id/usage
+
+Metadata of a medium. **Requires JWT.** A library medium follows the media role (`manageMedia` read or update, `own` for the own uploads), a booking document the booking (`manageBookings`, or the owner of a referenced booking). A medium outside that reach answers `404 media_not_found`, like an unknown one.
+
+### DELETE /api/v2/:tenant/media/:id
+
+**Requires JWT and media delete permission.** A medium outside the reach answers `404 media_not_found`; a booking document within it `403 booking_document_not_deletable`; a medium in use `409` with its usage proof.
+
+### GET /api/v2/:tenant/media/:id/file
+
+The file. `public` media anonymously while the tenant has a public projection, `intern` media for members of the tenant, booking documents for whoever the booking rule covers (`401` anonymous, `403` otherwise).
+
 ## Other categories
 
-Endpoints for events, users, bookings, coupons, checkout, payments, calendars, catalog, workflows, access points, rules, and files follow the same pattern: mostly tenant-scoped paths under `/api/:tenant/...` with permission checks via roles and memberships.
+Endpoints for events, users, bookings, coupons, checkout, payments, calendars, catalog, workflows, access points and rules follow the same pattern: mostly tenant-scoped paths under `/api/:tenant/...` with permission checks via roles and memberships.
 
 Entity schemas are documented in [entities.md](../entities.md).

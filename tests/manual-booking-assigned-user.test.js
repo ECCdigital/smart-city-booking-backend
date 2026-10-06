@@ -5,8 +5,10 @@ const {
 } = require("../src/commons/utilities/checkout-utils");
 const {
   BundleCheckoutService,
-  ManualBundleCheckoutService,
 } = require("../src/commons/services/checkout/bundle-checkout-service");
+const {
+  CheckoutPolicy,
+} = require("../src/commons/services/checkout/checkout-policy");
 
 describe("primaryEmailFromMail", () => {
   it("returns the first email in lowercase", () => {
@@ -29,29 +31,32 @@ describe("primaryEmailFromMail", () => {
   });
 });
 
-describe("ManualBundleCheckoutService assignedUserId", () => {
+describe("ADMIN_MANUAL assignedUserId", () => {
   afterEach(() => {
     sinon.restore();
   });
 
   it("sets assignedUserId from the booking email instead of the admin user", async () => {
-    sinon.stub(BundleCheckoutService.prototype, "prepareBooking").resolves({
-      assignedUserId: "admin@example.com",
-      mail: "Nutzer@Example.com",
-    });
-
-    const service = new ManualBundleCheckoutService({
-      user: "admin@example.com",
-      tenant: "tenant-1",
-      timeBegin: Date.now(),
-      timeEnd: Date.now() + 3600000,
-      bookableItems: [],
-      email: "Nutzer@Example.com",
-      name: "Nutzer",
-      isCommit: true,
-      isPayed: true,
-      isRejected: false,
-    });
+    const service = new BundleCheckoutService(
+      {
+        user: "admin@example.com",
+        tenant: "tenant-1",
+        timeBegin: Date.now(),
+        timeEnd: Date.now() + 3600000,
+        bookableItems: [],
+        email: "Nutzer@Example.com",
+        name: "Nutzer",
+      },
+      CheckoutPolicy.ADMIN_MANUAL,
+      {
+        isCommitted: true,
+        isPayed: true,
+        isRejected: false,
+      },
+    );
+    sinon
+      .stub(BundleCheckoutService.prototype, "generateBookingReference")
+      .resolves("TEST-REF");
 
     const booking = await service.prepareBooking();
 

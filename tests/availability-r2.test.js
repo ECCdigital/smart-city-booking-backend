@@ -4,7 +4,7 @@ const {
   AvailabilityContext,
 } = require("../src/commons/services/availability/availability-context");
 const {
-  ManualItemCheckoutService,
+  ItemCheckoutService,
 } = require("../src/commons/services/checkout/item-checkout-service");
 const OpeningHoursManager = require("../src/commons/utilities/opening-hours-manager");
 const {
@@ -136,7 +136,7 @@ async function isCheckoutAvailable(fixture, params) {
   const originals = installStubs(stubs);
 
   try {
-    const checkout = new ManualItemCheckoutService({
+    const checkout = new ItemCheckoutService({
       user: params.user ?? "user-1",
       tenantId: TENANT_ID,
       timeBegin: params.timeBegin,
@@ -182,7 +182,9 @@ function createCheckoutStubs(fixture) {
       },
     },
     TenantManager: {
-      getTenant: async () => fixture.tenant ?? null,
+      // The checkout asks the tenant for its supervision level (offer gate):
+      // a world without one is a free tenant.
+      getTenant: async () => fixture.tenant ?? { id: TENANT_ID },
     },
     TenantModel: {
       findOne: async () =>

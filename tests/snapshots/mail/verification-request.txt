@@ -1,0 +1,76 @@
+From: Buchungsplattform <noreply@plattform.example.test>
+To: erika@example.test
+Bcc: 
+Subject: Bestätigen Sie Ihre E-Mail-Adresse
+Attachments: 
+
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <style>
+      .content {
+        text-align: left;
+        background-color: white;
+        border: 1px solid grey;
+        padding: 10px 40px;
+        border-radius: 2px;
+        margin: auto;
+        max-width: 750px;
+      }
+
+      body {
+        align-content: center;
+      }
+
+      .layer {
+        text-align: center;
+      }
+    </style>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+
+  <body>
+    <div class="layer">
+      <div class="content">
+        <p>
+  <div style="font-family: inherit;">
+    <p>Hallo,</p>
+
+<p>
+  vielen Dank für Ihre Registrierung! Um Ihr Konto zu aktivieren, bestätigen
+  Sie bitte Ihre E-Mail-Adresse über den folgenden Button.
+</p>
+
+<p style="text-align: center; margin: 30px 0">
+  <a
+    href="https://buchung.example.test/auth/verify?token&#x3D;hook-verify-1&amp;id&#x3D;erika%40example.test"
+    style="background-color: #0055a5; color: #ffffff; padding: 12px 24px;
+           border-radius: 4px; text-decoration: none; font-weight: bold;
+           display: inline-block"
+  >
+    E-Mail bestätigen
+  </a>
+</p>
+
+<p style="font-size: 0.9em; color: #555">
+  Falls der Button nicht funktioniert, kopieren Sie diesen Link in Ihren
+  Browser:<br />
+  <a href="https://buchung.example.test/auth/verify?token&#x3D;hook-verify-1&amp;id&#x3D;erika%40example.test" style="word-break: break-all">https://buchung.example.test/auth/verify?token&#x3D;hook-verify-1&amp;id&#x3D;erika%40example.test</a>
+</p>
+
+<hr />
+
+<p style="font-size: 0.9em; color: #c62828">
+  <strong>Sie haben sich nicht registriert?</strong> Dann können Sie diese
+  E-Mail einfach ignorieren. Ohne Bestätigung wird kein Konto aktiviert.
+</p>
+    
+  </div>
+</p>
+      </div>
+    </div>
+  </body>
+  <footer class="footer"></footer>
+</html>

@@ -1,0 +1,65 @@
+# swagger/routes/authentication.yaml
+#
+# The sign-in answers, as far as the tenant supervision reaches into them:
+# `permissions.tenants[]` names per tenant of the user its supervision level,
+# when it last changed and the reason of that change, so the Admin UI marks a
+# declined or waiting tenant before its first request. The full routes are
+# described in `docs/api/authentication.md`.
+
+/auth/signin:
+  post:
+    tags:
+      - Authentication
+    summary: Sign in with id and password
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [id, password]
+            properties:
+              id:
+                type: string
+              password:
+                type: string
+    responses:
+      "200":
+        description: The user, the permissions and the tokens.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user:
+                  type: object
+                permissions:
+                  $ref: "#/components/schemas/SignInPermissions"
+                accessToken:
+                  type: string
+                refreshToken:
+                  type: string
+      "401":
+        description: Wrong id or password
+
+/auth/me:
+  get:
+    tags:
+      - Authentication
+    summary: The signed-in user and their permissions
+    security:
+      - bearerAuth: []
+    responses:
+      "200":
+        description: The user and the permissions.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user:
+                  type: object
+                permissions:
+                  $ref: "#/components/schemas/SignInPermissions"
+      "401":
+        description: Not authenticated

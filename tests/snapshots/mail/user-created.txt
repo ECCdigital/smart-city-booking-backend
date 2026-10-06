@@ -1,0 +1,57 @@
+From: Buchungsplattform <noreply@plattform.example.test>
+To: admin@plattform.example.test
+Bcc: 
+Subject: Ein neuer Benutzer wurde erstellt
+Attachments: 
+
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <style>
+      .content {
+        text-align: left;
+        background-color: white;
+        border: 1px solid grey;
+        padding: 10px 40px;
+        border-radius: 2px;
+        margin: auto;
+        max-width: 750px;
+      }
+
+      body {
+        align-content: center;
+      }
+
+      .layer {
+        text-align: center;
+      }
+    </style>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+
+  <body>
+    <div class="layer">
+      <div class="content">
+        <p>
+  <div style="font-family: inherit;">
+    <p>Ein neuer Benutzer wurde erstellt.</p>
+<br />
+<p><strong>Vorname:</strong> Erika</p>
+<p><strong>Nachname:</strong> Musterfrau</p>
+  <p><strong>Firma:</strong> Musterfirma GmbH</p>
+<p><strong>E-Mail:</strong> erika@example.test</p>
+<br />
+<p>
+  <strong>Registrierungsdatum:</strong>
+  01.09.2026, 11:30
+</p>
+    
+  </div>
+</p>
+      </div>
+    </div>
+  </body>
+  <footer class="footer"></footer>
+</html>

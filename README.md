@@ -13,11 +13,11 @@ This repository contains the **backend API** and business logic. Frontends are m
 
 ## Ecosystem
 
-| Component | Repository | Role |
-|-----------|------------|------|
-| **Backend API** | [smart-city-booking-backend](https://github.com/ECCdigital/smart-city-booking-backend) | REST API, auth, bookings, tenants |
-| **Storefront** | [smart-city-booking-store-front](https://github.com/ECCdigital/smart-city-booking-store-front) | Public booking UI — connects to this API (v4) |
-| **Admin UI** | [smart-city-booking-vue-app](https://github.com/ECCdigital/smart-city-booking-vue-app) | Administration, configuration, and JS web interface for embedding |
+| Component       | Repository                                                                                     | Role                                                              |
+| --------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| **Backend API** | [smart-city-booking-backend](https://github.com/ECCdigital/smart-city-booking-backend)         | REST API, auth, bookings, tenants                                 |
+| **Storefront**  | [smart-city-booking-store-front](https://github.com/ECCdigital/smart-city-booking-store-front) | Public booking UI — connects to this API (v4)                     |
+| **Admin UI**    | [smart-city-booking-vue-app](https://github.com/ECCdigital/smart-city-booking-vue-app)         | Administration, configuration, and JS web interface for embedding |
 
 ```
 ┌─────────────────┐     ┌──────────────────────┐     ┌─────────────────┐
@@ -39,11 +39,11 @@ More details: [docs/architecture.md](docs/architecture.md)
 
 ## Versions & Branches
 
-| Branch | Version line | Purpose |
-|--------|--------------|---------|
-| `develop` | **v4.x** (latest) | Active development and integration |
+| Branch        | Version line      | Purpose                                            |
+| ------------- | ----------------- | -------------------------------------------------- |
+| `develop`     | **v4.x** (latest) | Active development and integration                 |
 | `version/4.x` | **v4.x** (stable) | Maintenance, security fixes, production tag source |
-| `version/3.x` | **v3.x** (LTS) | Maintenance and security fixes |
+| `version/3.x` | **v3.x** (LTS)    | Maintenance and security fixes                     |
 
 - v4 releases: tags `v4.x.x` from `version/4.x`
 - v3 maintenance: tags `v3.x.x` from `version/3.x`
@@ -64,7 +64,7 @@ That guide covers version alignment, environment wiring (`FRONTEND_URL` = Admin 
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) v20+ (recommended: v22 LTS)
+- [Node.js](https://nodejs.org/) v22.22.2+ or v24.15+ (LTS)
 - [npm](https://www.npmjs.com/) v10+
 - [MongoDB](https://www.mongodb.com/) v6+
 
@@ -89,6 +89,8 @@ Set secure values for `CRYPTO_SECRET`, `JWT_SECRET`, and `JWT_REFRESH_SECRET`.
 `FRONTEND_URL` is the **Admin UI** base URL (default local: `http://localhost:8080`). The Storefront is configured separately — see [getting-started.md](docs/getting-started.md).
 
 For file uploads and payment documents (receipts, invoices), configure [Nextcloud](docs/nextcloud.md) in `.env`.
+
+Optional limits live in `.env` too: `MAX_TENANTS`, `MAX_BOOKABLES`, `MAX_EVENTS`, and `FAVORITES_MAX_PER_USER` (how many offers one signed-in user may mark as favorites across all tenants, default 200).
 
 Start in development mode (MongoDB must be running):
 
@@ -133,18 +135,19 @@ Schema reference with examples: [docs/entities.md](docs/entities.md)
 
 ## Documentation
 
-| Topic | Description |
-|-------|-------------|
-| [Getting started (full stack)](docs/getting-started.md) | Run API + Admin UI + Storefront (npm or Docker Compose) |
-| [Architecture](docs/architecture.md) | System components, data flow, version lines |
-| [Entities](docs/entities.md) | Data model and JSON examples |
-| [API Reference](docs/api/README.md) | Endpoints, permissions, examples |
-| [Authentication](docs/api/authentication.md) | Auth routes and JWT configuration |
-| [Deployment](docs/deployment.md) | Production setup, Docker, full-stack Compose, operations |
-| [Nextcloud](docs/nextcloud.md) | File storage for uploads, attachments, and PDF documents |
-| [Changelog](docs/CHANGELOG.md) | Version history and breaking changes |
-| [Web Integration](docs/web-integration.md) | Embed bookables & events in existing websites (JS web interface) |
-| [Block Periods (frontend)](docs/block-periods-frontend.md) | Frontend notes for block periods |
+| Topic                                                      | Description                                                          |
+| ---------------------------------------------------------- | -------------------------------------------------------------------- |
+| [Getting started (full stack)](docs/getting-started.md)    | Run API + Admin UI + Storefront (npm or Docker Compose)              |
+| [Architecture](docs/architecture.md)                       | System components, data flow, version lines                          |
+| [Entities](docs/entities.md)                               | Data model and JSON examples                                         |
+| [API Reference](docs/api/README.md)                        | Endpoints, permissions, examples                                     |
+| [Authorization](docs/authorization.md)                     | How to protect a route, extend the rights table, read within a reach |
+| [Authentication](docs/api/authentication.md)               | Auth routes and JWT configuration                                    |
+| [Deployment](docs/deployment.md)                           | Production setup, Docker, full-stack Compose, operations             |
+| [Nextcloud](docs/nextcloud.md)                             | File storage for uploads, attachments, and PDF documents             |
+| [Changelog](docs/CHANGELOG.md)                             | Version history and breaking changes                                 |
+| [Web Integration](docs/web-integration.md)                 | Embed bookables & events in existing websites (JS web interface)     |
+| [Block Periods (frontend)](docs/block-periods-frontend.md) | Frontend notes for block periods                                     |
 
 ---
 

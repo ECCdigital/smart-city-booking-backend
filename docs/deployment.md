@@ -17,16 +17,24 @@ For a local or evaluation full stack (API + Admin UI + Storefront), see [getting
 
 The Storefront and Admin UI are separate deployments — see [architecture.md](architecture.md).
 
-| Client | Env var(s) | Value |
-|--------|------------|-------|
-| Admin UI | `VUE_APP_SERVER_BASE_URL` | Public API URL (`BACKEND_URL`) |
-| Storefront | `NUXT_API_BASE_URL` | API URL reachable from the Storefront server (BFF) |
-| Storefront | `NUXT_USER_BASE_URL` / `NUXT_PUBLIC_USER_BASE_URL` | Public Storefront URL |
-| Storefront | `NUXT_ADMIN_BASE_URL` / `NUXT_PUBLIC_ADMIN_BASE_URL` | Public Admin UI URL (optional) |
-| Backend | `FRONTEND_URL` | Public **Admin UI** URL (not the Storefront) |
-| Backend | `BACKEND_URL` | Public API URL |
+| Client     | Env var(s)                                           | Value                                              |
+| ---------- | ---------------------------------------------------- | -------------------------------------------------- |
+| Admin UI   | `VUE_APP_SERVER_BASE_URL`                            | Public API URL (`BACKEND_URL`)                     |
+| Storefront | `NUXT_API_BASE_URL`                                  | API URL reachable from the Storefront server (BFF) |
+| Storefront | `NUXT_USER_BASE_URL` / `NUXT_PUBLIC_USER_BASE_URL`   | Public Storefront URL                              |
+| Storefront | `NUXT_ADMIN_BASE_URL` / `NUXT_PUBLIC_ADMIN_BASE_URL` | Public Admin UI URL (optional)                     |
+| Backend    | `FRONTEND_URL`                                       | Public **Admin UI** URL (not the Storefront)       |
+| Backend    | `BACKEND_URL`                                        | Public API URL                                     |
 
 Full wiring matrix and Compose notes: [getting-started.md](getting-started.md).
+
+## Keycloak (SSO)
+
+SSO is set up per instance in the Admin UI under „Instanz verwalten → Single Sign-On“, not in the environment. The tab shows the setup of the realm with the instance's values, checks the realm („Realm prüfen“) and gives both as text for the customer's IT („Als Text“). For the first setup, sign in locally as the instance owner from `INIT_ADMIN` / `INIT_ADMIN_SECRET`.
+
+Keycloak 26.x; the tab names the minimum version.
+
+Outside the tab, the backend needs to reach the Keycloak-URL entered there: it introspects Keycloak tokens with the API-Client, and „Realm prüfen“ calls Keycloak and the Storefront under the instance's Portal-URL from the backend. When every SSO sign-in fails, sign in locally and run „Realm prüfen“; the backend's log warns when Keycloak refuses tokens for a missing Audience mapper.
 
 ## Recommended environment settings
 
@@ -87,6 +95,8 @@ For production, prefer pinned release tags or GHCR images behind a TLS reverse p
 ## Database migrations
 
 Database migration scripts live in `migrations/scripts/`. Run them according to your deployment process when upgrading between versions. See [CHANGELOG.md](CHANGELOG.md) and [migrations/](migrations/) for breaking changes.
+
+Pending migrations run at start-up under a MongoDB lock, so parallel processes run them once, and `GET /healthz/ready` answers `503` until they have succeeded in that process — route traffic by that probe. The cutover to the tenant supervision is described in [tenant-supervision-cutover.md](tenant-supervision-cutover.md).
 
 ## Operations checklist
 

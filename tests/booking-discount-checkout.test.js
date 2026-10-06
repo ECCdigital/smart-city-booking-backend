@@ -2,10 +2,13 @@ const assert = require("assert");
 const sinon = require("sinon");
 const { Bookable } = require("../src/commons/entities/bookable/bookable");
 const {
-  ManualItemCheckoutService,
+  ItemCheckoutService,
 } = require("../src/commons/services/checkout/item-checkout-service");
 const MembershipManager = require("../src/commons/data-managers/membership-manager");
 const CouponService = require("../src/commons/services/coupon-service");
+const {
+  CheckoutPolicy,
+} = require("../src/commons/services/checkout/checkout-policy");
 
 const TENANT_ID = "tenant-1";
 const USER_ID = "user-1";
@@ -26,7 +29,7 @@ function discountBookable(overrides = {}) {
 }
 
 async function createCheckoutService(bookable, options = {}) {
-  const service = new ManualItemCheckoutService({
+  const service = new ItemCheckoutService({
     user: USER_ID,
     tenantId: TENANT_ID,
     timeBegin: Date.now(),
@@ -155,24 +158,24 @@ describe("ItemCheckoutService booking discount pricing", function () {
   });
 });
 
-describe("BookingService.createBooking — manual create ignores booking discounts", function () {
+describe("BookingCheckout.createBooking — manual create ignores booking discounts", function () {
   const ADMIN_ID = "admin@stadt.de";
   const CUSTOMER_MAIL = "kunde@example.com";
   const LIST_PRICE = 100;
   const TIME_BEGIN = Date.UTC(2026, 5, 20, 10, 0, 0);
   const TIME_END = Date.UTC(2026, 5, 20, 11, 0, 0);
 
-  let BookingService;
+  let BookingCheckout;
   let BookingManager;
   let BookableManager;
   let TenantManager;
   let EventManager;
   let OpeningHoursManager;
-  let LockerService;
+  let AccessService;
   let WorkflowService;
 
   before(function () {
-    BookingService = require("../src/commons/services/checkout/booking-service");
+    BookingCheckout = require("../src/commons/services/checkout/booking-checkout");
     BookingManager = require("../src/commons/data-managers/booking-manager");
     ({
       BookableManager,
@@ -180,7 +183,7 @@ describe("BookingService.createBooking — manual create ignores booking discoun
     TenantManager = require("../src/commons/data-managers/tenant-manager");
     EventManager = require("../src/commons/data-managers/event-manager");
     OpeningHoursManager = require("../src/commons/utilities/opening-hours-manager");
-    LockerService = require("../src/commons/services/locker/locker-service");
+    AccessService = require("../src/commons/services/access/access-service");
     WorkflowService = require("../src/commons/services/workflow/workflow-service");
   });
 
@@ -204,7 +207,7 @@ describe("BookingService.createBooking — manual create ignores booking discoun
       },
     });
 
-    sinon.stub(BookingManager, "getBooking").resolves({ id: null });
+    sinon.stub(BookingManager, "getBooking").resolves(null);
     const storeBooking = sinon
       .stub(BookingManager, "storeBooking")
       .callsFake(async (value) => value);
@@ -227,19 +230,16 @@ describe("BookingService.createBooking — manual create ignores booking discoun
     sinon.stub(TenantManager, "getTenant").resolves(null);
     sinon.stub(EventManager, "getEvent").resolves(null);
     sinon.stub(OpeningHoursManager, "hasOpeningHoursConflict").resolves(false);
-    sinon.stub(LockerService, "getInstance").returns({
-      getAvailableLocker: sinon.stub().resolves([]),
-      handleCreate: sinon.stub().resolves(),
-      handlePreReserve: sinon.stub().resolves(),
-    });
+    sinon.stub(AccessService, "holdForBooking").resolves([]);
+    sinon.stub(AccessService, "provisionForBooking").resolves([]);
     sinon.stub(CouponService, "incrementCouponUsage").resolves();
     sinon.stub(WorkflowService, "handleWorkflowEvent").resolves();
 
-    await BookingService.createBooking({
+    await BookingCheckout.createBooking({
       tenantId: TENANT_ID,
       user: { id: ADMIN_ID },
       simulate: false,
-      manualBooking: true,
+      policy: CheckoutPolicy.ADMIN_MANUAL,
       bookingAttempt: {
         timeBegin: TIME_BEGIN,
         timeEnd: TIME_END,

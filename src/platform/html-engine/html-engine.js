@@ -4,6 +4,12 @@ const {
 const TenantManager = require("../../commons/data-managers/tenant-manager");
 const ExternalPriceService = require("../../commons/services/external-price-service");
 const InstanceManager = require("../../commons/data-managers/instance-manager");
+const {
+  absoluteUrl,
+  enrichAttachment,
+} = require("../../commons/services/media/media-reference");
+// The embeds render the public's view of the offers, whoever asks.
+const { PUBLIC } = require("../../commons/services/authorization/reach");
 
 class HtmlEngine {
   /**
@@ -101,11 +107,16 @@ class HtmlEngine {
     }
 
     for (const bookable of bookables) {
-      const tenantObj = await TenantManager.getTenant(bookable.tenantId);
+      const tenantObj = await TenantManager.getTenant(
+        bookable.tenantId,
+        PUBLIC,
+      );
 
       htmlOutput += '<li class="bt-' + bookable.type + '">';
+      // The markup is embedded on foreign websites, so every media address has
+      // to be absolute.
       htmlOutput += this.generateImageHtml(
-        bookable.imgUrl,
+        absoluteUrl(bookable.coverImageUrl),
         "cover-image",
         bookable.title,
       );
@@ -177,7 +188,7 @@ class HtmlEngine {
     let htmlOutput = '<div class="bookable-item">';
 
     htmlOutput += this.generateImageHtml(
-      bookable.imgUrl,
+      absoluteUrl(bookable.coverImageUrl),
       "cover-image",
       bookable.title,
     );
@@ -197,11 +208,14 @@ class HtmlEngine {
       htmlOutput += '<ul class="attachments">';
       bookable.attachments
         .filter((attachment) => attachment.type !== "agreement")
+        // A media attachment stores its file under `reference`, so the address
+        // has to be resolved — and absolutized for the embedding website.
+        .map((attachment) => enrichAttachment(attachment, bookable.tenantId))
         .forEach((attachment) => {
           htmlOutput += '<li class="attachment">';
           htmlOutput +=
             '<a href="' +
-            attachment.url +
+            absoluteUrl(attachment.url) +
             '" target="_blank">' +
             attachment.title +
             "</a>";
@@ -249,9 +263,13 @@ class HtmlEngine {
         "</a>";
     }
 
-    let relatedBookables = (
-      await BookableManager.getRelatedBookables(bookable.id, bookable.tenantId)
-    ).filter((bookable) => bookable.isPublic === true);
+    // The related bookables as the public sees them (ADR 0003): what the
+    // projection lists of them.
+    let relatedBookables = await BookableManager.getRelatedBookables(
+      bookable.id,
+      bookable.tenantId,
+      PUBLIC,
+    );
 
     if (relatedBookables.length > 0) {
       htmlOutput += '<div class="related-bookable-objects">';
@@ -272,7 +290,7 @@ class HtmlEngine {
     let htmlOutput = '<ul class="booking-manager-list">';
 
     for (const event of events) {
-      const tenantObj = await TenantManager.getTenant(event.tenantId);
+      const tenantObj = await TenantManager.getTenant(event.tenantId, PUBLIC);
 
       let tags = "";
       event.information.tags.forEach((tag) => {
@@ -281,7 +299,7 @@ class HtmlEngine {
 
       htmlOutput += `<li class="event" rel="${tags.trim()}">`;
       htmlOutput += this.generateImageHtml(
-        event.information.teaserImage,
+        absoluteUrl(event.teaserImageUrl),
         "cover-image",
         event.information.name,
       );
@@ -377,7 +395,7 @@ class HtmlEngine {
     htmlOutput += `<h1>Informationen</h1>`;
     htmlOutput += `<h2>${event.information.name || ""}</h2>`;
     htmlOutput += this.generateImageHtml(
-      event.information.teaserImage,
+      absoluteUrl(event.teaserImageUrl),
       "teaser-image",
       event.information.name,
     );
@@ -446,6 +464,7 @@ class HtmlEngine {
       let eventLocationBookable = await BookableManager.getBookable(
         event.eventLocation.room,
         event.tenantId,
+        PUBLIC,
       );
 
       htmlOutput += `<div class="room">${eventLocationBookable?.title}</div>`;
@@ -464,7 +483,7 @@ class HtmlEngine {
 
     if (event.eventOrganzier) {
       htmlOutput += this.generateImageHtml(
-        event.eventOrganizer.contactPersonImage,
+        absoluteUrl(event.contactPersonImageUrl),
         "contact-person-image",
         event.eventOrganizer.contactPersonName,
       );
@@ -479,17 +498,19 @@ class HtmlEngine {
       }</div>`;
     }
 
-    if (event.eventOrganizer.speakers.length > 0) {
+    const speakers = event.speakersWithImageUrls;
+
+    if (speakers.length > 0) {
       htmlOutput += `<h6>Referenten</h6>`;
       htmlOutput += `<ul class="speaker-list">`;
 
-      event.eventOrganizer.speakers.forEach((speaker) => {
+      speakers.forEach((speaker) => {
         htmlOutput += `<li class="speaker">`;
         htmlOutput += speaker.name
           ? `<div class="speaker-name">${speaker.name || ""}</div>`
           : "";
         htmlOutput += this.generateImageHtml(
-          speaker.image,
+          absoluteUrl(speaker.image),
           "speaker-image",
           speaker.name,
         );
@@ -555,9 +576,17 @@ class HtmlEngine {
       htmlOutput += `<div class="event-images">`;
       htmlOutput += `<h5>Bilder</h5>`;
       htmlOutput += '<ul class="event-images-list">';
-      event.images.forEach((image) => {
+      const imageUrls = event.imageUrls;
+
+      event.images.forEach((image, index) => {
         htmlOutput += '<li class="event-image">';
-        htmlOutput += this.generateImageHtml(image, "event-image", image.name);
+        // The address is derived, the alt text still comes from the stored
+        // entry — the markup stays the one it has always been.
+        htmlOutput += this.generateImageHtml(
+          absoluteUrl(imageUrls[index]),
+          "event-image",
+          image.name,
+        );
         htmlOutput += "</li>";
       });
       htmlOutput += "</ul>";
@@ -571,8 +600,15 @@ class HtmlEngine {
         htmlOutput += `<h5>Anhänge</h5>`;
         htmlOutput += '<ul class="event-attachment-list">';
         event.attachments.forEach((eventAttachment) => {
+          // Legacy entries are bare URLs; converted ones carry their file
+          // under `reference` — either way the link has to leave absolute.
+          const attachment =
+            typeof eventAttachment === "string"
+              ? { title: eventAttachment, url: eventAttachment }
+              : enrichAttachment(eventAttachment, event.tenantId);
+
           htmlOutput += '<li class="event-attachment">';
-          htmlOutput += `<a href="${eventAttachment}" target="_blank">${eventAttachment}</a>`;
+          htmlOutput += `<a href="${absoluteUrl(attachment.url)}" target="_blank">${attachment.title || attachment.url}</a>`;
           htmlOutput += "</li>";
         });
         htmlOutput += "</ul>";
@@ -580,13 +616,12 @@ class HtmlEngine {
       }
     }
 
-    let relatedTickets = (
-      await BookableManager.getBookables(event.tenantId)
-    ).filter(
-      (bookable) =>
-        bookable.type === "ticket" &&
-        bookable.eventId === event.id &&
-        bookable.isPublic === true,
+    // The tickets of the event as the public sees them (ADR 0003): what
+    // the projection lists of them, each with its event reachable.
+    const relatedTickets = await BookableManager.getEventBookables(
+      event.tenantId,
+      event.id,
+      PUBLIC,
     );
 
     if (relatedTickets.length > 0) {

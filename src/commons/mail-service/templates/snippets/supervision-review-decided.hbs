@@ -1,0 +1,14 @@
+<p>
+  Zu einem Angebot Ihres Mandanten <strong>{{tenantName}}</strong> wurde eine
+  Prüfentscheidung getroffen.
+</p>
+<br />
+<p><strong>{{typeLabel}}:</strong> {{title}}</p>
+<p><strong>Entscheidung:</strong> {{decision}}</p>
+<p><strong>Bisheriger Prüfstatus:</strong> {{fromStatus}}</p>
+<p><strong>Neuer Prüfstatus:</strong> {{toStatus}}</p>
+{{#if reason}}
+  <p><strong>Begründung:</strong> {{reason}}</p>
+{{/if}}
+<br />
+<p><a href="{{adminUrl}}">Zur Verwaltung Ihres Mandanten</a></p>

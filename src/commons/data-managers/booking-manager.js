@@ -7,14 +7,57 @@ const { Booking } = require("../entities/booking/booking");
 const BookingModel = require("./models/bookingModel");
 const BookableModel = require("./models/bookableModel");
 const { BookableManager } = require("./bookable-manager");
+const { NotFoundError } = require("../../errors/BaseError");
+const {
+  ownCondition,
+  DOMAIN,
+  PUBLIC,
+} = require("../services/authorization/reach");
+const { REACH } = require("../services/authorization/policy");
+const {
+  REFUND_STATE,
+} = require("../services/payment/cancellation-refund-service");
+
+/**
+ * The condition of a reach on the bookings (ADR 0002). Under `public` there
+ * is none: what the public sees of them is the handler's projection
+ * (the anonymized list under `?public=true`), so the manager reads the tenant's records whole and the
+ * handler shapes them - the offers alone have their projection in the
+ * manager (ADR 0003).
+ */
+const condition = (scope) =>
+  scope?.reach === REACH.PUBLIC ? {} : ownCondition("booking", scope);
 
 /**
  * Data Manager for Booking objects.
  */
 class BookingManager {
-  static async _toEntities(rawBookings) {
+  /**
+   * The public's view of a tenant's bookings (ADR 0003): the bookings of
+   * the bookables the public's list carries, and none of another - a
+   * tenant without a public projection has no list, and the bookable
+   * manager throws its `tenant_not_found`. The anonymizing is the
+   * handler's; which bookings are the public's is the manager's.
+   */
+  static async _ofListedBookables(tenantId, bookings) {
+    const listed = await BookableManager.getBookables(tenantId, PUBLIC);
+    const listedIds = new Set(listed.map((bookable) => bookable.id));
+    return bookings.filter((booking) =>
+      (booking.bookableIds || []).every((id) => listedIds.has(id)),
+    );
+  }
+
+  /**
+   * The entities of some documents as a reach sees them: under `own` - the
+   * booker reading their bookings - without the refund state (glossary
+   * "Erstattungsstand"), which is the administration's.
+   */
+  static async _toEntities(rawBookings, scope) {
     const bookings = rawBookings.map((doc) => doc.toEntity());
     await BookingManager._enrichBookingsWithCustomFields(bookings);
+    if (scope?.reach === REACH.OWN) {
+      bookings.forEach((booking) => booking.hideRefundState());
+    }
     return bookings;
   }
 
@@ -48,6 +91,7 @@ class BookingManager {
           const bookables = await BookableManager.getBookablesByIds(
             tenantId,
             bookableIds,
+            DOMAIN,
           );
           const bookableFieldsById = new Map(
             bookables.map((bookable) => [
@@ -80,99 +124,219 @@ class BookingManager {
   /**
    * Get all bookings related to a tenant
    * @param {string} tenantId Identifier of the tenant
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
+   * @param {Object} [options]
+   * @param {boolean} [options.populate=false] Carry the primary bookable
+   *   and the workflow status of each booking as `_populated`, read by
+   *   the domain: a booking within reach brings its dependents along
+   * @param {string} [options.refundState] Only the bookings in this
+   *   refund state (glossary "Erstattungsstand")
    * @returns {Promise<Booking[]>} List of bookings
    */
-  static async getTenantBookings(tenantId) {
-    const rawBookings = await BookingModel.find({ tenantId: tenantId });
-    return BookingManager._toEntities(rawBookings);
+  static async getTenantBookings(
+    tenantId,
+    scope,
+    { populate = false, refundState } = {},
+  ) {
+    const reach = condition(scope);
+    // The booker's view has no refund state, so under `own` nothing is in
+    // one: the filter must not tell what the booking itself does not.
+    if (refundState && scope?.reach === REACH.OWN) {
+      return [];
+    }
+    const rawBookings = await BookingModel.find({
+      tenantId: tenantId,
+      ...(refundState && { "cancellationRefund.refundState": refundState }),
+      ...reach,
+    });
+    let bookings = await BookingManager._toEntities(rawBookings, scope);
+    if (scope?.reach === REACH.PUBLIC) {
+      bookings = await BookingManager._ofListedBookables(tenantId, bookings);
+    }
+    if (populate) {
+      await BookingManager._populate(bookings);
+    }
+    return bookings;
+  }
+
+  /**
+   * The primary bookable of a booking: the one it names, else the first
+   * of its items.
+   *
+   * @param {Booking} booking
+   * @returns {string|null}
+   */
+  static _primaryBookableIdOf(booking) {
+    return booking.bookableId ?? booking.bookableItems?.[0]?.bookableId ?? null;
+  }
+
+  /**
+   * The dependents of some bookings the caller may embed: the primary
+   * bookable with its custom fields and the workflow status, read by the
+   * domain (ADR 0002), one bookable query and one workflow read per tenant.
+   *
+   * @param {Booking[]} bookings
+   * @returns {Promise<void>}
+   */
+  static async _populate(bookings) {
+    // The workflow service reads the bookings through this manager; the
+    // require waits until the module is whole.
+    const WorkflowService = require("../services/workflow/workflow-service");
+
+    const byTenant = new Map();
+    for (const booking of bookings) {
+      if (!byTenant.has(booking.tenantId)) byTenant.set(booking.tenantId, []);
+      byTenant.get(booking.tenantId).push(booking);
+    }
+
+    await Promise.all(
+      [...byTenant.entries()].map(async ([tenantId, tenantBookings]) => {
+        const bookableIds = [
+          ...new Set(
+            tenantBookings
+              .map(BookingManager._primaryBookableIdOf)
+              .filter(Boolean),
+          ),
+        ];
+        const [bookables, workflowStatusMap] = await Promise.all([
+          BookableManager.getBookablesByIdsWithCustomFields(
+            tenantId,
+            bookableIds,
+            DOMAIN,
+          ),
+          WorkflowService.getWorkflowStatusMap(tenantId),
+        ]);
+        const bookableById = new Map(bookables.map((b) => [b.id, b]));
+
+        for (const booking of tenantBookings) {
+          const bookableId = BookingManager._primaryBookableIdOf(booking);
+          booking._populated = {
+            bookable: bookableId ? bookableById.get(bookableId) ?? null : null,
+            workflowStatus: WorkflowService.resolveWorkflowStatus(
+              workflowStatusMap,
+              booking.id,
+            ),
+          };
+        }
+      }),
+    );
   }
 
   /**
    * Get bookings by IDs
    * @param {string} tenantId Identifier of the tenant
    * @param {string[]} bookingIds Array of booking IDs
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
    * @returns {Promise<Booking[]>} List of bookings
    */
-  static async getBookings(tenantId, bookingIds) {
+  static async getBookings(tenantId, bookingIds, scope) {
     const rawBookings = await BookingModel.find({
       tenantId: tenantId,
       id: { $in: bookingIds },
+      ...condition(scope),
     });
-    return BookingManager._toEntities(rawBookings);
+    return BookingManager._toEntities(rawBookings, scope);
   }
 
   /**
    * Get all bookings related to a bookable object
    * @param {string} tenantId Identifier of the tenant
    * @param {string} bookableId Bookable ID
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
    * @returns {Promise<Booking[]>} List of bookings
    */
-  static async getRelatedBookings(tenantId, bookableId) {
+  static async getRelatedBookings(tenantId, bookableId, scope) {
     const rawBookings = await BookingModel.find({
       tenantId: tenantId,
       "bookableItems.bookableId": bookableId,
+      ...condition(scope),
     });
-    return BookingManager._toEntities(rawBookings);
+    return BookingManager._toEntities(rawBookings, scope);
   }
 
   /**
    * Get bookings related to multiple bookables
    * @param {string} tenantId Identifier of the tenant
    * @param {string[]} bookableIds Array of bookable IDs
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
    * @returns {Promise<Booking[]>} List of bookings
    */
-  static async getRelatedBookingsBatch(tenantId, bookableIds) {
+  static async getRelatedBookingsBatch(tenantId, bookableIds, scope) {
     const rawBookings = await BookingModel.find({
       tenantId: tenantId,
       "bookableItems.bookableId": { $in: bookableIds },
+      ...condition(scope),
     });
-    return BookingManager._toEntities(rawBookings);
+    return BookingManager._toEntities(rawBookings, scope);
   }
 
   /**
-   * Get all bookings assigned to a user
-   * @param {Object} params Parameters object
-   * @param {string} params.userID User ID
-   * @param {Object} [params.filter={}] Additional filter options
+   * The bookings assigned to a user, in one tenant or across all.
+   * @param {string} userId The assigned user
+   * @param {string|null} tenantId The tenant, or null for every tenant
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002); the domain reads "my bookings" for
+   *   the route and says `DOMAIN`; none is a programming error
+   * @param {Object} [options]
+   * @param {boolean} [options.populate=false] As of `getTenantBookings`
    * @returns {Promise<Booking[]>} List of bookings
    */
-  static async getAssignedBookings({ userID, filter = {} }) {
+  static async getAssignedBookings(
+    userId,
+    tenantId,
+    scope,
+    { populate = false } = {},
+  ) {
     const rawBookings = await BookingModel.find({
-      assignedUserId: userID,
-      ...filter,
+      assignedUserId: userId,
+      ...(tenantId ? { tenantId } : {}),
+      ...condition(scope),
     });
-    return BookingManager._toEntities(rawBookings);
+    const bookings = await BookingManager._toEntities(rawBookings, scope);
+    // The assigned user is the booker, whatever reach the read runs under:
+    // the refund state is the administration's.
+    bookings.forEach((booking) => booking.hideRefundState());
+    if (populate) {
+      await BookingManager._populate(bookings);
+    }
+    return bookings;
   }
 
   /**
    * Get a specific booking
    * @param {string} id Booking ID
    * @param {string} tenantId Tenant ID
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
+   * @param {Object} [options]
+   * @param {boolean} [options.populate=false] As of `getTenantBookings`
    * @returns {Promise<Booking|null>} Booking or null
    */
-  static async getBooking(id, tenantId) {
+  static async getBooking(id, tenantId, scope, { populate = false } = {}) {
     const rawBooking = await BookingModel.findOne({
       id: id,
       tenantId: tenantId,
+      ...condition(scope),
     });
 
     if (!rawBooking) {
       return null;
     }
 
-    const [booking] = await BookingManager._toEntities([rawBooking]);
+    const [booking] = await BookingManager._toEntities([rawBooking], scope);
+    if (populate) {
+      await BookingManager._populate([booking]);
+    }
     return booking;
-  }
-
-  /**
-   * Get booking status information
-   * @param {string} tenantId Tenant ID
-   * @param {string[]} bookingIds Array of booking IDs
-   * @returns {Promise<Object[]>} Array of booking status objects
-   */
-  static async getBookingStatus(tenantId, bookingIds) {
-    const bookings = await BookingManager.getBookings(tenantId, bookingIds);
-    return bookings.map((booking) => booking.exportStatus());
   }
 
   /**
@@ -213,6 +377,222 @@ class BookingManager {
   }
 
   /**
+   * The conditional write of the booking lifecycle (spec part 2, section 5):
+   * writes the booking only where the stored one is in `expectStatus`, in one
+   * atomic operation, and answers the document as it was before - the
+   * snapshot an abort restores with {@link replaceBooking}. No match answers
+   * `null`; the caller reads the state and raises the guard error.
+   *
+   * @param {Booking|Object} booking The booking to store
+   * @param {string} expectStatus The state the stored booking must be in
+   * @param {{ unset?: string[] }} [options] Fields to remove from the
+   *   document with the write (`reinstate` drops the refund audit)
+   * @returns {Promise<Object|null>} The previous document, or null
+   */
+  static async storeBookingIfStatus(booking, expectStatus, options = {}) {
+    const bookingEntity =
+      booking instanceof Booking ? booking : new Booking(booking);
+
+    bookingEntity.validate();
+
+    const unsetFields = Array.isArray(options.unset) ? options.unset : [];
+    for (const field of unsetFields) {
+      delete bookingEntity[field];
+    }
+    const update =
+      unsetFields.length === 0
+        ? bookingEntity
+        : {
+            $set: bookingEntity,
+            $unset: Object.fromEntries(unsetFields.map((field) => [field, ""])),
+          };
+
+    return await BookingModel.findOneAndUpdate(
+      {
+        id: bookingEntity.id,
+        tenantId: bookingEntity.tenantId,
+        status: expectStatus,
+      },
+      update,
+      { upsert: false, new: false },
+    ).lean();
+  }
+
+  /**
+   * Sets the refund state of a booking that carries one (glossary
+   * "Erstattungsstand") with one atomic write of those fields alone: a
+   * booking without a refund state - not cancelled, nothing to refund,
+   * reinstated in between - is no match and answers `null`, and so is one
+   * already in that state, whose moment and person stay. `completed`
+   * records the moment and the person; `open` drops both.
+   *
+   * @param {string} tenantId Tenant ID
+   * @param {string} bookingId Booking ID
+   * @param {{ refundState: string, completedAt?: number, completedByUserId?: string|null }} state
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller writes under (ADR 0002)
+   * @returns {Promise<Booking|null>} The booking as written, or null
+   */
+  static async setRefundState(
+    tenantId,
+    bookingId,
+    { refundState, completedAt, completedByUserId = null },
+    scope,
+  ) {
+    const completion = {
+      "cancellationRefund.refundCompletedAt": completedAt,
+      "cancellationRefund.refundCompletedByUserId": completedByUserId,
+    };
+    const rawBooking = await BookingModel.findOneAndUpdate(
+      {
+        id: bookingId,
+        tenantId: tenantId,
+        "cancellationRefund.refundState": { $exists: true, $ne: refundState },
+        ...condition(scope),
+      },
+      refundState === REFUND_STATE.COMPLETED
+        ? {
+            $set: {
+              "cancellationRefund.refundState": refundState,
+              ...completion,
+            },
+          }
+        : {
+            $set: { "cancellationRefund.refundState": refundState },
+            $unset: Object.fromEntries(
+              Object.keys(completion).map((field) => [field, ""]),
+            ),
+          },
+      { new: true },
+    );
+
+    if (!rawBooking) {
+      return null;
+    }
+    const [booking] = await BookingManager._toEntities([rawBooking], scope);
+    return booking;
+  }
+
+  /**
+   * Puts a previous document back as a whole, as
+   * {@link storeBookingIfStatus} answered it: what the document did not
+   * carry is gone again, unlike a `$set` of it.
+   *
+   * @param {Object} document The document to put back
+   * @returns {Promise<void>}
+   */
+  static async replaceBooking(document) {
+    const fields = { ...document };
+    delete fields._id;
+    delete fields.__v;
+    await BookingModel.replaceOne(
+      { id: fields.id, tenantId: fields.tenantId },
+      fields,
+    );
+  }
+
+  /**
+   * Find the bookings whose attachments reference a medium. The usage proof is
+   * searched on demand (§4.7 of the media spec); a medium never carries a back
+   * reference. Booking documents are not found this way — they hang on their
+   * booking by `bookingId` and cascade with it.
+   *
+   * @param {string} tenantId Tenant ID
+   * @param {string} mediaId ID of the medium
+   * @returns {Promise<Array<{id: string, title: string}>>} Usage sites
+   */
+  static async getMediaUsage(tenantId, mediaId) {
+    if (!mediaId) {
+      return [];
+    }
+
+    const docs = await BookingModel.find(
+      {
+        tenantId: tenantId,
+        "attachments.reference.mediaId": mediaId,
+      },
+      { id: 1, name: 1 },
+    ).lean();
+
+    return docs.map((doc) => ({ id: doc.id, title: doc.name || "" }));
+  }
+
+  /**
+   * Every booking of a tenant that carries attachments — the stock the media
+   * import walks when it converts stored addresses into media references.
+   *
+   * @param {string} tenantId Tenant ID
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
+   * @returns {Promise<Booking[]>} Bookings with at least one attachment
+   */
+  static async getBookingsWithAttachments(tenantId, scope) {
+    const rawBookings = await BookingModel.find({
+      tenantId: tenantId,
+      "attachments.0": { $exists: true },
+      ...condition(scope),
+    });
+
+    return BookingManager._toEntities(rawBookings, scope);
+  }
+
+  /**
+   * Bookings whose attachments name a file. Generated documents are attached
+   * under `title` (receipts, cancellations) or `name` (invoices), so both are
+   * matched — this is how the media import places a legacy booking document
+   * without guessing (§4.10). An aggregated document names several bookings.
+   *
+   * @param {string} tenantId Tenant ID
+   * @param {string} fileName File name from the legacy document tree
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
+   * @returns {Promise<Booking[]>} Bookings that name the file
+   */
+  static async getBookingsByAttachmentFileName(tenantId, fileName, scope) {
+    if (!fileName) {
+      return [];
+    }
+
+    const rawBookings = await BookingModel.find({
+      tenantId: tenantId,
+      $or: [
+        { "attachments.title": fileName },
+        { "attachments.name": fileName },
+      ],
+      ...condition(scope),
+    });
+
+    return BookingManager._toEntities(rawBookings, scope);
+  }
+
+  /**
+   * Appends a document attachment to a booking with one atomic push. The
+   * attachment never travels in a whole-document write: that could lose it
+   * to the state write of a transition running next to it, or overwrite a
+   * parallel amendment.
+   *
+   * @param {string} tenantId Tenant ID
+   * @param {string} bookingId Booking ID
+   * @param {Object} attachment The attachment, in the shape of the schema
+   * @returns {Promise<Object>} The attachment
+   * @throws {NotFoundError} If the booking does not exist
+   */
+  static async addAttachment(tenantId, bookingId, attachment) {
+    const result = await BookingModel.updateOne(
+      { id: bookingId, tenantId },
+      { $push: { attachments: attachment } },
+    );
+
+    if (result.matchedCount === 0) {
+      throw new NotFoundError("booking_not_found", { bookingId });
+    }
+
+    return attachment;
+  }
+
+  /**
    * Remove a booking
    * @param {string} id Booking ID
    * @param {string} tenantId Tenant ID
@@ -229,6 +609,9 @@ class BookingManager {
    * @param {number} timeBegin Start time
    * @param {number} timeEnd End time
    * @param {string|null} bookingToIgnore Booking ID to ignore
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
    * @returns {Promise<Booking[]>} Concurrent bookings
    */
   static async getConcurrentBookings(
@@ -237,10 +620,12 @@ class BookingManager {
     timeBegin,
     timeEnd,
     bookingToIgnore = null,
+    scope,
   ) {
     const relatedBookings = await BookingManager.getRelatedBookings(
       tenantId,
       bookableId,
+      scope,
     );
 
     return BookingManager.filterConcurrentBookings(
@@ -305,6 +690,9 @@ class BookingManager {
    * @param {string[]} bookableIds
    * @param {number} timeBegin
    * @param {number} timeEnd
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
    * @returns {Promise<Booking[]>}
    */
   static async getBookingsForBookableFamily(
@@ -312,7 +700,9 @@ class BookingManager {
     bookableIds,
     timeBegin,
     timeEnd,
+    scope,
   ) {
+    const reach = condition(scope);
     if (!bookableIds.length) {
       return [];
     }
@@ -323,51 +713,22 @@ class BookingManager {
       isRejected: { $ne: true },
       timeBegin: { $lt: timeEnd },
       timeEnd: { $gt: timeBegin },
+      ...reach,
     });
 
     return rawBookings.map((doc) => doc.toEntity());
   }
 
   /**
-   * Get bookings in a time range
-   * @param {string} tenantId Tenant ID
-   * @param {number} timeBegin Start time
-   * @param {number} timeEnd End time
-   * @returns {Promise<Booking[]>} Bookings in time range
-   */
-  static async getBookingsByTimeRange(tenantId, timeBegin, timeEnd) {
-    const rawBookings = await BookingModel.find({
-      tenantId: tenantId,
-      $or: [
-        { timeBegin: { $gte: timeBegin, $lt: timeEnd } },
-        { timeEnd: { $gt: timeBegin, $lte: timeEnd } },
-      ],
-    });
-    return BookingManager._toEntities(rawBookings);
-  }
-
-  /**
-   * Update payment status of a booking
-   * @param {Booking} booking Booking with updated payment info
-   * @returns {Promise<void>}
-   */
-  static async setBookingPayedStatus(booking) {
-    await BookingModel.updateOne(
-      { id: booking.id, tenantId: booking.tenantId },
-      {
-        isPayed: booking.isPayed,
-        paymentMethod: booking.paymentMethod,
-      },
-    );
-  }
-
-  /**
    * Get bookings for an event
    * @param {string} tenantId Tenant ID
    * @param {string} eventId Event ID
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
    * @returns {Promise<Booking[]>} Event bookings
    */
-  static async getEventBookings(tenantId, eventId) {
+  static async getEventBookings(tenantId, eventId, scope) {
     const bookables = await BookableModel.find({
       tenantId: tenantId,
       eventId: eventId,
@@ -375,19 +736,27 @@ class BookingManager {
     });
 
     const bookableIds = bookables.map((b) => b.id);
-    return await BookingManager.getRelatedBookingsBatch(tenantId, bookableIds);
+    return await BookingManager.getRelatedBookingsBatch(
+      tenantId,
+      bookableIds,
+      scope,
+    );
   }
 
-  static async getBookedSeatsCount(
-    tenantId,
-    eventId,
-    { onlyOwn = false, userId = null } = {},
-  ) {
+  /**
+   * The booked seats of an event, whole: every ticket of every booking
+   * that is not rejected. The event is the caller's to bring within reach
+   * (ADR 0002); its seats are the domain's to count.
+   *
+   * @param {string} tenantId
+   * @param {string} eventId
+   * @returns {Promise<number>}
+   */
+  static async getBookedSeatsCount(tenantId, eventId) {
     const matchStage = {
       tenantId: tenantId,
       isRejected: false,
       "bookableItems._bookableUsed.eventId": eventId,
-      ...(onlyOwn ? { "bookableItems._bookableUsed.ownerUserId": userId } : {}),
     };
 
     const result = await BookingModel.aggregate([
@@ -396,9 +765,6 @@ class BookingManager {
       {
         $match: {
           "bookableItems._bookableUsed.eventId": eventId,
-          ...(onlyOwn
-            ? { "bookableItems._bookableUsed.ownerUserId": userId }
-            : {}),
         },
       },
       {
@@ -462,17 +828,60 @@ class BookingManager {
   }
 
   /**
-   * Get bookings with custom filter
+   * Get bookings with custom filter - a free condition of the domain,
+   * within a reach like every other record read (ticket 22).
    * @param {string} tenantId Tenant ID
    * @param {Object} filter MongoDB filter object
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
    * @returns {Promise<Booking[]>} Filtered bookings
    */
-  static async getBookingsCustomFilter(tenantId, filter) {
+  static async getBookingsCustomFilter(tenantId, filter, scope) {
     const rawBookings = await BookingModel.find({
       tenantId: tenantId,
       ...filter,
+      ...condition(scope),
     });
-    return BookingManager._toEntities(rawBookings);
+    return BookingManager._toEntities(rawBookings, scope);
+  }
+
+  /**
+   * Get committed, non-rejected bookings of a single user (the assigned user),
+   * narrowed down at the database level. Used by the access/booking queries to
+   * avoid loading the whole tenant.
+   *
+   * The price/payment validity (`isPayed` for priced bookings) is intentionally
+   * NOT enforced here - it depends on `priceEur` and is re-checked in memory via
+   * `Booking.isBookingValid()`.
+   *
+   * @param {string|null} tenantId Tenant ID, or null/undefined to search across all tenants
+   * @param {string} userId Assigned user ID
+   * @param {Object} [opts]
+   * @param {Object} [opts.timeFilter={}] Extra time conditions (e.g. on timeBegin/timeEnd)
+   * @param {Object} [opts.match={}] Extra MongoDB conditions (e.g. bookable/locker $or)
+   * @param {boolean} [opts.requireCommitted=true] When false, also returns uncommitted bookings
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
+   * @returns {Promise<Booking[]>} List of bookings
+   */
+  static async getUserBookingsFiltered(
+    tenantId,
+    userId,
+    { timeFilter = {}, match = {}, requireCommitted = true } = {},
+    scope,
+  ) {
+    const rawBookings = await BookingModel.find({
+      ...(tenantId ? { tenantId: tenantId } : {}),
+      assignedUserId: userId,
+      ...(requireCommitted ? { isCommitted: true } : {}),
+      isRejected: false,
+      ...timeFilter,
+      ...match,
+      ...condition(scope),
+    });
+    return rawBookings.map((doc) => doc.toEntity());
   }
 }
 

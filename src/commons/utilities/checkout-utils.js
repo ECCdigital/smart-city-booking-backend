@@ -1,6 +1,7 @@
 const { v4: uuidv4 } = require("uuid");
 const UserManager = require("../data-managers/user-manager");
 const { BookableManager } = require("../data-managers/bookable-manager");
+const { DOMAIN } = require("../services/authorization/reach");
 
 function primaryEmailFromMail(mail) {
   if (!mail) {
@@ -33,16 +34,17 @@ async function resolveCheckoutId(checkoutId, userID, tenantId) {
 }
 
 /**
- * Append mandatory checkout addons that are missing from the given items.
- * Matches the behaviour of BookingService.createBooking.
+ * Resolve the effective checkout items: copies of the given items with every
+ * mandatory addon present at its parent's amount. The one addon rule for the
+ * validate and checkout paths — pure, complete list, no caller mutation.
  * @param {Array<{bookableId: string, amount: number}>} bookableItems
  * @param {string} tenantId
  * @returns {Promise<Array<{bookableId: string, amount: number}>>}
  */
-async function withMandatoryAddons(bookableItems, tenantId) {
+async function resolveCheckoutItems(bookableItems, tenantId) {
   const bookableIds = bookableItems.map((item) => item.bookableId);
   const bookables = await Promise.all(
-    bookableIds.map((id) => BookableManager.getBookable(id, tenantId)),
+    bookableIds.map((id) => BookableManager.getBookable(id, tenantId, DOMAIN)),
   );
 
   const bookableMap = new Map();
@@ -86,8 +88,43 @@ async function withMandatoryAddons(bookableItems, tenantId) {
   return items;
 }
 
+/**
+ * Count the units of each bookable a booking holds against the bookable's
+ * maximum per booking: the sum over the booking's positions of it. A
+ * mandatory addon of a position counts nothing, its amount follows the
+ * position's.
+ * @param {Array<{bookableId: string, amount: number}>} bookableItems
+ * @param {string} tenantId
+ * @returns {Promise<Map<string, number>>} bookableId -> counted units
+ */
+async function countAmountsInBooking(bookableItems, tenantId) {
+  const bookableIds = [
+    ...new Set(bookableItems.map((item) => item.bookableId)),
+  ];
+  const bookables = await Promise.all(
+    bookableIds.map((id) => BookableManager.getBookable(id, tenantId, DOMAIN)),
+  );
+
+  const mandatoryIds = new Set();
+  for (const bookable of bookables) {
+    if (bookable && Array.isArray(bookable.checkoutBookableIds)) {
+      for (const addon of bookable.checkoutBookableIds) {
+        if (addon.mandatory) mandatoryIds.add(addon.bookableId);
+      }
+    }
+  }
+
+  const counted = new Map();
+  for (const item of bookableItems) {
+    const units = mandatoryIds.has(item.bookableId) ? 0 : Number(item.amount);
+    counted.set(item.bookableId, (counted.get(item.bookableId) || 0) + units);
+  }
+  return counted;
+}
+
 module.exports = {
   resolveCheckoutId,
   primaryEmailFromMail,
-  withMandatoryAddons,
+  resolveCheckoutItems,
+  countAmountsInBooking,
 };

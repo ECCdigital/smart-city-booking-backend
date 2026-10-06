@@ -6,8 +6,17 @@ const {
 } = require("../utilities/block-period-generator");
 const TenantManager = require("../data-managers/tenant-manager");
 const { NotFoundError } = require("../../errors/BaseError");
+const { DOMAIN } = require("./authorization/reach");
 
 class CalendarService {
+  /**
+   * @deprecated The V1 engine behind `GET .../availability/v1`.
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   bookable of the route is read under (ADR 0002), as in V2; its
+   *   parents and related bookables the domain reads
+   * @throws {NotFoundError} `bookable_not_found`, or the public
+   *   projection's `tenant_not_found`
+   */
   static async checkAvailability(
     tenantId,
     bookableId,
@@ -15,6 +24,7 @@ class CalendarService {
     end,
     amount,
     user,
+    scope,
   ) {
     const externalCache = new Map();
     const startDate = start ? new Date(start) : new Date();
@@ -26,9 +36,9 @@ class CalendarService {
     endDate.setHours(24, 0, 0, 0);
 
     const [bookable, parentBookables, relatedBookables] = await Promise.all([
-      BookableManager.getBookable(bookableId, tenantId),
-      BookableManager.getAncestorBookables(bookableId, tenantId),
-      BookableManager.getRelatedBookables(bookableId, tenantId),
+      BookableManager.getBookable(bookableId, tenantId, scope),
+      BookableManager.getAncestorBookables(bookableId, tenantId, DOMAIN),
+      BookableManager.getRelatedBookables(bookableId, tenantId, DOMAIN),
     ]);
 
     if (!bookable) {
@@ -70,6 +80,7 @@ class CalendarService {
 
     const maxBookingAdvanceInMonths = await TenantManager.getTenant(
       tenantId,
+      DOMAIN,
     ).then((tenant) => tenant?.maxBookingAdvanceInMonths);
 
     const maxBookingAdvancePeriods = generateTimePeriodsFromMaxBookingAdvance(

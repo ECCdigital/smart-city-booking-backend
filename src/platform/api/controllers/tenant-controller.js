@@ -2,26 +2,19 @@ const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const Tenant = require("../../../commons/entities/tenant/tenant");
 const UserManager = require("../../../commons/data-managers/user-manager");
 const MembershipManager = require("../../../commons/data-managers/membership-manager");
-const PermissionService = require("../../../commons/services/permission-service");
-const InstanceManger = require("../../../commons/data-managers/instance-manager");
 const bunyan = require("bunyan");
-const { readFileSync } = require("fs");
-const { join } = require("path");
 const { v4: uuidv4 } = require("uuid");
-const { RolePermission } = require("../../../commons/entities/role/role");
 const { RoleManager } = require("../../../commons/data-managers/role-manager");
 const Membership = require("../../../commons/entities/tenant/membership");
 const InvitationService = require("../../../commons/services/invitation-service");
 const ChallengeManager = require("../../../commons/data-managers/challenge-manager");
 const PaymentUtils = require("../../../commons/utilities/payment-utils");
-const SupervisorNotificationService = require("../../../commons/services/supervisor-notification-service");
+const MembershipService = require("../../../commons/services/membership/membership-service");
+const AccessAppLifecycleService = require("../../../commons/services/access/access-app-lifecycle-service");
 const {
   validateMailSnippets,
   validateMailSubjects,
 } = require("../../../commons/mail-service/templates/mail-snippet-overrides");
-const {
-  mergeDefaultMailSnippets,
-} = require("../../../commons/mail-service/templates/default-mail-snippets");
 const {
   normalizeUserId,
   userIdsMatch,
@@ -36,7 +29,30 @@ const {
 const {
   getCancellationRefundTiersError,
 } = require("../../../commons/utilities/cancellation-refund-tiers");
+const {
+  getLegalDocumentsError,
+} = require("../../../commons/utilities/legal-documents");
+const MediaReferenceGuard = require("../../../commons/services/media/media-reference-guard");
+const {
+  BaseError,
+  ForbiddenError,
+  NotFoundError,
+} = require("../../../errors/BaseError");
+const {
+  PUBLIC,
+  tenantsOf,
+  scopeOf,
+  reachesOf,
+} = require("../../../commons/services/authorization");
+const ApiResponse = require("../../../commons/utilities/api-response");
+const {
+  computeReadiness,
+} = require("../../../commons/services/supervision/readiness-service");
 const Formatters = require("../../../commons/utilities/formatters");
+const TenantCreationService = require("../../../commons/services/tenant/tenant-creation-service");
+const {
+  assertSupervisionLevel,
+} = require("../../../commons/services/supervision/supervision-constants");
 
 const PDF_TEMPLATE_FIELDS = {
   receiptTemplate: "receipt",
@@ -101,40 +117,80 @@ function validateCancellationRefundTiersField(body) {
   return getCancellationRefundTiersError(body.cancellationRefundTiers);
 }
 
+function validateLegalDocumentsField(body) {
+  if (!Object.prototype.hasOwnProperty.call(body, "legalDocuments")) {
+    return null;
+  }
+  return getLegalDocumentsError(body.legalDocuments);
+}
+
 const logger = bunyan.createLogger({
   name: "tenant-controller.js",
   level: process.env.LOG_LEVEL,
 });
 
 /**
- * Web Controller for Bookables.
+ * Web Controller for the tenants. The right is the router's (`tenant.*`
+ * for the tenant the route names, `tenantUser.*` for its members); a
+ * handler hands `scopeOf(req)` on and never branches over rights. Left to
+ * the adapter: the creation over the obsolete PUT (`also: ["create"]`, ADR 0001) and
+ * the protection of an owner against removal by a user manager.
  */
 class TenantController {
+  /** The 404 of a tenant the manager did not find. */
+  static _notFound(response, id) {
+    return ApiResponse.fail(
+      response,
+      new NotFoundError("tenant_not_found", { id }),
+    );
+  }
+
+  /**
+   * The tenants within the reach: in full the ones the user owns (every
+   * one under `any`; the scope carries the owned set, ADR 0002), with
+   * `?publicTenants=true` the public projection of the ones the user
+   * belongs to. A declined tenant goes out to its owner as to any member:
+   * the membership rests (glossary "Ruhende Mitgliedschaft") and the
+   * tenant stays theirs to see.
+   */
   static async getTenants(request, response) {
     try {
-      const { user } = request;
       const publicTenants = request.query.publicTenants === "true";
-      const permissions = await UserManager.getUserPermissions(user.id);
-      const tenantIds = permissions.tenants.map((p) => p.tenantId);
-
-      const tenants = await TenantManager.getTenants();
-
-      const allowedTenants = [];
-      for (const tenant of tenants) {
-        if (publicTenants) {
-          const publicTenant = tenant.exportPublic();
-          if (tenantIds.includes(publicTenant.id)) {
-            allowedTenants.push(publicTenant);
-          }
-        } else if (
-          (await PermissionService._isTenantOwner(user.id, tenant.id)) ||
-          (await PermissionService._isInstanceOwner(user.id))
-        ) {
-          allowedTenants.push(tenant);
-        }
+      const supervisionLevel = request.query.supervisionLevel || undefined;
+      if (supervisionLevel !== undefined) {
+        assertSupervisionLevel(supervisionLevel);
       }
-      response.status(200).send(allowedTenants);
+
+      const scope = scopeOf(request);
+      // The public projection lists the tenants of the memberships, not the
+      // owned ones the route's owner key names.
+      const tenants = await TenantManager.getTenants(
+        publicTenants
+          ? {
+              ...scope,
+              tenantIds: tenantsOf(request.principal, {
+                tenantsOf: "membership",
+              }),
+            }
+          : scope,
+        { ...(supervisionLevel !== undefined && { supervisionLevel }) },
+      );
+
+      response
+        .status(200)
+        .send(
+          tenants.map((tenant) =>
+            publicTenants
+              ? tenant.exportPublic()
+              : AccessAppLifecycleService.redactBackendState(
+                  tenant.exportWithMedia(),
+                ),
+          ),
+        );
     } catch (error) {
+      if (error instanceof BaseError) {
+        return ApiResponse.fail(response, error);
+      }
       logger.error(error);
       response.sendStatus(500);
     }
@@ -142,7 +198,7 @@ class TenantController {
 
   static async getPublicTenants(request, response) {
     try {
-      const tenants = await TenantManager.getTenants();
+      const tenants = await TenantManager.getTenants(PUBLIC);
       const publicTenants = tenants.map((tenant) => tenant.exportPublic());
       response.status(200).send(publicTenants);
     } catch (error) {
@@ -154,41 +210,63 @@ class TenantController {
   static async getTenant(request, response) {
     try {
       const user = request.user;
-      const id = request.params.id;
+      const id = request.params.tenant;
 
-      if (id) {
-        const tenant = await TenantManager.getTenant(id);
-
-        if (
-          user &&
-          ((await PermissionService._isTenantOwner(user.id, tenant.id)) ||
-            (await PermissionService._isInstanceOwner(user.id)))
-        ) {
-          logger.info(
-            `Sending tenant ${tenant.id} to user ${user?.id} with details`,
-          );
-          response.status(200).send(tenant);
-        } else {
-          response.sendStatus(403);
-        }
-      } else {
-        logger.warn(
-          `Could not get tenants by user ${user?.id}. Missing required parameters.`,
-        );
-        response.sendStatus(400);
+      const tenant = await TenantManager.getTenant(id, scopeOf(request));
+      if (!tenant) {
+        return TenantController._notFound(response, id);
       }
+
+      logger.info(
+        `Sending tenant ${tenant.id} to user ${user?.id} with details`,
+      );
+      response
+        .status(200)
+        .send(
+          AccessAppLifecycleService.redactBackendState(
+            tenant.exportWithMedia(),
+          ),
+        );
     } catch (err) {
       logger.error(err);
       response.status(500).send("could not get tenant");
     }
   }
 
-  static async storeTenant(request, response) {
+  /**
+   * The readiness check (glossary "Bereitschafts-Check") of the tenant of
+   * the path: computed on every call, the same answer for the tenant owner
+   * and the instance owner. The route's marker decides who reads it.
+   */
+  static async getReadiness(request, response) {
+    try {
+      const readiness = await computeReadiness(request.params.tenant);
+      response.status(200).json(readiness);
+    } catch (err) {
+      if (err instanceof BaseError) {
+        return ApiResponse.fail(response, err);
+      }
+      logger.error(err);
+      response.status(500).send("could not compute readiness");
+    }
+  }
+
+  /**
+   * @deprecated Use createTenant or updateTenant instead.
+   *
+   * The route carries `tenant.update` for the tenant of the body; an
+   * unknown id creates, which the marker names as its second question
+   * (`tenant.create`, ADR 0001).
+   */
+  static async storeTenant(request, response, next) {
     const tenant = new Tenant(request.body);
     let isUpdate;
 
     try {
-      const existingTenant = await TenantManager.getTenant(tenant.id);
+      const existingTenant = await TenantManager.getTenant(
+        tenant.id,
+        scopeOf(request),
+      );
       isUpdate = !!(existingTenant && existingTenant.id);
     } catch (error) {
       logger.error(error);
@@ -197,6 +275,8 @@ class TenantController {
 
     if (isUpdate) {
       await TenantController.updateTenant(request, response);
+    } else if (request.reaches?.create !== "any") {
+      return next(new ForbiddenError());
     } else {
       await TenantController.createTenant(request, response);
     }
@@ -205,8 +285,6 @@ class TenantController {
   static async createTenant(request, response) {
     try {
       const user = request.user;
-      const tenant = new Tenant(request.body);
-      tenant.id = uuidv4();
 
       if (Object.prototype.hasOwnProperty.call(request.body, "mailSnippets")) {
         try {
@@ -253,66 +331,28 @@ class TenantController {
         return response.status(400).send(cancellationRefundTiersError);
       }
 
-      tenant.ownerUserIds = [user.id];
-      if ((await TenantManager.checkTenantCount()) === false) {
-        throw new Error(`Maximum number of tenants reached.`);
+      const legalDocumentsError = validateLegalDocumentsField(request.body);
+      if (legalDocumentsError) {
+        return response.status(400).send(legalDocumentsError);
       }
 
-      const instance = await InstanceManger.getInstance();
+      // `storeTenant` routes an unknown id here too: both creation paths
+      // share the one contract of the creation service.
+      const tenant = await TenantCreationService.create({
+        body: request.body,
+        creatorUserId: user.id,
+        creatorIsInstanceOwner: request.principal?.isInstanceOwner === true,
+        reaches: reachesOf(request),
+      });
+      logger.info(`created tenant ${tenant.id} by user ${user?.id}`);
 
-      const hasPermission =
-        instance.allowAllUsersToCreateTenant ||
-        instance.allowedUsersToCreateTenant.includes(user.id) ||
-        instance.ownerUserIds.includes(user.id);
-
-      if (hasPermission) {
-        const membership = new Membership({
-          tenantId: tenant.id,
-          userId: user.id,
-          roles: [],
-          status: "active",
-          source: "manually",
-          owner: true,
-        });
-
-        const emailTemplate = readFileSync(
-          join(
-            __dirname,
-            "../../../commons/mail-service/templates/default-generic-mail-template.temp.html",
-          ),
-          "utf8",
-        );
-        const receiptTemplate = readFileSync(
-          join(
-            __dirname,
-            "../../../commons/pdf-service/templates/default-receipt-template.temp.html",
-          ),
-          "utf8",
-        );
-
-        const invoiceTemplate = readFileSync(
-          join(
-            __dirname,
-            "../../../commons/pdf-service/templates/default-invoice-template.temp.html",
-          ),
-          "utf8",
-        );
-
-        tenant.genericMailTemplate = emailTemplate;
-        tenant.receiptTemplate = receiptTemplate;
-        tenant.invoiceTemplate = invoiceTemplate;
-        tenant.mailSnippets = mergeDefaultMailSnippets(tenant.mailSnippets);
-
-        await TenantManager.storeTenant(tenant);
-        await MembershipManager.addMembership(tenant.id, membership);
-        logger.info(`created tenant ${tenant.id} by user ${user?.id}`);
-
-        response.sendStatus(201);
-      } else {
-        logger.warn(`User ${user?.id} not allowed to create tenant`);
-        response.sendStatus(403);
-      }
+      response.sendStatus(201);
     } catch (err) {
+      // With the code and, for a hit limit, the `Retry-After` header.
+      if (err instanceof BaseError) {
+        return ApiResponse.fail(response, err);
+      }
+
       logger.error(err);
       response.status(500).send("could not create tenant");
     }
@@ -321,121 +361,154 @@ class TenantController {
   static async updateTenant(request, response) {
     try {
       const user = request.user;
-      if (
-        (await PermissionService._isTenantOwner(user.id, request.body.id)) ||
-        (await PermissionService._isInstanceOwner(user.id))
-      ) {
-        const tenant = await TenantManager.getTenant(request.body.id);
-
-        const fields = [
-          "name",
-          "contactName",
-          "location",
-          "mail",
-          "phone",
-          "website",
-          "bookableDetailLink",
-          "eventDetailLink",
-          "genericMailTemplate",
-          "mailSnippets",
-          "mailSubjects",
-          "mailShowSupportFooter",
-          "mailBookingPeriodFormat",
-          "useInstanceMail",
-          "noreplyMail",
-          "noreplyDisplayName",
-          "noreplyHost",
-          "noreplyPort",
-          "noreplyUser",
-          "noreplyPassword",
-          "noreplyStarttls",
-          "noreplyUseGraphApi",
-          "noreplyGraphTenantId",
-          "noreplyGraphClientId",
-          "noreplyGraphClientSecret",
-          "receiptTemplate",
-          "receiptNumberPrefix",
-          "receiptEnableBCC",
-          "invoiceTemplate",
-          "invoiceNumberPrefix",
-          "paymentPurposeSuffix",
-          "applications",
-          "maxBookingAdvanceInMonths",
-          "defaultEventCreationMode",
-          "enablePublicStatusView",
-          "notifyOnNewBooking",
-          "notifySupervisorsOnBooking",
-          "catalogParticipation",
-          "bookableCustomFields",
-          "cancellationTemplate",
-          "cancellationNumberPrefix",
-          "cancellationRefundTiers",
-          "pdfBookingLayout",
-          "pdfBookingTableMeta",
-        ];
-
-        if (
-          Object.prototype.hasOwnProperty.call(request.body, "mailSnippets")
-        ) {
-          try {
-            validateMailSnippets(request.body.mailSnippets);
-          } catch (error) {
-            return response.status(400).send(error.message);
-          }
-        }
-
-        if (
-          Object.prototype.hasOwnProperty.call(request.body, "mailSubjects")
-        ) {
-          try {
-            validateMailSubjects(request.body.mailSubjects);
-          } catch (error) {
-            return response.status(400).send(error.message);
-          }
-        }
-
-        const templateError = validatePdfTemplates(request.body);
-        if (templateError) {
-          return response.status(400).send(templateError);
-        }
-
-        const layoutError = validatePdfBookingLayout(request.body);
-        if (layoutError) {
-          return response.status(400).send(layoutError);
-        }
-
-        const tableMetaError = validatePdfBookingTableMetaField(request.body);
-        if (tableMetaError) {
-          return response.status(400).send(tableMetaError);
-        }
-
-        const mailBookingPeriodFormatError = validateMailBookingPeriodFormat(
-          request.body,
-        );
-        if (mailBookingPeriodFormatError) {
-          return response.status(400).send(mailBookingPeriodFormatError);
-        }
-
-        const cancellationRefundTiersError =
-          validateCancellationRefundTiersField(request.body);
-        if (cancellationRefundTiersError) {
-          return response.status(400).send(cancellationRefundTiersError);
-        }
-
-        fields.forEach((field) => {
-          if (Object.prototype.hasOwnProperty.call(request.body, field)) {
-            tenant[field] = request.body[field];
-          }
-        });
-
-        const updatedTenant = await TenantManager.storeTenant(tenant);
-        logger.info(`updated tenant ${tenant.id} by user ${user?.id}`);
-        response.status(200).send(updatedTenant);
-      } else {
-        logger.warn(`User ${user?.id} not allowed to update tenant`);
-        response.sendStatus(403);
+      const tenant = await TenantManager.getTenant(
+        request.body.id,
+        scopeOf(request),
+      );
+      if (!tenant) {
+        return TenantController._notFound(response, request.body.id);
       }
+
+      const fields = [
+        "name",
+        "contactName",
+        "location",
+        "mail",
+        "phone",
+        "website",
+        "bookableDetailLink",
+        "eventDetailLink",
+        "genericMailTemplate",
+        "mailSnippets",
+        "mailSubjects",
+        "mailShowSupportFooter",
+        "mailBookingPeriodFormat",
+        "useInstanceMail",
+        "noreplyMail",
+        "noreplyDisplayName",
+        "noreplyHost",
+        "noreplyPort",
+        "noreplyUser",
+        "noreplyPassword",
+        "noreplyStarttls",
+        "noreplyUseGraphApi",
+        "noreplyGraphTenantId",
+        "noreplyGraphClientId",
+        "noreplyGraphClientSecret",
+        "receiptTemplate",
+        "receiptNumberPrefix",
+        "receiptEnableBCC",
+        "invoiceTemplate",
+        "invoiceNumberPrefix",
+        "paymentPurposeSuffix",
+        "applications",
+        "maxBookingAdvanceInMonths",
+        "defaultEventCreationMode",
+        "enablePublicStatusView",
+        "notifyOnNewBooking",
+        "notifySupervisorsOnBooking",
+        "catalogParticipation",
+        "bookableCustomFields",
+        "cancellationTemplate",
+        "cancellationNumberPrefix",
+        "cancellationRefundTiers",
+        "pdfBookingLayout",
+        "pdfBookingTableMeta",
+        "legalDocuments",
+      ];
+
+      if (Object.prototype.hasOwnProperty.call(request.body, "mailSnippets")) {
+        try {
+          validateMailSnippets(request.body.mailSnippets);
+        } catch (error) {
+          return response.status(400).send(error.message);
+        }
+      }
+
+      if (Object.prototype.hasOwnProperty.call(request.body, "mailSubjects")) {
+        try {
+          validateMailSubjects(request.body.mailSubjects);
+        } catch (error) {
+          return response.status(400).send(error.message);
+        }
+      }
+
+      const templateError = validatePdfTemplates(request.body);
+      if (templateError) {
+        return response.status(400).send(templateError);
+      }
+
+      const layoutError = validatePdfBookingLayout(request.body);
+      if (layoutError) {
+        return response.status(400).send(layoutError);
+      }
+
+      const tableMetaError = validatePdfBookingTableMetaField(request.body);
+      if (tableMetaError) {
+        return response.status(400).send(tableMetaError);
+      }
+
+      const mailBookingPeriodFormatError = validateMailBookingPeriodFormat(
+        request.body,
+      );
+      if (mailBookingPeriodFormatError) {
+        return response.status(400).send(mailBookingPeriodFormatError);
+      }
+
+      const cancellationRefundTiersError = validateCancellationRefundTiersField(
+        request.body,
+      );
+      if (cancellationRefundTiersError) {
+        return response.status(400).send(cancellationRefundTiersError);
+      }
+
+      const legalDocumentsError = validateLegalDocumentsField(request.body);
+      if (legalDocumentsError) {
+        return response.status(400).send(legalDocumentsError);
+      }
+
+      // Checked is what the request brings, not what is already stored: a
+      // medium that turned `intern` after it was picked must not block the
+      // next change to an unrelated field. The scope, on the other hand, is
+      // the tenant that was just resolved and checked, never one the payload
+      // names.
+      await MediaReferenceGuard.assertTenantStorable(
+        request.body,
+        tenant.id,
+        reachesOf(request),
+      );
+
+      fields.forEach((field) => {
+        if (Object.prototype.hasOwnProperty.call(request.body, field)) {
+          tenant[field] = request.body[field];
+        }
+      });
+
+      const previousTenant = await TenantManager.getTenant(
+        request.body.id,
+        scopeOf(request),
+      );
+      // Backend-owned access-app state (e.g. Salto IQ activations) is
+      // neither written by a tenant update nor sent back in the answer.
+      AccessAppLifecycleService.preserveBackendState(previousTenant, tenant);
+      await AccessAppLifecycleService.syncWebhooks(previousTenant, tenant);
+
+      const updatedTenant = await TenantManager.storeTenant(tenant);
+      logger.info(`updated tenant ${tenant.id} by user ${user?.id}`);
+      response
+        .status(200)
+        .send(
+          AccessAppLifecycleService.redactBackendState(
+            updatedTenant.exportWithMedia(),
+          ),
+        );
     } catch (err) {
+      // A refused media reference has to reach the admin UI with its code — the
+      // blanket 500 below would hide why the save was rejected.
+      if (err instanceof BaseError) {
+        return response.status(err.statusCode).send(err.toJSON());
+      }
+
       logger.error(err);
       response.status(500).send("could not update tenant");
     }
@@ -444,28 +517,16 @@ class TenantController {
   static async removeTenant(request, response) {
     try {
       const user = request.user;
-      const id = request.params.id;
+      const id = request.params.tenant;
 
-      const tenant = await TenantManager.getTenant(id);
-
-      if (id) {
-        if (
-          (await PermissionService._isTenantOwner(user.id, tenant.id)) ||
-          (await PermissionService._isInstanceOwner(user.id))
-        ) {
-          await TenantManager.removeTenant(id);
-          logger.info(`removed tenant ${id} by user ${user?.id}`);
-          response.sendStatus(200);
-        } else {
-          logger.warn(`User ${user?.id} not allowed to remove tenant`);
-          response.sendStatus(403);
-        }
-      } else {
-        logger.warn(
-          `Could not remove tenant by user ${user?.id}. Missing required parameters.`,
-        );
-        response.sendStatus(400);
+      const tenant = await TenantManager.getTenant(id, scopeOf(request));
+      if (!tenant) {
+        return TenantController._notFound(response, id);
       }
+
+      await TenantManager.removeTenant(id);
+      logger.info(`removed tenant ${id} by user ${user?.id}`);
+      response.sendStatus(200);
     } catch (err) {
       logger.error(err);
       response.status(500).send("could not remove tenant");
@@ -480,17 +541,9 @@ class TenantController {
    */
   static async previewPdfTemplate(request, response) {
     try {
-      const user = request.user;
-      const tenantId = request.params.id;
+      const tenantId = request.params.tenant;
       const { templateType, template, pdfBookingLayout, pdfBookingTableMeta } =
         request.body;
-
-      if (
-        !(await PermissionService._isTenantOwner(user.id, tenantId)) &&
-        !(await PermissionService._isInstanceOwner(user.id))
-      ) {
-        return response.sendStatus(403);
-      }
 
       const layoutError = validatePdfBookingLayout(request.body);
       if (layoutError) {
@@ -540,9 +593,15 @@ class TenantController {
   static async getActivePaymentApps(request, response) {
     try {
       const {
-        params: { id: tenantId },
+        params: { tenant: tenantId },
         user,
       } = request;
+
+      // The payment apps of a tenant the public sees (`tenant.paymentApps`,
+      // ADR 0003): none of a tenant without a public projection.
+      if (!(await TenantManager.getTenant(tenantId, scopeOf(request)))) {
+        return response.status(404).send("tenant not found");
+      }
 
       const paymentApps = await TenantManager.getTenantAppByType(
         tenantId,
@@ -584,29 +643,18 @@ class TenantController {
   static async getUsers(request, response) {
     try {
       const tenantId = request.params.tenant;
-      const user = request.user;
 
-      if (
-        await PermissionService._allowReadAny(
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_USERS,
-        )
-      ) {
-        const memberships =
-          await MembershipManager.getMembershipsByTenantID(tenantId);
+      const memberships =
+        await MembershipManager.getMembershipsByTenantID(tenantId);
 
-        const userDetails = await UserManager.getUsersById(
-          memberships.map((m) => m.userId),
-        );
+      const userDetails = await UserManager.getUsersById(
+        memberships.map((m) => m.userId),
+      );
 
-        response.status(200).send({
-          users: memberships,
-          userDetails: userDetails,
-        });
-      } else {
-        response.sendStatus(403);
-      }
+      response.status(200).send({
+        users: memberships,
+        userDetails: userDetails,
+      });
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not get users");
@@ -615,9 +663,8 @@ class TenantController {
 
   static async addUser(request, response) {
     try {
-      const tenantId = request.params.id;
+      const tenantId = request.params.tenant;
       const body = request.body;
-      const user = request.user;
 
       const roles = body.roles;
       const challenges = body.challenges || [];
@@ -628,82 +675,72 @@ class TenantController {
         return response.status(400).send("User ID is required");
       }
 
-      if (
-        await PermissionService._allowUpdateAny(
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_USERS,
-        )
-      ) {
-        const membership =
-          await MembershipManager.getMembershipsByTenantID(tenantId);
+      const membership =
+        await MembershipManager.getMembershipsByTenantID(tenantId);
 
-        const userAlreadyInTenant = membership.find((m) =>
-          userIdsMatch(m.userId, userId),
-        );
-        if (userAlreadyInTenant) {
-          return response.status(400).send("User already in tenant");
-        }
-
-        if (type === "manually") {
-          const existingUser = await UserManager.getUser(userId);
-
-          if (!existingUser) {
-            return response.status(404).send("User does not exist");
-          }
-
-          const newMembership = new Membership({
-            tenantId,
-            userId,
-            status: "active",
-            source: "manually",
-            roles: roles || [],
-            invitations: [],
-          });
-
-          await MembershipManager.addMembership(tenantId, newMembership);
-        } else {
-          const invitation = await InvitationService.createInvitation({
-            tenantId,
-            intendedUserId: userId,
-            roles,
-            challenges: challenges,
-            type: "single",
-            expiresAt: null,
-            maxUses: 1,
-          });
-
-          const newMembership = new Membership({
-            tenantId,
-            userId,
-            status: "pending",
-            source: type,
-            invitations: [{ token: invitation.token, status: "pending" }],
-          });
-
-          await MembershipManager.addMembership(tenantId, newMembership);
-
-          await InvitationService.sendInvitationMail(
-            tenantId,
-            invitation.token,
-            userId,
-          );
-        }
-
-        const memberships =
-          await MembershipManager.getMembershipsByTenantID(tenantId);
-
-        const userDetails = await UserManager.getUsersById(
-          memberships.map((m) => m.userId),
-        );
-
-        response.status(201).send({
-          users: memberships,
-          userDetails: userDetails,
-        });
-      } else {
-        response.sendStatus(403);
+      const userAlreadyInTenant = membership.find((m) =>
+        userIdsMatch(m.userId, userId),
+      );
+      if (userAlreadyInTenant) {
+        return response.status(400).send("User already in tenant");
       }
+
+      if (type === "manually") {
+        const existingUser = await UserManager.getUser(userId);
+
+        if (!existingUser) {
+          return response.status(404).send("User does not exist");
+        }
+
+        const newMembership = new Membership({
+          tenantId,
+          userId,
+          status: "active",
+          source: "manually",
+          roles: roles || [],
+          invitations: [],
+        });
+
+        await MembershipManager.addMembership(tenantId, newMembership);
+      } else {
+        const invitation = await InvitationService.createInvitation({
+          tenantId,
+          intendedUserId: userId,
+          roles,
+          challenges: challenges,
+          type: "single",
+          expiresAt: null,
+          maxUses: 1,
+        });
+
+        const newMembership = new Membership({
+          tenantId,
+          userId,
+          status: "pending",
+          source: type,
+          invitations: [{ token: invitation.token, status: "pending" }],
+        });
+
+        await MembershipManager.addMembership(tenantId, newMembership);
+
+        await InvitationService.sendInvitationMail(
+          tenantId,
+          invitation.token,
+          userId,
+        );
+      }
+
+      const memberships =
+        await MembershipManager.getMembershipsByTenantID(tenantId);
+
+      const userDetails = await UserManager.getUsersById(
+        memberships.map((m) => m.userId),
+      );
+
+      response.status(201).send({
+        users: memberships,
+        userDetails: userDetails,
+      });
     } catch (error) {
       logger.error(error);
       response
@@ -712,55 +749,39 @@ class TenantController {
     }
   }
 
-  static async removeUser(request, response) {
+  static async removeUser(request, response, next) {
     try {
-      const tenantId = request.params.id;
+      const tenantId = request.params.tenant;
       const { userId } = request.body;
-      const user = request.user;
 
-      if (
-        await PermissionService._allowUpdateAny(
-          user.id,
+      const targetMembership =
+        await MembershipManager.getMembershipByTenantAndUserID(
           tenantId,
-          RolePermission.MANAGE_USERS,
-        )
-      ) {
-        const userMembership =
-          await MembershipManager.getMembershipByTenantAndUserID(
-            tenantId,
-            user.id,
-          );
-
-        const targetMembership =
-          await MembershipManager.getMembershipByTenantAndUserID(
-            tenantId,
-            userId,
-          );
-
-        if (!userMembership.owner && targetMembership.owner) {
-          return response
-            .status(403)
-            .send("Only owners can remove other owners");
-        }
-
-        await InvitationService.deleteUserInvitations(tenantId, userId);
-
-        await MembershipManager.removeMembership(tenantId, userId);
-
-        const updatedMemberships =
-          await MembershipManager.getMembershipsByTenantID(tenantId);
-
-        const userDetails = await UserManager.getUsersById(
-          updatedMemberships.map((m) => m.userId),
+          userId,
         );
 
-        response.status(200).send({
-          users: updatedMemberships,
-          userDetails: userDetails,
-        });
-      } else {
-        response.sendStatus(403);
+      // Only an owner removes an owner: the route's `tenantUser.manage` is
+      // the user manager's, the target's ownership is the marker's second
+      // decision (`tenantUser.owner`, as at `remove-owner`).
+      if (targetMembership?.owner && request.reaches?.owner !== "any") {
+        return next(new ForbiddenError());
       }
+
+      await InvitationService.deleteUserInvitations(tenantId, userId);
+
+      await MembershipManager.removeMembership(tenantId, userId);
+
+      const updatedMemberships =
+        await MembershipManager.getMembershipsByTenantID(tenantId);
+
+      const userDetails = await UserManager.getUsersById(
+        updatedMemberships.map((m) => m.userId),
+      );
+
+      response.status(200).send({
+        users: updatedMemberships,
+        userDetails: userDetails,
+      });
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not remove user from tenant");
@@ -769,44 +790,31 @@ class TenantController {
 
   static async removeUserRole(request, response) {
     try {
-      const tenantId = request.params.id;
+      const tenantId = request.params.tenant;
       const { userId, roleId } = request.body;
       const user = request.user;
 
-      if (
-        await PermissionService._allowUpdateAny(
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_USERS,
-        )
-      ) {
-        await MembershipManager.removeRoleFromMembership(
-          tenantId,
-          userId,
-          roleId,
-        );
+      await MembershipManager.removeRoleFromMembership(
+        tenantId,
+        userId,
+        roleId,
+      );
 
-        const updatedMemberships =
-          await MembershipManager.getMembershipsByTenantID(tenantId);
+      const updatedMemberships =
+        await MembershipManager.getMembershipsByTenantID(tenantId);
 
-        const userDetails = await UserManager.getUsersById(
-          updatedMemberships.map((m) => m.userId),
-        );
+      const userDetails = await UserManager.getUsersById(
+        updatedMemberships.map((m) => m.userId),
+      );
 
-        logger.info(
-          `${tenantId} - User ${user?.id} removed role ${roleId} from user ${userId}`,
-        );
+      logger.info(
+        `${tenantId} - User ${user?.id} removed role ${roleId} from user ${userId}`,
+      );
 
-        response.status(200).send({
-          users: updatedMemberships,
-          userDetails: userDetails,
-        });
-      } else {
-        logger.warn(
-          `${tenantId} - User ${user?.id} not allowed to remove user role`,
-        );
-        response.sendStatus(403);
-      }
+      response.status(200).send({
+        users: updatedMemberships,
+        userDetails: userDetails,
+      });
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not remove user role from tenant");
@@ -815,60 +823,36 @@ class TenantController {
 
   static async editUserRole(request, response) {
     try {
-      const tenantId = request.params.id;
+      const tenantId = request.params.tenant;
       const { userId, roles } = request.body;
       const user = request.user;
 
-      console.log(roles);
+      const tenantRoles = await RoleManager.getTenantRoles(tenantId);
+      const mappedRoles = tenantRoles.map((role) => role.id);
 
-      if (
-        await PermissionService._allowUpdateAny(
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_USERS,
-        )
-      ) {
-        const tenantRoles = await RoleManager.getTenantRoles(tenantId);
-        const mappedRoles = tenantRoles.map((role) => role.id);
+      const verifiedRoles = roles.filter((role) => mappedRoles.includes(role));
 
-        const verifiedRoles = roles.filter((role) =>
-          mappedRoles.includes(role),
-        );
-        const memberships =
-          await MembershipManager.getMembershipsByTenantID(tenantId);
-        const userMembership = memberships.find((m) => m.userId === userId);
+      await MembershipManager.setRolesForMembership(
+        tenantId,
+        userId,
+        verifiedRoles,
+      );
 
-        userMembership.roles = verifiedRoles;
+      const updatedMemberships =
+        await MembershipManager.getMembershipsByTenantID(tenantId);
 
-        console.log(userMembership);
+      const userDetails = await UserManager.getUsersById(
+        updatedMemberships.map((m) => m.userId),
+      );
 
-        await MembershipManager.setRolesForMembership(
-          tenantId,
-          userId,
-          verifiedRoles,
-        );
+      logger.info(
+        `${tenantId} - User ${user?.id} edit roles from user ${userId}`,
+      );
 
-        const updatedMemberships =
-          await MembershipManager.getMembershipsByTenantID(tenantId);
-
-        const userDetails = await UserManager.getUsersById(
-          updatedMemberships.map((m) => m.userId),
-        );
-
-        logger.info(
-          `${tenantId} - User ${user?.id} edit roles from user ${userId}`,
-        );
-
-        response.status(200).send({
-          users: updatedMemberships,
-          userDetails: userDetails,
-        });
-      } else {
-        logger.warn(
-          `${tenantId} - User ${user?.id} not allowed to remove user role`,
-        );
-        response.sendStatus(403);
-      }
+      response.status(200).send({
+        users: updatedMemberships,
+        userDetails: userDetails,
+      });
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not remove user from tenant");
@@ -877,65 +861,47 @@ class TenantController {
 
   static async addOwner(request, response) {
     try {
-      const tenantId = request.params.id;
+      const tenantId = request.params.tenant;
       const userId = normalizeUserId(request.body.userId);
-      const user = request.user;
 
       if (!userId) {
         return response.status(400).send("User ID is required");
       }
 
-      if (
-        (await PermissionService._isTenantOwner(user.id, tenantId)) ||
-        (await PermissionService._isInstanceOwner(user.id))
-      ) {
-        const userMembership =
-          await MembershipManager.getMembershipByTenantAndUserID(
-            tenantId,
-            user.id,
-          );
-
-        if (!userMembership.owner) {
-          return response.status(403).send("Only owners can add other owners");
-        }
-
-        const existingMembership =
-          await MembershipManager.getMembershipByTenantAndUserID(
-            tenantId,
-            userId,
-          );
-
-        if (!existingMembership) {
-          const newMembership = new Membership({
-            tenantId,
-            userId,
-            roles: [],
-            status: "active",
-            source: "manually",
-            owner: true,
-          });
-
-          await MembershipManager.addMembership(tenantId, newMembership);
-        } else if (!existingMembership.owner) {
-          await MembershipManager.updateMembership(tenantId, userId, {
-            owner: true,
-          });
-        }
-
-        const updatedMemberships =
-          await MembershipManager.getMembershipsByTenantID(tenantId);
-
-        const userDetails = await UserManager.getUsersById(
-          updatedMemberships.map((m) => m.userId),
+      const existingMembership =
+        await MembershipManager.getMembershipByTenantAndUserID(
+          tenantId,
+          userId,
         );
 
-        response.status(200).send({
-          users: updatedMemberships,
-          userDetails: userDetails,
+      if (!existingMembership) {
+        const newMembership = new Membership({
+          tenantId,
+          userId,
+          roles: [],
+          status: "active",
+          source: "manually",
+          owner: true,
         });
-      } else {
-        response.sendStatus(403);
+
+        await MembershipManager.addMembership(tenantId, newMembership);
+      } else if (!existingMembership.owner) {
+        await MembershipManager.updateMembership(tenantId, userId, {
+          owner: true,
+        });
       }
+
+      const updatedMemberships =
+        await MembershipManager.getMembershipsByTenantID(tenantId);
+
+      const userDetails = await UserManager.getUsersById(
+        updatedMemberships.map((m) => m.userId),
+      );
+
+      response.status(200).send({
+        users: updatedMemberships,
+        userDetails: userDetails,
+      });
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not add owner to tenant");
@@ -944,69 +910,45 @@ class TenantController {
 
   static async removeOwner(request, response) {
     try {
-      const tenantId = request.params.id;
+      const tenantId = request.params.tenant;
       const { userId } = request.body;
-      const user = request.user;
 
-      const tenant = await TenantManager.getTenant(tenantId);
-
-      if (
-        (await PermissionService._isTenantOwner(user.id, tenant.id)) ||
-        (await PermissionService._isInstanceOwner(user.id))
-      ) {
-        const existingMembership =
-          await MembershipManager.getMembershipByTenantAndUserID(
-            tenantId,
-            userId,
-          );
-
-        if (!existingMembership || !existingMembership.owner) {
-          return response
-            .status(400)
-            .send("User is not an owner of the tenant");
-        }
-
-        const userMembership =
-          await MembershipManager.getMembershipByTenantAndUserID(
-            tenantId,
-            user.id,
-          );
-
-        if (!userMembership.owner) {
-          return response
-            .status(403)
-            .send("Only owners can remove other owners");
-        }
-
-        const allMemberships =
-          await MembershipManager.getMembershipsByTenantID(tenantId);
-
-        const ownerMemberships = allMemberships.filter((m) => m.owner);
-
-        if (ownerMemberships.length <= 1) {
-          return response
-            .status(400)
-            .send("Cannot remove the last owner of the tenant");
-        }
-
-        await MembershipManager.updateMembership(tenantId, userId, {
-          owner: false,
-        });
-
-        const updatedMemberships =
-          await MembershipManager.getMembershipsByTenantID(tenantId);
-
-        const userDetails = await UserManager.getUsersById(
-          updatedMemberships.map((m) => m.userId),
+      const existingMembership =
+        await MembershipManager.getMembershipByTenantAndUserID(
+          tenantId,
+          userId,
         );
 
-        response.status(200).send({
-          users: updatedMemberships,
-          userDetails: userDetails,
-        });
-      } else {
-        response.sendStatus(403);
+      if (!existingMembership || !existingMembership.owner) {
+        return response.status(400).send("User is not an owner of the tenant");
       }
+
+      const allMemberships =
+        await MembershipManager.getMembershipsByTenantID(tenantId);
+
+      const ownerMemberships = allMemberships.filter((m) => m.owner);
+
+      if (ownerMemberships.length <= 1) {
+        return response
+          .status(400)
+          .send("Cannot remove the last owner of the tenant");
+      }
+
+      await MembershipManager.updateMembership(tenantId, userId, {
+        owner: false,
+      });
+
+      const updatedMemberships =
+        await MembershipManager.getMembershipsByTenantID(tenantId);
+
+      const userDetails = await UserManager.getUsersById(
+        updatedMemberships.map((m) => m.userId),
+      );
+
+      response.status(200).send({
+        users: updatedMemberships,
+        userDetails: userDetails,
+      });
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not remove owner from tenant");
@@ -1015,42 +957,29 @@ class TenantController {
 
   static async updateUserStatus(request, response) {
     try {
-      const tenantId = request.params.id;
+      const tenantId = request.params.tenant;
       const { userId, status } = request.body;
       const user = request.user;
 
-      if (
-        await PermissionService._allowUpdateAny(
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_USERS,
-        )
-      ) {
-        await MembershipManager.updateMembership(tenantId, userId, {
-          status,
-        });
+      await MembershipManager.updateMembership(tenantId, userId, {
+        status,
+      });
 
-        const updatedMemberships =
-          await MembershipManager.getMembershipsByTenantID(tenantId);
+      const updatedMemberships =
+        await MembershipManager.getMembershipsByTenantID(tenantId);
 
-        const userDetails = await UserManager.getUsersById(
-          updatedMemberships.map((m) => m.userId),
-        );
+      const userDetails = await UserManager.getUsersById(
+        updatedMemberships.map((m) => m.userId),
+      );
 
-        logger.info(
-          `${tenantId} - User ${user?.id} updated status for user ${userId} to ${status}`,
-        );
+      logger.info(
+        `${tenantId} - User ${user?.id} updated status for user ${userId} to ${status}`,
+      );
 
-        response.status(200).send({
-          users: updatedMemberships,
-          userDetails: userDetails,
-        });
-      } else {
-        logger.warn(
-          `${tenantId} - User ${user?.id} not allowed to update user status`,
-        );
-        response.sendStatus(403);
-      }
+      response.status(200).send({
+        users: updatedMemberships,
+        userDetails: userDetails,
+      });
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not update user status in tenant");
@@ -1059,7 +988,7 @@ class TenantController {
 
   static async updateUserBookingNotificationRecipients(request, response) {
     try {
-      const tenantId = request.params.id;
+      const tenantId = request.params.tenant;
       const { userId, bookingNotificationRecipients } = request.body;
       const user = request.user;
 
@@ -1067,62 +996,48 @@ class TenantController {
         return response.status(400).send("User ID is required");
       }
 
-      if (
-        await PermissionService._allowUpdateAny(
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_USERS,
-        )
-      ) {
-        const membership =
-          await MembershipManager.getMembershipByTenantAndUserID(
-            tenantId,
-            userId,
-          );
+      const membership = await MembershipManager.getMembershipByTenantAndUserID(
+        tenantId,
+        userId,
+      );
 
-        if (!membership) {
-          return response.status(404).send("Membership not found");
-        }
-
-        let recipients;
-        try {
-          recipients =
-            await SupervisorNotificationService.prepareRecipientsForWrite(
-              tenantId,
-              bookingNotificationRecipients,
-            );
-        } catch (error) {
-          logger.warn(
-            `${tenantId} - Invalid booking notification recipients provided by user ${user?.id}: ${error.message}`,
-          );
-          return response.status(400).send(error.message);
-        }
-
-        await MembershipManager.updateMembership(tenantId, userId, {
-          bookingNotificationRecipients: recipients,
-        });
-
-        const updatedMemberships =
-          await MembershipManager.getMembershipsByTenantID(tenantId);
-
-        const userDetails = await UserManager.getUsersById(
-          updatedMemberships.map((m) => m.userId),
-        );
-
-        logger.info(
-          `${tenantId} - User ${user?.id} updated booking notification recipients for user ${userId}`,
-        );
-
-        response.status(200).send({
-          users: updatedMemberships,
-          userDetails: userDetails,
-        });
-      } else {
-        logger.warn(
-          `${tenantId} - User ${user?.id} not allowed to update booking notification recipients`,
-        );
-        response.sendStatus(403);
+      if (!membership) {
+        return response.status(404).send("Membership not found");
       }
+
+      let recipients;
+      try {
+        recipients =
+          await MembershipService.prepareBookingNotificationRecipients(
+            tenantId,
+            bookingNotificationRecipients,
+          );
+      } catch (error) {
+        logger.warn(
+          `${tenantId} - Invalid booking notification recipients provided by user ${user?.id}: ${error.message}`,
+        );
+        return response.status(400).send(error.message);
+      }
+
+      await MembershipManager.updateMembership(tenantId, userId, {
+        bookingNotificationRecipients: recipients,
+      });
+
+      const updatedMemberships =
+        await MembershipManager.getMembershipsByTenantID(tenantId);
+
+      const userDetails = await UserManager.getUsersById(
+        updatedMemberships.map((m) => m.userId),
+      );
+
+      logger.info(
+        `${tenantId} - User ${user?.id} updated booking notification recipients for user ${userId}`,
+      );
+
+      response.status(200).send({
+        users: updatedMemberships,
+        userDetails: userDetails,
+      });
     } catch (error) {
       logger.error(error);
       response
@@ -1131,25 +1046,14 @@ class TenantController {
     }
   }
 
+  // The challenges: the right is the router's (`tenant.challenge`).
   static async getChallenges(request, response) {
     try {
       const tenantId = request.params.tenant;
-      const user = request.user;
 
-      if (
-        (await PermissionService._allowReadAny(
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_TENANTS,
-        )) ||
-        (await PermissionService._isInstanceOwner(user.id))
-      ) {
-        const challenges =
-          await ChallengeManager.getChallengesByTenantID(tenantId);
-        response.status(200).send(challenges);
-      } else {
-        response.sendStatus(403);
-      }
+      const challenges =
+        await ChallengeManager.getChallengesByTenantID(tenantId);
+      response.status(200).send(challenges);
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not get challenges for tenant");
@@ -1158,28 +1062,13 @@ class TenantController {
 
   static async createChallenge(request, response) {
     try {
-      const tenantId = request.params.id;
+      const tenantId = request.params.tenant;
       const body = request.body;
-      const user = request.user;
 
-      if (
-        (await PermissionService._allowUpdateAny(
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_TENANTS,
-        )) ||
-        (await PermissionService._isInstanceOwner(user.id))
-      ) {
-        body.id = uuidv4();
+      body.id = uuidv4();
 
-        console.log(body);
-
-        const challenge = await ChallengeManager.createChallenge(
-          tenantId,
-          body,
-        );
-        response.status(201).send(challenge);
-      }
+      const challenge = await ChallengeManager.createChallenge(tenantId, body);
+      response.status(201).send(challenge);
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not create challenge for tenant");
@@ -1190,23 +1079,13 @@ class TenantController {
     try {
       const tenantId = request.params.tenant;
       const body = request.body;
-      const user = request.user;
 
-      if (
-        (await PermissionService._allowUpdateAny(
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_TENANTS,
-        )) ||
-        (await PermissionService._isInstanceOwner(user.id))
-      ) {
-        const challenge = await ChallengeManager.updateChallenge(
-          tenantId,
-          body.id,
-          body,
-        );
-        response.status(200).send(challenge);
-      }
+      const challenge = await ChallengeManager.updateChallenge(
+        tenantId,
+        body.id,
+        body,
+      );
+      response.status(200).send(challenge);
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not update challenge for tenant");
@@ -1216,20 +1095,10 @@ class TenantController {
   static async deleteChallenge(request, response) {
     try {
       const tenantId = request.params.tenant;
-      const user = request.user;
       const challengeID = request.params.id;
 
-      if (
-        (await PermissionService._allowUpdateAny(
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_TENANTS,
-        )) ||
-        (await PermissionService._isInstanceOwner(user.id))
-      ) {
-        await ChallengeManager.deleteChallenge(tenantId, challengeID);
-        response.sendStatus(200);
-      }
+      await ChallengeManager.deleteChallenge(tenantId, challengeID);
+      response.sendStatus(200);
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not delete challenge for tenant");

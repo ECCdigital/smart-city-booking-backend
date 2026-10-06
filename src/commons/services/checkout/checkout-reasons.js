@@ -1,4 +1,4 @@
-const { CHECK_TYPES } = require("./item-checkout-service");
+const { CHECK_TYPES } = require("../../availability/checkout-check-types");
 
 /**
  * Stable reason codes used as i18n keys in the frontend.
@@ -15,6 +15,10 @@ const CHECKOUT_REASONS = {
   UNKNOWN: "checkout.unknown",
 
   // bookable
+  // Also the offer a new self-booking cannot reach (ADR 0003): a pending
+  // or declined tenant's, or - under supervision - one not approved. The
+  // checkout reads as the public, and what the public cannot reach is not
+  // there - the reason names no cause on purpose (spec §5.2).
   BOOKABLE_NOT_FOUND: "checkout.bookable_not_found",
   BOOKABLE_NOT_BOOKABLE: "checkout.bookable_not_bookable",
   BOOKABLE_UNAVAILABLE: "checkout.bookable_unavailable",
@@ -39,6 +43,7 @@ const CHECKOUT_REASONS = {
   // pricing / amount
   NO_PRICE_CATEGORY: "checkout.no_price_category",
   MAX_AMOUNT_EXCEEDED: "checkout.max_amount_exceeded",
+  MAX_AMOUNT_PER_BOOKING_EXCEEDED: "checkout.max_amount_per_booking_exceeded",
 
   // group booking
   BOOKING_ATTEMPTS_MISSING: "checkout.booking_attempts_missing",
@@ -48,15 +53,16 @@ const CHECKOUT_REASONS = {
 
   // payment (triggered as part of v2 checkout)
   LOCKER_UNAVAILABLE: "checkout.locker_unavailable",
+  COMPARTMENTS_UNAVAILABLE: "checkout.compartments_unavailable",
   PAYMENT_PROVIDER_UNAVAILABLE: "checkout.payment_provider_unavailable",
   PAYMENT_FAILED: "checkout.payment_failed",
 };
 
 /**
  * Default mapping CHECK_TYPE -> reason code.
- * Used as a fallback when the service throws a generic check error.
- * For more specific reasons (e.g. duration too short vs. too long),
- * the resolver below inspects the raw error payload.
+ * Used as a fallback when a check throws without naming a `reason`.
+ * A check that can distinguish more than one cause (duration too short
+ * vs. too long, not bookable vs. not permitted) sets `reason` itself.
  */
 const REASON_BY_CHECK_TYPE = {
   [CHECK_TYPES.PERMISSION]: CHECKOUT_REASONS.PERMISSION_DENIED,

@@ -1,37 +1,78 @@
 const express = require("express");
-const AuthenticationController = require("../authentication/controllers/authentication-controller");
 const { TenantController } = require("./controllers/tenant-controller");
 const UserController = require("./controllers/user-controller");
 const RoleController = require("./controllers/role-controller");
 const HolidayController = require("./controllers/holiday-controller");
 const InvitationController = require("./controllers/invitation-controller");
 const MembershipController = require("./controllers/membership-controller");
-const CatalogController = require("./controllers/catalog-controller");
 const RuleController = require("./controllers/rule-controller");
 const FileController = require("./controllers/file-controller");
 const MailTemplateController = require("./controllers/mail-template-controller");
 const { BookingController } = require("./controllers/booking-controller");
-const { optionalAuth } = require("../../middleware/auth-middleware");
+const AccessController = require("./controllers/access-controller");
 const InstanceController = require("./controllers/instance-controller");
+const SupervisionController = require("./controllers/supervision-controller");
+const {
+  authorize,
+  publicRoute,
+} = require("../../commons/services/authorization");
 
 const router = express.Router({ mergeParams: true });
+
+// The instance level (glossary "Berechtigung"): every route carries its marker.
+// A route about one tenant names it `:tenant`, as the tenant router does,
+// so the principal is loaded in that tenant; `PUT /tenants` names it in the
+// body.
+
+// ACCESS WEBHOOKS
+// ===============
+
+router.use("/webhooks/access", require("./routes/access-webhook.routes"));
 
 // INSTANCES
 // =========
 
-// Public
-router.get("/instances/public", InstanceController.getPublicInstance);
-
-// Protected
+router.get(
+  "/instances/public",
+  publicRoute("instance", "readPublic"),
+  InstanceController.getPublicInstance,
+);
 router.get(
   "/instances",
-  AuthenticationController.isSignedIn,
+  authorize("instance", "read"),
   InstanceController.getInstance,
 );
 router.put(
   "/instances",
-  AuthenticationController.isSignedIn,
+  authorize("instance", "update", { also: ["instanceMedia.read"] }),
   InstanceController.storeInstance,
+);
+router.get(
+  "/instances/supervision/history",
+  authorize("instance", "supervisionHistory"),
+  SupervisionController.getInstanceHistory,
+);
+router.get(
+  "/instances/review-queue",
+  authorize("instance", "reviewQueue"),
+  SupervisionController.getReviewQueue,
+);
+router.get(
+  "/instances/tenant-approval-queue",
+  authorize("instance", "tenantApprovalQueue"),
+  SupervisionController.getTenantApprovalQueue,
+);
+// The supervision notification outbox (glossary "Aufsichtsmitteilung"):
+// what did not go out, and sending it again without deciding again.
+router.get(
+  "/instances/supervision/notifications",
+  authorize("instance", "supervisionNotifications"),
+  SupervisionController.listNotifications,
+);
+router.post(
+  "/instances/supervision/notifications/:id/retry",
+  authorize("instance", "supervisionNotificationRetry"),
+  SupervisionController.retryNotification,
 );
 
 // RULES
@@ -39,280 +80,269 @@ router.put(
 
 router.get(
   "/rules/meta",
-  AuthenticationController.isSignedIn,
+  authorize("rule", "read"),
   RuleController.getMetadata,
 );
 router.get(
   "/rules/executions",
-  AuthenticationController.isSignedIn,
+  authorize("rule", "read"),
   RuleController.getExecutionLogs,
 );
-router.get(
-  "/rules",
-  AuthenticationController.isSignedIn,
-  RuleController.getRules,
-);
-router.post(
-  "/rules",
-  AuthenticationController.isSignedIn,
-  RuleController.createRule,
-);
-router.get(
-  "/rules/:id",
-  AuthenticationController.isSignedIn,
-  RuleController.getRule,
-);
-router.put(
-  "/rules/:id",
-  AuthenticationController.isSignedIn,
-  RuleController.updateRule,
-);
+router.get("/rules", authorize("rule", "read"), RuleController.getRules);
+router.post("/rules", authorize("rule", "write"), RuleController.createRule);
+router.get("/rules/:id", authorize("rule", "read"), RuleController.getRule);
+router.put("/rules/:id", authorize("rule", "write"), RuleController.updateRule);
 router.put(
   "/rules/:id/enabled",
-  AuthenticationController.isSignedIn,
+  authorize("rule", "write"),
   RuleController.setRuleEnabled,
 );
 router.delete(
   "/rules/:id",
-  AuthenticationController.isSignedIn,
+  authorize("rule", "write"),
   RuleController.deleteRule,
 );
-router.post(
-  "/rules/:id/run",
-  AuthenticationController.isSignedIn,
-  RuleController.runRule,
-);
+router.post("/rules/:id/run", authorize("rule", "run"), RuleController.runRule);
 router.post(
   "/rules/:id/dry-run",
-  AuthenticationController.isSignedIn,
+  authorize("rule", "run"),
   RuleController.dryRunRule,
 );
 router.get(
   "/rules/:id/executions",
-  AuthenticationController.isSignedIn,
+  authorize("rule", "read"),
   RuleController.getRuleExecutionLogs,
 );
 
 // TENANTS
 // =======
 
-// Public
-router.get("/tenants/public", TenantController.getPublicTenants);
 router.get(
-  "/tenants/:id",
-  AuthenticationController.isSignedIn,
-  TenantController.getTenant,
-);
-router.get(
-  "/tenants/:id/payment-apps",
-  optionalAuth,
-  TenantController.getActivePaymentApps,
-);
-router.get(
-  "/tenants/:id/mail/templates/default",
-  AuthenticationController.isSignedIn,
-  MailTemplateController.getDefaultTemplates,
-);
-
-// Protected
-router.get(
-  "/tenants",
-  AuthenticationController.isSignedIn,
-  TenantController.getTenants,
-);
-router.put(
-  "/tenants",
-  AuthenticationController.isSignedIn,
-  TenantController.storeTenant,
-);
-router.post(
-  "/tenants",
-  AuthenticationController.isSignedIn,
-  TenantController.createTenant,
-);
-router.delete(
-  "/tenants/:id",
-  AuthenticationController.isSignedIn,
-  TenantController.removeTenant,
+  "/tenants/public",
+  publicRoute("tenant", "listPublic"),
+  TenantController.getPublicTenants,
 );
 router.get(
   "/tenants/count/check",
-  AuthenticationController.isSignedIn,
+  authorize("tenant", "countCheck"),
   TenantController.countCheck,
 );
+router.get(
+  "/tenants",
+  authorize("tenant", "list"),
+  TenantController.getTenants,
+);
 router.post(
-  "/tenants/:id/pdf-preview",
-  AuthenticationController.isSignedIn,
+  "/tenants",
+  authorize("tenant", "create", { also: ["media.read"] }),
+  TenantController.createTenant,
+);
+// The obsolete store: the tenant is the body's; an unknown id creates,
+// which the marker names as its second question (ADR 0001).
+router.put(
+  "/tenants",
+  authorize("tenant", "update", {
+    tenantOf: (req) => req.body?.id,
+    also: ["create", "media.read"],
+  }),
+  TenantController.storeTenant,
+);
+router.get(
+  "/tenants/:tenant",
+  authorize("tenant", "read"),
+  TenantController.getTenant,
+);
+router.delete(
+  "/tenants/:tenant",
+  authorize("tenant", "delete"),
+  TenantController.removeTenant,
+);
+// The supervision (glossary "Mandanten-Aufsicht"): the level is the
+// instance owner's, the history the tenant owner's too.
+router.put(
+  "/tenants/:tenant/supervision",
+  authorize("tenant", "supervise"),
+  SupervisionController.changeTenantLevel,
+);
+router.get(
+  "/tenants/:tenant/supervision/history",
+  authorize("tenant", "supervisionHistory"),
+  SupervisionController.getTenantHistory,
+);
+router.get(
+  "/tenants/:tenant/readiness",
+  authorize("tenant", "readiness"),
+  TenantController.getReadiness,
+);
+router.get(
+  "/tenants/:tenant/payment-apps",
+  publicRoute("tenant", "paymentApps"),
+  TenantController.getActivePaymentApps,
+);
+router.get(
+  "/tenants/:tenant/mail/templates/default",
+  authorize("tenant", "mailTemplates"),
+  MailTemplateController.getDefaultTemplates,
+);
+router.post(
+  "/tenants/:tenant/pdf-preview",
+  authorize("tenant", "pdfPreview"),
   TenantController.previewPdfTemplate,
 );
 
-router.post(
-  "/tenants/:id/add-user",
-  AuthenticationController.isSignedIn,
-  TenantController.addUser,
-);
-
-router.post(
-  "/tenants/:id/remove-user",
-  AuthenticationController.isSignedIn,
-  TenantController.removeUser,
-);
-
-router.post(
-  "/tenants/:id/edit-user-roles",
-  AuthenticationController.isSignedIn,
-  TenantController.editUserRole,
-);
-
-router.post(
-  "/tenants/:id/add-owner",
-  AuthenticationController.isSignedIn,
-  TenantController.addOwner,
-);
-
-router.post(
-  "/tenants/:id/remove-owner",
-  AuthenticationController.isSignedIn,
-  TenantController.removeOwner,
-);
-
-router.post(
-  "/tenants/:id/remove-user-role",
-  AuthenticationController.isSignedIn,
-  TenantController.removeUserRole,
-);
-
 router.get(
-  "/tenants/:id/users",
-  AuthenticationController.isSignedIn,
+  "/tenants/:tenant/users",
+  authorize("tenantUser", "read"),
   TenantController.getUsers,
 );
-
 router.post(
-  "/tenants/:id/update-user-status",
-  AuthenticationController.isSignedIn,
+  "/tenants/:tenant/add-user",
+  authorize("tenantUser", "manage"),
+  TenantController.addUser,
+);
+// Removing an owner is the owners' alone: the marker decides that too.
+router.post(
+  "/tenants/:tenant/remove-user",
+  authorize("tenantUser", "manage", { also: ["owner"] }),
+  TenantController.removeUser,
+);
+router.post(
+  "/tenants/:tenant/edit-user-roles",
+  authorize("tenantUser", "manage"),
+  TenantController.editUserRole,
+);
+router.post(
+  "/tenants/:tenant/remove-user-role",
+  authorize("tenantUser", "manage"),
+  TenantController.removeUserRole,
+);
+router.post(
+  "/tenants/:tenant/update-user-status",
+  authorize("tenantUser", "manage"),
   TenantController.updateUserStatus,
 );
-
 router.post(
-  "/tenants/:id/update-user-booking-notification-recipients",
-  AuthenticationController.isSignedIn,
+  "/tenants/:tenant/update-user-booking-notification-recipients",
+  authorize("tenantUser", "manage"),
   TenantController.updateUserBookingNotificationRecipients,
+);
+router.post(
+  "/tenants/:tenant/add-owner",
+  authorize("tenantUser", "owner"),
+  TenantController.addOwner,
+);
+router.post(
+  "/tenants/:tenant/remove-owner",
+  authorize("tenantUser", "owner"),
+  TenantController.removeOwner,
 );
 
 // USERS
 // =====
 
-// Protected
-router.get(
-  "/users",
-  AuthenticationController.isSignedIn,
-  UserController.getUsers,
-);
-router.get(
-  "/users/ids",
-  AuthenticationController.isSignedIn,
-  UserController.getUserIds,
-);
-router.get(
-  "/users/:id",
-  AuthenticationController.isSignedIn,
-  UserController.getUser,
-);
+router.get("/users", authorize("user", "read"), UserController.getUsers);
+router.get("/users/ids", authorize("user", "read"), UserController.getUserIds);
+router.get("/users/:id", authorize("user", "read"), UserController.getUser);
 router.post(
   "/users/:id/change-id",
-  AuthenticationController.isSignedIn,
+  authorize("user", "changeId"),
   UserController.changeUserId,
 );
+// The obsolete store: an unknown id creates, which the marker decides too.
 router.put(
   "/users",
-  AuthenticationController.isSignedIn,
+  authorize("user", "update", { also: ["create"] }),
   UserController.storeUser,
 );
-router.put(
-  "/user",
-  AuthenticationController.isSignedIn,
-  UserController.updateMe,
-);
+router.put("/user", authorize("user", "updateSelf"), UserController.updateMe);
 router.delete(
   "/users/:id",
-  AuthenticationController.isSignedIn,
+  authorize("user", "delete"),
   UserController.removeUser,
 );
 
+// ROLES, HOLIDAYS
+// ===============
+
+router.get("/roles", authorize("role", "list"), RoleController.getRoles);
+
 router.get(
-  "/roles",
-  AuthenticationController.isSignedIn,
-  RoleController.getRoles,
+  "/holidays",
+  publicRoute("holidays", "all"),
+  HolidayController.getHolidays,
 );
 
-router.get("/holidays", HolidayController.getHolidays);
+// INVITATIONS
+// ===========
 
-//INVITATIONS
 router.get(
   "/invitations/my",
-  AuthenticationController.isSignedIn,
+  authorize("invitation", "readMine"),
   InvitationController.getMyInvitations,
 );
 
 // MEMBERSHIPS
 // ===========
+
 router.get(
   "/memberships",
-  AuthenticationController.isSignedIn,
+  authorize("membership", "read"),
   MembershipController.getMemberships,
 );
-
 router.get(
   "/memberships/my/pending",
-  AuthenticationController.isSignedIn,
+  authorize("membership", "readMine"),
   MembershipController.getMyPendingMemberships,
 );
-
 router.get(
   "/memberships/my",
-  AuthenticationController.isSignedIn,
+  authorize("membership", "readMine"),
   MembershipController.getMyMemberships,
 );
 
-// Catalog
+// CATALOG
+// =======
+
+// On the async router (`routes/instance-catalog.routes.js`), mounted at the
+// root so the paths stay `/catalog...` and every error reaches the central
+// error handler. The order in the instance router is unchanged.
+router.use(require("./routes/instance-catalog.routes"));
+
+// FILES
+// =====
+
+// The tenant-less listing and upload are gone with the instance media library
+// (§4.9) — `/api/v2/instance/media` replaces them. `GET /files/get` stays as
+// the resolver of legacy paths (§4.10): a public medium for anyone, an intern
+// one for a signed-in user - the medium's visibility decides in the media
+// rights, from the questions the marker names.
 router.get(
-  "/catalog",
-  AuthenticationController.isSignedIn,
-  CatalogController.getInstanceCatalog,
-);
-router.get("/catalog/public", CatalogController.getPublicCatalog);
-router.get("/catalog/mode", CatalogController.getPortalMode);
-router.get("/catalog/bundle", optionalAuth, CatalogController.getCatalogBundle);
-
-router.put(
-  "/catalog",
-  AuthenticationController.isSignedIn,
-  CatalogController.storeInstanceCatalog,
+  "/files/get",
+  publicRoute("instanceMedia", "file", { also: ["intern"] }),
+  FileController.getFile,
 );
 
-router.get("/catalog/themes/:slug", optionalAuth, CatalogController.getTheme);
-router.get("/catalog/themes", CatalogController.getTheme);
-router.get(
-  "/catalog/availability/:slug",
-  AuthenticationController.isSignedIn,
-  CatalogController.slugAvailability,
-);
-router.get("/catalog/:slug", optionalAuth, CatalogController.getCatalogBySlug);
+// BOOKINGS
+// ========
 
-router.get("/files/list", FileController.getFiles);
-router.get("/files/get", FileController.getFile);
-router.post(
-  "/files",
-  AuthenticationController.isSignedIn,
-  FileController.createFile,
-);
-
-//Bookings
 router.get(
   "/bookings/assigned",
-  AuthenticationController.isSignedIn,
+  authorize("booking", "readMine"),
   BookingController.getAssignedBookings,
+);
+
+// ACCESS (tenant-independent: a user may have bookings across tenants)
+// ===================================================================
+
+router.get(
+  "/access/bookings",
+  authorize("accessBookings", "read"),
+  AccessController.getAccessBookings,
+);
+router.get(
+  "/access/access-points/:accessPointId/bookings",
+  authorize("accessBookings", "read"),
+  AccessController.getAccessPointBookings,
 );
 
 router.use("/instances", require("./routes/instance.routes"));

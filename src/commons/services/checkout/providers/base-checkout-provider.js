@@ -63,6 +63,17 @@ class BaseCheckoutProvider {
     return false;
   }
 
+  /**
+   * Whether the provider's availability check narrows the platform's own
+   * count instead of replacing it. A replacing provider (iFBS) is the one
+   * source of the capacity; a narrowing one (Pareva) is asked after the
+   * platform count and can only refuse further - and one that cannot
+   * answer (`unknown: true`) leaves the decision to the platform count.
+   */
+  get narrowsAvailability() {
+    return false;
+  }
+
   get handlesMaxAmount() {
     return false;
   }

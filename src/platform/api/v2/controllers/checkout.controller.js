@@ -2,7 +2,7 @@ const {
   ItemCheckoutService,
   CheckoutPermissions,
 } = require("../../../../commons/services/checkout/item-checkout-service");
-const BookingService = require("../../../../commons/services/checkout/booking-service");
+const BookingCheckout = require("../../../../commons/services/checkout/booking-checkout");
 const {
   BookableManager,
 } = require("../../../../commons/data-managers/bookable-manager");
@@ -12,7 +12,7 @@ const {
 } = require("../../../../commons/utilities/group-booking-permissions");
 const {
   resolveCheckoutId,
-  withMandatoryAddons,
+  resolveCheckoutItems,
 } = require("../../../../commons/utilities/checkout-utils");
 const {
   normalizeCheckError,
@@ -23,10 +23,11 @@ const {
 const {
   BundleCheckoutService,
 } = require("../../../../commons/services/checkout/bundle-checkout-service");
+const { scopeOf } = require("../../../../commons/services/authorization");
 const { CheckoutError } = require("../../../../errors/CheckoutError");
 const { BaseError } = require("../../../../errors/BaseError");
 const PaymentUtils = require("../../../../commons/utilities/payment-utils");
-const LockerService = require("../../../../commons/services/locker/locker-service");
+const AccessService = require("../../../../commons/services/access/access-service");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
@@ -156,21 +157,26 @@ class CheckoutControllerV2 {
         data,
       });
     } catch (err) {
-      // unexpected (DB/network/etc.) — surface as graceful failure too,
-      // because we promised "always 200" for this endpoint.
-      logger.error(
-        { err, tenantId, bookableId, userId: user?.id },
-        "validateItem: unexpected error",
-      );
+      // A bookable the public cannot reach is the checkout's own refusal
+      // (`bookable_not_found`, thrown by `init`); everything else is
+      // unexpected (DB/network/etc.) and surfaces as a graceful failure
+      // too, because we promised "always 200" for this endpoint.
+      const refusal = err instanceof CheckoutError ? err : null;
+      if (!refusal) {
+        logger.error(
+          { err, tenantId, bookableId, userId: user?.id },
+          "validateItem: unexpected error",
+        );
+      }
 
       return res.status(200).json({
         success: false,
         checkoutId,
         checkoutIdGenerated: generated,
         error: {
-          reason: CHECKOUT_REASONS.UNKNOWN,
-          checkType: null,
-          params: {},
+          reason: refusal?.reason ?? CHECKOUT_REASONS.UNKNOWN,
+          checkType: refusal?.checkType ?? null,
+          params: refusal?.params ?? {},
         },
       });
     } finally {
@@ -200,7 +206,7 @@ class CheckoutControllerV2 {
         tenantId,
       );
 
-      const booking = await BookingService.createSingleBooking({
+      const booking = await BookingCheckout.createSingleBooking({
         tenantId,
         user,
         bookingAttempt: req.body,
@@ -263,6 +269,7 @@ class CheckoutControllerV2 {
     );
 
     const resolved = await CheckoutControllerV2._resolveGroupCheckoutRequest({
+      scope: scopeOf(req),
       tenantId,
       user,
       rawBookableItems,
@@ -285,7 +292,7 @@ class CheckoutControllerV2 {
     const { bookableItems, bookingAttempts: rawAttempts } = resolved;
 
     try {
-      const resolvedItems = await withMandatoryAddons(bookableItems, tenantId);
+      const resolvedItems = await resolveCheckoutItems(bookableItems, tenantId);
 
       const attempts = await Promise.all(
         rawAttempts.map(async (attempt, index) => {
@@ -405,6 +412,7 @@ class CheckoutControllerV2 {
       } = req.body;
 
       const resolved = await CheckoutControllerV2._resolveGroupCheckoutRequest({
+        scope: scopeOf(req),
         tenantId,
         user,
         rawBookableItems,
@@ -442,7 +450,7 @@ class CheckoutControllerV2 {
         comment,
       };
 
-      const groupBooking = await BookingService.createGroupBooking({
+      const groupBooking = await BookingCheckout.createGroupBooking({
         tenantId,
         user,
         contactData,
@@ -485,7 +493,11 @@ class CheckoutControllerV2 {
       const user = req.user;
       const id = req.params.id;
 
-      const bookable = await BookableManager.getBookable(id, tenantId);
+      const bookable = await BookableManager.getBookable(
+        id,
+        tenantId,
+        scopeOf(req),
+      );
 
       if (!bookable) {
         throw new CheckoutError({
@@ -532,6 +544,19 @@ class CheckoutControllerV2 {
 
       return res.status(200).json({ success: true });
     } catch (err) {
+      // A bookable the public cannot reach and one that is not there are
+      // the same absence (ADR 0003, spec §5.2): the pre-check answers the
+      // 404 itself, in the checkout's error shape.
+      if (err instanceof BaseError && err.statusCode === 404) {
+        return res.status(404).json(
+          new CheckoutError({
+            reason: CHECKOUT_REASONS.BOOKABLE_NOT_FOUND,
+            statusCode: 404,
+            params: { bookableId: req.params.id },
+            checkType: "permissions",
+          }).toJSON(),
+        );
+      }
       return CheckoutControllerV2._respondWithError(res, err, {
         logMessage: "checkoutPermissions: failed",
         context: {
@@ -553,6 +578,7 @@ class CheckoutControllerV2 {
   static async _resolveGroupCheckoutRequest({
     tenantId,
     user,
+    scope,
     rawBookableItems,
     rawBookingAttempts,
   }) {
@@ -587,10 +613,29 @@ class CheckoutControllerV2 {
     }
 
     const leadBookableId = bookableItems[0].bookableId;
+    // The lead bookable as the public reaches it (ADR 0003): of a tenant
+    // without a public projection nothing - the same absence as an
+    // unknown bookable.
     const bookable = await BookableManager.getBookable(
       leadBookableId,
       tenantId,
-    );
+      scope,
+    ).catch((err) => {
+      if (err instanceof BaseError && err.code === "tenant_not_found") {
+        return null;
+      }
+      throw err;
+    });
+    if (!bookable) {
+      return {
+        error: {
+          reason: CHECKOUT_REASONS.BOOKABLE_NOT_FOUND,
+          statusCode: 404,
+          checkType: null,
+          params: { bookableId: leadBookableId },
+        },
+      };
+    }
     const gb = bookable?.groupBooking;
     if (!gb?.enabled) {
       return {
@@ -721,12 +766,11 @@ class CheckoutControllerV2 {
     const bookingIds = [booking.id];
 
     try {
-      const lockerServiceInstance = LockerService.getInstance();
-      await lockerServiceInstance.refreshPreReservations(tenantId, bookingIds);
+      await AccessService.refreshHolds(tenantId, bookingIds);
     } catch (err) {
       logger.warn(
         { tenantId, bookingId: booking.id, err: err.message },
-        "checkout: locker pre-reservation refresh failed",
+        "checkout: renewing the compartment holds failed",
       );
       throw new CheckoutError({
         reason: CHECKOUT_REASONS.LOCKER_UNAVAILABLE,
@@ -806,12 +850,11 @@ class CheckoutControllerV2 {
     }
 
     try {
-      const lockerServiceInstance = LockerService.getInstance();
-      await lockerServiceInstance.refreshPreReservations(tenantId, bookingIds);
+      await AccessService.refreshHolds(tenantId, bookingIds);
     } catch (err) {
       logger.warn(
         { tenantId, groupBookingId: groupBooking?.id, err: err.message },
-        "groupCheckout: locker pre-reservation refresh failed",
+        "groupCheckout: renewing the compartment holds failed",
       );
       throw new CheckoutError({
         reason: CHECKOUT_REASONS.LOCKER_UNAVAILABLE,
@@ -871,6 +914,17 @@ class CheckoutControllerV2 {
    * shape with a reason code.
    */
   static _toCheckoutError(err) {
+    // The compartment shortage the access hold throws at the admission
+    // (AccessService._assertCompartmentCapacity): a plain BaseError carries
+    // no reason, so the storefront would read it as checkout.unknown.
+    if (err instanceof BaseError && err.code === "compartments_unavailable") {
+      return new CheckoutError({
+        reason: CHECKOUT_REASONS.COMPARTMENTS_UNAVAILABLE,
+        statusCode: 409,
+        params: err.params,
+      });
+    }
+
     if (err instanceof BaseError) return err;
 
     // Plain { checkType, message, ... } from ItemCheckoutService

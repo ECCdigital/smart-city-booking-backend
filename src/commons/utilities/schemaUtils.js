@@ -25,9 +25,13 @@ const ERROR_CODES = {
   minItems: "min_items",
   maxItems: "max_items",
   format: "invalid_format",
+  enum: "invalid_enum",
   greaterThan: "greater_than",
   greaterEqualThan: "greater_equal_than",
   validate: "invalid_custom",
+  maxLength: "max_length",
+  unknownField: "unknown_field",
+  duplicateId: "duplicate_id",
 };
 
 function isMongooseSubdocumentSchema(type) {
@@ -197,5 +201,7 @@ class SchemaUtils {
     return true;
   }
 }
+
+SchemaUtils.ERROR_CODES = ERROR_CODES;
 
 module.exports = SchemaUtils;

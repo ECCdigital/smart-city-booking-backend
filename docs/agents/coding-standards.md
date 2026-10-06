@@ -50,13 +50,13 @@ module.exports = { BookingService };
 
 ## Naming
 
-| Kind | Convention | Example |
-|------|------------|---------|
-| Files | kebab-case | `booking-controller.js` |
-| Classes | PascalCase | `BookingController` |
-| Functions/methods | camelCase | `resolveCheckoutId` |
-| Constants | UPPER_SNAKE or PascalCase enum | `BOOKING_HOOK_TYPES` |
-| Mongoose models | PascalCase singular | `Booking`, `Tenant` |
+| Kind              | Convention                     | Example                 |
+| ----------------- | ------------------------------ | ----------------------- |
+| Files             | kebab-case                     | `booking-controller.js` |
+| Classes           | PascalCase                     | `BookingController`     |
+| Functions/methods | camelCase                      | `resolveCheckoutId`     |
+| Constants         | UPPER_SNAKE or PascalCase enum | `BOOKING_HOOK_TYPES`    |
+| Mongoose models   | PascalCase singular            | `Booking`, `Tenant`     |
 
 ## Error handling
 
@@ -95,7 +95,8 @@ logger.info({ tenantId, bookingId }, "Booking created");
 
 - JSON Schema definitions in `src/commons/schemas/`
 - Validate input at controller or service boundary
-- Domain validation (availability, permissions) belongs in services
+- Domain validation (availability, lifecycle rules) belongs in services
+- Rights are decided once, by the route's marker, never in a service or handler: see [docs/authorization.md](../authorization.md)
 
 ## Comments
 

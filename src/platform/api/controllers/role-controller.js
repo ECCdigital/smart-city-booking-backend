@@ -1,8 +1,8 @@
 const { RoleManager } = require("../../../commons/data-managers/role-manager");
 const MembershipManager = require("../../../commons/data-managers/membership-manager");
-const { Role, RolePermission } = require("../../../commons/entities/role/role");
+const { Role } = require("../../../commons/entities/role/role");
 const { v4: uuidv4 } = require("uuid");
-const PermissionService = require("../../../commons/services/permission-service");
+const { NotFoundError } = require("../../../errors/BaseError");
 const createComponentLogger = require("../../../middleware/logger");
 
 const logger = createComponentLogger("role-controller.js");
@@ -11,6 +11,14 @@ const logger = createComponentLogger("role-controller.js");
  * Web Controller for Roles.
  */
 class RoleController {
+  /**
+   * The reach first, then the projection (glossary "Reichweite"): under
+   * `any` the roles; under `own` - the member's reach, the marker vouched
+   * for the membership (`role.list`, `own: "tenantMember"`) - the public
+   * projection `{ id, name, tenantId }` where asked for, an empty list
+   * otherwise. Without the tenant in the path nobody is a member, so the
+   * instance owner alone gets here, with every role of every tenant.
+   */
   static async getRoles(request, response) {
     try {
       const user = request.user;
@@ -18,33 +26,17 @@ class RoleController {
       const isPublicView =
         request.query.public?.trim()?.toLowerCase() === "true";
 
-      let roles;
+      const roles = tenantId
+        ? await RoleManager.getTenantRoles(tenantId)
+        : await RoleManager.getRoles();
 
-      if (tenantId) {
-        roles = await RoleManager.getTenantRoles(tenantId);
+      let allowedRoles;
+      if (request.reach === "any") {
+        allowedRoles = roles;
+      } else if (isPublicView) {
+        allowedRoles = roles.map((role) => role.toPublic());
       } else {
-        roles = await RoleManager.getRoles();
-      }
-
-      let allowedRoles = [];
-
-      if (isPublicView) {
-        for (let role of roles) {
-          allowedRoles.push(role.toPublic());
-        }
-      } else {
-        for (let role of roles) {
-          if (
-            await PermissionService._allowRead(
-              role,
-              user.id,
-              tenantId,
-              RolePermission.MANAGE_ROLES,
-            )
-          ) {
-            allowedRoles.push(role);
-          }
-        }
+        allowedRoles = [];
       }
 
       logger.info(`Sending ${allowedRoles.length} roles to user ${user?.id}`);
@@ -55,20 +47,25 @@ class RoleController {
     }
   }
 
+  /**
+   * The roles of the signed-in user in the tenant: the
+   * public projection where asked for. The membership is the principal's:
+   * a resting membership (glossary "Ruhende Mitgliedschaft") or none gives
+   * nothing, an empty list; the role ids themselves are read from the
+   * membership, which the principal does not carry.
+   */
   static async getUserRolesByTenant(req, res) {
-    const user = req.user;
-    if (!user) {
-      return res.status(400).json({ error: "User not authenticated" });
-    }
-
+    const { userId, isMember } = req.principal;
     const tenantId = req.params.tenant;
     const isPublicView = Boolean(req.query.public);
 
     try {
-      const membership = await MembershipManager.getMembershipByTenantAndUserID(
-        tenantId,
-        user.id,
-      );
+      const membership = isMember
+        ? await MembershipManager.getMembershipByTenantAndUserID(
+            tenantId,
+            userId,
+          )
+        : null;
 
       const roleIds = membership ? membership.roles : [];
 
@@ -77,25 +74,11 @@ class RoleController {
       );
       const validRoles = roles.filter((r) => r);
 
-      let allowedRoles;
-      if (isPublicView) {
-        allowedRoles = validRoles.map((role) => role.toPublic());
-      } else {
-        const checks = await Promise.all(
-          validRoles.map(async (role) => {
-            const allowed = await PermissionService.allowRead(
-              role,
-              user.id,
-              tenantId,
-              RolePermission.MANAGE_ROLES,
-            );
-            return allowed ? role : null;
-          }),
-        );
-        allowedRoles = checks.filter((r) => r);
-      }
+      const allowedRoles = isPublicView
+        ? validRoles.map((role) => role.toPublic())
+        : validRoles;
 
-      logger.info(`Sending ${allowedRoles.length} roles to user ${user.id}`);
+      logger.info(`Sending ${allowedRoles.length} roles to user ${userId}`);
       return res.status(200).json(allowedRoles);
     } catch (err) {
       logger.error("Error in getUserRolesByTenant:", err);
@@ -112,22 +95,8 @@ class RoleController {
       if (roleId) {
         const role = await RoleManager.getRole(roleId, tenantId);
         if (role) {
-          if (
-            await PermissionService._allowRead(
-              role,
-              user.id,
-              tenantId,
-              RolePermission.MANAGE_ROLES,
-            )
-          ) {
-            logger.info(`Sending role ${role.id} to user ${user?.id}`);
-            response.status(200).send(role);
-          } else {
-            logger.warn(
-              `User ${user?.id} is not allowed to read role ${role.id}`,
-            );
-            response.sendStatus(403);
-          }
+          logger.info(`Sending role ${role.id} to user ${user?.id}`);
+          response.status(200).send(role);
         } else {
           response.sendStatus(404);
         }
@@ -140,78 +109,39 @@ class RoleController {
     }
   }
 
-  /**
-   * @obsolete Use createRole or updateRole instead.
-   * @param request
-   * @param response
-   * @returns {Promise<void>}
-   */
-  static async storeRole(request, response) {
-    const roleId = request.body.id;
-    const tenantId = request.params.tenant;
-    const role = await RoleManager.getRole(roleId, tenantId);
-
-    const isUpdate = !!role;
-
-    if (isUpdate) {
-      await RoleController.updateRole(request, response);
-    } else {
-      await RoleController.createRole(request, response);
-    }
-  }
-
   static async createRole(request, response) {
     try {
       const user = request.user;
       const tenantId = request.params.tenant;
-      const role = new Role(request.body);
 
+      const role = new Role(request.body);
       role.id = uuidv4();
       role.ownerUserId = user.id;
       role.tenantId = tenantId;
 
-      if (
-        await PermissionService._allowCreate(
-          role,
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_ROLES,
-        )
-      ) {
-        await RoleManager.storeRole(role, tenantId);
-        logger.info(`Created role ${role.id} by user ${user?.id}`);
-        response.sendStatus(201);
-      } else {
-        logger.warn(`User ${user?.id} not allowed to create role`);
-        response.sendStatus(403);
-      }
+      await RoleManager.storeRole(role, tenantId);
+      logger.info(`Created role ${role.id} by user ${user?.id}`);
+      response.sendStatus(201);
     } catch (err) {
       logger.error(err);
       response.status(500).send("could not create role");
     }
   }
 
-  static async updateRole(request, response) {
+  static async updateRole(request, response, next) {
     try {
       const user = request.user;
       const tenantId = request.params.tenant;
       const role = new Role(request.body);
 
-      if (
-        await PermissionService._allowUpdate(
-          role,
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_ROLES,
-        )
-      ) {
-        await RoleManager.storeRole(role, tenantId);
-        logger.info(`Updated role ${role.id} by user ${user?.id}`);
-        response.sendStatus(201);
-      } else {
-        logger.warn(`User ${user?.id} not allowed to update role`);
-        response.sendStatus(403);
+      // A PUT names its role; none of that id in the tenant is a 404.
+      if (!(await RoleManager.getRole(role.id, tenantId))) {
+        return next(new NotFoundError("role_not_found", { roleId: role.id }));
       }
+
+      await RoleManager.storeRole(role, tenantId);
+      logger.info(`Updated role ${role.id} by user ${user?.id}`);
+      response.sendStatus(201);
     } catch (err) {
       logger.error(err);
       response.status(500).send("could not update role");
@@ -226,21 +156,12 @@ class RoleController {
 
       if (roleId) {
         const role = await RoleManager.getRole(roleId, tenantId);
-        if (
-          await PermissionService._allowDelete(
-            role,
-            user.id,
-            tenantId,
-            RolePermission.MANAGE_ROLES,
-          )
-        ) {
-          await RoleManager.removeRole(roleId, tenantId);
-          logger.info(`Removed role ${role.id} by user ${user?.id}`);
-          response.sendStatus(200);
-        } else {
-          logger.warn(`User ${user?.id} not allowed to remove role`);
-          response.sendStatus(403);
+        if (!role) {
+          return response.sendStatus(404);
         }
+        await RoleManager.removeRole(roleId, tenantId);
+        logger.info(`Removed role ${role.id} by user ${user?.id}`);
+        response.sendStatus(200);
       } else {
         response.sendStatus(400);
       }

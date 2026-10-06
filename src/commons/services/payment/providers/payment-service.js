@@ -55,23 +55,55 @@ class PaymentService {
     return checkoutUrl;
   }
 
-  paymentRequest() {
-    throw new Error("paymentRequest not implemented");
+  /**
+   * The payment request (glossary "Zahlungsaufforderung") as a value, for
+   * the notify step of the booking lifecycle to send (mail-stack spec,
+   * section 4): a provider that takes the customer to a payment page
+   * answers the link to the storefront's redirection, which starts the
+   * payment of the bookings when it is opened. The invoice provider
+   * answers the invoice it issues, or the announcement of one to follow.
+   * No provider mails.
+   *
+   * @returns {Promise<{ form: "link" | "invoice" | "pending", paymentUrl?: string, files?: Array<{ name: string, buffer: Buffer }> }>}
+   */
+  async paymentRequest() {
+    return { form: "link", paymentUrl: this.paymentRedirectionUrl() };
   }
 
+  /** The storefront's page that starts the payment of the bookings. */
+  paymentRedirectionUrl() {
+    return `${process.env.FRONTEND_URL}/payment/redirection?ids=${this.bookingIds.join(",")}&tenant=${this.tenantId}&aggregated=${this.aggregated ? "true" : "false"}`;
+  }
+
+  /**
+   * A successful payment is the transition `pay` of the lifecycle, set off
+   * by the payment (glossary "Auslöser"): of the group the webhook names
+   * or the first booking belongs to where the payment was aggregated, of
+   * every booking named otherwise. The lifecycle's guard - a booking paid
+   * already, a group whose members differ in state - and a missing
+   * booking or group throw as the 409 and 404 they are.
+   */
   async handleSuccessfulPayment({ bookingIds, tenantId, paymentMethod }) {
-    const BookingService = require("../../checkout/booking-service");
+    const {
+      bookingLifecycle,
+      groupBookingLifecycle,
+      TRIGGER,
+    } = require("../../booking-lifecycle");
     if (this.aggregated) {
-      await BookingService.setAggregatedBookingPayed({
+      const { groupBookingIdOf } = require("../../documents/document-issuance");
+      const groupBookingId = await groupBookingIdOf({
         tenantId,
         bookingIds,
+        groupBookingId: this.groupBookingId,
+      });
+      await groupBookingLifecycle.pay(tenantId, groupBookingId, {
+        trigger: TRIGGER.PAYMENT,
         paymentMethod,
       });
     } else {
       for (const bookingId of bookingIds) {
-        await BookingService.setBookingPayed({
-          tenantId,
-          bookingId,
+        await bookingLifecycle.pay(tenantId, bookingId, {
+          trigger: TRIGGER.PAYMENT,
           paymentMethod,
         });
       }

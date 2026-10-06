@@ -2,6 +2,7 @@ const {
   BookableManager,
 } = require("../../../commons/data-managers/bookable-manager");
 const EventManager = require("../../../commons/data-managers/event-manager");
+const { scopeOf } = require("../../../commons/services/authorization");
 const MembershipManager = require("../../../commons/data-managers/membership-manager");
 const InstanceManager = require("../../../commons/data-managers/instance-manager");
 const ExternalPriceService = require("../../../commons/services/external-price-service");
@@ -11,10 +12,23 @@ const {
 const {
   GroupBookingPermissions,
 } = require("../../../commons/utilities/group-booking-permissions");
+const { NotFoundError } = require("../../../errors/BaseError");
 
+/**
+ * The JSON embed engine: every page reads through the managers with the
+ * route's reach (`json.all`: the public's, staff included), so what it
+ * shows is the public projection the managers apply (ADR 0003) - a list
+ * what is listed, a detail what a direct link reaches, the tickets of an
+ * event what is listed of them, a tenant without a public projection a
+ * 404. On top of it the tenant's own catalog participation and the
+ * bookable's own permissions (`hasAccess`), which are no supervision.
+ */
 class JSONController {
+  // The catalog access refusals are the typed errors of the errors module
+  // (`tenant_not_found`, `authentication_required`,
+  // `tenant_membership_required`); the embed API keeps its own body shape.
   static _sendCatalogAccessError(res, error) {
-    return res.status(error.code || 500).json({
+    return res.status(error.statusCode || 500).json({
       success: false,
       message: error.message || "Internal server error",
     });
@@ -52,7 +66,9 @@ class JSONController {
     instance,
     { identity, userRoles, cancellationRefundTiers = [] } = {},
   ) {
-    const pub = bookable.exportPublic();
+    // Embedding websites live on foreign hosts, so every media address has to
+    // leave here absolute.
+    const pub = bookable.exportPublic({ absoluteMediaUrls: true });
     pub.checkoutUrl = await JSONController._checkoutUrl(
       bookable.id,
       tenantId,
@@ -86,9 +102,10 @@ class JSONController {
 
     try {
       const userRoles = await JSONController.getUserRoles(tenantId, identity);
-      let bookables = await BookableManager.getBookables(tenantId);
-
-      bookables = bookables.filter((bookable) => bookable.isPublic);
+      let bookables = await BookableManager.getBookables(
+        tenantId,
+        scopeOf(req),
+      );
 
       bookables = bookables.filter((bookable) => {
         return JSONController.hasAccess(bookable, identity, userRoles);
@@ -113,7 +130,11 @@ class JSONController {
 
       const relatedBookables =
         allRelatedIds.length > 0
-          ? await BookableManager.getBookablesByIds(tenantId, allRelatedIds)
+          ? await BookableManager.getBookablesByIds(
+              tenantId,
+              allRelatedIds,
+              scopeOf(req),
+            )
           : [];
 
       const relatedMap = new Map(relatedBookables.map((b) => [b.id, b]));
@@ -144,12 +165,7 @@ class JSONController {
 
         pub.relatedBookables = (bookable.relatedBookableIds ?? [])
           .map((id) => relatedMap.get(id))
-          .filter(
-            (b) =>
-              b &&
-              b.isPublic &&
-              JSONController.hasAccess(b, identity, userRoles),
-          );
+          .filter((b) => b && JSONController.hasAccess(b, identity, userRoles));
         pub.relatedBookables = await Promise.all(
           pub.relatedBookables.map((b) =>
             JSONController._exportPublicBookable(
@@ -166,10 +182,7 @@ class JSONController {
       res.setHeader("content-type", "application/json");
       res.status(200).send(await Promise.all(result));
     } catch (error) {
-      res.status(500).json({
-        success: false,
-        message: "Internal server error",
-      });
+      JSONController._fail(res, error, "No bookables found");
     }
   }
 
@@ -192,9 +205,13 @@ class JSONController {
     try {
       const userRoles = await JSONController.getUserRoles(tenantId, identity);
       const exportOptions = { identity, userRoles, cancellationRefundTiers };
-      const bookable = await BookableManager.getBookable(id, tenantId);
+      const bookable = await BookableManager.getBookable(
+        id,
+        tenantId,
+        scopeOf(req),
+      );
 
-      if (!bookable?.id || bookable.isPublic === false) {
+      if (!bookable?.id) {
         return res.status(404).json({
           success: false,
           message: "Bookable not found",
@@ -225,11 +242,12 @@ class JSONController {
             ? await BookableManager.getBookablesByIds(
                 tenantId,
                 bookable.relatedBookableIds,
+                scopeOf(req),
               )
             : [];
 
-        pub.relatedBookables = relatedBookables.filter(
-          (b) => b.isPublic && JSONController.hasAccess(b, identity, userRoles),
+        pub.relatedBookables = relatedBookables.filter((b) =>
+          JSONController.hasAccess(b, identity, userRoles),
         );
         pub.relatedBookables = await Promise.all(
           pub.relatedBookables.map((b) =>
@@ -251,10 +269,7 @@ class JSONController {
         });
       }
     } catch (error) {
-      res.status(500).json({
-        success: false,
-        message: "Internal server error",
-      });
+      JSONController._fail(res, error, "Bookable not found");
     }
   }
 
@@ -276,11 +291,9 @@ class JSONController {
     try {
       const identity = req.user;
       const userRoles = await JSONController.getUserRoles(tenantId, identity);
-      let events = await EventManager.getEvents(tenantId);
+      let events = await EventManager.getEvents(tenantId, scopeOf(req));
       const checkoutInstance = await InstanceManager.getInstance();
       const exportOptions = { identity, userRoles, cancellationRefundTiers };
-
-      events = events.filter((event) => event.isPublic);
 
       if (ids) {
         const idsArray = ids.split(",");
@@ -303,31 +316,32 @@ class JSONController {
             Date.parse(b.information.startDate),
         );
 
-      const publicEvents = events.map((event) => event.exportPublic());
+      const publicEvents = events.map((event) =>
+        event.exportPublic({ absoluteMediaUrls: true }),
+      );
 
       for (const event of publicEvents) {
         const tickets = await BookableManager.getEventBookables(
           tenantId,
           event.id,
+          scopeOf(req),
         );
         event.tickets = await Promise.all(
-          tickets
-            .filter((ticket) => ticket.isPublic)
-            .map((ticket) =>
-              JSONController._exportPublicBookable(
-                ticket,
-                tenantId,
-                checkoutInstance,
-                exportOptions,
-              ),
+          tickets.map((ticket) =>
+            JSONController._exportPublicBookable(
+              ticket,
+              tenantId,
+              checkoutInstance,
+              exportOptions,
             ),
+          ),
         );
       }
 
       res.setHeader("content-type", "application/json");
       res.status(200).send(publicEvents);
-    } catch {
-      res.sendStatus(500);
+    } catch (error) {
+      JSONController._fail(res, error, "No events found");
     }
   }
 
@@ -348,28 +362,27 @@ class JSONController {
     try {
       const identity = req.user;
       const userRoles = await JSONController.getUserRoles(tenantId, identity);
-      const event = await EventManager.getEvent(id, tenantId);
+      const event = await EventManager.getEvent(id, tenantId, scopeOf(req));
       const checkoutInstance = await InstanceManager.getInstance();
       const exportOptions = { identity, userRoles, cancellationRefundTiers };
 
-      if (event?.id && event.isPublic === true) {
+      if (event?.id) {
         const tickets = await BookableManager.getEventBookables(
           tenantId,
           event.id,
+          scopeOf(req),
         );
 
-        const publicEvent = event.exportPublic();
+        const publicEvent = event.exportPublic({ absoluteMediaUrls: true });
         publicEvent.tickets = await Promise.all(
-          tickets
-            .filter((ticket) => ticket.isPublic)
-            .map((ticket) =>
-              JSONController._exportPublicBookable(
-                ticket,
-                tenantId,
-                checkoutInstance,
-                exportOptions,
-              ),
+          tickets.map((ticket) =>
+            JSONController._exportPublicBookable(
+              ticket,
+              tenantId,
+              checkoutInstance,
+              exportOptions,
             ),
+          ),
         );
 
         res.setHeader("content-type", "application/json");
@@ -377,9 +390,17 @@ class JSONController {
       } else {
         res.status(404).send("Event not found");
       }
-    } catch {
-      res.sendStatus(500);
+    } catch (error) {
+      JSONController._fail(res, error, "Event not found");
     }
+  }
+
+  /** The public's 404 of a tenant without a projection, a 500 for the rest. */
+  static _fail(res, error, notFoundMessage) {
+    if (error instanceof NotFoundError) {
+      return res.status(404).json({ success: false, message: notFoundMessage });
+    }
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 
   static async getUserRoles(tenantId, identity) {

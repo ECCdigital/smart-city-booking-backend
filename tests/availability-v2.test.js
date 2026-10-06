@@ -8,6 +8,7 @@ const {
 const {
   CheckoutPermissions,
 } = require("../src/commons/services/checkout/checkout-permissions");
+const { DOMAIN } = require("../src/commons/services/authorization/reach");
 
 describe("BookingManager.filterConcurrentBookings", () => {
   const bookings = [
@@ -176,6 +177,7 @@ describe("CalendarServiceV2 opening-hours handling", () => {
       "2026-06-15",
       1,
       { id: "user-1" },
+      DOMAIN,
     );
 
     const dayStart = new Date("2026-06-15T00:00:00").getTime();
@@ -277,6 +279,7 @@ describe("CalendarServiceV2 opening-hours handling", () => {
       "2026-06-15",
       1,
       { id: "user-1" },
+      DOMAIN,
     );
 
     const dayStart = new Date("2026-06-15T00:00:00").getTime();

@@ -1,0 +1,524 @@
+/api/{tenant}/bookings:
+  post:
+    tags:
+      - Bookings
+    summary: Create a manual booking
+    description: |
+      The administration books on behalf of a customer (a manual booking):
+      the booking is prepared, stored in the state the form names and
+      admitted to the lifecycle - the compartments held or the access
+      granted, the receipt of a paid booking issued, the customer, the
+      tenant and the supervisors mailed. The state is named as `status`
+      (`requested`, `payment_due` or `confirmed`; an explicit `status` wins
+      over the three flags sent with it), or in the older form of the
+      flags `isCommitted` and `isPayed`. Needs `manageBookings.create`.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/BookingTenantParam"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              tenantId:
+                type: string
+              status:
+                type: string
+                enum: [requested, payment_due, confirmed]
+                description: |
+                  The state the booking starts in. `confirmed` on a priced
+                  booking needs `paymentMethod` and `timePaid`.
+              paymentMethod:
+                type: string
+                description: The payment method of a booking born confirmed
+              timePaid:
+                type: integer
+                description: The moment of the payment as a Unix timestamp in milliseconds, of a booking born confirmed
+              isCommitted:
+                type: boolean
+                description: The older form of the state
+              isPayed:
+                type: boolean
+              timeBegin:
+                type: integer
+              timeEnd:
+                type: integer
+              bookableItems:
+                type: array
+                items:
+                  type: object
+              name:
+                type: string
+              mail:
+                type: string
+              paymentProvider:
+                type: string
+    responses:
+      "200":
+        description: Created - the booking as stored, with its attachments
+      "400":
+        description: >-
+          `invalid_status` - a state a booking cannot be born in (params carry
+          `status`, or the flags); `missing_payment_details` - `confirmed`
+          with a price and no payment named (params carry `status` and
+          `missing`)
+      "401":
+        description: Not authenticated
+      "403":
+        description: Missing booking creation permission
+  put:
+    tags:
+      - Bookings
+    summary: Update a booking
+    description: |
+      The booking named by `id` is updated: the content change (`amend`)
+      first, then the transitions the three flags ask for, each atomic for
+      itself. A body that carries none of `isCommitted`, `isPayed` and
+      `isRejected` is the content change alone, the state stays; a body
+      that carries any of them reads the missing ones as `false`. The
+      transitions have routes of their own (`/commit`, `/pay`, `/reject`,
+      `/reinstate`). Creating is `POST` on the same path.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/BookingTenantParam"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              id:
+                type: string
+                description: The booking to update
+              tenantId:
+                type: string
+              status:
+                type: string
+                description: Discarded - the state is not an input of an update
+              isCommitted:
+                type: boolean
+                description: The flags are the plan of transitions
+              isPayed:
+                type: boolean
+              isRejected:
+                type: boolean
+              timeBegin:
+                type: integer
+              timeEnd:
+                type: integer
+              bookableItems:
+                type: array
+                items:
+                  type: object
+              name:
+                type: string
+              mail:
+                type: string
+              paymentProvider:
+                type: string
+    responses:
+      "201":
+        description: Updated - the booking as stored
+      "400":
+        description: >-
+          `invalid_status_change` - flags no transition reaches (params carry
+          `status` and `requested`)
+      "401":
+        description: Not authenticated
+      "403":
+        description: Missing booking management permission
+      "404":
+        description: Booking not found
+      "409":
+        description: >-
+          `invalid_transition` - the booking moved between the load and the
+          write, a payment webhook say (params carry `bookingId`, `status`,
+          `transition`)
+
+/api/bookings/assigned:
+  get:
+    tags:
+      - Bookings
+    summary: The bookings of the signed-in customer, across all tenants
+    description: |
+      Every booking assigned to the signed-in user, of every tenant. Each
+      booking carries, beside its stored fields, the customer view of ticket
+      18 (tenant supervision spec §5.2): `tenant`, a snapshot of the tenant -
+      name and support/emergency contact - whatever its supervision level,
+      because the booking is the customer's contract with it; and for a
+      ticket booking `event`, the core data of the event. Neither depends on
+      the public tenant or catalog projection, which a non-public tenant
+      does not have, so a customer's pages render from this answer alone.
+      `?populate=true` adds `_populated` with the lead bookable and the
+      workflow status, as before.
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: populate
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: ["true"]
+    responses:
+      "200":
+        description: The bookings, each with `tenant` and, for a ticket booking, `event`
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/CustomerBooking"
+      "401":
+        description: Not authenticated
+
+/api/{tenant}/bookings/assigned:
+  get:
+    tags:
+      - Bookings
+    summary: The bookings of the signed-in customer in one tenant
+    description: |
+      As `GET /api/bookings/assigned`, limited to the tenant of the path.
+      Each booking carries `tenant` and, for a ticket booking, `event`
+      (ticket 18).
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/BookingTenantParam"
+      - name: populate
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: ["true"]
+    responses:
+      "200":
+        description: The bookings, each with `tenant` and, for a ticket booking, `event`
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/CustomerBooking"
+      "401":
+        description: Not authenticated
+
+/api/{tenant}/bookings/{ids}/status:
+  get:
+    tags:
+      - Bookings
+    summary: The status of one or more bookings (v1)
+    description: |
+      The status view of the bookings named by `ids` (comma-separated),
+      for the storefront's status page after a checkout; an unknown id is
+      left out. Each item carries the customer view of ticket 18: `tenant`,
+      the snapshot of the tenant whatever its supervision level (`null` for
+      a deleted tenant), and for a ticket booking `event`, the core data of
+      the event (`null` when the event is gone). Nothing of the supervision
+      is named.
+    parameters:
+      - $ref: "#/components/parameters/BookingTenantParam"
+      - $ref: "#/components/parameters/BookingIdsParam"
+    responses:
+      "200":
+        description: The status of every booking found
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/BookingStatusV1"
+      "400":
+        description: No booking id named
+
+/api/v2/{tenant}/bookings/{ids}/status:
+  get:
+    tags:
+      - Bookings
+    summary: The status of one or more bookings (v2)
+    description: |
+      Always HTTP 200: a failure is `success: false` with a reason, an
+      unknown id an item with `success: false` and the reason
+      `booking_status.booking_not_found`. A found booking carries its state
+      as `status`, the flags and the i18n key, and the customer view of
+      ticket 18: `tenant`, the snapshot of the tenant whatever its
+      supervision level (`null` for a deleted tenant), and for a ticket
+      booking `event`, the core data of the event (`null` when the event is
+      gone).
+    parameters:
+      - $ref: "#/components/parameters/BookingTenantParam"
+      - $ref: "#/components/parameters/BookingIdsParam"
+    responses:
+      "200":
+        description: The status of the bookings, or the failure
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                data:
+                  type: object
+                  properties:
+                    bookings:
+                      type: array
+                      items:
+                        $ref: "#/components/schemas/BookingStatusV2Item"
+                error:
+                  type: object
+                  description: "On `success: false` at the top level - `missing_parameters`, `internal_error`"
+
+/api/{tenant}/bookings/{bookingId}/reinstate:
+  post:
+    tags:
+      - Bookings
+    summary: Reinstate a rejected or cancelled booking
+    description: |
+      Brings a rejected booking back to `requested` and a cancelled one back
+      to the state it was cancelled from, with price and positions of before;
+      the refund audit is removed and the reason cleared. The access is
+      granted again at `confirmed`, held at `requested` or `payment_due`. No
+      document, no mail. Answer and errors as `POST /bookings/{id}/pay`.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/BookingTenantParam"
+      - $ref: "#/components/parameters/BookingIdParam"
+    responses:
+      "200":
+        description: "Booking reinstated (`success: true`, `data: null`, `errors: []`)"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Missing booking management permission
+      "404":
+        description: "`booking_not_found`"
+      "409":
+        description: >-
+          `invalid_transition` - the booking is not rejected or cancelled, or
+          a cancelled one does not know what it was cancelled from (params
+          carry `bookingId`, `status`, `transition`)
+      "500":
+        description: >-
+          The reinstatement aborted and the booking stays as it was; the body
+          is the plain text `Could not reinstate booking`
+
+/api/{tenant}/bookings/{bookingId}/refund-state:
+  put:
+    tags:
+      - Bookings
+    summary: Set the refund state of a cancelled booking
+    description: |
+      A booking cancelled from `confirmed` with a refund amount above zero
+      carries a refund state at its refund audit,
+      `cancellationRefund.refundState`: `open` from the cancellation on,
+      `completed` once the administration has paid the refund out. This
+      route sets it by hand - the platform pays nothing out itself.
+      `completed` records `refundCompletedAt` and `refundCompletedByUserId`
+      (a repeated `completed` keeps the first mark), `open` drops both. The booking's state stays; a reinstatement removes
+      the refund state with the refund audit. Needs
+      `manageBookings.updateAny`. The booker never sees the refund state:
+      under the reach `own` a booking is answered without it.
+
+      `GET /api/{tenant}/bookings?refundState=open` lists the bookings whose
+      refund is still open (`completed` likewise; another value is
+      `400 invalid_refund_state`). Under the reach `own` the filter matches
+      no booking.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/BookingTenantParam"
+      - $ref: "#/components/parameters/BookingIdParam"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [refundState]
+            properties:
+              refundState:
+                type: string
+                enum: [open, completed]
+    responses:
+      "200":
+        description: The booking as stored, with the refund state
+      "400":
+        description: "`invalid_refund_state` - `refundState` is neither `open` nor `completed`"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Missing booking management permission
+      "404":
+        description: "`booking_not_found`"
+      "409":
+        description: >-
+          `refund_state_not_applicable` - the booking carries no refund
+          state: it is not cancelled, was cancelled unpaid or without a
+          refund amount, or was cancelled before this feature
+
+components:
+  parameters:
+    BookingTenantParam:
+      name: tenant
+      in: path
+      required: true
+      description: Tenant identifier
+      schema:
+        type: string
+    BookingIdParam:
+      name: bookingId
+      in: path
+      required: true
+      description: Booking identifier
+      schema:
+        type: string
+    BookingIdsParam:
+      name: ids
+      in: path
+      required: true
+      description: One or more booking identifiers, comma-separated
+      schema:
+        type: string
+  schemas:
+    BookingTenantSnapshot:
+      type: object
+      nullable: true
+      description: |
+        The tenant as a customer's booking carries it (ticket 18, tenant
+        supervision spec §5.2): the fields `GET /api/tenants/public` names
+        them by, without the supervision level or anything of the
+        supervision, whatever the level. `null` for a deleted tenant.
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        contactName:
+          type: string
+        mail:
+          type: string
+        phone:
+          type: string
+        accessApps:
+          type: array
+          description: The customer service of every active access application that has one
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              customerService:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  phone:
+                    type: string
+                  email:
+                    type: string
+    BookingEventCoreData:
+      type: object
+      nullable: true
+      description: |
+        The core data of the event of a ticket booking (ticket 18): the id,
+        the title and the period as Unix timestamps in milliseconds (`null`
+        where the event names no date). No description, no prices, no media
+        - the booking vouches for the event, not for its offer. Present on
+        ticket bookings only; `null` when the event is gone.
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        timeBegin:
+          type: integer
+          nullable: true
+        timeEnd:
+          type: integer
+          nullable: true
+    CustomerBooking:
+      type: object
+      description: A booking as stored, with the customer view of ticket 18
+      additionalProperties: true
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        status:
+          type: string
+        timeBegin:
+          type: integer
+        timeEnd:
+          type: integer
+        bookableItems:
+          type: array
+          items:
+            type: object
+        tenant:
+          $ref: "#/components/schemas/BookingTenantSnapshot"
+        event:
+          $ref: "#/components/schemas/BookingEventCoreData"
+    BookingStatusV1:
+      type: object
+      properties:
+        bookingId:
+          type: string
+        priceEur:
+          type: number
+        timeBegin:
+          type: integer
+        timeEnd:
+          type: integer
+        status:
+          type: string
+          enum: [requested, payment_due, confirmed, rejected, cancelled]
+        isCommitted:
+          type: boolean
+        isPayed:
+          type: boolean
+        isRejected:
+          type: boolean
+        cancellationPolicy:
+          type: object
+        tenant:
+          $ref: "#/components/schemas/BookingTenantSnapshot"
+        event:
+          $ref: "#/components/schemas/BookingEventCoreData"
+    BookingStatusV2Item:
+      type: object
+      properties:
+        bookingId:
+          type: string
+        success:
+          type: boolean
+        status:
+          type: string
+          enum: [requested, payment_due, confirmed, rejected, cancelled]
+        statusKey:
+          type: string
+        paymentProvider:
+          type: string
+          nullable: true
+        isCommitted:
+          type: boolean
+        isPayed:
+          type: boolean
+        isRejected:
+          type: boolean
+        priceEur:
+          type: number
+        tenant:
+          $ref: "#/components/schemas/BookingTenantSnapshot"
+        event:
+          $ref: "#/components/schemas/BookingEventCoreData"
+        error:
+          type: object
+          description: "On `success: false` - `booking_status.booking_not_found` with `params.bookingId`"

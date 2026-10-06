@@ -11,14 +11,20 @@ const GroupBookingManager = require("../data-managers/group-booking-manager");
 const { BookableManager } = require("../data-managers/bookable-manager");
 const EventManager = require("../data-managers/event-manager");
 const CouponManager = require("../data-managers/coupon-manager");
+const FavoriteManager = require("../data-managers/favorite-manager");
 const MembershipManager = require("../data-managers/membership-manager");
 const InstanceManager = require("../data-managers/instance-manager");
 const TokenSessionService = require("./token-session-service");
+const { notify } = require("../mail-service");
+const { normalizeReturnTarget } = require("./user/return-target");
 
 class UserService {
   static async singUpUser(user, nextUrl, verifyUrl, invitation = null) {
-    const MailController = require("../mail-service/mail-controller");
-    const hook = user.addHook(USER_HOOK_TYPES.VERIFY, { nextUrl, verifyUrl });
+    const returnTarget = normalizeReturnTarget(nextUrl, { verifyUrl });
+    const hook = user.addHook(USER_HOOK_TYPES.VERIFY, {
+      nextUrl: returnTarget,
+      verifyUrl,
+    });
     const createdUser = await UserManager.createUser(user);
 
     if (invitation && invitation.token && invitation.tenantId) {
@@ -29,12 +35,13 @@ class UserService {
       );
     }
 
-    await MailController.sendVerificationRequest(
-      createdUser.id,
-      hook.id,
+    await notify("VERIFICATION_REQUEST", {
+      to: createdUser.id,
+      hookId: hook.id,
       verifyUrl,
-    );
-    await MailController.sendUserCreated(createdUser.id);
+      nextUrl: returnTarget,
+    });
+    await notify("USER_CREATED", { userId: createdUser.id });
   }
 
   /**
@@ -110,11 +117,10 @@ class UserService {
 
     await UserManager.updateUser(user);
 
-    return { success: true };
+    return { success: true, nextUrl: hook.payload?.nextUrl ?? null };
   }
 
   static async requestForgotPassword(email, resetUrl) {
-    const MailController = require("../mail-service/mail-controller");
     const user = await UserManager.getUser(email, true);
 
     if (!user || user.authType !== "local" || user.isSuspended) {
@@ -123,26 +129,33 @@ class UserService {
 
     const userEntity = user instanceof User ? user : new User(user);
 
-    userEntity.hooks.forEach((hook) => {
-      if (
-        hook.type === USER_HOOK_TYPES.FORGOT_PASSWORD &&
-        hook.status === "active"
-      ) {
-        hook.status = "revoked";
-      }
-    });
+    userEntity.revokeActiveHooks(USER_HOOK_TYPES.FORGOT_PASSWORD);
 
     const hook = userEntity.addForgotPasswordHook(resetUrl);
     await UserManager.updateUser(userEntity);
-    await MailController.sendForgotPasswordRequest(
-      userEntity.id,
-      hook.id,
+    await notify("FORGOT_PASSWORD_REQUEST", {
+      to: userEntity.id,
+      hookId: hook.id,
       resetUrl,
-    );
+    });
 
     logger.info(`Forgot password request sent to user ${userEntity.id}`);
 
     return { success: true };
+  }
+
+  /**
+   * The password change of a signed-in user: the new password stands
+   * behind a hook the user confirms from the password reset mail. Lived in
+   * `UserManager` until the mail-stack chain.
+   */
+  static async resetPassword(user, password) {
+    const userEntity = user instanceof User ? user : new User(user);
+
+    const hook = userEntity.addPasswordResetHook(password);
+    await UserManager.updateUser(userEntity);
+    await notify("PASSWORD_RESET", { to: userEntity.id, hookId: hook.id });
+    return hook;
   }
 
   static async resetPasswordWithToken(token, password, id) {
@@ -306,6 +319,11 @@ class UserService {
           normalizedNewId,
           session,
         );
+        await FavoriteManager.reassignUserId(
+          previousId,
+          normalizedNewId,
+          session,
+        );
       }
 
       if (Object.keys(userSet).length > 0) {
@@ -381,6 +399,19 @@ class UserService {
       firstName: updated.firstName,
       lastName: updated.lastName,
     };
+  }
+
+  /**
+   * Removes a user and what is the user's alone: their favorites go with
+   * them (glossary "Favorit"), the first cascade of a user removal. The
+   * bookings, memberships and owned offers stay as they are.
+   *
+   * @param {string} userId
+   * @returns {Promise<void>}
+   */
+  static async deleteUser(userId) {
+    await FavoriteManager.removeFavoritesOfUser(userId);
+    await UserManager.deleteUser(userId);
   }
 }
 
