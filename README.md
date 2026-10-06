@@ -39,14 +39,21 @@ More details: [docs/architecture.md](docs/architecture.md)
 
 ## Versions & Branches
 
-| Branch        | Version line      | Purpose                                            |
-| ------------- | ----------------- | -------------------------------------------------- |
-| `develop`     | **v4.x** (latest) | Active development and integration                 |
-| `version/4.x` | **v4.x** (stable) | Maintenance, security fixes, production tag source |
-| `version/3.x` | **v3.x** (LTS)    | Maintenance and security fixes                     |
+| Branch                             | Purpose                                                                      |
+| ---------------------------------- | ---------------------------------------------------------------------------- |
+| newest `version/<major>.<minor>.x` | Target of all work and pull requests; the next minor release is tagged here  |
+| older `version/<major>.<minor>.x`  | Fixes for a line that is still maintained; its patches are tagged here       |
+| `develop`                          | Default branch; follows the newest `version/…` branch, gets nothing directly |
+| `version/3.x`                      | v3 (LTS): maintenance and security fixes                                     |
 
-- v4 releases: tags `v4.x.x` from `version/4.x`
-- v3 maintenance: tags `v3.x.x` from `version/3.x`
+- **Work and pull requests** go to the newest `version/<major>.<minor>.x`.
+- **Fixes** go to the oldest maintained branch that has the bug and are merged forward regularly, branch by branch, up to the newest.
+- **Maintained** are the `version/<major>.<minor>.x` branches of the current major version. A line that is no longer maintained loses its branch; its tags stay.
+- **Opening a pull request:** GitHub proposes `develop` as the base. Switch it by hand to the `version/…` branch named above.
+- **`develop`** is brought up to the newest `version/…` branch by hand: when new branches are cut, and at every release candidate and release of the newest version. A patch of an older version does not move it; the fix arrives with the next catch-up.
+- **Tags:** every release `v<major>.<minor>.<patch>` is tagged on its `version/<major>.<minor>.x`. v3: tags `v3.x.x` from `version/3.x`.
+
+The newest branch: `git branch -r --list 'origin/version/[0-9]*.[0-9]*.x' --sort=-v:refname | head -1`.
 
 Breaking changes: [docs/CHANGELOG.md](docs/CHANGELOG.md)
 

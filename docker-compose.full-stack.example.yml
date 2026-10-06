@@ -8,8 +8,8 @@
 #
 # Docs: docs/getting-started.md
 #
-# Branch pins: change #develop to version/4.x (backend, admin) or version/1.x
-# (storefront) for a more stable deploy.
+# Pins: for a more stable deploy, change #develop to a release tag
+# (#v<major>.<minor>.<patch>) or use the published GHCR images.
 
 services:
   mongodb:

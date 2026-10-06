@@ -30,11 +30,13 @@ For API-only setup, see the [README Quick Start](../README.md#quick-start). For 
 
 ## Version alignment
 
-| Component  | Branch / line              | Notes                                |
-| ---------- | -------------------------- | ------------------------------------ |
-| Backend    | `develop` or `version/4.x` | v4 API                               |
-| Admin UI   | `develop` or `version/4.x` | Must match backend major line        |
-| Storefront | `develop` or `version/1.x` | Storefront v1.x ↔ backend v4.x only |
+| Component  | Branch / line                     | Notes                                |
+| ---------- | --------------------------------- | ------------------------------------ |
+| Backend    | `develop` or a release tag `v4.…` | v4 API                               |
+| Admin UI   | `develop` or a release tag `v4.…` | Must match backend major line        |
+| Storefront | `develop` or a release tag `v1.…` | Storefront v1.x ↔ backend v4.x only |
+
+`develop` carries the newest state of each repo. To **contribute**, work on the newest `version/<major>.<minor>.x` of the repo instead, and put fixes on the oldest maintained one; they are merged forward from there. `develop` gets nothing directly: GitHub proposes it as a pull request's base, so switch the base by hand to the `version/…` branch. The rule in full: [Versions & Branches](../README.md#versions--branches).
 
 v3 uses the vue-app for both admin and public flows (`version/3.x`). This guide is for **v4** with a separate Storefront.
 
@@ -130,7 +132,7 @@ Ensure MongoDB is running and reachable at the `DB_URL` you configure.
 ```bash
 git clone https://github.com/ECCdigital/smart-city-booking-backend.git
 cd smart-city-booking-backend
-git checkout develop   # or version/4.x
+git checkout develop   # to contribute: the newest version/<major>.<minor>.x
 npm install
 cp .env-example .env
 # Edit secrets, DB_URL, FRONTEND_URL, BACKEND_URL
@@ -144,7 +146,7 @@ API: [http://localhost:8081](http://localhost:8081) — live check: [http://loca
 ```bash
 git clone https://github.com/ECCdigital/smart-city-booking-vue-app.git
 cd smart-city-booking-vue-app
-git checkout develop   # or version/4.x
+git checkout develop   # to contribute: the newest version/<major>.<minor>.x
 npm install
 cp .env-example .env
 # Set VUE_APP_SERVER_BASE_URL=http://localhost:8081
@@ -158,7 +160,7 @@ Admin UI: [http://localhost:8080](http://localhost:8080)
 ```bash
 git clone https://github.com/ECCdigital/smart-city-booking-store-front.git
 cd smart-city-booking-store-front
-git checkout develop   # or version/1.x
+git checkout develop   # to contribute: the newest version/<major>.<minor>.x
 npm install
 cp .env.example .env
 # Set NUXT_API_BASE_URL=http://localhost:8081 and Storefront/Admin URLs (see matrix above)
@@ -197,7 +199,7 @@ docker compose up -d --build
 - Storefront `NUXT_API_BASE_URL=http://backend:8081` — **container → container** (BFF), not `localhost:8080`
 - Storefront public URLs remain `http://localhost:3000`
 
-The example builds the backend from the current directory (`.`) and the frontends from their public GitHub `develop` branches. For a more stable deploy, pin branches in `docker-compose.yml` (e.g. `version/4.x` for backend/admin, `version/1.x` for storefront) or switch `build:` to published GHCR images.
+The example builds the backend from the current directory (`.`) and the frontends from their public GitHub `develop` branches. For a more stable deploy, pin a release tag in `docker-compose.yml` (`#v<major>.<minor>.<patch>` instead of `#develop`) or switch `build:` to published GHCR images.
 
 Nextcloud is **not** included in the Compose file. Set `NEXTCLOUD_*` in `.env` if you need uploads/PDFs — see [nextcloud.md](nextcloud.md).
 
