@@ -42,7 +42,7 @@ The vue-app also ships `booking-manager.min.js` for [embedding components into e
 | **v4.x** | Storefront         | vue-app  |
 | **v3.x** | vue-app (combined) | vue-app  |
 
-v3 maintenance continues on the `version/3.x` branch. Active v4 development is on `develop`; stable v4 releases are maintained on `version/4.x`.
+v3 maintenance continues on the `version/3.x` branch. v4 work happens on the newest `version/<major>.<minor>.x` branch, fixes on the oldest maintained one; `develop` follows the newest. See [Versions & Branches](../README.md#versions--branches).
 
 ## Core data model
 
