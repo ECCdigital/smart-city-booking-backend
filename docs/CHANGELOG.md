@@ -7,6 +7,10 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ## [Unreleased]
 
+### Fixed
+
+- `fast-xml-parser` was a transitive dependency resolving to the vulnerable `4.3.2` (CVE-2026-25896, DOCTYPE entity encoding bypass leading to XSS; also covers CVE-2026-33036). It is now a direct dependency pinned to `^4.5.5`. No code change
+
 ### Added
 
 - The refund state of a cancelled booking (glossary „Erstattungsstand“, ECCdigital/tickets#15): a booking cancelled from `confirmed` with a refund amount above zero carries `cancellationRefund.refundState`, `open` from the cancellation on (single and group, whoever cancels); a reinstatement drops it, bookings cancelled before stay without. `PUT /api/:tenant/bookings/:id/refund-state` (`booking.update`) sets `completed` with moment and person or back to `open` - a repeated `completed` keeps the first mark - and answers `409 refund_state_not_applicable` for a booking without one; `GET /api/:tenant/bookings?refundState=open|completed` filters the list. The booker reads their bookings without the refund state, and the filter answers them nothing. The rule engine lists the field, so a scheduled rule with the query `{ "cancellationRefund.refundState": "open" }` and the action `sendAggregatedEmail` mails each tenant its open refunds; a new partial index on the bookings serves both. Route snapshot updated on purpose. The Admin UI shows and sets the state from its matching release ([smart-city-booking-vue-app](https://github.com/ECCdigital/smart-city-booking-vue-app))
