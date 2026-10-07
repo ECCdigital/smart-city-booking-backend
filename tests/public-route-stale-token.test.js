@@ -146,19 +146,19 @@ describe("public routes: a stale token is refused, no token stays anonymous", fu
         sinon.stub(axios, "post").resolves({ data: { active: false } });
       });
 
+      afterEach(function () {
+        KeycloakVerifier.getSigningKey.restore();
+        axios.post.restore();
+        h.instance.applications = [];
+        KeycloakVerifier.clearCache();
+      });
+
       it("lets the same token through while the session is active", async function () {
         axios.post.resolves({ data: { active: true } });
 
         const res = await h.api().get(PRECHECK).set(bearer(keycloakToken()));
 
         expect(res.status).to.equal(200);
-      });
-
-      afterEach(function () {
-        KeycloakVerifier.getSigningKey.restore();
-        axios.post.restore();
-        h.instance.applications = [];
-        KeycloakVerifier.clearCache();
       });
 
       it('refuses it with 401 "SSO token verification failed", as the protected route does', async function () {

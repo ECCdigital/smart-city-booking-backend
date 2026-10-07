@@ -17,6 +17,7 @@ const { classifyToken } = require("../commons/utilities/token-classifier");
  *
  * @param {import("express").Response} res
  * @param {Error} error - What the verification threw.
+ * @returns {import("express").Response} The response, sent.
  */
 function refuseToken(res, error) {
   let message = "Invalid or expired token";

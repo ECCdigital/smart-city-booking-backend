@@ -20,6 +20,12 @@ const options = {
           type: "http",
           scheme: "bearer",
           bearerFormat: "JWT",
+          description:
+            "Required on protected routes. Public routes take it optionally: " +
+            "without it they answer anonymously, but a token sent along must " +
+            "hold - an expired, revoked or invalid one is refused with 401 " +
+            "and the same message as on a protected route " +
+            '(e.g. `{ "success": false, "message": "Token has expired" }`).',
         },
       },
       schemas: {},
