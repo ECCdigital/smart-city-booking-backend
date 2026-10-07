@@ -275,6 +275,23 @@ function statusFromFlags(flags, priceEur) {
   return STATUS.CONFIRMED;
 }
 
+/**
+ * The state the members of a group share (glossary "Gruppenzustand"),
+ * read off the first member, and the ids of the members that deviate from
+ * it. The guard of the group lifecycle and the consistency check in front
+ * of it compare alike.
+ *
+ * @param {{ id: string, status: string }[]} bookings The members
+ * @returns {{ status: string, deviating: string[] }}
+ */
+function groupStateOf(bookings) {
+  const status = bookings[0].status;
+  const deviating = bookings
+    .filter((booking) => booking.status !== status)
+    .map((booking) => booking.id);
+  return { status, deviating };
+}
+
 module.exports = {
   STATUS,
   STATUSES,
@@ -292,4 +309,5 @@ module.exports = {
   cancelledFromFlags,
   statusFromFlags,
   isImpossibleFlagCombination,
+  groupStateOf,
 };

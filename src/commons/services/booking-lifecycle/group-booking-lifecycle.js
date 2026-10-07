@@ -20,7 +20,13 @@
  * policy failed, the members written before it restored (spec part 2, 4.2).
  */
 
-const { STATUS, TRANSITION, TRIGGER, nextState } = require("./booking-state");
+const {
+  STATUS,
+  TRANSITION,
+  TRIGGER,
+  nextState,
+  groupStateOf,
+} = require("./booking-state");
 const {
   PHASE,
   step,
@@ -55,10 +61,7 @@ function isPricedGroup(bookings) {
  * the same error over every member (`nextStateOf`).
  */
 function sharedStatusOf(transition, groupBookingId, bookings) {
-  const status = bookings[0].status;
-  const deviating = bookings
-    .filter((booking) => booking.status !== status)
-    .map((booking) => booking.id);
+  const { status, deviating } = groupStateOf(bookings);
   if (deviating.length > 0) {
     throw new ConflictError("invalid_transition", {
       groupBookingId,
