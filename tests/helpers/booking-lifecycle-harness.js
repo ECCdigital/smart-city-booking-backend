@@ -95,6 +95,9 @@ const {
 } = require("../../src/commons/services/authorization/table");
 const { Booking } = require("../../src/commons/entities/booking/booking");
 const {
+  ownCondition,
+} = require("../../src/commons/services/authorization/reach");
+const {
   GroupBooking,
 } = require("../../src/commons/entities/groupBooking/groupBooking");
 
@@ -683,11 +686,26 @@ async function installHarness({
         .filter((id) => store.has(id))
         .map((id) => clone(store.get(id))),
     });
+  /**
+   * Whether a stored group is within the reach, by the condition the real
+   * manager queries with (none under `public`); a read without a reach
+   * throws here as it does there (ADR 0002).
+   */
+  const groupWithinReach = (doc, scope) => {
+    const condition =
+      scope?.reach === "public" ? {} : ownCondition("groupBooking", scope);
+    return (
+      Boolean(doc) &&
+      Object.entries(condition).every(([field, value]) => doc[field] === value)
+    );
+  };
   sinon
     .stub(GroupBookingManager, "getGroupBooking")
     .callsFake(async (tenantId, id, populate = false, scope) => {
       const doc = groups.get(id);
-      if (!ofTenant(doc, tenantId) || !withinReach(doc, scope)) return null;
+      if (!groupWithinReach(doc, scope) || !ofTenant(doc, tenantId)) {
+        return null;
+      }
       return populate ? populated(doc) : new GroupBooking(clone(doc));
     });
   sinon
@@ -697,7 +715,7 @@ async function installHarness({
         (group) =>
           ofTenant(group, tenantId) && group.bookingIds.includes(bookingId),
       );
-      if (!withinReach(doc, scope)) return null;
+      if (!groupWithinReach(doc, scope)) return null;
       return populate ? populated(doc) : new GroupBooking(clone(doc));
     });
   sinon

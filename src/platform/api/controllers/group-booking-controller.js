@@ -127,6 +127,7 @@ class GroupBookingController {
         tenantId,
         groupBookingId,
         updateData,
+        scopeOf(req),
       );
 
       return res.status(200).send(updatedGroupBooking);
@@ -268,6 +269,8 @@ class GroupBookingController {
       const groupBooking = await GroupBookingManager.getGroupBooking(
         tenantId,
         groupBookingId,
+        false,
+        scopeOf(req),
       );
 
       if (!groupBooking) {
