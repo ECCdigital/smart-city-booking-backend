@@ -3,7 +3,7 @@ const MediaReferenceGuard = require("../../../commons/services/media/media-refer
 const { reachesOf } = require("../../../commons/services/authorization");
 const KeycloakCheckService = require("../../../commons/services/keycloak-check/keycloak-check-service");
 const JwtHelper = require("../../../commons/utilities/jwt-helper");
-const { BaseError } = require("../../../errors/BaseError");
+const { BaseError, BadRequestError } = require("../../../errors/BaseError");
 
 /**
  * Web Controller for the instance. The right is the router's
@@ -33,6 +33,20 @@ class InstanceController {
     try {
       const { body } = request;
 
+      // The body is stored as the whole instance: one without owners would
+      // leave the instance without an instance owner (ECCdigital/tickets#105).
+      // Empty or blank ids name nobody, so a list of only those counts as none.
+      const namesAnOwner =
+        Array.isArray(body?.ownerUserIds) &&
+        body.ownerUserIds.some(
+          (id) => typeof id === "string" && id.trim() !== "",
+        );
+      if (!namesAnOwner) {
+        throw new BadRequestError("instance_owners_required", {
+          field: "ownerUserIds",
+        });
+      }
+
       await MediaReferenceGuard.assertInstanceStorable(
         body,
         reachesOf(request),
@@ -43,8 +57,9 @@ class InstanceController {
         .status(200)
         .send(updatedInstance?.exportWithMedia() ?? updatedInstance);
     } catch (error) {
-      // A rejected media reference has to reach the admin UI with its code —
-      // the blanket 500 below would hide why the save was refused.
+      // A refused body (no owners, a rejected media reference) has to reach
+      // the admin UI with its code — the blanket 500 below would hide why the
+      // save was refused.
       if (error instanceof BaseError) {
         return response.status(error.statusCode).send(error.toJSON());
       }

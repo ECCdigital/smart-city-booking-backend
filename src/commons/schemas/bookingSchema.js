@@ -147,8 +147,12 @@ const bookingSchemaDefinition = {
   paymentProvider: {
     type: String,
     default: "",
+    // Required only of an unpaid booking with a price: it says how the
+    // tenant asks for the money. A paid booking does without, e.g. one from
+    // before the field became required that is marked paid by transfer
+    // (ECCdigital/tickets#187), as the confirmation's consistency rule does.
     validate: (value, obj) => {
-      if (obj.priceEur > 0 && (!value || value.trim() === "")) {
+      if (obj.priceEur > 0 && !obj.isPayed && (!value || value.trim() === "")) {
         return "required";
       }
       return true;

@@ -8,6 +8,10 @@ For protected routes, send the access token in the `Authorization` header:
 Authorization: Bearer <accessToken>
 ```
 
+Public routes take the header too and then answer for the signed-in user. A token sent along must hold there as well: an expired, revoked or invalid access token is refused with `401` and the same message as on a protected route (`{ "success": false, "message": "Token has expired" }`), not answered as anonymous. Renew it with `POST /auth/refresh` and repeat the request, or send it without the header. Without a token a public route answers anonymously.
+
+The public routes under `/auth` are the exception: sign-in, sign-up, refresh, the verification and password mails, the SSO and card routes and the hooks do not read the `Authorization` header at all. A stale token sent along there is ignored, never answered with `401`, so a client can always sign in anew or renew its token. `GET /auth/me` and `POST /auth/signout` need a session and refuse a stale token like any protected route.
+
 ## Routes
 
 ### POST /auth/signin
@@ -147,16 +151,18 @@ Reset a user's password via a hook.
 
 ### POST /auth/resetpassword
 
-Update the password using the hook data.
+Change the password of the signed-in account (Bearer token required). The new password takes effect once the user confirms it from the mail (`GET /auth/reset/:hookId`). Only the own password: an `id` in the body is not read.
 
 **Request body:**
 
 ```json
 {
-  "id": "someone@example.com",
+  "currentPassword": "current-password",
   "password": "new-password"
 }
 ```
+
+**Responses:** `200` the confirmation mail is sent; `400` `currentPassword` or `password` missing; `401` not signed in; `403` the current password is wrong, or the account has no password of its own (SSO). For a forgotten password use `POST /auth/forgot-password` and `POST /auth/reset-password`.
 
 ### GET /auth/me
 
@@ -232,4 +238,4 @@ Sliding windows counted in MongoDB (`rateLimitEvents`, rows expire after 7 days)
 | `RATE_LIMIT_VERIFICATION_MAIL_PER_IP`            | 30/h    | `POST /auth/resend-verification`, per IP |
 | `RATE_LIMIT_TENANT_SELF_CREATION_PER_USER`       | 3/24h   | tenant self-creation per user            |
 
-The client IP is `req.ip`; the server trusts the proxy headers (`trust proxy`), so run it behind a reverse proxy that sets `X-Forwarded-For` from the connection, not from the client.
+The client IP is `req.ip`. The server takes `X-Forwarded-For` only from the proxies `TRUSTED_PROXIES` names (addresses or CIDR networks); without the variable it counts the direct address of the connection. See [docs/migrations/v4.3.1-upgrade.md](../migrations/v4.3.1-upgrade.md).

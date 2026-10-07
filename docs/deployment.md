@@ -43,7 +43,11 @@ NODE_ENV=production
 LOG_LEVEL=info
 DISABLE_EMAIL_CHECK=false
 PORT=8081
+# The reverse proxy and the Storefront server, as the backend sees them
+TRUSTED_PROXIES=10.0.1.5, 10.0.2.0/24
 ```
+
+`TRUSTED_PROXIES` names the proxies whose `X-Forwarded-For` the backend believes; without it the per-IP rate limits count the proxy's address. See [docs/migrations/v4.3.1-upgrade.md](migrations/v4.3.1-upgrade.md).
 
 See `.env-example` for the full list of configuration options.
 

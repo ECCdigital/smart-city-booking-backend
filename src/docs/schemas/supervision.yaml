@@ -204,6 +204,13 @@ components:
         offerId:
           type: string
           nullable: true
+        offerTitle:
+          type: string
+          nullable: true
+          description: |
+            The current title of the offer the row names, read with the
+            page; `null` for a row without an offer or of an offer that is
+            gone. Not stored with the row.
         eventType:
           type: string
           enum:
