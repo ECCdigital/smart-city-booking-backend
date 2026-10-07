@@ -333,6 +333,12 @@ class BookableController {
       // an edit keeps the stored one, whatever the body carries.
       bookable.review = existingBookable.review ?? emptyReview();
 
+      // A client that leaves the owner out keeps the stored one, so the
+      // owner does not lose the bookable to the schema default.
+      if (request.body.ownerUserId === undefined) {
+        bookable.ownerUserId = existingBookable.ownerUserId;
+      }
+
       if (!existingBookable.isPublic && bookable.isPublic) {
         if (
           (await BookableManager.checkPublicBookableCount(
