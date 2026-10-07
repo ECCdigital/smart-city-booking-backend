@@ -48,7 +48,7 @@ const {
 } = require("../booking-lifecycle/booking-state");
 const { planUpdate } = require("../booking-lifecycle/update-plan");
 const BookingService = require("./booking-service");
-const { DOMAIN } = require("../authorization/reach");
+const { DOMAIN, PUBLIC } = require("../authorization/reach");
 
 const logger = bunyan.createLogger({
   name: "booking-checkout.js",
@@ -136,6 +136,57 @@ async function assertInvoicePermission(
         message: "Sie sind nicht berechtigt, per Rechnung zu bezahlen.",
       });
     }
+  }
+}
+
+/**
+ * A self-booking of an offer behind a login (`requiresLogin`) needs a
+ * signed-in customer (ECCdigital/tickets#123): without one the checkout
+ * refuses with 401 and `checkout.login_required`, as the pre-check names
+ * it, before anything is stored - whether or not the offer names permitted
+ * users or roles, and for a mandatory add-on behind a login too. The offers are read as the public, as the checks read
+ * them: one the public cannot reach is left to the checks, which refuse it
+ * as not there. The administration's manual booking is not asked.
+ *
+ * @param {{ tenantId: string, user?: Object, bookableItems: Object[], policy: string }} params
+ * @returns {Promise<void>}
+ * @throws {CheckoutError} `checkout.login_required` with status 401
+ */
+async function assertSignedInWhereRequired({
+  tenantId,
+  user,
+  bookableItems,
+  policy,
+}) {
+  if (!checkoutPolicy.runsChecks(policy) || user?.id) {
+    return;
+  }
+
+  const requested = (bookableItems || []).filter((item) => item?.bookableId);
+  if (requested.length === 0) {
+    return;
+  }
+  // The cart as the checkout books it: with the mandatory add-ons.
+  const items = await resolveCheckoutItems(requested, tenantId);
+  const ids = [...new Set(items.map((item) => item.bookableId))];
+
+  // A tenant without a public projection reaches nothing either.
+  const bookables = await BookableManager.getBookablesByIds(
+    tenantId,
+    ids,
+    PUBLIC,
+  ).catch((err) => {
+    if (err instanceof BaseError && err.code === "tenant_not_found") {
+      return [];
+    }
+    throw err;
+  });
+  if (bookables.some((bookable) => bookable.requiresLogin)) {
+    throw new CheckoutError({
+      reason: CHECKOUT_REASONS.LOGIN_REQUIRED,
+      statusCode: 401,
+      checkType: "permissions",
+    });
   }
 }
 
@@ -311,6 +362,13 @@ async function createSingleBooking({
   policy = CheckoutPolicy.SELF_SERVICE,
   checkoutId,
 }) {
+  await assertSignedInWhereRequired({
+    tenantId,
+    user,
+    bookableItems: bookingAttempt?.bookableItems,
+    policy,
+  });
+
   const booking = await createBooking({
     tenantId,
     user,
@@ -414,6 +472,17 @@ async function createGroupBooking({
   const sortedBookingAttempts = [...bookingAttempts].sort(
     (a, b) => Number(a.timeBegin) - Number(b.timeBegin),
   );
+
+  // Every attempt before the first is stored: a later one refused here
+  // would leave the earlier ones behind.
+  await assertSignedInWhereRequired({
+    tenantId,
+    user,
+    bookableItems: sortedBookingAttempts.flatMap(
+      (attempt) => attempt?.bookableItems || [],
+    ),
+    policy,
+  });
 
   await assertInvoicePermission(tenantId, user, paymentProvider, policy);
 

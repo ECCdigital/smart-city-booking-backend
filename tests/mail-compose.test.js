@@ -38,6 +38,7 @@ const {
   tenant,
   booking,
   concert,
+  groupMembers,
   membership,
   installMailStackStore,
   issuedFile,
@@ -165,6 +166,18 @@ describe("compose: a notice as mail values", function () {
 
       expect(filenames(mail)).to.deep.equal(["qrcode.png"]);
     });
+
+    for (const type of ["BOOKING_CONFIRMATION", "FREE_BOOKING_CONFIRMATION"]) {
+      it(`${type}: the default subject has single spaces`, async function () {
+        installMailStackStore({ tenant: tenant({ mailSubjects: {} }) });
+
+        const [mail] = await compose(type, single());
+
+        expect(mail.subject).to.equal(
+          "Vielen Dank für Ihre Buchung im Stadthalle Musterstadt",
+        );
+      });
+    }
   });
 
   describe("the aggregated notice of a group", function () {
@@ -213,6 +226,41 @@ describe("compose: a notice as mail values", function () {
       const mails = await compose("INCOMING_BOOKING", single());
 
       expect(mails.map((mail) => mail.to)).to.deep.equal([TENANT_MAIL]);
+    });
+
+    it("calls a requested booking a request, in subject and text", async function () {
+      installMailStackStore({ bookings: [booking({ status: "requested" })] });
+
+      const [mail] = await compose("INCOMING_BOOKING", single());
+
+      expect(mail.subject).to.equal("Eine neue Buchungsanfrage liegt vor");
+      expect(mail.html).to.include("Es liegt eine neue Buchungsanfrage vor.");
+    });
+
+    for (const status of ["confirmed", "payment_due"]) {
+      it(`calls a booking at ${status} a booking, in subject and text`, async function () {
+        installMailStackStore({ bookings: [booking({ status })] });
+
+        const [mail] = await compose("INCOMING_BOOKING", single());
+
+        expect(mail.subject).to.equal("Eine neue Buchung liegt vor");
+        expect(mail.html).to.include("Es liegt eine neue Buchung vor.");
+        expect(mail.html).not.to.include("Buchungsanfrage");
+      });
+    }
+
+    it("calls a requested group a request", async function () {
+      installMailStackStore({
+        bookings: groupMembers().map((member) => ({
+          ...member,
+          status: "requested",
+        })),
+      });
+
+      const [mail] = await compose("INCOMING_BOOKING", group());
+
+      expect(mail.subject).to.equal("Eine neue Buchungsanfrage liegt vor");
+      expect(mail.html).to.include("Es liegt eine neue Buchungsanfrage vor.");
     });
 
     it("is nothing where the tenant does not want one", async function () {

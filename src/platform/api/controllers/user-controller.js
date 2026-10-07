@@ -124,7 +124,9 @@ class UserController {
       logger.info(
         ` Instance -- created user ${userObject.id} by user ${user?.id}`,
       );
-      response.status(200).send(newUser);
+      // The person as `GET /users/:id` shows them: never the password
+      // hash (ECCdigital/tickets#260).
+      response.status(200).send(newUser.exportPublic());
     } catch (error) {
       logger.error(error);
       response.status(500).send("could not create user");

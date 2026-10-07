@@ -1,3 +1,5 @@
+const { groupStateOf } = require("./booking-lifecycle/booking-state");
+
 /**
  * Custom error class for consistency-related errors.
  */
@@ -62,17 +64,23 @@ function checkSameContactDetails(bookings) {
 }
 
 /**
- * Ensures all bookings have the same status.
+ * Ensures all bookings share one booking state (glossary "Gruppenzustand"),
+ * compared as the guard of the group lifecycle does (`groupStateOf`): over
+ * `status`, not over the flags, which differ between a free and a priced member of the same
+ * state.
  *
  * @param {Array<Object>} bookings - The list of bookings to check.
- * @throws {ConsistencyError} If the statuses do not match.
+ * @throws {ConsistencyError} `STATUS_MISMATCH` with the `bookingIds` of the
+ *   members that deviate from the state of most members.
  */
 function checkSameStatus(bookings) {
-  checkSameFields(
-    bookings,
-    ["isCommitted", "isRejected", "isPayed"],
-    "STATUS_MISMATCH",
-  );
+  const { status, deviating } = groupStateOf(bookings);
+  if (deviating.length > 0) {
+    throw new ConsistencyError("STATUS_MISMATCH", "Mismatch in booking state", {
+      status,
+      bookingIds: deviating,
+    });
+  }
 }
 
 /**

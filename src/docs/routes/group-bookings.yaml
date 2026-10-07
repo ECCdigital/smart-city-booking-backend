@@ -65,6 +65,11 @@
     responses:
       "200":
         description: "Group booking paid (`success: true`, `data` the group with its members)"
+      "400":
+        description: >-
+          `ValidationError` - a member does not pass the booking schema, so
+          nothing was paid; `details` name field and code. A payment provider
+          is not required of a paid booking
       "401":
         description: Not authenticated
       "403":

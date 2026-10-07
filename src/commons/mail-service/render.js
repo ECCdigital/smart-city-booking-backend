@@ -305,7 +305,7 @@ async function render(
     return [];
   }
   const booking = bookings[0];
-  const ctx = { tenant, hasAttachments: attachments.length > 0 };
+  const ctx = { tenant, hasAttachments: attachments.length > 0, bookings };
   const includeQRCode = !aggregated && resolve(mailType.includeQRCode, ctx);
   const sendBCC = resolve(mailType.sendBCC, ctx);
   const addRejectionLink = resolve(mailType.addRejectionLink, ctx);

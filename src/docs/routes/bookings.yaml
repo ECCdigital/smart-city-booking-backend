@@ -274,6 +274,54 @@
                   type: object
                   description: "On `success: false` at the top level - `missing_parameters`, `internal_error`"
 
+/api/{tenant}/bookings/{bookingId}/pay:
+  post:
+    tags:
+      - Bookings
+    summary: Mark a booking as paid
+    description: |
+      Pays a booking awaiting payment: it is confirmed and granted, the
+      receipt is attached and the confirmation is mailed. A payment provider
+      is not required of a paid booking.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/BookingTenantParam"
+      - $ref: "#/components/parameters/BookingIdParam"
+    requestBody:
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              paymentMethod:
+                type: string
+                description: How the booking was paid, e.g. `TRANSFER` or `CASH`
+              timePaid:
+                type: integer
+                description: The moment of the payment as a Unix timestamp in milliseconds; now if omitted
+    responses:
+      "200":
+        description: "Booking paid (`success: true`, `data: null`, `errors: []`)"
+      "400":
+        description: >-
+          `ValidationError` - the stored booking does not pass the booking
+          schema, so nothing was paid; `details` name field and code
+      "401":
+        description: Not authenticated
+      "403":
+        description: Missing booking management permission
+      "404":
+        description: "`booking_not_found`"
+      "409":
+        description: >-
+          `invalid_transition` - the booking is not awaiting payment (params
+          carry `bookingId`, `status`, `transition`)
+      "500":
+        description: >-
+          The payment aborted and the booking stays as it was; the body is the
+          plain text `Could not set booking as paid`
+
 /api/{tenant}/bookings/{bookingId}/reinstate:
   post:
     tags:
@@ -284,7 +332,7 @@
       to the state it was cancelled from, with price and positions of before;
       the refund audit is removed and the reason cleared. The access is
       granted again at `confirmed`, held at `requested` or `payment_due`. No
-      document, no mail. Answer and errors as `POST /bookings/{id}/pay`.
+      document, no mail.
     security:
       - bearerAuth: []
     parameters:

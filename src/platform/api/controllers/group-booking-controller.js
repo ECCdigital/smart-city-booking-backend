@@ -129,6 +129,7 @@ class GroupBookingController {
         tenantId,
         groupBookingId,
         updateData,
+        scopeOf(req),
       );
 
       return res.status(200).send(updatedGroupBooking);
@@ -258,6 +259,7 @@ class GroupBookingController {
       answerTransitionError(error, res, {
         code: "set_aggregated_booking_payed_failed",
         fallback: (mapped) => ({ message: mapped.message }),
+        answerValidationError: true,
       });
     }
   }
@@ -269,6 +271,8 @@ class GroupBookingController {
       const groupBooking = await GroupBookingManager.getGroupBooking(
         tenantId,
         groupBookingId,
+        false,
+        scopeOf(req),
       );
 
       if (!groupBooking) {
