@@ -9,6 +9,7 @@ const CHECK_TYPES = Object.freeze({
   CHILD_BOOKINGS: "child-bookings",
   MAX_BOOKING_DATE: "max-booking-date",
   INSUFFICIENT_LEAD_TIME: "insufficient-lead-time",
+  TIME_IN_PAST: "time-in-past",
   TIME_RELATION: "time-relation",
   PRICE_CATEGORY: "price-category",
   MAX_AMOUNT: "max-amount",
