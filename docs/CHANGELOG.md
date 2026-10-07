@@ -13,7 +13,7 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ### Changed
 
-- Docs: the cutover guide of the tenant supervision names the checkout reason the code answers for an offer that is no longer reachable, `checkout.bookable_not_found`, in steps 1 and 6 instead of the removed `checkout.offer_not_reachable` ([ECCdigital/tickets#262](https://github.com/ECCdigital/tickets/issues/262)). No code change
+- Docs: the cutover guide of the tenant supervision names the checkout reason the code answers for an offer that is no longer reachable, `checkout.bookable_not_found`, in steps 1 and 6 instead of the removed `checkout.offer_not_reachable` (ECCdigital/tickets#262). No code change
 - Docs name the branch rule without a version number (ECCdigital/tickets#224): work and pull requests go to the newest `version/<major>.<minor>.x`, fixes to the oldest maintained one and are merged forward, `develop` stays the default branch but only follows the newest; a pull request's base is switched from `develop` by hand. README, `AGENTS.md`, `docs/getting-started.md`, `docs/architecture.md`, `docs/agents/architecture.md` and the Compose example no longer name `version/4.x`, which is gone; a stable deploy pins a release tag or the GHCR images. The mirror to openCode runs for `develop` and every `version/*` branch by pattern. No code change
 - CI: the pull request workflow runs `npm run format:check` and `npm test` after ESLint. No code change
 - Glossary: `GLOSSARY.md` gains the section "Plattform und Distribution" (Instanz, Betreiber, Kern, Komponente, Modul, Erweiterungspunkt, Anbieter, Anbindung, Profil), decided while charting the map ECCdigital/tickets#203. No code change
