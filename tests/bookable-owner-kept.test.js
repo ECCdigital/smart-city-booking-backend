@@ -115,4 +115,18 @@ describe("PUT /:tenant/bookables keeps the owner", function () {
       expect(one.body.title).to.equal("Geändert");
     });
   }
+
+  it("stores the owner a body names, as before", async function () {
+    const res = await call("put", `/api/${TENANT}/bookables`, OWNER, {
+      ...withoutOwner({ title: "Übergeben" }),
+      ownerUserId: OWNER,
+    });
+
+    expect(res.status).to.equal(201);
+    expect(writtenBookables).to.have.length(1);
+    expect(writtenBookables[0]).to.include({
+      id: OWN_ID,
+      ownerUserId: OWNER,
+    });
+  });
 });
