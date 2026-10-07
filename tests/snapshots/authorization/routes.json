@@ -172,7 +172,7 @@
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
-    "instanceOwner": 200
+    "instanceOwner": 400
   },
   "GET /api/instances/supervision/history": {
     "anonymous": 401,
@@ -676,7 +676,7 @@
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
-    "instanceOwner": 200
+    "instanceOwner": 400
   },
   "POST /api/v2/instance/media/": {
     "anonymous": 401,
