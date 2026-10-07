@@ -396,7 +396,7 @@ class PdfService {
     );
 
     const renderedHtml = template(data);
-    const filename = `Zahlungsbeleg-${receiptNumber}.pdf`;
+    const filename = PdfService._buildReceiptFilename("single", receiptNumber);
 
     return await PdfService.convertToPdf(renderedHtml, filename);
   }
@@ -434,7 +434,10 @@ class PdfService {
         DEFAULT_TEMPLATES.receipt,
       );
       const renderedHtml = template(data);
-      const filename = `Sammelbeleg-${receiptNumber}.pdf`;
+      const filename = PdfService._buildReceiptFilename(
+        "aggregated",
+        receiptNumber,
+      );
 
       return await PdfService.convertToPdf(renderedHtml, filename);
     } catch (err) {
@@ -1302,6 +1305,17 @@ class PdfService {
 
   static _scaleCurrency(value, scale) {
     return Math.round((Number(value) || 0) * scale * 100) / 100;
+  }
+
+  /**
+   * Builds receipt PDF filenames from the receipt number. Without a tenant
+   * prefix the number starts with a dash (`-2026-0001-1`, the format receipts
+   * have always carried); the file name leaves it out.
+   */
+  static _buildReceiptFilename(documentType, receiptNumber) {
+    const label =
+      documentType === "aggregated" ? "Sammelbeleg" : "Zahlungsbeleg";
+    return `${label}-${String(receiptNumber).replace(/^-/, "")}.pdf`;
   }
 
   /**

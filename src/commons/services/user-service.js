@@ -16,6 +16,7 @@ const InstanceManager = require("../data-managers/instance-manager");
 const TokenSessionService = require("./token-session-service");
 const { notify } = require("../mail-service");
 const { normalizeReturnTarget } = require("./user/return-target");
+const { normalizeUserId, userIdsMatch } = require("../utilities/user-id-utils");
 
 class UserService {
   static async singUpUser(user, nextUrl, verifyUrl, invitation = null) {
@@ -102,7 +103,10 @@ class UserService {
       }
     }
 
-    if (user.id !== id) {
+    // The account id as given, compared exactly but trimmed and without
+    // regard to case, as every lookup of an account by its id
+    // (ECCdigital/tickets#259).
+    if (!userIdsMatch(user.id, id)) {
       throw { message: "User ID does not match token", status: 400 };
     }
 
@@ -230,12 +234,8 @@ class UserService {
     keycloakId = null,
     anonymize = false,
   }) {
-    const normalizedCurrentId = String(currentId || "")
-      .trim()
-      .toLowerCase();
-    const normalizedNewId = String(newId || "")
-      .trim()
-      .toLowerCase();
+    const normalizedCurrentId = normalizeUserId(currentId);
+    const normalizedNewId = normalizeUserId(newId);
     const normalizedKeycloakId = String(keycloakId || "").trim();
 
     if (!normalizedNewId) {
@@ -253,9 +253,10 @@ class UserService {
     const previousId = currentUser.id;
 
     if (previousId !== normalizedNewId) {
-      const existingTargetUser = await UserManager.getRawUserBy({
-        id: normalizedNewId,
-      });
+      // The account the new id names, found as every account by its id:
+      // an older one stored in another case is taken too
+      // (ECCdigital/tickets#259).
+      const existingTargetUser = await UserManager.getRawUser(normalizedNewId);
       if (
         existingTargetUser &&
         String(existingTargetUser._id) !== String(currentUser._id)

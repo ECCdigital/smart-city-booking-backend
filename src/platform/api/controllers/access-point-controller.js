@@ -10,6 +10,9 @@ const AccessLocationService = require("../../../commons/services/access/access-l
 const AccessEvidenceService = require("../../../commons/services/access/access-evidence-service");
 const AccessInfoService = require("../../../commons/services/access/access-info-service");
 const AccessService = require("../../../commons/services/access/access-service");
+const {
+  hasAccessProvider,
+} = require("../../../commons/services/access/providers/access-provider-registry");
 const { ValidationError } = require("../../../errors/ValidationError");
 const { BaseError, NotFoundError } = require("../../../errors/BaseError");
 const createComponentLogger = require("../../../middleware/logger");
@@ -145,6 +148,7 @@ class AccessPointController {
       tenantId: tenantId,
     });
 
+    AccessPointController._assertProviderRegistered(accessPoint);
     AccessPointController._assertRulePreconditions(accessPoint);
     const listedAccessPoint =
       await AccessPointController._fetchListedAccessPoint(
@@ -181,6 +185,7 @@ class AccessPointController {
       AccessPointController._writableFields(request.body),
     );
 
+    AccessPointController._assertProviderRegistered(accessPoint);
     AccessPointController._assertRulePreconditions(accessPoint);
     const listedAccessPoint =
       await AccessPointController._fetchListedAccessPoint(
@@ -344,6 +349,33 @@ class AccessPointController {
     } catch (err) {
       return next(err);
     }
+  }
+
+  /**
+   * Refuse a provider the registry does not know - a typo such as `dummy`,
+   * which would otherwise be stored and only fail at the door. Checked against
+   * the state the write would leave behind, so an existing access point with
+   * such a provider is refused as soon as it is saved again.
+   *
+   * The registry decides, not the tenant's applications: a provider the
+   * tenant has not switched on yet still takes an access point, so one can be
+   * prepared before the application is.
+   *
+   * @param {AccessPoint} accessPoint The access point as it would be stored
+   * @throws {ValidationError} `unknown_provider` naming the provider
+   */
+  static _assertProviderRegistered(accessPoint) {
+    if (hasAccessProvider(accessPoint.provider)) {
+      return;
+    }
+
+    throw new ValidationError([
+      {
+        field: "provider",
+        code: "unknown_provider",
+        params: { provider: accessPoint.provider },
+      },
+    ]);
   }
 
   /**

@@ -18,10 +18,11 @@
  * out with its event only (§5.2: no leak over embedded objects): the
  * events of the tenant are loaded once per call, and only when a ticket
  * is among the offers. What leaves is the entity as the manager read it,
- * without its review (glossary "Prüfstatus"): the module decides records,
- * not fields, and the review is the one field it removes - once, here,
- * so no public answer carries a status or a private reason and asking
- * twice answers the same. Nothing outside this module asks the offer
+ * without its review (glossary "Prüfstatus") and without the member who
+ * created it (`ownerUserId`, a mail address, ECCdigital/tickets#260): the
+ * module decides records, not fields, and these are the two fields it
+ * removes - once, here, so no public answer carries a status, a private
+ * reason or a person and asking twice answers the same. Nothing outside this module asks the offer
  * gate - the media rights ask `reached` too: a handler that reads through a manager
  * under `public` inherits the projection without a line of its own.
  *
@@ -99,23 +100,25 @@ async function project(tenantId, offers, passes) {
             event: events.get(offer.eventId) ?? null,
           })),
     )
-    .map(withoutReview);
+    .map(publicCopy);
 }
 
 const hangsOnEvent = (offer) =>
   offer?.type === BOOKABLE_TYPES.TICKET && Boolean(offer.eventId);
 
 /**
- * The offer as the public gets it: the same entity, without its review.
- * A copy, so the record the manager read keeps what the review service
- * wrote; the same prototype, so the handlers' entity methods still work.
+ * The offer as the public gets it: the same entity, without its review
+ * and without the member who created it. A copy, so the record the
+ * manager read keeps what the review service wrote; the same prototype,
+ * so the handlers' entity methods still work.
  */
-function withoutReview(offer) {
+function publicCopy(offer) {
   const copy = Object.assign(
     Object.create(Object.getPrototypeOf(offer)),
     offer,
   );
   delete copy.review;
+  delete copy.ownerUserId;
   return copy;
 }
 
