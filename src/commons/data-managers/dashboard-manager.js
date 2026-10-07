@@ -10,6 +10,7 @@ const {
 const {
   isEventBookable,
 } = require("../availability/availability-rules/event-rules");
+const { ownCondition } = require("../services/authorization/reach");
 
 const ALL_STATUS_KEYS = [
   BOOKING_STATUS_I18N.AWAITING_APPROVAL,
@@ -267,8 +268,28 @@ class DashboardManager {
     return map;
   }
 
-  static async countUsers() {
-    return UserModel.countDocuments({});
+  /**
+   * The persons the instance dashboard counts within a reach (ADR 0002,
+   * ECCdigital/tickets#260): under `any` every person of the instance,
+   * under `own` the persons with an active membership in the tenant set
+   * of the scope, each once however many of the tenants they belong to.
+   *
+   * @param {{reach: string, tenantIds?: string[]}} scope - The reach of
+   *   `instanceDashboard.read`.
+   * @returns {Promise<number>}
+   */
+  static async countUsers(scope) {
+    // Under `own` the condition names the tenant set (`{ id: { $in } }`),
+    // under `any` it is empty.
+    const { id: tenantSet } = ownCondition("instanceDashboard", scope);
+    if (!tenantSet) {
+      return UserModel.countDocuments({});
+    }
+    const userIds = await MembershipModel.distinct("userId", {
+      tenantId: tenantSet,
+      status: "active",
+    });
+    return userIds.length;
   }
 
   /**

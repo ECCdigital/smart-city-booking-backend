@@ -3,6 +3,8 @@ const sinon = require("sinon");
 const DashboardManager = require("../src/commons/data-managers/dashboard-manager");
 const BookingModel = require("../src/commons/data-managers/models/bookingModel");
 const BookableModel = require("../src/commons/data-managers/models/bookableModel");
+const MembershipModel = require("../src/commons/data-managers/models/membershipModel");
+const UserModel = require("../src/commons/data-managers/models/userModel");
 const {
   BOOKING_STATUS_I18N,
 } = require("../src/commons/services/booking/booking-status-keys");
@@ -175,6 +177,60 @@ describe("DashboardManager.aggregateRevenueByTenant", function () {
     assert.deepStrictEqual(
       [...result],
       [["demo", { revenueEur: 80, regularRevenueEur: 119 }]],
+    );
+  });
+});
+
+describe("DashboardManager.countUsers (ECCdigital/tickets#260)", function () {
+  let sandbox;
+
+  beforeEach(function () {
+    sandbox = sinon.createSandbox();
+  });
+
+  afterEach(function () {
+    sandbox.restore();
+  });
+
+  it("counts every person of the instance under any", async function () {
+    sandbox.stub(UserModel, "countDocuments").resolves(57);
+    const distinct = sandbox.stub(MembershipModel, "distinct");
+
+    const count = await DashboardManager.countUsers({
+      reach: "any",
+      userId: "admin",
+    });
+
+    assert.strictEqual(count, 57);
+    assert.strictEqual(distinct.called, false);
+  });
+
+  it("counts under own the distinct persons of active memberships in the tenant set", async function () {
+    const countDocuments = sandbox.stub(UserModel, "countDocuments");
+    const distinct = sandbox
+      .stub(MembershipModel, "distinct")
+      .resolves(["a@example.test", "b@example.test"]);
+
+    const count = await DashboardManager.countUsers({
+      reach: "own",
+      userId: "owner",
+      tenantIds: ["demo", "nord"],
+    });
+
+    assert.strictEqual(count, 2);
+    assert.strictEqual(countDocuments.called, false);
+    assert.deepStrictEqual(distinct.firstCall.args, [
+      "userId",
+      { tenantId: { $in: ["demo", "nord"] }, status: "active" },
+    ]);
+  });
+
+  it("refuses a count without a reach", async function () {
+    sandbox.stub(UserModel, "countDocuments").resolves(57);
+
+    await assert.rejects(
+      () => DashboardManager.countUsers(),
+      /without a reach/,
     );
   });
 });
