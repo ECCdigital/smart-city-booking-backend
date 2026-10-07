@@ -31,7 +31,7 @@ const logger = bunyan.createLogger({
  *   The body of the 500, or a function of the error that makes it
  * @param {function(BaseError): Object} [options.body] The body of an answer
  *   under 500; the error's JSON form unless the endpoint keeps another
- * @param {boolean} [options.answerInvalidBooking] Whether an abort caused by
+ * @param {boolean} [options.answerValidationError] Whether an abort caused by
  *   a `ValidationError` of the stored booking answers that error
  */
 function answerTransitionError(
@@ -41,12 +41,16 @@ function answerTransitionError(
     code,
     fallback,
     body = (error) => error.toJSON(),
-    answerInvalidBooking = false,
+    answerValidationError = false,
   },
 ) {
   const aborted = err instanceof LifecycleError;
   let error = err;
-  if (aborted && answerInvalidBooking && err.cause instanceof ValidationError) {
+  if (
+    aborted &&
+    answerValidationError &&
+    err.cause instanceof ValidationError
+  ) {
     error = err.cause;
   } else if (aborted) {
     error = new BaseError(code, 500, { message: err.message });

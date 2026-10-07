@@ -256,7 +256,7 @@ class GroupBookingController {
       answerTransitionError(error, res, {
         code: "set_aggregated_booking_payed_failed",
         fallback: (mapped) => ({ message: mapped.message }),
-        answerInvalidBooking: true,
+        answerValidationError: true,
       });
     }
   }
