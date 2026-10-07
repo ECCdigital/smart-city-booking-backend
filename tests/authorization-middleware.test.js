@@ -274,6 +274,19 @@ describe("authorization middleware: the three markers", function () {
       });
     });
 
+    it("does not read the header on the front door auth.all, valid or not (ECCdigital/tickets#109)", async function () {
+      const frontDoor = app(["/signin", publicRoute("auth", "all"), answer]);
+      const invalid = await request(frontDoor)
+        .get("/api/t1/signin")
+        .set({ Authorization: "Bearer nonsense" });
+      const valid = await request(frontDoor)
+        .get("/api/t1/signin")
+        .set(as("customer"));
+      expect(invalid.status).to.equal(200);
+      expect(invalid.body).to.deep.equal({ reach: "public", user: null });
+      expect(valid.body).to.deep.equal({ reach: "public", user: null });
+    });
+
     it("answers public without arguments", async function () {
       const plain = app(["/holidays", publicRoute(), answer]);
       const res = await request(plain).get("/api/t1/holidays");

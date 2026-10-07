@@ -5,7 +5,7 @@
     "roleHolder": 400,
     "tenantOwner": 400,
     "instanceOwner": 400,
-    "expiredToken": 401
+    "expiredToken": 400
   },
   "POST /auth/refresh": {
     "anonymous": 401,
@@ -21,7 +21,7 @@
     "roleHolder": 400,
     "tenantOwner": 400,
     "instanceOwner": 400,
-    "expiredToken": 401
+    "expiredToken": 400
   },
   "POST /auth/check-email": {
     "anonymous": 400,
@@ -29,7 +29,7 @@
     "roleHolder": 400,
     "tenantOwner": 400,
     "instanceOwner": 400,
-    "expiredToken": 401
+    "expiredToken": 400
   },
   "POST /auth/resend-verification": {
     "anonymous": 202,
@@ -37,7 +37,7 @@
     "roleHolder": 202,
     "tenantOwner": 202,
     "instanceOwner": 202,
-    "expiredToken": 401
+    "expiredToken": 202
   },
   "POST /auth/forgot-password": {
     "anonymous": 200,
@@ -45,7 +45,7 @@
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200,
-    "expiredToken": 401
+    "expiredToken": 200
   },
   "POST /auth/reset-password": {
     "anonymous": 400,
@@ -53,7 +53,7 @@
     "roleHolder": 400,
     "tenantOwner": 400,
     "instanceOwner": 400,
-    "expiredToken": 401
+    "expiredToken": 400
   },
   "POST /auth/sso/signin": {
     "anonymous": 400,
@@ -61,7 +61,7 @@
     "roleHolder": 400,
     "tenantOwner": 400,
     "instanceOwner": 400,
-    "expiredToken": 401
+    "expiredToken": 400
   },
   "POST /auth/sso/signup": {
     "anonymous": "timeout",
@@ -69,7 +69,7 @@
     "roleHolder": "timeout",
     "tenantOwner": "timeout",
     "instanceOwner": "timeout",
-    "expiredToken": 401
+    "expiredToken": "timeout"
   },
   "POST /auth/sso/verify": {
     "anonymous": 400,
@@ -77,7 +77,7 @@
     "roleHolder": 400,
     "tenantOwner": 400,
     "instanceOwner": 400,
-    "expiredToken": 401
+    "expiredToken": 400
   },
   "GET /auth/card-methods": {
     "anonymous": 200,
@@ -85,7 +85,7 @@
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200,
-    "expiredToken": 401
+    "expiredToken": 200
   },
   "POST /auth/card/signin": {
     "anonymous": 400,
@@ -93,7 +93,7 @@
     "roleHolder": 400,
     "tenantOwner": 400,
     "instanceOwner": 400,
-    "expiredToken": 401
+    "expiredToken": 400
   },
   "POST /auth/card/signup": {
     "anonymous": 400,
@@ -101,7 +101,7 @@
     "roleHolder": 400,
     "tenantOwner": 400,
     "instanceOwner": 400,
-    "expiredToken": 401
+    "expiredToken": 400
   },
   "GET /auth/card/link": {
     "anonymous": 400,
@@ -109,7 +109,7 @@
     "roleHolder": 400,
     "tenantOwner": 400,
     "instanceOwner": 400,
-    "expiredToken": 401
+    "expiredToken": 400
   },
   "POST /auth/card/link": {
     "anonymous": 400,
@@ -117,7 +117,7 @@
     "roleHolder": 400,
     "tenantOwner": 400,
     "instanceOwner": 400,
-    "expiredToken": 401
+    "expiredToken": 400
   },
   "GET /auth/verify/:hookId": {
     "anonymous": 302,
@@ -125,7 +125,7 @@
     "roleHolder": 302,
     "tenantOwner": 302,
     "instanceOwner": 302,
-    "expiredToken": 401
+    "expiredToken": 302
   },
   "GET /auth/reset/:hookId": {
     "anonymous": 302,
@@ -133,7 +133,7 @@
     "roleHolder": 302,
     "tenantOwner": 302,
     "instanceOwner": 302,
-    "expiredToken": 401
+    "expiredToken": 302
   },
   "POST /auth/verify-email": {
     "anonymous": 400,
@@ -141,7 +141,7 @@
     "roleHolder": 400,
     "tenantOwner": 400,
     "instanceOwner": 400,
-    "expiredToken": 401
+    "expiredToken": 400
   },
   "POST /auth/signin": {
     "anonymous": "403 {\"message\":\"Authentication failed\"}",
@@ -149,7 +149,7 @@
     "roleHolder": "403 {\"message\":\"Authentication failed\"}",
     "tenantOwner": "403 {\"message\":\"Authentication failed\"}",
     "instanceOwner": "403 {\"message\":\"Authentication failed\"}",
-    "expiredToken": 401
+    "expiredToken": "403 {\"message\":\"Authentication failed\"}"
   },
   "POST /auth/signout": {
     "anonymous": 401,

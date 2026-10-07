@@ -11,6 +11,12 @@
  * protected route to compare with is `GET /auth/me`. A revoked token is a
  * Keycloak session the introspection answers inactive: a local access
  * token is not revoked before it expires.
+ *
+ * The exception are the public routes of the auth router (`/auth/*`, entry
+ * `auth.all`): they are what a session is made of, so they do not read a
+ * header sent along at all - a client with a stale token signs in anew,
+ * asks for a mail or renews its token there. The routes of the router that
+ * need a session (`/auth/me`, `/auth/signout`) stay protected.
  */
 
 const crypto = require("crypto");
@@ -26,6 +32,8 @@ const {
   CUSTOMER,
 } = require("./helpers/booking-lifecycle-harness");
 const KeycloakVerifier = require("../src/commons/utilities/keycloak-verifier");
+const JwtHelper = require("../src/commons/utilities/jwt-helper");
+const UserManager = require("../src/commons/data-managers/user-manager");
 const {
   CHECKOUT_REASONS,
 } = require("../src/commons/services/checkout/checkout-reasons");
@@ -203,5 +211,74 @@ describe("public routes: a stale token is refused, no token stays anonymous", fu
 
     expect(res.status).to.equal(200);
     expect(res.body).to.deep.equal({ success: true });
+  });
+
+  describe("the public auth routes do not read the header", function () {
+    const stale = [
+      ["an expired token", () => h.as(CUSTOMER, { expiresIn: -60 })],
+      [
+        "a token signed with another key",
+        () => bearer(jwt.sign({ sub: CUSTOMER }, "another-key")),
+      ],
+      ["a header whose token is no JWT", () => bearer("garbage")],
+    ];
+
+    describe("POST /auth/signin", function () {
+      beforeEach(function () {
+        // The local strategy needs a verified local user who knows the
+        // password; the tokens are the JWT helper's, whose refresh token
+        // would write a session.
+        UserManager.getUser.restore();
+        sinon.stub(UserManager, "getUser").callsFake(async (id) => ({
+          id,
+          isVerified: true,
+          isSuspended: false,
+          authType: "local",
+          verifyPassword: () => true,
+        }));
+        sinon.stub(JwtHelper, "generateToken").resolves("fresh-access");
+        sinon.stub(JwtHelper, "generateRefreshToken").resolves("fresh-refresh");
+      });
+
+      afterEach(function () {
+        JwtHelper.generateToken.restore();
+        JwtHelper.generateRefreshToken.restore();
+        UserManager.getUser.restore();
+        sinon.stub(UserManager, "getUser").callsFake(async (id) => ({ id }));
+      });
+
+      for (const [name, headers] of stale) {
+        it(`signs in with ${name} sent along`, async function () {
+          const res = await h
+            .api()
+            .post("/auth/signin")
+            .set(headers())
+            .send({ id: CUSTOMER, password: "geheim" });
+
+          expect(res.status).to.equal(200);
+          expect(res.body.accessToken).to.equal("fresh-access");
+        });
+      }
+    });
+
+    it("asks for a reset mail with an expired token sent along", async function () {
+      const res = await h
+        .api()
+        .post("/auth/forgot-password")
+        .set(h.as(CUSTOMER, { expiresIn: -60 }))
+        .send({ id: CUSTOMER });
+
+      expect(res.status).to.equal(200);
+    });
+
+    it("keeps refusing the expired token on a public route elsewhere and on the protected auth route", async function () {
+      const { precheck, protectedRoute } = await bothWith(
+        h.as(CUSTOMER, { expiresIn: -60 }),
+      );
+
+      expect(precheck.status).to.equal(401);
+      expect(precheck.body.message).to.equal("Token has expired");
+      expect(protectedRoute.status).to.equal(401);
+    });
   });
 });

@@ -25,7 +25,8 @@ const options = {
             "without it they answer anonymously, but a token sent along must " +
             "hold - an expired, revoked or invalid one is refused with 401 " +
             "and the same message as on a protected route " +
-            '(e.g. `{ "success": false, "message": "Token has expired" }`).',
+            '(e.g. `{ "success": false, "message": "Token has expired" }`). ' +
+            "The public routes under /auth (sign-in, refresh, ...) do not read it.",
         },
       },
       schemas: {},

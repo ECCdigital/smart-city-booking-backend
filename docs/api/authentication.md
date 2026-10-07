@@ -10,6 +10,8 @@ Authorization: Bearer <accessToken>
 
 Public routes take the header too and then answer for the signed-in user. A token sent along must hold there as well: an expired, revoked or invalid access token is refused with `401` and the same message as on a protected route (`{ "success": false, "message": "Token has expired" }`), not answered as anonymous. Renew it with `POST /auth/refresh` and repeat the request, or send it without the header. Without a token a public route answers anonymously.
 
+The public routes under `/auth` are the exception: sign-in, sign-up, refresh, the verification and password mails, the SSO and card routes and the hooks do not read the `Authorization` header at all. A stale token sent along there is ignored, never answered with `401`, so a client can always sign in anew or renew its token. `GET /auth/me` and `POST /auth/signout` need a session and refuse a stale token like any protected route.
+
 ## Routes
 
 ### POST /auth/signin

@@ -4,7 +4,8 @@
  * principals - anonymous, signed in without a role, holder of every role
  * level, tenant owner, instance owner - and with the customer's expired
  * token (ECCdigital/tickets#109: refused like a protected route's, on a
- * public route too), and the status code each gets is pinned in
+ * public route too, but not read on the public routes under `/auth`), and
+ * the status code each gets is pinned in
  * `tests/snapshots/authorization/routes.json`. A 403 whose body is more
  * than the bare `Forbidden` of `sendStatus(403)` is pinned with its body,
  * to show the seven answer forms of a refusal that are folded into

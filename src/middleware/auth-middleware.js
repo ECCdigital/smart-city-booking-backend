@@ -132,7 +132,8 @@ const requireAuth = async (req, res, next) => {
  * route: an expired, revoked or invalid one is refused with the same 401
  * (`refuseToken`), never taken for anonymous, so the client renews it
  * (ECCdigital/tickets#109). A valid token whose user is unknown or
- * suspended stays anonymous.
+ * suspended stays anonymous. The front door `auth.all` does not run this
+ * at all (`FRONT_DOOR` in `commons/services/authorization/middleware.js`).
  */
 const optionalAuth = async (req, res, next) => {
   const token = JwtHelper.extractToken(req.headers.authorization);
