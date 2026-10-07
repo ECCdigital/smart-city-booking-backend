@@ -37,6 +37,12 @@ describe("checkout: an offer behind a login", function () {
           title: "Raum mit Anmeldung",
           requiresLogin: true,
         }),
+        // An offer open to guests whose mandatory add-on is behind a login.
+        "room-with-login-addon": bookable({
+          id: "room-with-login-addon",
+          title: "Raum mit Pflicht-Ergänzung",
+          checkoutBookableIds: [{ bookableId: "login-room", mandatory: true }],
+        }),
       },
     });
   });
@@ -129,6 +135,17 @@ describe("checkout: an offer behind a login", function () {
           { bookableId: "login-room", amount: 1 },
         ],
       }),
+    );
+
+    expect(res.status).to.equal(401);
+    expect(res.body.error.reason).to.equal(CHECKOUT_REASONS.LOGIN_REQUIRED);
+    expect(h.store.size).to.equal(0);
+  });
+
+  it("refuses an offer whose mandatory add-on is behind a login", async function () {
+    const res = await post(
+      `/api/v2/${TENANT}/checkout`,
+      checkoutBody("room-with-login-addon"),
     );
 
     expect(res.status).to.equal(401);

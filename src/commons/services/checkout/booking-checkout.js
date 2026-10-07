@@ -144,11 +144,12 @@ async function assertInvoicePermission(
  * signed-in customer (ECCdigital/tickets#123): without one the checkout
  * refuses with 401 and `checkout.login_required`, as the pre-check names
  * it, before anything is stored - whether or not the offer names permitted
- * users or roles. The offers are read as the public, as the checks read
+ * users or roles, and for a mandatory add-on behind a login too. The offers are read as the public, as the checks read
  * them: one the public cannot reach is left to the checks, which refuse it
  * as not there. The administration's manual booking is not asked.
  *
  * @param {{ tenantId: string, user?: Object, bookableItems: Object[], policy: string }} params
+ * @returns {Promise<void>}
  * @throws {CheckoutError} `checkout.login_required` with status 401
  */
 async function assertSignedInWhereRequired({
@@ -161,14 +162,13 @@ async function assertSignedInWhereRequired({
     return;
   }
 
-  const ids = [
-    ...new Set(
-      (bookableItems || []).map((item) => item?.bookableId).filter(Boolean),
-    ),
-  ];
-  if (ids.length === 0) {
+  const requested = (bookableItems || []).filter((item) => item?.bookableId);
+  if (requested.length === 0) {
     return;
   }
+  // The cart as the checkout books it: with the mandatory add-ons.
+  const items = await resolveCheckoutItems(requested, tenantId);
+  const ids = [...new Set(items.map((item) => item.bookableId))];
 
   // A tenant without a public projection reaches nothing either.
   const bookables = await BookableManager.getBookablesByIds(
