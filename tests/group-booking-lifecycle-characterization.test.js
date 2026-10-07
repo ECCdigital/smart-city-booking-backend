@@ -416,6 +416,40 @@ describe("group booking lifecycle today: what each state change does at the seam
       ]);
       expect(h.takeEffects()).to.deep.equal([]);
     });
+
+    it("names every member that deviates from the first in meta.bookingIds", async function () {
+      const first = await h.manualBooking("room");
+      const second = await h.manualBooking("room", { isCommitted: true });
+      const third = await h.manualBooking("room");
+      const fourth = await h.manualBooking("room", { isCommitted: true });
+      const id = await seedGroup([first.id, second.id, third.id, fourth.id]);
+
+      const res = await commit(id);
+
+      expect(res.body.errors).to.have.length(1);
+      expect(res.body.errors[0].code).to.equal("STATUS_MISMATCH");
+      expect(res.body.errors[0].meta.bookingIds).to.deep.equal([
+        second.id,
+        fourth.id,
+      ]);
+    });
+
+    it("confirms a request of a free and a priced member: the same state, though the flags differ", async function () {
+      const free = await h.manualBooking("free-request-room");
+      const priced = await h.manualBooking("room");
+      expect([stateOf(free), stateOf(priced)]).to.deep.equal([
+        "requested",
+        "requested",
+      ]);
+      expect(free.isPayed).to.not.equal(priced.isPayed);
+      const id = await seedGroup([free.id, priced.id]);
+
+      const res = await commit(id);
+
+      expect(res.status).to.equal(200);
+      expect(res.body.success).to.equal(true);
+      expect(states(id)).to.deep.equal(["confirmed", "payment_due"]);
+    });
   });
 
   // -----------------------------------------------------------------------

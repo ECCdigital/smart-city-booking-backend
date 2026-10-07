@@ -62,17 +62,26 @@ function checkSameContactDetails(bookings) {
 }
 
 /**
- * Ensures all bookings have the same status.
+ * Ensures all bookings share one booking state (glossary "Gruppenzustand"),
+ * compared like the guard of the group lifecycle: over `status`, not over
+ * the flags, which differ between a free and a priced member of the same
+ * state.
  *
  * @param {Array<Object>} bookings - The list of bookings to check.
- * @throws {ConsistencyError} If the statuses do not match.
+ * @throws {ConsistencyError} `STATUS_MISMATCH` with the `bookingIds` of the
+ *   members that deviate from the first.
  */
 function checkSameStatus(bookings) {
-  checkSameFields(
-    bookings,
-    ["isCommitted", "isRejected", "isPayed"],
-    "STATUS_MISMATCH",
-  );
+  const [first, ...rest] = bookings;
+  const bookingIds = rest
+    .filter((b) => b.status !== first.status)
+    .map((b) => b.id);
+  if (bookingIds.length > 0) {
+    throw new ConsistencyError("STATUS_MISMATCH", "Mismatch in booking state", {
+      status: first.status,
+      bookingIds,
+    });
+  }
 }
 
 /**
