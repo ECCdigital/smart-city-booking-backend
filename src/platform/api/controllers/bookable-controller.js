@@ -182,11 +182,25 @@ class BookableController {
       ? await EventManager.getEvent(bookable.eventId, bookable.tenantId, scope)
       : null;
     return {
-      event: event ? event.withoutReview() : null,
+      event: event ? BookableController._publicEvent(event) : null,
       relatedBookables: related.map((relatedBookable) =>
         relatedBookable.withResolvedMediaUrls(),
       ),
     };
+  }
+
+  /**
+   * The event embedded in a public bookable: without its review and
+   * without the mail address of the member who created it
+   * (ECCdigital/tickets#260).
+   *
+   * @param {import("../../../commons/entities/event/event").Event} event
+   * @returns {Object}
+   */
+  static _publicEvent(event) {
+    // eslint-disable-next-line no-unused-vars
+    const { ownerUserId, ...fields } = event.withoutReview();
+    return fields;
   }
 
   /**
