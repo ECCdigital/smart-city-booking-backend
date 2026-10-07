@@ -35,10 +35,13 @@ class InstanceController {
 
       // The body is stored as the whole instance: one without owners would
       // leave the instance without an instance owner (ECCdigital/tickets#105).
-      if (
-        !Array.isArray(body?.ownerUserIds) ||
-        body.ownerUserIds.length === 0
-      ) {
+      // Empty or blank ids name nobody, so a list of only those counts as none.
+      const namesAnOwner =
+        Array.isArray(body?.ownerUserIds) &&
+        body.ownerUserIds.some(
+          (id) => typeof id === "string" && id.trim() !== "",
+        );
+      if (!namesAnOwner) {
         throw new BadRequestError("instance_owners_required", {
           field: "ownerUserIds",
         });

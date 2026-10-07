@@ -101,6 +101,8 @@ describe("PUT /api/instances without owners", function () {
     ["an empty body", {}],
     ["a body without ownerUserIds", { contactUrl: "https://a.example" }],
     ["an empty owner list", { ownerUserIds: [], isInitialized: true }],
+    ["an owner list of one empty id", { ownerUserIds: [""] }],
+    ["an owner list of blank ids", { ownerUserIds: ["  ", "", "\t"] }],
   ]) {
     it(`refuses ${name} with 400 and keeps the instance`, async function () {
       const res = await put(body);

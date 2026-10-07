@@ -94,8 +94,8 @@
       "400":
         description: |
           `instance_owners_required` with `params: { field: "ownerUserIds" }`
-          for a body without `ownerUserIds` or with an empty list; nothing is
-          stored. `invalid_supervision_level` with `params: { field, level, allowed }`
+          for a body without `ownerUserIds`, with an empty list or with a list
+          of only empty or blank ids; nothing is stored. `invalid_supervision_level` with `params: { field, level, allowed }`
           for a `tenantInitialSupervisionLevel` outside the initial levels
           (`allowed: [free, supervised, pending]`; `declined`, `null` and `""`
           included); `validation_failed` for the other fields.
