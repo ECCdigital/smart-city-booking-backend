@@ -31,6 +31,7 @@ const {
   runEventDateCheck,
   runMaxBookingDateCheck,
   runMinBookingLeadTimeCheck,
+  runTimeInPastCheck,
 } = require("../../availability/checkout-availability-checks");
 const {
   isTimeRelatedBookable,
@@ -922,6 +923,13 @@ class ItemCheckoutService {
     return runMinBookingLeadTimeCheck(await this._availabilityParams());
   }
 
+  async checkTimeInPast() {
+    return runTimeInPastCheck({
+      originBookable: this.originBookable,
+      timeBegin: this.timeBegin,
+    });
+  }
+
   async checkEventDate() {
     const provider = await this._getAvailabilityProvider();
     return runEventDateCheck({
@@ -997,7 +1005,7 @@ class ItemCheckoutService {
     }
 
     if (stopOnFirstError) {
-      return await Promise.all([
+      const results = await Promise.all([
         this.checkPermissions(),
         this.checkOpeningHours(),
         this.checkMaxAmount(),
@@ -1012,6 +1020,11 @@ class ItemCheckoutService {
         this.checkMaxBookingDate(),
         this.checkMinBookingLeadTime(),
       ]);
+      // Last, so a validation names a conflict first: the staff's booking
+      // form validates a backwards booking over this validation, for
+      // information only (ECCdigital/tickets#188).
+      results.push(await this.checkTimeInPast());
+      return results;
     }
 
     return await Promise.allSettled([
@@ -1028,6 +1041,7 @@ class ItemCheckoutService {
       this.checkChildBookings(),
       this.checkMaxBookingDate(),
       this.checkMinBookingLeadTime(),
+      this.checkTimeInPast(),
     ]);
   }
 

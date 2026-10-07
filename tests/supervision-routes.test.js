@@ -321,6 +321,56 @@ describe("supervision routes", function () {
       }
     });
 
+    it("names each offer of a row by its title, null for one that is gone", async function () {
+      const row = (id, offerType, offerId) => ({
+        id,
+        tenantId: TENANT,
+        offerType,
+        offerId,
+        eventType: offerType ? "review.submitted" : "tenant.levelChanged",
+        occurredAt: new Date(0),
+        actor: { type: "user", userId: OWNER },
+      });
+      SupervisionHistoryManager.list.resolves({
+        items: [
+          row("h1", "bookable", FIXTURE_ID),
+          row("h2", "event", FIXTURE_ID),
+          row("h3", "bookable", "gone"),
+          row("h4", "event", "gone"),
+          row("h5", null, null),
+        ],
+        total: 5,
+        page: 1,
+        pageSize: 50,
+      });
+      try {
+        for (const [path, userId] of [
+          [`/tenants/${TENANT}/supervision/history`, OWNER],
+          ["/instances/supervision/history", ADMIN],
+        ]) {
+          const res = await call("get", path, userId);
+          expect(res.status).to.equal(200);
+          expect(
+            res.body.items.map((item) => [item.id, item.offerTitle]),
+          ).to.deep.equal([
+            ["h1", "Fixture"],
+            ["h2", "Sommerkonzert"],
+            ["h3", null],
+            ["h4", null],
+            ["h5", null],
+          ]);
+          expect(res.body.total).to.equal(5);
+        }
+      } finally {
+        SupervisionHistoryManager.list.resolves({
+          items: [],
+          total: 0,
+          page: 1,
+          pageSize: 50,
+        });
+      }
+    });
+
     it("refuses an unknown offer type in the filter", async function () {
       const res = await call(
         "get",
