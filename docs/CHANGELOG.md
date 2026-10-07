@@ -46,6 +46,10 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 - Supervision mails to tenant owners say „Freigabestufe" (spec §8); the self-creation notice to instance owners keeps „Aufsichtsstufe". A change to `declined` has its own subject („Ihr Mandant X wurde abgewiesen"), a hint and a contact line from `instance.contactAddress` or `mailAddress`; its withdrawal is the generic level change. Mail snapshots change on purpose
 
+### Fixed
+
+- The checkout took a guest booking of an offer behind a login ([ECCdigital/tickets#123](https://github.com/ECCdigital/tickets/issues/123)): only the pre-check of the permissions asked for `requiresLogin`, so an offer without permitted users or roles was booked without a sign-in and stored without `assignedUserId`. The completion of a self-booking now refuses a customer who is not signed in with `401` and `checkout.login_required` and stores nothing, in v1 (`POST /api/:tenant/checkout`, `…/checkout/group`, body `checkout.login_required`) and v2 (`POST /api/v2/:tenant/checkout`, `…/checkout/group`, `{ success: false, error: { reason: "checkout.login_required", checkType: "permissions" } }`), simulated or not, when any offer in the cart or in any attempt of a group requires a login. The pre-check (`GET /api/v2/:tenant/checkout/permissions/:id`) keeps answering `200` with this reason; the validation and the administration's manual booking are unchanged. Storefront and Admin UI offer the sign-in at the refusal from their matching releases
+
 ### Added
 
 - Maximum per booking of a bookable (ECCdigital/tickets#35): the field `maxAmountPerBooking` (integer ≥ 1, empty is unlimited) caps the units of a bookable one self-booking holds, summed over its positions of it; a mandatory addon does not count, a manual booking is not checked, an external provider's `maxAmount` applies as well. The checkout refuses with `checkType` `max-amount` and the reason `checkout.max_amount_per_booking_exceeded` (params `maxAmountPerBooking`, `bookableId`, `title`). Admin UI and storefront from their matching release
