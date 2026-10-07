@@ -256,6 +256,7 @@ describe("the initial supervision level of the instance", function () {
         const write = sinon.stub(InstanceModel, "findOneAndUpdate");
         try {
           const res = await call("put", "/instances", ADMIN, {
+            ownerUserIds: [ADMIN],
             [FIELD]: level,
           });
 
@@ -276,6 +277,7 @@ describe("the initial supervision level of the instance", function () {
 
     it("changes no tenant when the instance owner changes it", async function () {
       const res = await call("put", "/instances", ADMIN, {
+        ownerUserIds: [ADMIN],
         [FIELD]: "pending",
       });
 
