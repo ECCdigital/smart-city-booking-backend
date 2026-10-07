@@ -7,6 +7,10 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ## [Unreleased]
 
+### Security
+
+- `POST /auth/resetpassword` requires a session and the current password (ECCdigital/tickets#264): it changes only the password of the signed-in account (`user.updateSelf`), takes `{ currentPassword, password }` and no longer reads `id`; `401` without a session, `400` without the current password, `403` for a wrong one or an SSO account. Before, anyone could set a password of their choosing for any account, and the account's click on the confirmation mail put it in force. Breaking change of the API: Admin UI 4.3.1 and Storefront 1.2.1 ask for the current password; deploy them together with the backend, see [docs/migrations/v4.3.1-upgrade.md](migrations/v4.3.1-upgrade.md). Route snapshot updated on purpose
+
 ### Added
 
 - The refund state of a cancelled booking (glossary „Erstattungsstand“, ECCdigital/tickets#15): a booking cancelled from `confirmed` with a refund amount above zero carries `cancellationRefund.refundState`, `open` from the cancellation on (single and group, whoever cancels); a reinstatement drops it, bookings cancelled before stay without. `PUT /api/:tenant/bookings/:id/refund-state` (`booking.update`) sets `completed` with moment and person or back to `open` - a repeated `completed` keeps the first mark - and answers `409 refund_state_not_applicable` for a booking without one; `GET /api/:tenant/bookings?refundState=open|completed` filters the list. The booker reads their bookings without the refund state, and the filter answers them nothing. The rule engine lists the field, so a scheduled rule with the query `{ "cancellationRefund.refundState": "open" }` and the action `sendAggregatedEmail` mails each tenant its open refunds; a new partial index on the bookings serves both. Route snapshot updated on purpose. The Admin UI shows and sets the state from its matching release ([smart-city-booking-vue-app](https://github.com/ECCdigital/smart-city-booking-vue-app))

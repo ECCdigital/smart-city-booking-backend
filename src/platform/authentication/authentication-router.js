@@ -18,8 +18,10 @@ const {
  * they were: the marker says who may knock, not what the handler makes of a
  * secret in the request.
  *
- * The two exceptions are `/signout` and `/me`, which answer about the holder
- * of a session and therefore need one (`user.readSelf`).
+ * The exceptions are `/signout` and `/me`, which answer about the holder
+ * of a session and therefore need one (`user.readSelf`), and
+ * `/resetpassword`, which changes the password of the holder and nobody
+ * else's (`user.updateSelf`).
  */
 
 // Public auth endpoints
@@ -33,9 +35,10 @@ router.post(
   publicRoute("auth", "all"),
   AuthenticationController.refreshToken,
 );
+// Not public: the password change of the holder of a session.
 router.post(
   "/resetpassword",
-  publicRoute("auth", "all"),
+  authorize("user", "updateSelf"),
   AuthenticationController.resetPassword,
 );
 router.post(

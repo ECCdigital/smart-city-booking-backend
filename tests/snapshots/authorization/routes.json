@@ -14,7 +14,7 @@
     "instanceOwner": 401
   },
   "POST /auth/resetpassword": {
-    "anonymous": 400,
+    "anonymous": 401,
     "signedIn": 400,
     "roleHolder": 400,
     "tenantOwner": 400,
