@@ -10,36 +10,27 @@
 const SupervisionHistoryManager = require("../../data-managers/supervision-history-manager");
 const { BookableManager } = require("../../data-managers/bookable-manager");
 const EventManager = require("../../data-managers/event-manager");
-const { OFFER_TYPES } = require("./supervision-constants");
+const { OFFER_TYPES, offerTitleOf } = require("./supervision-constants");
 const { DOMAIN } = require("../authorization/reach");
 
-const keyOf = (tenantId, id) => `${tenantId}/${id}`;
+const keyOf = (offerType, tenantId, id) => `${offerType}:${tenantId}/${id}`;
 
-/**
- * Per offer type: the offers of some (tenant, id) references, and the
- * title of one, as the review queue names them.
- */
-const OFFER_SOURCES = Object.freeze({
-  [OFFER_TYPES.BOOKABLE]: {
-    read: async (refs) => {
-      const byTenant = new Map();
-      for (const { tenantId, id } of refs) {
-        byTenant.set(tenantId, [...(byTenant.get(tenantId) ?? []), id]);
-      }
-      const bookables = [];
-      for (const [tenantId, ids] of byTenant) {
-        bookables.push(
-          ...(await BookableManager.getBookablesByIds(tenantId, ids, DOMAIN)),
-        );
-      }
-      return bookables;
-    },
-    title: (bookable) => bookable.title || null,
+/** Per offer type: the offers of some (tenant, id) references. */
+const OFFER_READS = Object.freeze({
+  [OFFER_TYPES.BOOKABLE]: async (refs) => {
+    const byTenant = new Map();
+    for (const { tenantId, id } of refs) {
+      byTenant.set(tenantId, [...(byTenant.get(tenantId) ?? []), id]);
+    }
+    const bookables = [];
+    for (const [tenantId, ids] of byTenant) {
+      bookables.push(
+        ...(await BookableManager.getBookablesByIds(tenantId, ids, DOMAIN)),
+      );
+    }
+    return bookables;
   },
-  [OFFER_TYPES.EVENT]: {
-    read: (refs) => EventManager.getEventsByIds(refs, DOMAIN),
-    title: (event) => event.information?.name || null,
-  },
+  [OFFER_TYPES.EVENT]: (refs) => EventManager.getEventsByIds(refs, DOMAIN),
 });
 
 class SupervisionHistoryService {
@@ -53,15 +44,15 @@ class SupervisionHistoryService {
     const result = await SupervisionHistoryManager.list(params);
 
     const titles = new Map();
-    for (const [offerType, source] of Object.entries(OFFER_SOURCES)) {
+    for (const [offerType, read] of Object.entries(OFFER_READS)) {
       const refs = result.items
         .filter((row) => row.offerType === offerType && row.offerId)
         .map((row) => ({ tenantId: row.tenantId, id: row.offerId }));
       if (refs.length === 0) continue;
-      for (const offer of await source.read(refs)) {
+      for (const offer of await read(refs)) {
         titles.set(
-          `${offerType}:${keyOf(offer.tenantId, offer.id)}`,
-          source.title(offer),
+          keyOf(offerType, offer.tenantId, offer.id),
+          offerTitleOf(offerType, offer),
         );
       }
     }
@@ -71,8 +62,7 @@ class SupervisionHistoryService {
       items: result.items.map((row) => ({
         ...row,
         offerTitle:
-          titles.get(`${row.offerType}:${keyOf(row.tenantId, row.offerId)}`) ??
-          null,
+          titles.get(keyOf(row.offerType, row.tenantId, row.offerId)) ?? null,
       })),
     };
   }
