@@ -458,15 +458,29 @@ class Bookable {
    *
    * They are the public routes, so the review (glossary "Prüfstatus") is
    * left out entirely: no public DTO carries a status or a private reason.
+   * Nor does it name a person (ECCdigital/tickets#260): the member who
+   * created the bookable (`ownerUserId`), the permitted persons
+   * (`permittedUsers`) and the discounts (`bookingDiscounts`) stay
+   * behind. The permitted roles and `requiresLogin` remain, so a client
+   * can offer the login; whether a person may book is the checkout's
+   * answer.
    *
    * @returns {Object} A plain copy with `images`, `imgUrl` and `attachments`
-   *   resolved and without `review`; every other field exactly as stored.
+   *   resolved and without `review`, `ownerUserId`, `permittedUsers` and
+   *   `bookingDiscounts`; every other field exactly as stored.
    */
   withResolvedMediaUrls() {
     const absolute = (reference) =>
       reference ? { ...reference, url: absoluteUrl(reference.url) } : reference;
-    // eslint-disable-next-line no-unused-vars
-    const { review, ...fields } = this;
+    const {
+      /* eslint-disable no-unused-vars */
+      review,
+      ownerUserId,
+      permittedUsers,
+      bookingDiscounts,
+      /* eslint-enable no-unused-vars */
+      ...fields
+    } = this;
 
     return {
       ...fields,

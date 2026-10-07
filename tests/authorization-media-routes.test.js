@@ -268,7 +268,7 @@ describe("authorization on the media routes", function () {
         "put",
         "/api/instances",
         ADMIN,
-        {},
+        { ownerUserIds: [ADMIN] },
       );
       expect(reaches).to.include({
         "instanceMedia.read": "any",
