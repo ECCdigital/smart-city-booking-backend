@@ -60,6 +60,9 @@ function createApp() {
 }
 
 describe("public registration: account-neutral answers and rate limits", function () {
+  // Each request waits for the work left for after its answer (#259).
+  this.timeout(10000);
+
   let app;
   let users;
   let sent;

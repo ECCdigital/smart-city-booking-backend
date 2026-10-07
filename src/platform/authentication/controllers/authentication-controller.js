@@ -20,7 +20,7 @@ const logger = bunyan.createLogger({
 const VERIFICATION_MAIL_ANSWER = {
   success: true,
   message:
-    "If the address belongs to an unverified account, a verification mail has been sent",
+    "If the address is not verified yet, a verification mail has been sent",
 };
 
 /**

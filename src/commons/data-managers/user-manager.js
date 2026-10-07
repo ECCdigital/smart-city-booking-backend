@@ -31,9 +31,10 @@ class UserManager {
    * (ECCdigital/tickets#259) - `^own` or `.*` find nothing. Every lookup of an
    * account by its id goes through here.
    *
-   * Ids are stored in lower case; an older one stored in another case or
-   * with blanks around it is found by the anchored comparison of the escaped
-   * address.
+   * One query for every address, known or not, so the time of a lookup
+   * tells no account. Ids are stored in lower case; an older one stored in
+   * another case or with blanks around it is found as well, and of two that
+   * differ only so the one in lower case wins.
    *
    * @param {*} id The address as given
    * @returns {Promise<Object|null>} The raw document
@@ -46,11 +47,13 @@ class UserManager {
       return null;
     }
 
+    const candidates = await UserModel.find({
+      id: { $regex: `^\\s*${escapeRegex(normalizedId)}\\s*$`, $options: "i" },
+    });
     return (
-      (await UserModel.findOne({ id: normalizedId })) ??
-      (await UserModel.findOne({
-        id: { $regex: `^\\s*${escapeRegex(normalizedId)}\\s*$`, $options: "i" },
-      }))
+      candidates.find((candidate) => candidate.id === normalizedId) ??
+      candidates[0] ??
+      null
     );
   }
 

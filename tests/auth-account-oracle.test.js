@@ -116,9 +116,9 @@ function installUserCollection(documents) {
   const plain = (user) => JSON.parse(JSON.stringify(user));
 
   sinon
-    .stub(UserModel, "findOne")
+    .stub(UserModel, "find")
     .callsFake(async (filter) =>
-      asDocument(docs.find((doc) => matches(doc, filter)) ?? null),
+      docs.filter((doc) => matches(doc, filter)).map(asDocument),
     );
   sinon.stub(UserModel, "create").callsFake(async (user) => {
     docs.push(plain(user));
@@ -280,13 +280,28 @@ describe("auth: no account oracle (ECCdigital/tickets#259)", function () {
       assert.strictEqual(res.body.user.id, OWNER);
     });
 
-    it("finds an account stored in another case", async function () {
-      docs.push(account("Mixed.Case@Example.test"));
+    it("finds an account stored in another case and with blanks around it", async function () {
+      docs.push({
+        ...account("mixed.case@example.test"),
+        id: " Mixed.Case@Example.test ",
+      });
 
       const res = await signin("mixed.case@example.test", PASSWORD);
 
       assert.strictEqual(res.status, 200);
-      assert.strictEqual(res.body.user.id, "mixed.case@example.test");
+      assert.strictEqual(res.body.user.id.trim(), "mixed.case@example.test");
+    });
+
+    it("takes the account in lower case of two that differ only in case", async function () {
+      docs.unshift({
+        ...account(OWNER, { firstName: "Doppelt" }),
+        id: "OWNER@example.test",
+      });
+
+      const res = await signin(OWNER, PASSWORD);
+
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(res.body.user.firstName, "Konto");
     });
 
     it("finds no account for a pattern, with the owner's password", async function () {
@@ -378,7 +393,7 @@ describe("auth: no account oracle (ECCdigital/tickets#259)", function () {
       assert.deepStrictEqual(fresh.body, {
         success: true,
         message:
-          "If the address belongs to an unverified account, a verification mail has been sent",
+          "If the address is not verified yet, a verification mail has been sent",
       });
       assert.strictEqual(transport.sent.length, 0, "no mail out yet");
 
