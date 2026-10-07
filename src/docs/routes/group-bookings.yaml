@@ -100,3 +100,35 @@ components:
       description: Group booking identifier
       schema:
         type: string
+
+/api/{tenant}/group-bookings/booking/{bookingId}:
+  get:
+    tags:
+      - Group bookings
+    summary: The group a booking belongs to
+    description: |
+      The group of the booking within the reach of the request. A booking
+      without a group is the common case, not a failure: it answers `200`
+      with `null`, as do a group outside the reach and an unknown booking.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/GroupBookingTenantParam"
+      - name: bookingId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: populate
+        in: query
+        required: false
+        schema:
+          type: boolean
+        description: Whether the members come populated
+    responses:
+      "200":
+        description: The group, or `null` when the booking belongs to none
+      "401":
+        description: Not authenticated
+      "403":
+        description: Missing permission to read group bookings
