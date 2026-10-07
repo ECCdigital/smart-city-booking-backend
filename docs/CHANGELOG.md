@@ -53,6 +53,10 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 - Supervision mails to tenant owners say „Freigabestufe" (spec §8); the self-creation notice to instance owners keeps „Aufsichtsstufe". A change to `declined` has its own subject („Ihr Mandant X wurde abgewiesen"), a hint and a contact line from `instance.contactAddress` or `mailAddress`; its withdrawal is the generic level change. Mail snapshots change on purpose
 
+### Fixed
+
+- Sign-in, signup, verification resend and forgot password no longer tell whether an address has an account ([ECCdigital/tickets#259](https://github.com/ECCdigital/tickets/issues/259)): an account is found by its exact address, trimmed and without regard to case, never as a pattern, also when an account's id is changed (an older account in another case blocks the new id) and when the email verification compares the address with its token; the sign-in answers an unknown account, a wrong password and an SSO account alike (`401`), unverified and suspended only with the right password; signup, resend and forgot password answer before the lookup and the mail, a failing mail is only logged. Changed answers and the check for accounts that differ only in case: [docs/migrations/v4.3.1-upgrade.md](migrations/v4.3.1-upgrade.md)
+
 ### Security
 
 - `fast-xml-parser` is a direct dependency at `^4.5.5` (ECCdigital/tickets#199): `webdav` pulled in 4.3.2, which has CVE-2026-25896. No code change

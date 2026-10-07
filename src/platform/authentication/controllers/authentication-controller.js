@@ -9,11 +9,19 @@ const { TooManyRequestsError } = require("../../../errors/BaseError");
 const CardAuthService = require("../../../commons/services/card-auth/card-auth-service");
 
 const JwtHelper = require("../../../commons/utilities/jwt-helper");
+const { afterAnswer } = require("../../../commons/services/user/after-answer");
 
 const logger = bunyan.createLogger({
   name: "authentication-controller.js",
   level: process.env.LOG_LEVEL,
 });
+
+/** The one answer of signup and resend, whatever the address (#259). */
+const VERIFICATION_MAIL_ANSWER = {
+  success: true,
+  message:
+    "If the address is not verified yet, a verification mail has been sent",
+};
 
 /**
  * Controller for user authentication.
@@ -177,7 +185,9 @@ class AuthenticationController {
    * Public signup. Answers account-neutrally (spec §6.3): 201 whether or not
    * the address already has an account - an existing account is never
    * duplicated and, if still unverified, gets its verification mail again.
-   * The per-IP signup limit answers 429 with `Retry-After`.
+   * The answer does not wait for the account or its mail
+   * (ECCdigital/tickets#259); a failing mail is only logged. The per-IP
+   * signup limit answers 429 with `Retry-After`.
    */
   static async signup(request, response) {
     try {
@@ -195,12 +205,12 @@ class AuthenticationController {
         invitationTenantId,
       } = request.body;
 
-      if (!userID || !password) {
+      if (typeof userID !== "string" || !userID.trim() || !password) {
         return response.status(400).send("Email and password are required");
       }
 
       const user = new User({
-        id: userID,
+        id: userID.trim(),
         secret: undefined,
         firstName: firstName,
         lastName: lastName,
@@ -223,20 +233,24 @@ class AuthenticationController {
         ip: request.ip,
       });
 
-      return response.sendStatus(201);
+      return response.status(201).json(VERIFICATION_MAIL_ANSWER);
     } catch (error) {
       if (error instanceof TooManyRequestsError) {
         return ApiResponse.fail(response, error);
       }
       logger.error("Could not sign up user", error);
-      return response.status(error.status || 500).send(error.message);
+      if (error.status) {
+        return response.status(error.status).send(error.message);
+      }
+      return response.status(500).send("Internal server error");
     }
   }
 
   /**
    * Sends the verification mail of an unverified account again. Always 202
-   * for a well-formed request, whether the address is known or not; only
-   * the per-IP limit answers 429 with `Retry-After`.
+   * for a well-formed request, whether the address is known or not, without
+   * waiting for the mail (ECCdigital/tickets#259); only the per-IP limit
+   * answers 429 with `Retry-After`.
    */
   static async resendVerification(request, response) {
     const { id, verifyUrl, nextUrl } = request.body;
@@ -252,11 +266,7 @@ class AuthenticationController {
         nextUrl,
         ip: request.ip,
       });
-      return response.status(202).json({
-        success: true,
-        message:
-          "If the address belongs to an unverified account, a verification mail has been sent",
-      });
+      return response.status(202).json(VERIFICATION_MAIL_ANSWER);
     } catch (error) {
       if (error instanceof TooManyRequestsError) {
         return ApiResponse.fail(response, error);
@@ -339,6 +349,11 @@ class AuthenticationController {
     }
   }
 
+  /**
+   * Mails a reset link to a local account. Answers every address alike and
+   * before the mail goes out (ECCdigital/tickets#259); a failure is only
+   * logged.
+   */
   static async forgotPassword(request, response) {
     const { id, resetUrl } = request.body;
 
@@ -346,15 +361,13 @@ class AuthenticationController {
       return response.status(400).send("Email is required");
     }
 
-    try {
-      await UserService.requestForgotPassword(id, resetUrl);
-      return response
-        .status(200)
-        .send("If the email exists, a reset link has been sent");
-    } catch (error) {
-      logger.error("Forgot password request failed:", error);
-      return response.status(500).send("Internal server error");
-    }
+    afterAnswer(
+      () => UserService.requestForgotPassword(id, resetUrl),
+      `forgot password request for ${id}`,
+    );
+    return response
+      .status(200)
+      .send("If the email exists, a reset link has been sent");
   }
 
   static async resetPasswordWithToken(request, response) {
