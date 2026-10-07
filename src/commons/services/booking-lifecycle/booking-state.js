@@ -276,16 +276,26 @@ function statusFromFlags(flags, priceEur) {
 }
 
 /**
- * The state the members of a group share (glossary "Gruppenzustand"),
- * read off the first member, and the ids of the members that deviate from
- * it. The guard of the group lifecycle and the consistency check in front
- * of it compare alike.
+ * The state the members of a group share (glossary "Gruppenzustand"), the
+ * state of most members - of a tie the one the first of them is in - and
+ * the ids of the members that deviate from it, so a single outlier is
+ * named even when it is the first. The guard of the group lifecycle and
+ * the consistency check in front of it compare alike.
  *
  * @param {{ id: string, status: string }[]} bookings The members
  * @returns {{ status: string, deviating: string[] }}
  */
 function groupStateOf(bookings) {
-  const status = bookings[0].status;
+  const counts = new Map();
+  for (const booking of bookings) {
+    counts.set(booking.status, (counts.get(booking.status) ?? 0) + 1);
+  }
+  // A Map keeps the order of first appearance, and only a larger count
+  // replaces the leader: of a tie the state met first stays.
+  let status = bookings[0].status;
+  for (const [candidate, count] of counts) {
+    if (count > counts.get(status)) status = candidate;
+  }
   const deviating = bookings
     .filter((booking) => booking.status !== status)
     .map((booking) => booking.id);

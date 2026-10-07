@@ -71,7 +71,7 @@ function checkSameContactDetails(bookings) {
  *
  * @param {Array<Object>} bookings - The list of bookings to check.
  * @throws {ConsistencyError} `STATUS_MISMATCH` with the `bookingIds` of the
- *   members that deviate from the first.
+ *   members that deviate from the state of most members.
  */
 function checkSameStatus(bookings) {
   const { status, deviating } = groupStateOf(bookings);

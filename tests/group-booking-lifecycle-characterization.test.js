@@ -434,6 +434,20 @@ describe("group booking lifecycle today: what each state change does at the seam
       ]);
     });
 
+    it("names the one deviating member when it is the first: the state of the majority is the reference", async function () {
+      const first = await h.manualBooking("room", { isCommitted: true });
+      const second = await h.manualBooking("room");
+      const third = await h.manualBooking("room");
+      const id = await seedGroup([first.id, second.id, third.id]);
+
+      const res = await commit(id);
+
+      expect(res.body.errors).to.have.length(1);
+      expect(res.body.errors[0].code).to.equal("STATUS_MISMATCH");
+      expect(res.body.errors[0].meta).to.include({ status: "requested" });
+      expect(res.body.errors[0].meta.bookingIds).to.deep.equal([first.id]);
+    });
+
     it("confirms a request of a free and a priced member: the same state, though the flags differ", async function () {
       const free = await h.manualBooking("free-request-room");
       const priced = await h.manualBooking("room");
