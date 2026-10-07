@@ -100,6 +100,7 @@ router.get(
 - The entry must have `public: true`. Otherwise a start-up error: use `authorize()`.
 - The handler gets `req.reach` as `public | self | own | any`: the widest the principal has. Staff of the tenant get `any` at `bookable.readPublic`, the public gets `public`, and the same manager call answers both correctly (section 4).
 - `publicRoute()` without arguments is a plainly public route: `req.reach` is `public`, no table entry involved.
+- Without a token the request is anonymous. A token sent along is verified as at `authorize`: an expired, revoked or invalid one is refused with the same `401` and message (`Token has expired`, `SSO token verification failed`, `Invalid token`, ...), never taken for anonymous, so the client renews it (ECCdigital/tickets#109). A valid token whose user is unknown or suspended stays anonymous.
 
 `public` is a reserved word in strict mode. The module exports the marker as `public` and as `publicRoute`; destructuring callers need the second name.
 

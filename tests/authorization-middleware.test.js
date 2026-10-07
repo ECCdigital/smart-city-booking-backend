@@ -263,13 +263,15 @@ describe("authorization middleware: the three markers", function () {
       });
     });
 
-    it("treats an invalid token as anonymous, like optionalAuth", async function () {
-      JwtHelper.verifyToken.throws(new Error("bad"));
+    it("refuses an invalid token with 401, like authorize (ECCdigital/tickets#109)", async function () {
       const res = await request(server)
         .get("/api/t1/events")
         .set({ Authorization: "Bearer nonsense" });
-      expect(res.status).to.equal(200);
-      expect(res.body.user).to.equal(null);
+      expect(res.status).to.equal(401);
+      expect(res.body).to.deep.equal({
+        success: false,
+        message: "Invalid token",
+      });
     });
 
     it("answers public without arguments", async function () {

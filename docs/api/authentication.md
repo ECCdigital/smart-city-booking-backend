@@ -8,6 +8,8 @@ For protected routes, send the access token in the `Authorization` header:
 Authorization: Bearer <accessToken>
 ```
 
+Public routes take the header too and then answer for the signed-in user. A token sent along must hold there as well: an expired, revoked or invalid access token is refused with `401` and the same message as on a protected route (`{ "success": false, "message": "Token has expired" }`), not answered as anonymous. Renew it with `POST /auth/refresh` and repeat the request, or send it without the header. Without a token a public route answers anonymously.
+
 ## Routes
 
 ### POST /auth/signin
