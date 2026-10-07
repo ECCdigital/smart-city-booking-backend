@@ -553,7 +553,7 @@ describe("issue: the file name of a receipt", function () {
   } = require("../src/commons/data-managers/bookable-manager");
 
   /** The receipt's renderer down to the PDF, the PDF engine stubbed. */
-  function rendering(bookings) {
+  function stubReceiptRendering(bookings) {
     sinon
       .stub(BookingManager, "getBooking")
       .callsFake(async (id) => bookings.find((b) => b.id === id) ?? null);
@@ -577,7 +577,7 @@ describe("issue: the file name of a receipt", function () {
     it(`a receipt of a tenant with prefix "${prefix}" is named ${expected}`, async function () {
       const bookings = [booking("B1")];
       world({ bookings, tenant: { receiptNumberPrefix: prefix } });
-      rendering(bookings);
+      stubReceiptRendering(bookings);
 
       const { attachment } = await issue({
         tenantId: TENANT,
@@ -596,7 +596,7 @@ describe("issue: the file name of a receipt", function () {
     it(`an aggregated receipt of a tenant with prefix "${prefix}" is named ${expected}`, async function () {
       const bookings = [booking("B1"), booking("B2")];
       world({ bookings, tenant: { receiptNumberPrefix: prefix } });
-      rendering(bookings);
+      stubReceiptRendering(bookings);
 
       const { attachment } = await issue({
         tenantId: TENANT,
