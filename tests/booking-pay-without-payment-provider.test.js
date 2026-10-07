@@ -123,6 +123,45 @@ describe("marking a booking paid without a payment provider", function () {
     }
   });
 
+  it("names the reason when the booking does not pass its schema: 400 with the field, nothing stored", async function () {
+    const id = await oldBookingAwaitingPayment();
+    h.stored(id).mail = "";
+
+    const res = await api()
+      .post(`/api/${TENANT}/bookings/${id}/pay`)
+      .set(h.as(ADMIN))
+      .send({ paymentMethod: "TRANSFER" });
+
+    expect(res.status).to.equal(400);
+    expect(res.body).to.deep.include({
+      error: "ValidationError",
+      statusCode: 400,
+    });
+    expect(res.body.details).to.deep.equal([
+      { field: "mail", code: "required", params: {} },
+    ]);
+    expect(stateOf(h.stored(id))).to.equal("payment_due");
+  });
+
+  it("names the reason for a series too", async function () {
+    const id = await oldSeriesAwaitingPayment();
+    h.members(id)[1].mail = "";
+
+    const res = await api()
+      .post(`/api/${TENANT}/group-bookings/${id}/pay`)
+      .set(h.as(ADMIN))
+      .send({ paymentMethod: "TRANSFER" });
+
+    expect(res.status).to.equal(400);
+    expect(res.body.details).to.deep.equal([
+      { field: "mail", code: "required", params: {} },
+    ]);
+    expect(h.members(id).map(stateOf)).to.deep.equal([
+      "payment_due",
+      "payment_due",
+    ]);
+  });
+
   it("still requires the provider of an unpaid booking with a price", async function () {
     const id = await oldBookingAwaitingPayment();
 

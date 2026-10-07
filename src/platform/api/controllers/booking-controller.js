@@ -555,6 +555,7 @@ class BookingController {
       answerTransitionError(err, response, {
         code: "set_booking_payed_failed",
         fallback: "Could not set booking as paid",
+        answerInvalidBooking: true,
       });
     }
   }
