@@ -381,6 +381,10 @@ class AuthenticationController {
    * and only with the current one. The account named in the body is no
    * longer read. The new password stands behind a hook the user confirms
    * from the mail, as before.
+   *
+   * @param {import("express").Request} request - `body`: `{ currentPassword, password }`; `user`: the signed-in account
+   * @param {import("express").Response} response - `200`; `400` without both passwords; `403` for a wrong current password or an account without one (SSO)
+   * @returns {Promise<void>}
    */
   static async resetPassword(request, response) {
     const { currentPassword, password } = request.body;
