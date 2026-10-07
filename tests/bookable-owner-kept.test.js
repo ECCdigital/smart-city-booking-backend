@@ -80,40 +80,48 @@ describe("PUT /:tenant/bookables keeps the owner", function () {
     "member with updateOwn": READ_OWN_HOLDER,
   };
 
+  /** Bodies that name no owner: the field left out, `null`, empty, blank. */
+  const NO_OWNER = {
+    "leaves ownerUserId out": {},
+    "sends ownerUserId null": { ownerUserId: null },
+    'sends ownerUserId ""': { ownerUserId: "" },
+    "sends a blank ownerUserId": { ownerUserId: "  " },
+  };
+
   for (const [who, userId] of Object.entries(EDITORS)) {
-    it(`keeps the owner when the ${who} leaves ownerUserId out`, async function () {
-      const res = await call(
-        "put",
-        `/api/${TENANT}/bookables`,
-        userId,
-        withoutOwner({ title: "Geändert" }),
-      );
+    for (const [how, owner] of Object.entries(NO_OWNER)) {
+      it(`keeps the owner when the ${who} ${how}`, async function () {
+        const res = await call("put", `/api/${TENANT}/bookables`, userId, {
+          ...withoutOwner({ title: "Geändert" }),
+          ...owner,
+        });
 
-      expect(res.status).to.equal(201);
-      expect(res.body.ownerUserId).to.equal(READ_OWN_HOLDER);
-      expect(writtenBookables).to.have.length(1);
-      expect(writtenBookables[0]).to.include({
-        id: OWN_ID,
-        title: "Geändert",
-        ownerUserId: READ_OWN_HOLDER,
+        expect(res.status).to.equal(201);
+        expect(res.body.ownerUserId).to.equal(READ_OWN_HOLDER);
+        expect(writtenBookables).to.have.length(1);
+        expect(writtenBookables[0]).to.include({
+          id: OWN_ID,
+          title: "Geändert",
+          ownerUserId: READ_OWN_HOLDER,
+        });
+
+        const list = await call(
+          "get",
+          `/api/${TENANT}/bookables`,
+          READ_OWN_HOLDER,
+        );
+        expect(list.status).to.equal(200);
+        expect(list.body.map((offer) => offer.id)).to.include(OWN_ID);
+
+        const one = await call(
+          "get",
+          `/api/${TENANT}/bookables/${OWN_ID}`,
+          READ_OWN_HOLDER,
+        );
+        expect(one.status).to.equal(200);
+        expect(one.body.title).to.equal("Geändert");
       });
-
-      const list = await call(
-        "get",
-        `/api/${TENANT}/bookables`,
-        READ_OWN_HOLDER,
-      );
-      expect(list.status).to.equal(200);
-      expect(list.body.map((offer) => offer.id)).to.include(OWN_ID);
-
-      const one = await call(
-        "get",
-        `/api/${TENANT}/bookables/${OWN_ID}`,
-        READ_OWN_HOLDER,
-      );
-      expect(one.status).to.equal(200);
-      expect(one.body.title).to.equal("Geändert");
-    });
+    }
   }
 
   it("stores the owner a body names, as before", async function () {

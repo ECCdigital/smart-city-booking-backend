@@ -333,9 +333,10 @@ class BookableController {
       // an edit keeps the stored one, whatever the body carries.
       bookable.review = existingBookable.review ?? emptyReview();
 
-      // A client that leaves the owner out keeps the stored one, so the
-      // owner does not lose the bookable to the schema default.
-      if (request.body.ownerUserId === undefined) {
+      // A client that names no owner (field left out, null, empty or blank)
+      // keeps the stored one, so the owner does not lose the bookable.
+      const namedOwner = request.body.ownerUserId;
+      if (typeof namedOwner !== "string" || namedOwner.trim() === "") {
         bookable.ownerUserId = existingBookable.ownerUserId;
       }
 
