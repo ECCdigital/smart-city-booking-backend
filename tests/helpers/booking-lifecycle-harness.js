@@ -51,6 +51,9 @@ process.env.CRYPTO_SECRET =
   process.env.CRYPTO_SECRET || "0123456789abcdef0123456789abcdef";
 process.env.JWT_SECRET = process.env.JWT_SECRET || "characterization-secret";
 
+/** The key the harness signs its tokens with and verifies them by. */
+const TOKEN_KEY = "harness-key";
+
 const { errorHandler } = require("../../src/middleware/error-handler");
 const JwtHelper = require("../../src/commons/utilities/jwt-helper");
 const BookingManager = require("../../src/commons/data-managers/booking-manager");
@@ -91,6 +94,9 @@ const {
   ROLE_LEVELS,
 } = require("../../src/commons/services/authorization/table");
 const { Booking } = require("../../src/commons/entities/booking/booking");
+const {
+  ownCondition,
+} = require("../../src/commons/services/authorization/reach");
 const {
   GroupBooking,
 } = require("../../src/commons/entities/groupBooking/groupBooking");
@@ -680,11 +686,26 @@ async function installHarness({
         .filter((id) => store.has(id))
         .map((id) => clone(store.get(id))),
     });
+  /**
+   * Whether a stored group is within the reach, by the condition the real
+   * manager queries with (none under `public`); a read without a reach
+   * throws here as it does there (ADR 0002).
+   */
+  const groupWithinReach = (doc, scope) => {
+    const condition =
+      scope?.reach === "public" ? {} : ownCondition("groupBooking", scope);
+    return (
+      Boolean(doc) &&
+      Object.entries(condition).every(([field, value]) => doc[field] === value)
+    );
+  };
   sinon
     .stub(GroupBookingManager, "getGroupBooking")
     .callsFake(async (tenantId, id, populate = false, scope) => {
       const doc = groups.get(id);
-      if (!ofTenant(doc, tenantId) || !withinReach(doc, scope)) return null;
+      if (!groupWithinReach(doc, scope) || !ofTenant(doc, tenantId)) {
+        return null;
+      }
       return populate ? populated(doc) : new GroupBooking(clone(doc));
     });
   sinon
@@ -694,7 +715,7 @@ async function installHarness({
         (group) =>
           ofTenant(group, tenantId) && group.bookingIds.includes(bookingId),
       );
-      if (!withinReach(doc, scope)) return null;
+      if (!groupWithinReach(doc, scope)) return null;
       return populate ? populated(doc) : new GroupBooking(clone(doc));
     });
   sinon
@@ -847,10 +868,12 @@ async function installHarness({
   sinon.stub(PaymentUtils, "checkInvoicePermission").resolves(true);
   sinon.stub(AccessLogService, "log").resolves();
 
-  // --- the JWT middleware: any signed token names its user ---------------
+  // --- the JWT middleware: a token signed with the harness' key names its
+  // user until it expires; an expired or foreign one fails as the real
+  // verification does (`TokenExpiredError`, `JsonWebTokenError`) ----------
 
   sinon.stub(JwtHelper, "verifyToken").callsFake((token) => ({
-    sub: jwt.decode(token).sub,
+    sub: jwt.verify(token, TOKEN_KEY).sub,
     v: 2,
     type: "access",
   }));
@@ -995,9 +1018,12 @@ async function installHarness({
   const server = http.createServer(app);
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const api = () => request(server);
-  /** The authorization header of a signed-in user. */
-  const as = (userId) => ({
-    Authorization: `Bearer ${jwt.sign({ sub: userId }, "irrelevant")}`,
+  /**
+   * The authorization header of a signed-in user; `{ expiresIn: -60 }`
+   * gives one whose token expired a minute ago.
+   */
+  const as = (userId, signOptions = {}) => ({
+    Authorization: `Bearer ${jwt.sign({ sub: userId }, TOKEN_KEY, signOptions)}`,
   });
 
   /** The administration books manually with the flags it chooses. */

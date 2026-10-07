@@ -54,6 +54,20 @@ const OFFER_TYPES = Object.freeze({
   EVENT: "event",
 });
 
+/**
+ * The title an offer is named by in the review queue and the history: a
+ * bookable's `title`, an event's `information.name`; null without one.
+ *
+ * @param {string} offerType One of `OFFER_TYPES`
+ * @param {Object} offer The bookable or event
+ * @returns {string|null}
+ */
+function offerTitleOf(offerType, offer) {
+  const title =
+    offerType === OFFER_TYPES.EVENT ? offer?.information?.name : offer?.title;
+  return title || null;
+}
+
 /** The event types of the supervision history (glossary "Aufsichtshistorie"). */
 const HISTORY_EVENT_TYPES = Object.freeze({
   TENANT_CREATED: "tenant.created",
@@ -187,6 +201,7 @@ module.exports = {
   REVIEW_STATUS_VALUES: values(REVIEW_STATUS),
   OFFER_TYPES,
   OFFER_TYPE_VALUES: values(OFFER_TYPES),
+  offerTitleOf,
   HISTORY_EVENT_TYPES,
   HISTORY_EVENT_TYPE_VALUES: values(HISTORY_EVENT_TYPES),
   HISTORY_ACTOR_TYPES,

@@ -75,8 +75,9 @@ believes it only from the proxies `TRUSTED_PROXIES` names (see
   [Admin UI](https://github.com/ECCdigital/smart-city-booking-vue-app) and the
   [Storefront](https://github.com/ECCdigital/smart-city-booking-store-front)
   versions built for the supervision (direct links, the checkout reason
-  `checkout.offer_not_reachable`, the `409`-free registration, the contact
-  fields of the tenant creation - see `docs/CHANGELOG.md`).
+  `checkout.bookable_not_found` for an offer that is no longer reachable, the
+  `409`-free registration, the contact fields of the tenant creation - see
+  `docs/CHANGELOG.md`).
 - Check that the load balancer / orchestrator probes `/healthz/ready`.
 - Announce a short maintenance window.
 
@@ -194,8 +195,10 @@ Against the internal address of the new stack:
   offer, prices, availability and a test booking work as before.
 - Set a test tenant to `supervised`: an unapproved offer disappears from list
   and direct link, and its checkout is refused
-  (`checkout.offer_not_reachable`); after approval it is back - listed with
-  the publication wish, and by direct link and bookable without it.
+  (`checkout.bookable_not_found`, the same reason as for an offer that does
+  not exist - it deliberately names no cause); after approval it is back -
+  listed with the publication wish, and by direct link and bookable without
+  it.
 - Set a test tenant to `pending` (glossary „Freigabe ausstehend“): it leaves
   `GET /api/tenants/public`, its public paths answer `404`, a new booking is
   refused; the status page of an existing booking still answers, and the
