@@ -46,6 +46,7 @@ const {
   BACKEND_URL,
   NOW,
   tenant,
+  booking,
   cancellationRefund,
   installMailStackStore,
   issuedFile,
@@ -205,6 +206,13 @@ describe("mail characterization: every notice as it goes out today", function ()
 
     it("the tenant's notice of a new booking", async function () {
       await pin("incoming-booking", () =>
+        mail.send("INCOMING_BOOKING", single("B-1")),
+      );
+    });
+
+    it("the tenant's notice of a new request", async function () {
+      given({ bookings: [booking({ status: "requested" })] });
+      await pin("incoming-booking.requested", () =>
         mail.send("INCOMING_BOOKING", single("B-1")),
       );
     });
