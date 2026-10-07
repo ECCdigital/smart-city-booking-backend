@@ -129,6 +129,39 @@ describe("no foreign data in public answers (ECCdigital/tickets#260)", function 
     return body ? req.send(body) : req;
   };
 
+  describe("public events", function () {
+    // The event of the route world is the fixture, created by the role
+    // holder: its `ownerUserId` is their mail address. Before the public
+    // bookables, which stub the event read for `?populate=true`.
+    const PATHS = [
+      `/api/${TENANT}/events`,
+      `/api/${TENANT}/events/${FIXTURE_ID}`,
+    ];
+
+    it("name not the member who created them to the anonymous or a customer", async function () {
+      for (const path of PATHS) {
+        for (const userId of [null, CUSTOMER]) {
+          const res = await call("get", path, userId);
+          expect(res.status, `${path} as ${userId}`).to.equal(200);
+          const text = JSON.stringify(res.body);
+          expect(text, `${path} as ${userId}`).to.include(FIXTURE_ID);
+          expect(text, `${path} as ${userId}`).to.not.include(`"ownerUserId"`);
+          expect(text, `${path} as ${userId}`).to.not.include(ROLE_HOLDER);
+        }
+      }
+    });
+
+    it("leave the management read of an event whole", async function () {
+      const res = await call(
+        "get",
+        `/api/${TENANT}/events/${FIXTURE_ID}`,
+        ROLE_HOLDER,
+      );
+      expect(res.status).to.equal(200);
+      expect(res.body.ownerUserId).to.equal(ROLE_HOLDER);
+    });
+  });
+
   describe("public bookables", function () {
     before(function () {
       // `?populate=true` embeds the event and the related bookables.
