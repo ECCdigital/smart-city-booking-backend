@@ -1,7 +1,7 @@
 From: Buchungsplattform <noreply@plattform.example.test>
 To: buchung@stadthalle.example.test
 Bcc: 
-Subject: Eine neue Buchungsanfrage liegt vor
+Subject: Eine neue Buchung liegt vor
 Attachments: 
 
 <!DOCTYPE html>
@@ -38,7 +38,7 @@ Attachments:
   <div style="font-family: inherit;">
     
   <div style="">
-    <p>Es liegt eine neue Buchungsanfrage vor.</p> <br />
+    <p>Es liegt eine neue Buchung vor.</p> <br />
     
   </div>
 <br />

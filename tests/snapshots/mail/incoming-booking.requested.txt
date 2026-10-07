@@ -1,7 +1,7 @@
 From: Buchungsplattform <noreply@plattform.example.test>
 To: buchung@stadthalle.example.test
 Bcc: 
-Subject: Eine neue Buchung liegt vor
+Subject: Eine neue Buchungsanfrage liegt vor
 Attachments: 
 
 <!DOCTYPE html>
@@ -38,7 +38,7 @@ Attachments:
   <div style="font-family: inherit;">
     
   <div style="">
-    <p>Es liegt eine neue Buchung vor.</p> <br />
+    <p>Es liegt eine neue Buchungsanfrage vor.</p> <br />
     
   </div>
 <br />
@@ -47,7 +47,10 @@ Attachments:
 
 
   <div style="">
-    
+    <strong>Buchungsnummer:</strong> B-1<br>
+<strong>Gesamtbetrag:</strong> 120,50 €<br><br>
+
+
     <strong>Firma:</strong> Musterfirma GmbH<br>
     <strong>Name:</strong> Erika Musterfrau<br>
     <strong>Adresse:</strong> 
@@ -56,80 +59,36 @@ Attachments:
       Musterstadt<br>
     <strong>Telefon:</strong> +49 30 1234567<br>
     <strong>E-Mail:</strong> erika@example.test
-<br>
-<br>
-<strong>Gesamtbetrag:</strong> 120,50 €<br><br>
 
+  <br><br><strong>Hinweise zur Buchung:</strong>
+  <br> Bitte klingeln &lt;b&gt;laut&lt;/b&gt;
+
+
+  <br><strong>Anzahl Personen:</strong>
+  4 Erwachsene
+  <br><strong>Catering:</strong>
+  Vegetarisch
+  <br><strong>Sonderwünsche:</strong>
+  <em>nicht angegeben</em>
+  <br><strong>Buchungszeitraum:</strong> 05.10.2026, 10:00 - 05.10.2026, 12:00
 <br>
 <h2>Bestellübersicht</h2>
-<div style="margin-top: 20px">
-    <div style="margin-bottom: 20px; padding: 10px; border: 1px solid #ccc">
-      
-  <div style="">
-    <p>
-  <strong>Buchungsnummer:</strong>
-  G-1
-    <br /><strong>Buchungszeitraum:</strong>
-    05.10.2026, 10:00 - 05.10.2026, 12:00
-  <br /><strong>Gesamtbetrag:</strong>
-  50,00 €
-</p>
-<p><strong>Artikel:</strong></p>
-<ul>
-    <li>Großer Saal (x1)</li>
-</ul>
 
+  <div style="border-bottom: solid 1px grey; margin-bottom: 10px; padding-bottom: 10px">
+    <strong>Großer Saal, Anzahl: 1</strong>
 
-
-    
+      <p>Der Schlüssel liegt an der Rezeption bereit.</p>
   </div>
 
+    <div style="color: grey">
+      Gutschein: Frühbucher ( -10 % )<br>
     </div>
-    <div style="margin-bottom: 20px; padding: 10px; border: 1px solid #ccc">
-      
-  <div style="">
-    <p>
-  <strong>Buchungsnummer:</strong>
-  G-2
-    <br /><strong>Buchungszeitraum:</strong>
-    06.10.2026, 10:00 - 06.10.2026, 12:00
-  <br /><strong>Gesamtbetrag:</strong>
-  30,00 €
-</p>
-<p><strong>Artikel:</strong></p>
-<ul>
-    <li>Großer Saal (x1)</li>
-</ul>
-
-
 
     
   </div>
 
-    </div>
-    <div style="margin-bottom: 20px; padding: 10px; border: 1px solid #ccc">
-      
-  <div style="">
-    <p>
-  <strong>Buchungsnummer:</strong>
-  G-3
-  <br /><strong>Gesamtbetrag:</strong>
-  40,50 €
-</p>
-<p><strong>Artikel:</strong></p>
-<ul>
-    <li>Konzertkarte (x2)</li>
-</ul>
 
 
-
-    
-  </div>
-
-    </div>
-</div>
-    
-  </div>
 
 
 

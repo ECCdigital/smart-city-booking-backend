@@ -1,7 +1,7 @@
 From: Buchungsplattform <noreply@plattform.example.test>
 To: erika@example.test
 Bcc: 
-Subject: Vielen Dank für Ihre Buchung im  Stadthalle Musterstadt
+Subject: Vielen Dank für Ihre Buchung im Stadthalle Musterstadt
 Attachments: Hausordnung.pdf, buchung-B-1.ics, qrcode.png
 
 <!DOCTYPE html>

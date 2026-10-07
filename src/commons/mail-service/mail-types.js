@@ -26,7 +26,7 @@
  *   the caller's context and what the loader read.
  *
  * Of a booking notice, `ctx` of `subject`, `includeQRCode` and `sendBCC`
- * is `{ tenant, hasAttachments }`, and `templateData` gets the
+ * is `{ tenant, hasAttachments, bookings }`, and `templateData` gets the
  * type-specific part of the caller's context and the loaded bookings.
  * `includeQRCode`, `sendBCC`, `addRejectionLink`, `attachICal`,
  * `mergeMailAttach` and `gate` are of the booking family only.
@@ -44,6 +44,12 @@ const {
 } = require("../services/payment/cancellation-refund-service");
 
 const { SupervisionMailType } = require("./supervision-mail-types");
+const { STATUS } = require("../services/booking-lifecycle/booking-state");
+
+/** Whether the bookings still wait for the tenant's decision. */
+function isRequest(bookings) {
+  return bookings.some((booking) => booking.status === STATUS.REQUESTED);
+}
 
 /** A storefront route with the hook's token and the address it is for. */
 function hookLink(base, hookId, address) {
@@ -55,7 +61,7 @@ const MailType = Object.freeze({
     family: "booking",
     templateName: "booking-confirmation",
     audience: "booker",
-    subject: (ctx) => `Vielen Dank für Ihre Buchung im  ${ctx.tenant.name}`,
+    subject: (ctx) => `Vielen Dank für Ihre Buchung im ${ctx.tenant.name}`,
     includeQRCode: (ctx) => ctx.tenant.enablePublicStatusView,
     sendBCC: (ctx) => ctx.hasAttachments && ctx.tenant.receiptEnableBCC,
     addRejectionLink: true,
@@ -67,7 +73,7 @@ const MailType = Object.freeze({
     family: "booking",
     templateName: "free-booking-confirmation",
     audience: "booker",
-    subject: (ctx) => `Vielen Dank für Ihre Buchung im  ${ctx.tenant.name}`,
+    subject: (ctx) => `Vielen Dank für Ihre Buchung im ${ctx.tenant.name}`,
     includeQRCode: (ctx) => ctx.tenant.enablePublicStatusView,
     sendBCC: false,
     addRejectionLink: true,
@@ -165,7 +171,14 @@ const MailType = Object.freeze({
     family: "booking",
     templateName: "incoming-booking",
     audience: "tenant",
-    subject: () => "Eine neue Buchungsanfrage liegt vor",
+    // A request asks the tenant to decide, any other state only informs.
+    subject: (ctx) =>
+      isRequest(ctx.bookings)
+        ? "Eine neue Buchungsanfrage liegt vor"
+        : "Eine neue Buchung liegt vor",
+    templateData: (specific, { bookings }) => ({
+      isRequest: isRequest(bookings),
+    }),
     includeQRCode: false,
     sendBCC: false,
     addRejectionLink: false,

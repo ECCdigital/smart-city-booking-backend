@@ -545,3 +545,67 @@ describe("issue: revisions, aggregation and gaps", function () {
     );
   });
 });
+
+describe("issue: the file name of a receipt", function () {
+  const PdfService = require("../src/commons/pdf-service/pdf-service");
+  const {
+    BookableManager,
+  } = require("../src/commons/data-managers/bookable-manager");
+
+  /** The receipt's renderer down to the PDF, the PDF engine stubbed. */
+  function rendering(bookings) {
+    sinon
+      .stub(BookingManager, "getBooking")
+      .callsFake(async (id) => bookings.find((b) => b.id === id) ?? null);
+    sinon.stub(BookableManager, "getBookables").resolves([]);
+    sinon
+      .stub(PdfService, "convertToPdf")
+      .callsFake(async (html, filename) => ({
+        buffer: Buffer.from(html),
+        name: filename,
+      }));
+  }
+
+  afterEach(function () {
+    sinon.restore();
+  });
+
+  for (const [prefix, expected] of [
+    ["", `Zahlungsbeleg-${YEAR}-0001-1.pdf`],
+    ["RE", `Zahlungsbeleg-RE-${YEAR}-0001-1.pdf`],
+  ]) {
+    it(`a receipt of a tenant with prefix "${prefix}" is named ${expected}`, async function () {
+      const bookings = [booking("B1")];
+      world({ bookings, tenant: { receiptNumberPrefix: prefix } });
+      rendering(bookings);
+
+      const { attachment } = await issue({
+        tenantId: TENANT,
+        bookingIds: ["B1"],
+        type: "receipt",
+      });
+
+      assert.strictEqual(attachment.name, expected);
+    });
+  }
+
+  for (const [prefix, expected] of [
+    ["", `Sammelbeleg-${YEAR}-0001-1.pdf`],
+    ["RE", `Sammelbeleg-RE-${YEAR}-0001-1.pdf`],
+  ]) {
+    it(`an aggregated receipt of a tenant with prefix "${prefix}" is named ${expected}`, async function () {
+      const bookings = [booking("B1"), booking("B2")];
+      world({ bookings, tenant: { receiptNumberPrefix: prefix } });
+      rendering(bookings);
+
+      const { attachment } = await issue({
+        tenantId: TENANT,
+        bookingIds: ["B1", "B2"],
+        type: "receipt",
+        groupBookingId: "G1",
+      });
+
+      assert.strictEqual(attachment.name, expected);
+    });
+  }
+});
