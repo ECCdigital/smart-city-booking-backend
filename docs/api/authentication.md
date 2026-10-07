@@ -25,6 +25,8 @@ Sign in a user and receive JWT tokens.
 
 **Response:** `{ user, permissions, accessToken, refreshToken }`. `permissions.tenants[]` carries, per active membership of the user, the merged role levels and the tenant's supervision (see [Tenant supervision in the sign-in](#tenant-supervision-in-the-sign-in)). The SSO and card sign-ins answer the same `permissions`.
 
+The account is found by its exact address, trimmed and without regard to case, never as a pattern. An unknown account, a wrong password and an account that signs in with SSO answer alike: `401` `{ "message": "Invalid email or password" }`. Only with the right password does an unverified account answer `403` `{ "message": "User is not verified" }` and a suspended one `403` `{ "message": "User is suspended" }`.
+
 ### POST /auth/refresh
 
 Exchange a refresh token for new `accessToken` and `refreshToken`.
@@ -44,6 +46,17 @@ Sign out the currently authenticated user (revokes the active token; optional re
 ### POST /auth/signup
 
 Register a new user. The answer is account-neutral: `201` whether or not the address already has an account. An existing account is never duplicated; if it is still unverified, it receives its verification mail again (within the verification mail limits below), a verified one receives nothing. `400` when `id` or `password` is missing, `429` with `Retry-After` (seconds) past the per-IP limit — no account is created then.
+
+The answer does not wait: the lookup, the account and the verification mail follow after it, so neither its time nor a failing mail server tells whether the address has an account. A failing mail is only logged; the mail can be requested again with `POST /auth/resend-verification`. The address is stored trimmed and in lower case.
+
+**Response `201`** (the same body as `POST /auth/resend-verification`):
+
+```json
+{
+  "success": true,
+  "message": "If the address is not verified yet, a verification mail has been sent"
+}
+```
 
 **Request body:**
 
@@ -72,7 +85,7 @@ Answers `200` for every well-formed address, known or not (`400` without `email`
 
 ### POST /auth/resend-verification
 
-Sends the verification mail of an unverified account again. Answers `202` with the same body for a known unverified, a known verified and an unknown address (`400` without `id`). The per-account limits (1 per minute and 5 per hour) apply silently; the per-IP limit (30 per hour) answers `429` with `Retry-After` for every address alike. A new mail invalidates the earlier verification links of the account.
+Sends the verification mail of an unverified account again. Answers `202` with the same body for a known unverified, a known verified and an unknown address (`400` without `id`). The per-account limits (1 per minute and 5 per hour) apply silently; the per-IP limit (30 per hour) answers `429` with `Retry-After` for every address alike. A new mail invalidates the earlier verification links of the account. The answer does not wait for the mail; a failing one is only logged.
 
 **Request body:**
 
