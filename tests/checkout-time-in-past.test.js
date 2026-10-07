@@ -14,7 +14,9 @@ const {
   checkoutBody,
   TENANT,
   CUSTOMER,
+  ADMIN,
   DAY,
+  adminForm,
 } = require("./helpers/booking-lifecycle-harness");
 const {
   CHECKOUT_REASONS,
@@ -128,6 +130,21 @@ describe("checkout: a self-booking cannot start in the past", function () {
     expect(validate.body.error.reason).to.equal(CHECKOUT_REASONS.TIME_IN_PAST);
   });
 
+  it("a validation names a conflict before the begin in the past", async function () {
+    // The staff's booking form validates a backwards booking over the
+    // self-booking's validation; what it shows is the conflict.
+    const res = await post(`/api/v2/${TENANT}/checkout/validate/room`, {
+      start: PAST_BEGIN,
+      end: PAST_END,
+      amount: 11,
+    });
+
+    expect(res.body.success).to.equal(false);
+    expect(res.body.error.reason).to.equal(
+      CHECKOUT_REASONS.BOOKABLE_UNAVAILABLE,
+    );
+  });
+
   it("the occupancy answers a past window as not available", async function () {
     const res = await h
       .api()
@@ -152,6 +169,20 @@ describe("checkout: a self-booking cannot start in the past", function () {
 
     expect(h.stored(booking.id)).to.exist;
     expect(h.stored(booking.id).timeBegin).to.equal(PAST_BEGIN);
+  });
+
+  it("the administration moves a booking backwards", async function () {
+    const booking = await h.manualBooking("room");
+    const earlier = { timeBegin: PAST_BEGIN - DAY, timeEnd: PAST_END - DAY };
+
+    const res = await h
+      .api()
+      .put(`/api/${TENANT}/bookings`)
+      .set(h.as(ADMIN))
+      .send(adminForm(h.stored(booking.id), earlier));
+
+    expect(res.status).to.equal(201);
+    expect(h.stored(booking.id).timeBegin).to.equal(earlier.timeBegin);
   });
 });
 
