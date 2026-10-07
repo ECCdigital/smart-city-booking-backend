@@ -102,6 +102,23 @@ describe("CancellationRefundService", function () {
     assert.strictEqual(afterStart.appliedRefundPercentage, 50);
   });
 
+  it("counts no days before the start of a booking without a time span and picks no tier", function () {
+    const tenant = { cancellationRefundTiers: tiers };
+
+    for (const timeBegin of [null, undefined, ""]) {
+      const result = CancellationRefundService.calculate({
+        tenant,
+        booking: { priceEur: 100, timeBegin },
+        cancelledAt: berlinMillis("2026-08-02T00:01:00"),
+        origin: CANCELLATION_ORIGINS.USER,
+      });
+
+      assert.strictEqual(result.daysBeforeStart, null, String(timeBegin));
+      assert.strictEqual(result.appliedTierDays, null, String(timeBegin));
+      assert.strictEqual(result.suggestedRefundPercentage, 100);
+    }
+  });
+
   it("calculates calendar days across the daylight-saving transition", function () {
     const days = CancellationRefundService.calculateDaysBeforeStart(
       berlinMillis("2026-03-30T00:01:00"),

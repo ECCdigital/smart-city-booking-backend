@@ -15,12 +15,18 @@
  * mandatory. It answers an `Outcome` with `bookingIds` and `bookings` or
  * throws: `NotFoundError group_booking_not_found | booking_not_found` and
  * the guard's `ConflictError invalid_transition` - with the `bookingIds` of
- * the members that deviate from the first, where the members differ in
+ * the members that deviate from the state of most, where the members differ in
  * state - before any effect; `LifecycleError` when an effect with abort
  * policy failed, the members written before it restored (spec part 2, 4.2).
  */
 
-const { STATUS, TRANSITION, TRIGGER, nextState } = require("./booking-state");
+const {
+  STATUS,
+  TRANSITION,
+  TRIGGER,
+  nextState,
+  groupStateOf,
+} = require("./booking-state");
 const {
   PHASE,
   step,
@@ -51,14 +57,11 @@ function isPricedGroup(bookings) {
 /**
  * The guard of the group (spec part 1, section 7): all members in the same
  * state, else `ConflictError invalid_transition` naming the members that
- * deviate from the first. A shared state the transition does not allow is
+ * deviate from the state of most members (`groupStateOf`). A shared state the transition does not allow is
  * the same error over every member (`nextStateOf`).
  */
 function sharedStatusOf(transition, groupBookingId, bookings) {
-  const status = bookings[0].status;
-  const deviating = bookings
-    .filter((booking) => booking.status !== status)
-    .map((booking) => booking.id);
+  const { status, deviating } = groupStateOf(bookings);
   if (deviating.length > 0) {
     throw new ConflictError("invalid_transition", {
       groupBookingId,

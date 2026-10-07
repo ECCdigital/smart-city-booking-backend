@@ -26,11 +26,14 @@ const logger = bunyan.createLogger({
 
 /**
  * The status of a refused checkout: an offer the checkout cannot reach is
- * the public's 404 (ADR 0003), a bad request its 400 - a begin in the past
- * among them (ECCdigital/tickets#188) -, everything else the legacy 409.
+ * the public's 404 (ADR 0003), an offer behind a login without a signed-in
+ * customer 401 (ECCdigital/tickets#123), a bad request its 400 - a begin in
+ * the past among them (ECCdigital/tickets#188) -, everything else the legacy
+ * 409.
  */
 const statusOf = (err) => {
   if (err?.statusCode === 404) return 404;
+  if (err?.reason === CHECKOUT_REASONS.LOGIN_REQUIRED) return 401;
   if (err?.cause?.code === 400) return 400;
   if (err?.reason === CHECKOUT_REASONS.TIME_IN_PAST) return 400;
   return 409;
