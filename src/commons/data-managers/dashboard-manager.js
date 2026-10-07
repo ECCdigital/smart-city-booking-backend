@@ -279,12 +279,14 @@ class DashboardManager {
    * @returns {Promise<number>}
    */
   static async countUsers(scope) {
-    const tenants = ownCondition("instanceDashboard", scope).id;
-    if (!tenants) {
+    // Under `own` the condition names the tenant set (`{ id: { $in } }`),
+    // under `any` it is empty.
+    const { id: tenantSet } = ownCondition("instanceDashboard", scope);
+    if (!tenantSet) {
       return UserModel.countDocuments({});
     }
     const userIds = await MembershipModel.distinct("userId", {
-      tenantId: tenants,
+      tenantId: tenantSet,
       status: "active",
     });
     return userIds.length;
