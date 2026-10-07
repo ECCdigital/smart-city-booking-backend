@@ -49,7 +49,9 @@ All optional, defaults in `.env-example`.
 
 The lock compares the lease with the clock of the process that asks: keep the
 servers' clocks in sync (NTP). The rate limits need the client IP, so the
-reverse proxy has to hand on `X-Forwarded-For`.
+reverse proxy has to hand on `X-Forwarded-For`, and from v4.3.1 the backend
+believes it only from the proxies `TRUSTED_PROXIES` names (see
+[v4.3.1-upgrade.md](migrations/v4.3.1-upgrade.md)).
 
 ## Procedure
 
