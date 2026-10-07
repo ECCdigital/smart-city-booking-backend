@@ -19,6 +19,7 @@ process.env.CRYPTO_SECRET =
 process.env.JWT_SECRET = process.env.JWT_SECRET || "registration-secret";
 
 const { errorHandler } = require("../src/middleware/error-handler");
+const { whenIdle } = require("../src/commons/services/user/after-answer");
 const UserManager = require("../src/commons/data-managers/user-manager");
 const { User } = require("../src/commons/entities/user/user");
 const {
@@ -59,6 +60,9 @@ function createApp() {
 }
 
 describe("public registration: account-neutral answers and rate limits", function () {
+  // Each request waits for the work left for after its answer (#259).
+  this.timeout(10000);
+
   let app;
   let users;
   let sent;
@@ -125,14 +129,21 @@ describe("public registration: account-neutral answers and rate limits", functio
     }
   });
 
-  const signup = (id, ip = IP_A) =>
-    request(app).post("/auth/signup").set("X-Forwarded-For", ip).send({
-      id,
-      password: "secret-1234",
-      firstName: "Neu",
-      lastName: "Nutzer",
-      legalAcceptance: true,
-    });
+  /** A signup and the work it leaves for after the answer (#259). */
+  const signup = async (id, ip = IP_A) => {
+    const res = await request(app)
+      .post("/auth/signup")
+      .set("X-Forwarded-For", ip)
+      .send({
+        id,
+        password: "secret-1234",
+        firstName: "Neu",
+        lastName: "Nutzer",
+        legalAcceptance: true,
+      });
+    await whenIdle();
+    return res;
+  };
 
   const verificationMailsTo = (address) =>
     sent.filter(
@@ -260,11 +271,14 @@ describe("public registration: account-neutral answers and rate limits", functio
   });
 
   describe("POST /auth/resend-verification", function () {
-    const resend = (id, ip = IP_A) =>
-      request(app)
+    const resend = async (id, ip = IP_A) => {
+      const res = await request(app)
         .post("/auth/resend-verification")
         .set("X-Forwarded-For", ip)
         .send({ id, verifyUrl: "https://store.example.test/verify" });
+      await whenIdle();
+      return res;
+    };
 
     it("mails an unverified account and answers 202", async function () {
       const res = await resend(KNOWN_UNVERIFIED);

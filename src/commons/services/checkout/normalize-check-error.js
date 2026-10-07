@@ -24,10 +24,23 @@ function resolveReason(rawErr) {
  * - `params` contains structured data the frontend can interpolate
  *   (e.g. {title}, {remaining}, {totalCapacity})
  * - `debugMessage` is the original German message — only for logs/debug.
+ *
+ * The bookings a capacity check counted (`concurrentBookings`) stay
+ * behind: they are bookings of others, and the answer goes to whoever
+ * asks, the anonymous included (ECCdigital/tickets#260).
  */
 function normalizeCheckError(err) {
   if (err && typeof err === "object" && err.checkType) {
-    const { checkType, message, available, reason: _reason, ...rest } = err;
+    const {
+      checkType,
+      message,
+      /* eslint-disable no-unused-vars */
+      available,
+      reason: _reason,
+      concurrentBookings: _concurrentBookings,
+      /* eslint-enable no-unused-vars */
+      ...rest
+    } = err;
 
     return {
       reason: resolveReason(err),
