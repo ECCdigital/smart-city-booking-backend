@@ -145,10 +145,6 @@ class UserManager {
     return user;
   }
 
-  static async getRawUserBy(filter) {
-    return await UserModel.findOne(filter);
-  }
-
   static async findRawUserByIdOrKeycloak(userId, keycloakId = null) {
     const normalizedKeycloakId = String(keycloakId || "").trim();
 

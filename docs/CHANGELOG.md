@@ -48,7 +48,7 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ### Fixed
 
-- Sign-in, signup, verification resend and forgot password no longer tell whether an address has an account ([ECCdigital/tickets#259](https://github.com/ECCdigital/tickets/issues/259)): an account is found by its exact address, trimmed and without regard to case, never as a pattern; the sign-in answers an unknown account, a wrong password and an SSO account alike (`401`), unverified and suspended only with the right password; signup, resend and forgot password answer before the lookup and the mail, a failing mail is only logged. Changed answers and the check for accounts that differ only in case: [docs/migrations/v4.3.1-upgrade.md](migrations/v4.3.1-upgrade.md)
+- Sign-in, signup, verification resend and forgot password no longer tell whether an address has an account ([ECCdigital/tickets#259](https://github.com/ECCdigital/tickets/issues/259)): an account is found by its exact address, trimmed and without regard to case, never as a pattern, also when an account's id is changed (an older account in another case blocks the new id) and when the email verification compares the address with its token; the sign-in answers an unknown account, a wrong password and an SSO account alike (`401`), unverified and suspended only with the right password; signup, resend and forgot password answer before the lookup and the mail, a failing mail is only logged. Changed answers and the check for accounts that differ only in case: [docs/migrations/v4.3.1-upgrade.md](migrations/v4.3.1-upgrade.md)
 
 ### Added
 

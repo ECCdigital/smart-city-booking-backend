@@ -32,6 +32,8 @@ const authenticationRouter = require("../src/platform/authentication/authenticat
 const UserManager = require("../src/commons/data-managers/user-manager");
 const UserModel = require("../src/commons/data-managers/models/userModel");
 const { User } = require("../src/commons/entities/user/user");
+const { USER_HOOK_TYPES } = require("../src/commons/entities/user/userHook");
+const UserService = require("../src/commons/services/user-service");
 const MailerService = require("../src/commons/mail-service/mail-service");
 const JwtHelper = require("../src/commons/utilities/jwt-helper");
 const { whenIdle } = require("../src/commons/services/user/after-answer");
@@ -120,6 +122,18 @@ function installUserCollection(documents) {
     .callsFake(async (filter) =>
       docs.filter((doc) => matches(doc, filter)).map(asDocument),
     );
+  // `findOne` answers what `find` answers, and the hook lookup of the
+  // verification by `hooks.id`.
+  sinon.stub(UserModel, "findOne").callsFake(async (filter) => {
+    if (Object.keys(filter).length === 1 && "hooks.id" in filter) {
+      return asDocument(
+        docs.find((doc) =>
+          (doc.hooks ?? []).some((hook) => hook.id === filter["hooks.id"]),
+        ),
+      );
+    }
+    return asDocument(docs.find((doc) => matches(doc, filter)));
+  });
   sinon.stub(UserModel, "create").callsFake(async (user) => {
     docs.push(plain(user));
     return asDocument(docs[docs.length - 1]);
@@ -443,6 +457,60 @@ describe("auth: no account oracle (ECCdigital/tickets#259)", function () {
       await whenIdle();
 
       assert.strictEqual(transport.sent.length, 0);
+    });
+  });
+
+  describe("POST /auth/verify-email", function () {
+    const verifyHook = (id) => ({
+      id,
+      type: USER_HOOK_TYPES.VERIFY,
+      status: "active",
+      payload: {},
+    });
+
+    beforeEach(function () {
+      docs.find((doc) => doc.id === UNVERIFIED).hooks = [
+        verifyHook("hook-pending"),
+      ];
+    });
+
+    const verify = (token, id) =>
+      request(app).post("/auth/verify-email").send({ token, id });
+    const unverified = () => docs.find((doc) => doc.id === UNVERIFIED);
+
+    it("verifies the account of the token, its address named in another case and with blanks around it", async function () {
+      const res = await verify("hook-pending", "  Pending@Example.TEST ");
+
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(unverified().isVerified, true);
+    });
+
+    it("still refuses the token of another account", async function () {
+      const res = await verify("hook-pending", OWNER);
+
+      assert.strictEqual(res.status, 400);
+      assert.strictEqual(unverified().isVerified, false);
+    });
+  });
+
+  describe("changing the id of an account", function () {
+    it("refuses a new id that an account stored in another case has", async function () {
+      // Two accounts, told apart by their database id; the second is an
+      // older one that kept its case.
+      docs.find((doc) => doc.id === OWNER)._id = "oid-owner";
+      docs.push({
+        ...account("erika@example.test"),
+        _id: "oid-erika",
+        id: "Erika@Example.test",
+      });
+
+      await assert.rejects(
+        UserService.changeUserId({
+          currentId: OWNER,
+          newId: " erika@example.test",
+        }),
+        { status: 409, message: "Target user id already exists" },
+      );
     });
   });
 
