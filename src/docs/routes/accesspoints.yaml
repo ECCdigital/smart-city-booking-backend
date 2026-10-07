@@ -74,6 +74,14 @@
       as sent rather than normalised away, and an access point the provider
       does not list is not restricted.
 
+      `provider` has to be one the registry knows (`ifbs`, `nuki`, `pareva`,
+      `salto-ks`); any other is answered with an `unknown_provider` validation
+      error carrying the offending `provider`, field `provider`. Like the other
+      checks, this is checked against the state this request would leave
+      behind, so an existing access point with such a provider is refused as
+      soon as it is saved again. Whether the tenant has switched the provider
+      on does not matter here.
+
       The provider's listing is fetched once per save. A provider that cannot
       be asked is answered as such and nothing is stored: an HTTP 401 or 403
       from the provider (token rejected) is a `502 access_provider_rejected`,
@@ -311,6 +319,15 @@
         description: Not a tenant owner
       "404":
         description: The tenant has no access point with that id
+      "503":
+        description: |
+          `store_front_url_missing`: the instance has no `STORE_FRONT_URL`, so
+          there is no address to encode. A configuration of the instance, not a
+          failure of the request.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreFrontUrlMissing"
 
 /api/{tenant}/accesspoints/{id}/location-prefill:
   get:
@@ -653,6 +670,24 @@ components:
           example: qrScan
       required:
         - type
+
+    StoreFrontUrlMissing:
+      type: object
+      description: |
+        The body of a 503 answer of the QR code route: the instance has no
+        `STORE_FRONT_URL`, so the scan address cannot be built.
+      properties:
+        error:
+          type: string
+          example: BaseError
+        code:
+          type: string
+          example: store_front_url_missing
+        statusCode:
+          type: integer
+          example: 503
+        params:
+          type: object
 
     AccessProviderRejected:
       type: object
