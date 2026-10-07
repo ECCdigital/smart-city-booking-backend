@@ -46,6 +46,10 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 - Supervision mails to tenant owners say „Freigabestufe" (spec §8); the self-creation notice to instance owners keeps „Aufsichtsstufe". A change to `declined` has its own subject („Ihr Mandant X wurde abgewiesen"), a hint and a contact line from `instance.contactAddress` or `mailAddress`; its withdrawal is the generic level change. Mail snapshots change on purpose
 
+### Fixed
+
+- Sign-in, signup, verification resend and forgot password no longer tell whether an address has an account ([ECCdigital/tickets#259](https://github.com/ECCdigital/tickets/issues/259)). An account is found by its exact address, trimmed and without regard to case, never as a search pattern (`^own` with the owner's password signed in as the owner, `.*` sent the first account's reset link); this holds for every lookup of an account by its id. `POST /auth/signin` answers an unknown account, a wrong password and an SSO account alike with `401` `Invalid email or password` (was `404`/`401`); `User is not verified` and `User is suspended` (`403`) only come with the right password. Signup, resend and forgot password answer before the lookup and the mail - a slow or failing mail server no longer shows in the time or the status of the answer, a failure is only logged, signup no longer answers `500` with the text of the mail server; `POST /auth/signup` answers `201` with the body of the resend. Before the deploy, check for accounts whose addresses differ only in case - see [docs/migrations/v4.3.1-upgrade.md](migrations/v4.3.1-upgrade.md)
+
 ### Added
 
 - Maximum per booking of a bookable (ECCdigital/tickets#35): the field `maxAmountPerBooking` (integer ≥ 1, empty is unlimited) caps the units of a bookable one self-booking holds, summed over its positions of it; a mandatory addon does not count, a manual booking is not checked, an external provider's `maxAmount` applies as well. The checkout refuses with `checkType` `max-amount` and the reason `checkout.max_amount_per_booking_exceeded` (params `maxAmountPerBooking`, `bookableId`, `title`). Admin UI and storefront from their matching release

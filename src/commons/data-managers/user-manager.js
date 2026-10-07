@@ -13,9 +13,7 @@ const { ROLE_GROUPS, ROLE_LEVELS } = require("../entities/role/role-catalogue");
 
 class UserManager {
   static async getUser(id, withSensitive = false) {
-    const rawUser = await UserModel.findOne({
-      id: { $regex: id, $options: "i" },
-    });
+    const rawUser = await UserManager._findRawById(id);
     if (!rawUser) {
       return null;
     }
@@ -27,11 +25,37 @@ class UserManager {
     return user;
   }
 
+  /**
+   * The account of an address (the account id), found exactly: without
+   * blanks around it and without regard to case, never as a pattern
+   * (ECCdigital/tickets#259) - `^own` or `.*` find nothing. Every lookup of an
+   * account by its id goes through here.
+   *
+   * Ids are stored in lower case; an older one stored in another case or
+   * with blanks around it is found by the anchored comparison of the escaped
+   * address.
+   *
+   * @param {*} id The address as given
+   * @returns {Promise<Object|null>} The raw document
+   */
+  static async _findRawById(id) {
+    const normalizedId = String(id ?? "")
+      .trim()
+      .toLowerCase();
+    if (!normalizedId) {
+      return null;
+    }
+
+    return (
+      (await UserModel.findOne({ id: normalizedId })) ??
+      (await UserModel.findOne({
+        id: { $regex: `^\\s*${escapeRegex(normalizedId)}\\s*$`, $options: "i" },
+      }))
+    );
+  }
+
   static async getRawUser(id) {
-    const rawUser = await UserModel.findOne({
-      id: { $regex: id, $options: "i" },
-    });
-    return rawUser;
+    return await UserManager._findRawById(id);
   }
 
   static async signupUser(user) {
@@ -123,20 +147,9 @@ class UserManager {
   }
 
   static async findRawUserByIdOrKeycloak(userId, keycloakId = null) {
-    const normalizedUserId = String(userId || "")
-      .trim()
-      .toLowerCase();
     const normalizedKeycloakId = String(keycloakId || "").trim();
 
-    let rawUser = null;
-    if (normalizedUserId) {
-      rawUser = await UserModel.findOne({ id: normalizedUserId });
-      if (!rawUser) {
-        rawUser = await UserModel.findOne({
-          id: { $regex: `^${escapeRegex(normalizedUserId)}$`, $options: "i" },
-        });
-      }
-    }
+    let rawUser = await UserManager._findRawById(userId);
 
     if (!rawUser && normalizedKeycloakId) {
       rawUser = await UserModel.findOne({ keycloakId: normalizedKeycloakId });
