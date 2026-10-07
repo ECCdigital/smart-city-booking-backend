@@ -13,8 +13,8 @@
 const ENV_NAME = "TRUSTED_PROXIES";
 
 /** @returns {string[]} The entries of the variable, empty when it is unset. */
-function trustedProxies() {
-  return String(process.env[ENV_NAME] ?? "")
+function getTrustedProxies() {
+  return (process.env[ENV_NAME] ?? "")
     .split(",")
     .map((entry) => entry.trim())
     .filter(Boolean);
@@ -22,12 +22,20 @@ function trustedProxies() {
 
 /**
  * Sets `trust proxy` of the app from `TRUSTED_PROXIES`. Throws, naming the
- * variable, for an entry that is no address, network or Express name.
+ * variable, for an entry that is no address, network or Express name. A bare
+ * number is refused too: Express reads it as a hop count elsewhere, but here
+ * it would pass as an IPv4 shorthand (`1` is `0.0.0.1`).
  *
- * @param {import("express").Express} app
+ * @param {import("express").Express} app The app whose `req.ip` it sets
  */
 function applyTrustedProxies(app) {
-  const proxies = trustedProxies();
+  const proxies = getTrustedProxies();
+  const hopCount = proxies.find((entry) => /^\d+$/.test(entry));
+  if (hopCount !== undefined) {
+    throw new Error(
+      `${ENV_NAME} is invalid: "${hopCount}" is no address or network`,
+    );
+  }
   try {
     app.set("trust proxy", proxies.length > 0 ? proxies : false);
   } catch (error) {

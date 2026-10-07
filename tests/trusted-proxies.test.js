@@ -101,8 +101,19 @@ describe("trusted proxies: the client address the signup limit counts", function
     });
   }
 
-  describe("without TRUSTED_PROXIES", function () {
-    it("counts the direct address, whatever X-Forwarded-For says", async function () {
+  describe("without the direct address among TRUSTED_PROXIES", function () {
+    it("counts the direct address without the variable, whatever X-Forwarded-For says", async function () {
+      const app = createApp();
+
+      const first = await signup(app, CLIENT_A);
+      const second = await signup(app, CLIENT_B);
+
+      assert.strictEqual(first.status, 201);
+      assert.strictEqual(second.status, 429);
+    });
+
+    it("counts the direct address of a client that is no trusted proxy", async function () {
+      process.env.TRUSTED_PROXIES = "10.0.0.0/8";
       const app = createApp();
 
       const first = await signup(app, CLIENT_A);
@@ -191,6 +202,12 @@ describe("trusted proxies: the client address the signup limit counts", function
 
   it("refuses to start with an entry that is no address or network, naming the variable", function () {
     process.env.TRUSTED_PROXIES = "127.0.0.1, traefik";
+
+    assert.throws(() => createApp(), /TRUSTED_PROXIES/);
+  });
+
+  it("refuses a hop count, which would pass for an address", function () {
+    process.env.TRUSTED_PROXIES = "1";
 
     assert.throws(() => createApp(), /TRUSTED_PROXIES/);
   });
