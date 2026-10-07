@@ -32,7 +32,7 @@ Full wiring matrix and Compose notes: [getting-started.md](getting-started.md).
 
 SSO is set up per instance in the Admin UI under „Instanz verwalten → Single Sign-On“, not in the environment. The tab shows the setup of the realm with the instance's values, checks the realm („Realm prüfen“) and gives both as text for the customer's IT („Als Text“). For the first setup, sign in locally as the instance owner from `INIT_ADMIN` / `INIT_ADMIN_SECRET`.
 
-Keycloak 26.x; the tab names the minimum version.
+Keycloak 26.x; the tab names the minimum and the recommended version. An update of Keycloak can ask more of a realm set up before it, and SSO sign-in then fails: run „Realm prüfen“ after every update of Keycloak and set up what it finds as the tab shows.
 
 Outside the tab, the backend needs to reach the Keycloak-URL entered there: it introspects Keycloak tokens with the API-Client, and „Realm prüfen“ calls Keycloak and the Storefront under the instance's Portal-URL from the backend. When every SSO sign-in fails, sign in locally and run „Realm prüfen“; the backend's log warns when Keycloak refuses tokens for a missing Audience mapper.
 
