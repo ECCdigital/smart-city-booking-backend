@@ -376,34 +376,46 @@ class AuthenticationController {
     }
   }
 
-  static resetPassword(request, response) {
-    const id = request.body.id;
-    const password = request.body.password;
+  /**
+   * The password change of the signed-in account: only its own password,
+   * and only with the current one. The account named in the body is no
+   * longer read. The new password stands behind a hook the user confirms
+   * from the mail, as before.
+   *
+   * @param {import("express").Request} request - `body`: `{ currentPassword, password }`; `user`: the signed-in account
+   * @param {import("express").Response} response - `200`; `400` without both passwords; `403` for a wrong current password or an account without one (SSO)
+   * @returns {Promise<void>}
+   */
+  static async resetPassword(request, response) {
+    const { currentPassword, password } = request.body;
 
-    if (id && password) {
-      UserManager.getUser(id, true)
-        .then((user) => {
-          if (user) {
-            UserService.resetPassword(user, password)
-              .then(() => {
-                logger.info(`Password reset for user ${user.id}.`);
-                response.sendStatus(200);
-              })
-              .catch((err) => {
-                logger.error(err);
-                response.status(500).send("could not reset password");
-              });
-          } else {
-            logger.warn(`Could not reset password. User ${id} not found.`);
-            response.sendStatus(404);
-          }
-        })
-        .catch((err) => {
-          logger.error(err);
-          response.sendStatus(500);
-        });
-    } else {
-      response.sendStatus(400);
+    if (
+      typeof currentPassword !== "string" ||
+      typeof password !== "string" ||
+      !currentPassword ||
+      !password
+    ) {
+      return response
+        .status(400)
+        .send("Current password and password are required");
+    }
+
+    try {
+      const user = await UserManager.getUser(request.user.id, true);
+      if (
+        !user ||
+        user.authType !== "local" ||
+        !user.verifyPassword(currentPassword)
+      ) {
+        return response.status(403).send("Current password is wrong");
+      }
+
+      await UserService.resetPassword(user, password);
+      logger.info(`Password reset for user ${user.id}.`);
+      return response.sendStatus(200);
+    } catch (err) {
+      logger.error(err);
+      return response.status(500).send("could not reset password");
     }
   }
 
