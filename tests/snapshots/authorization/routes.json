@@ -1189,6 +1189,13 @@
     "tenantOwner": 200,
     "instanceOwner": 200
   },
+  "POST /api/:tenant/bookings/:id/cancel": {
+    "anonymous": 401,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
   "POST /api/:tenant/bookings/:id/request-reject": {
     "anonymous": 201,
     "signedIn": 201,

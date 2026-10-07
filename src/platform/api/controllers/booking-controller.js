@@ -14,6 +14,7 @@ const {
 } = require("../../../commons/services/documents/document-issuance");
 const {
   BaseError,
+  BadRequestError,
   ConflictError,
   ForbiddenError,
   NotFoundError,
@@ -32,7 +33,11 @@ const {
   CheckoutPolicy,
 } = require("../../../commons/services/checkout/checkout-policy");
 const WorkflowService = require("../../../commons/services/workflow/workflow-service");
-const { scopeOf, PUBLIC } = require("../../../commons/services/authorization");
+const {
+  scopeOf,
+  PUBLIC,
+  REACH,
+} = require("../../../commons/services/authorization");
 const {
   resolveCheckoutId,
 } = require("../../../commons/utilities/checkout-utils");
@@ -767,6 +772,65 @@ class BookingController {
         code: "booking_reject_request_failed",
         fallback: "Could not reject booking",
         body: (error) => ({ code: error.code, message: error.message }),
+      });
+    }
+  }
+
+  /**
+   * The direct cancellation of the signed-in booker's own booking (glossary
+   * "Storno", trigger customer): no cancellation request, no mail to
+   * confirm - the lifecycle transition `cancel` as the release of a request
+   * runs it. Checked in this order: a reason, before any booking is read
+   * (400 `reason_required`); the booking, the user's own only, whoever
+   * they are (404 `booking_not_found`); its cancellation policy (403
+   * `booking_user_cancellation_disabled`); its state (the lifecycle's 409
+   * `invalid_transition`). The bank details go to the cancellation
+   * document of a paid booking and are dropped otherwise. Answers 200
+   * without a body.
+   */
+  static async cancelBooking(request, response) {
+    try {
+      const { tenant, id } = request.params;
+      const { reason, bankDetails } = request.body || {};
+      const trimmedReason = typeof reason === "string" ? reason.trim() : "";
+      if (!trimmedReason) {
+        return ApiResponse.fail(
+          response,
+          new BadRequestError("reason_required"),
+        );
+      }
+
+      // Own only, even for the administration: a booking of someone else
+      // is cancelled by the administration's rejection, with its own rules.
+      const { userId } = scopeOf(request);
+      const booking = await BookingManager.getBooking(id, tenant, {
+        reach: REACH.OWN,
+        userId,
+      });
+      if (!booking) {
+        return BookingController._notFound(response, id);
+      }
+      if (booking.cancellationPolicy?.userCancellable !== true) {
+        return ApiResponse.fail(
+          response,
+          new ForbiddenError("booking_user_cancellation_disabled", {
+            bookingId: id,
+          }),
+        );
+      }
+
+      logger.info(`${tenant} -- cancelling booking ${id} by user ${userId}`);
+      await bookingLifecycle.cancel(tenant, id, {
+        trigger: TRIGGER.CUSTOMER,
+        reason: trimmedReason,
+        bankDetails: booking.isPayed === true ? bankDetails || null : null,
+        cancelledByUserId: userId,
+      });
+      return response.sendStatus(200);
+    } catch (err) {
+      answerTransitionError(err, response, {
+        code: "booking_cancellation_failed",
+        fallback: "Could not cancel booking",
       });
     }
   }

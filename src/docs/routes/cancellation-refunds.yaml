@@ -127,6 +127,60 @@
           `invalid_transition` - the booking is cancelled or rejected already
           (params carry `status` and `transition`)
 
+/api/{tenant}/bookings/{bookingId}/cancel:
+  post:
+    tags:
+      - Bookings
+    summary: Cancel the own booking directly
+    description: |
+      The signed-in booker cancels their own booking at once, without a
+      cancellation request and without a confirmation mail. Only the own
+      booking, for the administration as well; a booking of someone else
+      is cancelled through `POST /bookings/{bookingId}/reject`.
+
+      A request is rejected, a confirmed booking or one awaiting payment is
+      cancelled, with the trigger customer: the refund follows the tenant's
+      tiers, the access is revoked, a priced booking gets its cancellation
+      document, and the booker is mailed the cancellation with it. The
+      reason is stored trimmed. Bank details go to the cancellation document
+      of a paid booking and are dropped silently otherwise. An open
+      cancellation request stays on the booking; releasing it later answers
+      409.
+
+      Checked in this order: the reason (400), the booking (404), the
+      cancellation policy (403), the state (409).
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/CancellationTenantParam"
+      - $ref: "#/components/parameters/CancellationBookingIdParam"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/BookingUserCancellationRequest"
+    responses:
+      "200":
+        description: Booking cancelled; no body
+      "400":
+        description: >-
+          `reason_required` - no reason, an empty one or one of blanks only;
+          checked before the booking is read
+      "401":
+        description: Not authenticated
+      "403":
+        description: >-
+          `booking_user_cancellation_disabled` - the cancellation policy of
+          the booking does not let the user cancel it
+      "404":
+        description: >-
+          `booking_not_found` - no booking of the signed-in user with this id
+      "409":
+        description: >-
+          `invalid_transition` - the booking is cancelled or rejected already
+          (params carry `status` and `transition`)
+
 /api/{tenant}/group-bookings/{groupBookingId}/cancellation-refund-preview:
   get:
     tags:
@@ -238,6 +292,31 @@ components:
         bankDetails:
           type: object
           description: Optional bank details used only while rendering the document.
+          properties:
+            accountHolder:
+              type: string
+            bankName:
+              type: string
+            iban:
+              type: string
+            bic:
+              type: string
+
+    BookingUserCancellationRequest:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          description: Why the booker cancels; must contain more than blanks.
+        bankDetails:
+          type: object
+          description: >-
+            Optional bank details for the refund of a paid booking, used only
+            while rendering the cancellation document; dropped for an unpaid
+            booking.
           properties:
             accountHolder:
               type: string

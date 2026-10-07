@@ -448,9 +448,10 @@ function createBookingLifecycle(adapters) {
    * due, the open refund state (glossary "Erstattungsstand"), and drops the
    * hook of a cancellation request; then the access is revoked, the cancellation
    * document issued for a priced booking unless the caller leaves it out,
-   * the workflow told and the customer mailed - the rejection of a request,
-   * the cancellation otherwise (a request the customer withdrew through a
-   * hook reads as a cancellation, as before).
+   * the workflow told and the customer mailed - the rejection of a request
+   * the administration or the system turned down, the cancellation
+   * otherwise (a request the customer withdrew, directly or through a hook,
+   * reads as a cancellation).
    *
    * @param {string} tenantId
    * @param {string} bookingId
@@ -498,7 +499,10 @@ function createBookingLifecycle(adapters) {
       { status: booking.status, cancelledFrom: from },
     );
 
-    const rejection = booking.status === STATUS.REJECTED && !hookId;
+    const rejection =
+      booking.status === STATUS.REJECTED &&
+      trigger !== TRIGGER.CUSTOMER &&
+      !hookId;
     const files = [];
 
     const notice = noticeOf(tenantId, bookingId);

@@ -288,6 +288,11 @@ router.post(
   BookingController.rejectBooking,
 );
 router.post(
+  "/bookings/:id/cancel",
+  authorize("booking", "cancel"),
+  BookingController.cancelBooking,
+);
+router.post(
   "/bookings/:id/request-reject",
   tokenAuthorized(),
   BookingController.requestRejectBooking,
