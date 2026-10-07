@@ -46,6 +46,10 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 - Supervision mails to tenant owners say „Freigabestufe" (spec §8); the self-creation notice to instance owners keeps „Aufsichtsstufe". A change to `declined` has its own subject („Ihr Mandant X wurde abgewiesen"), a hint and a contact line from `instance.contactAddress` or `mailAddress`; its withdrawal is the generic level change. Mail snapshots change on purpose
 
+### Security
+
+- `fast-xml-parser` is a direct dependency at `^4.5.5` (ECCdigital/tickets#199): `webdav` pulled in 4.3.2, which has CVE-2026-25896. No code change
+
 ### Added
 
 - Maximum per booking of a bookable (ECCdigital/tickets#35): the field `maxAmountPerBooking` (integer ≥ 1, empty is unlimited) caps the units of a bookable one self-booking holds, summed over its positions of it; a mandatory addon does not count, a manual booking is not checked, an external provider's `maxAmount` applies as well. The checkout refuses with `checkType` `max-amount` and the reason `checkout.max_amount_per_booking_exceeded` (params `maxAmountPerBooking`, `bookableId`, `title`). Admin UI and storefront from their matching release
