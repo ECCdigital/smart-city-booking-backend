@@ -684,12 +684,17 @@ async function installHarness({
         .map((id) => clone(store.get(id))),
     });
   /**
-   * Whether a stored group is within the reach; a read without a reach is
-   * the programming error the real manager throws (ADR 0002).
+   * Whether a stored group is within the reach, by the condition the real
+   * manager queries with (none under `public`); a read without a reach
+   * throws here as it does there (ADR 0002).
    */
   const groupWithinReach = (doc, scope) => {
-    if (scope?.reach !== "public") ownCondition("groupBooking", scope);
-    return withinReach(doc, scope);
+    const condition =
+      scope?.reach === "public" ? {} : ownCondition("groupBooking", scope);
+    return (
+      Boolean(doc) &&
+      Object.entries(condition).every(([field, value]) => doc[field] === value)
+    );
   };
   sinon
     .stub(GroupBookingManager, "getGroupBooking")
