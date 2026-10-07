@@ -21,9 +21,12 @@ const path = require("node:path");
 
 const { normalizeUserId } = require("../src/commons/utilities/user-id-utils");
 
-const FOUND_YES = "yes";
-const FOUND_NO = "no";
-const FOUND_UNDETERMINED = "undetermined";
+/** Whether a lookup of the address finds an account from v4.3.1 on. */
+const FOUND = Object.freeze({
+  YES: "yes",
+  NO: "no",
+  UNDETERMINED: "undetermined",
+});
 
 /**
  * The roles a membership gives, as the report names them.
@@ -58,20 +61,29 @@ function rolesOfMembership(membership) {
  * @returns {string[]} One of `yes`, `no`, `undetermined` per account.
  */
 function foundFromV431(accounts, address) {
-  const exact = accounts.filter((account) => account.id === address).length;
+  const exactCount = accounts.filter(
+    (account) => account.id === address,
+  ).length;
   return accounts.map((account) => {
-    if (exact === 0) return FOUND_UNDETERMINED;
-    if (account.id !== address) return FOUND_NO;
-    return exact === 1 ? FOUND_YES : FOUND_UNDETERMINED;
+    if (exactCount === 0) return FOUND.UNDETERMINED;
+    if (account.id !== address) return FOUND.NO;
+    return exactCount === 1 ? FOUND.YES : FOUND.UNDETERMINED;
   });
 }
 
 /**
  * Finds the accounts whose addresses differ only in case or in blanks around
- * them, with the bookings assigned to each and the roles it holds. Bookings
- * and roles count for the account whose stored id they name exactly; those
- * naming the address in a spelling no account of it has are reported for the
- * address. Reads only.
+ * them, with the bookings assigned to each and the roles it holds. Reads only.
+ *
+ * Bookings (`assignedUserId`) and the instance owner (`ownerUserIds`) name an
+ * account by its stored id exactly; those naming the address in a spelling no
+ * account of it has are reported for the address (`otherSpellings`).
+ * Memberships are stored and looked up by the address trimmed and in lower
+ * case (`MembershipManager.getMembershipsByUserID`), so their roles count for
+ * every account of the address.
+ *
+ * Reads the models directly, not through the managers: a scan of all
+ * accounts across tenants, outside any request and its reach.
  *
  * @param {Object} models - `UserModel`, `BookingModel`, `MembershipModel`, `InstanceModel`.
  * @returns {Promise<Object[]>} One entry per address: `{ address, accounts, otherSpellings }`.
@@ -125,8 +137,11 @@ async function findCaseDuplicateAccounts({
     return [];
   }
 
-  /** Who a reference names: an account of a group, the group itself, or none. */
-  function holderOf(userId) {
+  /**
+   * Who a reference by the exact id names: the account of a group stored
+   * under that id, the group's other spellings, or nobody (`null`).
+   */
+  function exactHolderOf(userId) {
     const group = groups.get(normalizeUserId(userId));
     if (!group) return null;
     return (
@@ -135,15 +150,16 @@ async function findCaseDuplicateAccounts({
     );
   }
 
-  const spelling = (holder, userId) =>
-    holder.id === undefined ? ` (as ${JSON.stringify(userId)})` : "";
-
   const instances = await InstanceModel.find({}, { ownerUserIds: 1 }).lean();
   for (const instance of instances) {
     for (const ownerId of instance.ownerUserIds ?? []) {
-      const holder = holderOf(ownerId);
-      if (holder)
-        holder.roles.push(`instance owner${spelling(holder, ownerId)}`);
+      const holder = exactHolderOf(ownerId);
+      if (!holder) continue;
+      holder.roles.push(
+        holder.id === ownerId
+          ? "instance owner"
+          : `instance owner (as ${JSON.stringify(ownerId)})`,
+      );
     }
   }
 
@@ -152,10 +168,10 @@ async function findCaseDuplicateAccounts({
     { userId: 1, tenantId: 1, roles: 1, owner: 1, status: 1 },
   ).lean();
   for (const membership of memberships) {
-    const holder = holderOf(membership.userId);
-    if (!holder) continue;
+    const group = groups.get(normalizeUserId(membership.userId));
+    if (!group) continue;
     for (const role of rolesOfMembership(membership)) {
-      holder.roles.push(`${role}${spelling(holder, membership.userId)}`);
+      group.accounts.forEach((account) => account.roles.push(role));
     }
   }
 
@@ -164,7 +180,7 @@ async function findCaseDuplicateAccounts({
     { _id: 0, assignedUserId: 1 },
   ).lean();
   for (const booking of bookings) {
-    const holder = holderOf(booking.assignedUserId);
+    const holder = exactHolderOf(booking.assignedUserId);
     if (holder) holder.bookings += 1;
   }
 
@@ -220,8 +236,9 @@ function formatReport(groups) {
 }
 
 async function main() {
-  // Anchored at the repository like the CLIs under src/cli; variables set in
-  // the environment win over the file.
+  // Required here, not at the top: the test loads this module without
+  // configuration or database. Anchored at the repository like the CLIs
+  // under src/cli; variables set in the environment win over the file.
   require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 
   const yargs = require("yargs/yargs");

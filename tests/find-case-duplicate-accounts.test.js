@@ -3,7 +3,11 @@
  * on an account is found by its address trimmed and without regard to case
  * (ECCdigital/tickets#259), so of two accounts that differ only so one is no
  * longer found. The check names them, with their bookings and roles, and
- * changes nothing: the models it gets can only read.
+ * changes nothing: the models it gets can only read. Memberships are stored
+ * and found by the address in lower case (since the migration
+ * 02-07-2026-normalize-membership-invitation-user-ids), so their roles belong
+ * to every account of the address; bookings and the instance owner name one
+ * account by its exact id.
  */
 
 const { expect } = require("chai");
@@ -162,7 +166,7 @@ describe("find-case-duplicate-accounts (ECCdigital/tickets#283)", function () {
     });
   });
 
-  it("names the roles of each account: instance owner, tenant owner, roles of a membership", async function () {
+  it("names the roles of each account: instance owner by its exact id, the memberships of its address", async function () {
     const [group] = await findCaseDuplicateAccounts(
       models({
         users: [account("Erika@example.org"), account("erika@example.org")],
@@ -183,7 +187,11 @@ describe("find-case-duplicate-accounts (ECCdigital/tickets#283)", function () {
       group.accounts.map((a) => [a.id, a.roles]),
     );
     expect(rolesOf).to.deep.equal({
-      "Erika@example.org": ["instance owner"],
+      "Erika@example.org": [
+        "instance owner",
+        "owner of tenant t1",
+        "roles r1, r2 in tenant t2 (pending)",
+      ],
       "erika@example.org": [
         "owner of tenant t1",
         "roles r1, r2 in tenant t2 (pending)",
@@ -191,12 +199,12 @@ describe("find-case-duplicate-accounts (ECCdigital/tickets#283)", function () {
     });
   });
 
-  it("reports bookings and roles in a spelling no account of the address has", async function () {
+  it("reports bookings and the instance owner in a spelling no account of the address has", async function () {
     const [group] = await findCaseDuplicateAccounts(
       models({
         users: [account("ERIKA@example.org"), account("Erika@example.org")],
         bookings: [booking("erika@example.org"), booking(" erika@example.org")],
-        memberships: [membership("erika@example.org", "t1", { owner: true })],
+        instances: [{ ownerUserIds: ["erika@example.org"] }],
       }),
     );
 
@@ -204,7 +212,7 @@ describe("find-case-duplicate-accounts (ECCdigital/tickets#283)", function () {
     expect(group.accounts.map((a) => a.roles)).to.deep.equal([[], []]);
     expect(group.otherSpellings).to.deep.equal({
       bookings: 2,
-      roles: ['owner of tenant t1 (as "erika@example.org")'],
+      roles: ['instance owner (as "erika@example.org")'],
     });
   });
 
@@ -240,7 +248,7 @@ describe("find-case-duplicate-accounts (ECCdigital/tickets#283)", function () {
           "Accounts whose addresses differ only in case or in blanks around them: 1 address, 2 accounts.",
           "",
           "erika@example.org",
-          '  - "Erika@example.org" (_id 64f000000000000000000001, created 2024-05-02, local, unverified): found from v4.3.1 on: no; bookings: 0; roles: none',
+          '  - "Erika@example.org" (_id 64f000000000000000000001, created 2024-05-02, local, unverified): found from v4.3.1 on: no; bookings: 0; roles: owner of tenant t1',
           '  - "erika@example.org" (_id 64f000000000000000000002, created 2025-01-15, keycloak, verified): found from v4.3.1 on: yes; bookings: 1; roles: owner of tenant t1',
         ].join("\n"),
       );
