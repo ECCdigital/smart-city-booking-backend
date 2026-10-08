@@ -296,6 +296,54 @@ describe("booking lifecycle: cancel", function () {
     ]);
   });
 
+  it("a request the customer withdraws without a hook reads as a cancellation: the cancel mail, not the rejection", async function () {
+    const { adapters, lifecycle } = lifecycleOver({
+      bookings: [booking({ status: "requested" })],
+    });
+
+    const outcome = await lifecycle.cancel(TENANT, "B-1", {
+      trigger: TRIGGER.CUSTOMER,
+      reason: "Doch nicht",
+      cancelledByUserId: "erika",
+    });
+
+    expect(effectTable(outcome)).to.deep.equal([
+      "persist store.save ok",
+      "provision access.revoke ok",
+      "document documents.issue ok",
+      "notify workflow.emit ok",
+      "notify mail.BOOKING_REJECTION skipped",
+      "notify mail.BOOKING_CANCEL ok",
+    ]);
+    const stored = adapters.store.rows.get("B-1");
+    expect(stored.status).to.equal("rejected");
+    expect(stored.cancellationRefund).to.include({
+      origin: "user",
+      cancelledByUserId: "erika",
+    });
+    const [mail] = adapters.mail.calls;
+    expect(mail.args[0]).to.equal("BOOKING_CANCEL");
+    expect(mail.args[1].reason).to.equal("Doch nicht");
+    expect(mail.args[1].attachments.map((f) => f.name)).to.deep.equal([
+      "cancellation-1.pdf",
+    ]);
+  });
+
+  it("a request turned down by the administration or the system still mails the rejection", async function () {
+    for (const trigger of [TRIGGER.ADMIN, TRIGGER.SYSTEM]) {
+      const { adapters, lifecycle } = lifecycleOver({
+        bookings: [booking({ status: "requested" })],
+      });
+
+      await lifecycle.cancel(TENANT, "B-1", { trigger, reason: "Kein Platz" });
+
+      expect(
+        adapters.mail.calls.map((call) => call.args[0]),
+        trigger,
+      ).to.deep.equal(["BOOKING_REJECTION"]);
+    }
+  });
+
   it("cancels a free booking without a document", async function () {
     const { adapters, lifecycle } = lifecycleOver({
       bookings: [booking({ priceEur: 0 })],
