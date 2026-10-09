@@ -54,6 +54,8 @@ const EVENT_SNAPSHOT = {
   title: "Sommerkonzert",
   timeBegin: new Date("2027-06-21T19:00").getTime(),
   timeEnd: new Date("2027-06-21T22:00").getTime(),
+  format: 0,
+  participationLink: null,
 };
 
 /** A tenant awaiting approval (pending), with everything the snapshot leaves out. */
@@ -82,10 +84,11 @@ function tenant(overrides = {}) {
   });
 }
 
-function event() {
+function event(overrides = {}) {
   return new Event({
     id: "E1",
     tenantId: TENANT,
+    ...overrides,
     information: {
       name: "Sommerkonzert",
       description: "A long description that stays home",
@@ -216,6 +219,33 @@ describe("booking-bound customer routes: tenant snapshot and event core data", f
         name: "Gemeinde Beispiel",
         accessApps: [],
       });
+    });
+
+    // ECCdigital/tickets#180: the booker finds the participation link of an
+    // online or hybrid event in their booking once it is confirmed - with
+    // registration too, which the public projection hides it for.
+    it("carries the participation link of an online event once the booking is confirmed", async function () {
+      const link = "https://meet.example.test/sommer";
+      installWorld({
+        events: [
+          event({
+            format: 2,
+            attendees: { needsRegistration: true },
+            eventLocation: { url: link },
+          }),
+        ],
+      });
+
+      const [confirmed, due] = await assignedOf([
+        ticketBooking(),
+        ticketBooking({ id: "B-4", status: "payment_due" }),
+      ]);
+
+      expect(confirmed.event).to.include({
+        format: 2,
+        participationLink: link,
+      });
+      expect(due.event).to.include({ format: 2, participationLink: null });
     });
 
     it("answers tenant: null for a booking of a deleted tenant", async function () {
@@ -367,6 +397,8 @@ describe("booking-bound customer routes: tenant snapshot and event core data", f
         "title",
         "timeBegin",
         "timeEnd",
+        "format",
+        "participationLink",
       ]);
       expect(room).to.not.have.property("event");
     });

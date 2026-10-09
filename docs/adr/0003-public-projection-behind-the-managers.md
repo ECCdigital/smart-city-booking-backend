@@ -7,5 +7,5 @@ What the public sees of a tenant's offers - its supervision level, the offer's r
 - A new public endpoint that reads through a manager with `scopeOf(req)` inherits the projection without a line of its own; a handler cannot forget it.
 - `own` keeps its one meaning (ADR 0001): a role holder with `readOwn` sees their own records, never their own plus the public ones. Where that would be a regression (`bookable.prices`), the entry loses `own` instead.
 - Engines and checkout ask as the public for everyone, staff included: nobody books an offer the public could not.
-- The module decides records, not fields; the review status is the one field it removes. Anonymizing bookings stays with the handlers.
+- The module decides records, not fields; the review status is the one field it removes, and the participation link of an event with registration the other (ECCdigital/tickets#180: only its bookers see it, in their booking). Anonymizing bookings stays with the handlers.
 - A handler may ask narrower than its right (`PUBLIC` for the anonymized booking list, iCal without `includePrivate`), never wider.

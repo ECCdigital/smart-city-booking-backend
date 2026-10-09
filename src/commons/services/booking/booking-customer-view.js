@@ -8,9 +8,12 @@
  *
  * Per booking: `tenant`, the snapshot of `Tenant#exportBookingSnapshot`
  * (`null` for a deleted tenant), and for a ticket booking `event`, the core
- * data `{ id, title, timeBegin, timeEnd }` of the event (`null` when the
- * event is gone) - no description, no prices, no media: the booking vouches
- * for the tenant and the event, not for their offer. One tenant query and
+ * data `{ id, title, timeBegin, timeEnd, format, participationLink }` of the
+ * event (`null` when the event is gone) - no description, no prices, no
+ * media: the booking vouches for the tenant and the event, not for their
+ * offer. The participation link of an online or hybrid event is the
+ * booker's once the booking is confirmed, with registration too
+ * (ECCdigital/tickets#180); before, it is `null`. One tenant query and
  * one event query per answer, whatever the number of bookings; nothing is
  * written.
  */
@@ -19,6 +22,10 @@ const TenantManager = require("../../data-managers/tenant-manager");
 const EventManager = require("../../data-managers/event-manager");
 const { DOMAIN } = require("../authorization/reach");
 const { BOOKABLE_TYPES } = require("../../entities/bookable/bookable");
+const {
+  formatOf,
+  participationLinkForBooking,
+} = require("../../entities/event/event-format");
 
 const eventKey = (tenantId, id) => `${tenantId}\u0000${id}`;
 
@@ -46,14 +53,17 @@ function eventRefOf(booking) {
  * The core data of an event as a booking carries it.
  *
  * @param {import("../../entities/event/event").Event} event
- * @returns {{ id: string, title: string, timeBegin: number|null, timeEnd: number|null }}
+ * @param {Object} booking
+ * @returns {{ id: string, title: string, timeBegin: number|null, timeEnd: number|null, format: number, participationLink: string|null }}
  */
-function eventCoreData(event) {
+function eventCoreData(event, booking) {
   return {
     id: event.id,
     title: event.information?.name ?? "",
     timeBegin: event.getStartDateTime()?.getTime() ?? null,
     timeEnd: event.getEndDateTime()?.getTime() ?? null,
+    format: formatOf(event),
+    participationLink: participationLinkForBooking(event, booking),
   };
 }
 
@@ -79,14 +89,15 @@ async function customerViewOf(bookings) {
     tenants.map((t) => [t.id, t.exportBookingSnapshot()]),
   );
   const eventByKey = new Map(
-    events.map((e) => [eventKey(e.tenantId, e.id), eventCoreData(e)]),
+    events.map((e) => [eventKey(e.tenantId, e.id), e]),
   );
 
   return (booking) => {
     const view = { tenant: snapshotByTenant.get(booking.tenantId) ?? null };
     const ref = eventRefOf(booking);
     if (ref) {
-      view.event = eventByKey.get(eventKey(ref.tenantId, ref.id)) ?? null;
+      const event = eventByKey.get(eventKey(ref.tenantId, ref.id));
+      view.event = event ? eventCoreData(event, booking) : null;
     }
     return view;
   };
