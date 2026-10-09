@@ -19,6 +19,9 @@
  *   tenant takes precedence.
  * - `includeQRCode(ctx)`, `sendBCC(ctx)`, `addRejectionLink`: as before.
  * - `attachICal`: the calendar file of the bookings goes with it.
+ * - `showsParticipationLink`: the booking details name the participation
+ *   link of an online or hybrid event, for a confirmed booking
+ *   (ECCdigital/tickets#180) - the confirmations alone.
  * - `mergeMailAttach`: the `mailAttach` documents of the bookings go
  *   with it.
  * - `gate({ tenant })`: the audience only gets it where this holds.
@@ -60,6 +63,7 @@ const MailType = Object.freeze({
     sendBCC: (ctx) => ctx.hasAttachments && ctx.tenant.receiptEnableBCC,
     addRejectionLink: true,
     attachICal: true,
+    showsParticipationLink: true,
     mergeMailAttach: true,
   },
 
@@ -72,6 +76,7 @@ const MailType = Object.freeze({
     sendBCC: false,
     addRejectionLink: true,
     attachICal: true,
+    showsParticipationLink: true,
     mergeMailAttach: true,
   },
 

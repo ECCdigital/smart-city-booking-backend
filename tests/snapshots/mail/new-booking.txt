@@ -71,7 +71,8 @@ Attachments:
         Ticket für die Veranstaltung Herbstkonzert<br>
         vom 05.10.2026 19:30
         bis 05.10.2026 22:00<br>
-        Ort: Großer Saal, Rathausplatz, 1 12345 Musterstadt
+        Format: Präsenz<br>
+        Ort: Großer Saal, Rathausplatz 1, 12345 Musterstadt
       </div>
 
   </div>

@@ -54,6 +54,8 @@ const EVENT_SNAPSHOT = {
   title: "Sommerkonzert",
   timeBegin: new Date("2027-06-21T19:00").getTime(),
   timeEnd: new Date("2027-06-21T22:00").getTime(),
+  format: 0,
+  participationLink: null,
 };
 
 /** A tenant awaiting approval (pending), with everything the snapshot leaves out. */
@@ -82,10 +84,11 @@ function tenant(overrides = {}) {
   });
 }
 
-function event() {
+function event(overrides = {}) {
   return new Event({
     id: "E1",
     tenantId: TENANT,
+    ...overrides,
     information: {
       name: "Sommerkonzert",
       description: "A long description that stays home",
@@ -94,6 +97,15 @@ function event() {
       endDate: "2027-06-21",
       endTime: "22:00",
     },
+  });
+}
+
+/** An online event with registration: its link is its bookers' alone. */
+function onlineEventWithRegistration() {
+  return event({
+    format: 2,
+    attendees: { needsRegistration: true },
+    eventLocation: { url: "https://meet.example.test/sommer" },
   });
 }
 
@@ -218,6 +230,33 @@ describe("booking-bound customer routes: tenant snapshot and event core data", f
       });
     });
 
+    // ECCdigital/tickets#180: the booker finds the participation link of an
+    // online or hybrid event in their booking once it is confirmed - with
+    // registration too, which the public projection hides it for.
+    it("carries the participation link of an online event once the booking is confirmed", async function () {
+      const link = "https://meet.example.test/sommer";
+      installWorld({
+        events: [
+          event({
+            format: 2,
+            attendees: { needsRegistration: true },
+            eventLocation: { url: link },
+          }),
+        ],
+      });
+
+      const [confirmed, due] = await assignedOf([
+        ticketBooking(),
+        ticketBooking({ id: "B-4", status: "payment_due" }),
+      ]);
+
+      expect(confirmed.event).to.include({
+        format: 2,
+        participationLink: link,
+      });
+      expect(due.event).to.include({ format: 2, participationLink: null });
+    });
+
     it("answers tenant: null for a booking of a deleted tenant", async function () {
       installWorld({ tenants: [] });
 
@@ -327,6 +366,16 @@ describe("booking-bound customer routes: tenant snapshot and event core data", f
 
       expect(item.tenant).to.equal(null);
     });
+
+    // The lookup answers whoever knows a booking number, signed in or not:
+    // the participation link stays with the booker's account and mails.
+    it("hands out no participation link, even for a confirmed booking", async function () {
+      installWorld({ events: [onlineEventWithRegistration()] });
+
+      const [item] = await statusOf("B-2", [ticketBooking()]);
+
+      expect(item.event).to.include({ format: 2, participationLink: null });
+    });
   });
 
   describe("GET /api/v2/:tenant/bookings/:ids/status", function () {
@@ -367,6 +416,8 @@ describe("booking-bound customer routes: tenant snapshot and event core data", f
         "title",
         "timeBegin",
         "timeEnd",
+        "format",
+        "participationLink",
       ]);
       expect(room).to.not.have.property("event");
     });
@@ -395,6 +446,16 @@ describe("booking-bound customer routes: tenant snapshot and event core data", f
 
       expect(tenantsByIds.callCount).to.equal(1);
       expect(tenantsByIds.firstCall.args[0]).to.deep.equal([TENANT]);
+    });
+
+    // The lookup answers whoever knows a booking number, signed in or not:
+    // the participation link stays with the booker's account and mails.
+    it("hands out no participation link, even for a confirmed booking", async function () {
+      installWorld({ events: [onlineEventWithRegistration()] });
+
+      const [item] = await statusOf("B-2", [ticketBooking()]);
+
+      expect(item.event).to.include({ format: 2, participationLink: null });
     });
   });
 });

@@ -248,6 +248,38 @@ describe("supervision: the public projection of the offers", function () {
       expect(await reached(T, [b, e])).to.have.length(2);
     });
 
+    // ECCdigital/tickets#180: with registration only the bookers see the
+    // participation link, without it everyone.
+    it("hands an event with registration out without its participation link, the record untouched", async function () {
+      const stored = event({
+        isPublic: true,
+        format: 2,
+        attendees: { needsRegistration: true },
+        eventLocation: { name: "Online", url: "https://meet.example/abc" },
+      });
+      const [listedEvent] = await listed(T, [stored]);
+      const [reachedEvent] = await reached(T, [stored]);
+      expect(listedEvent.eventLocation).to.deep.equal({
+        name: "Online",
+        url: "",
+      });
+      expect(reachedEvent.eventLocation.url).to.equal("");
+      expect(stored.eventLocation.url).to.equal("https://meet.example/abc");
+    });
+
+    it("hands an event without registration out with its participation link", async function () {
+      const stored = event({
+        isPublic: true,
+        format: 1,
+        attendees: { needsRegistration: false },
+        eventLocation: { name: "Saal", url: "https://meet.example/abc" },
+      });
+      const [listedEvent] = await listed(T, [stored]);
+      expect(listedEvent.eventLocation.url).to.equal(
+        "https://meet.example/abc",
+      );
+    });
+
     it("loads the tenant once per call and answers an empty list without asking further", async function () {
       expect(await reached(T, [])).to.deep.equal([]);
       expect(TenantManager.getTenant.callCount).to.equal(1);

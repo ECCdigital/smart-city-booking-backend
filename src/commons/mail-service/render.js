@@ -31,6 +31,12 @@ const Formatters = require("../utilities/formatters");
 const {
   LIVE_STATUSES,
 } = require("../services/booking-lifecycle/booking-state");
+const {
+  EVENT_FORMAT,
+  formatOf,
+  formatLabel,
+  participationLinkForBooking,
+} = require("../entities/event/event-format");
 
 const overrideDateFormatter = new Intl.DateTimeFormat("de-DE", {
   day: "2-digit",
@@ -144,33 +150,61 @@ function cancellationContext(booking, tenantId, addRejectionLink) {
   return { rejectionUrl: null, cancellationContactHint: contactHint || null };
 }
 
-function bookingItems(booking, bookables, events) {
+/**
+ * The address line of an event: its venue and address without empty parts,
+ * none for an online event.
+ */
+function eventAddress(event) {
+  if (formatOf(event) === EVENT_FORMAT.ONLINE) return "";
+  const address = event.location?.address ?? {};
+  return [
+    event.eventLocation?.name,
+    [address.street, address.house_number].filter(Boolean).join(" "),
+    [address.post_code, address.city].filter(Boolean).join(" "),
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
+/**
+ * The ticket's event as the booking details print it. The participation
+ * link only where the notice names it (`withParticipationLink`, the
+ * confirmations) and the booking is confirmed (ECCdigital/tickets#180).
+ */
+function eventDetails(event, booking, withParticipationLink) {
+  return {
+    name: event.information.name,
+    startDate: event.information.startDate,
+    startTime: event.information.startTime,
+    endDate: event.information.endDate,
+    endTime: event.information.endTime,
+    format: formatLabel(event),
+    address: eventAddress(event),
+    participationLink: withParticipationLink
+      ? participationLinkForBooking(event, booking)
+      : null,
+  };
+}
+
+function ticketEventOf(item, bookables, events) {
+  const bookable = bookables.find((b) => b.id === item.bookableId);
+  const event =
+    bookable?.type === "ticket" && bookable.eventId
+      ? events.get(bookable.eventId)
+      : null;
+  return { bookable, event };
+}
+
+function bookingItems(booking, bookables, events, withParticipationLink) {
   return (booking.bookableItems || []).map((item) => {
-    const bookable = bookables.find((b) => b.id === item.bookableId);
-    const event =
-      bookable?.type === "ticket" && bookable.eventId
-        ? events.get(bookable.eventId)
-        : null;
+    const { bookable, event } = ticketEventOf(item, bookables, events);
 
     return {
       amount: item.amount,
       isTicket: Boolean(event),
       bookableTitle: bookable?.title,
       bookingNotes: bookable?.bookingNotes,
-      event: event
-        ? {
-            name: event.information.name,
-            startDate: event.information.startDate,
-            startTime: event.information.startTime,
-            endDate: event.information.endDate,
-            endTime: event.information.endTime,
-            locationName: event.eventLocation.name,
-            locationStreet: event.location?.address?.street,
-            locationHouseNumber: event.location?.address?.house_number,
-            locationZip: event.location?.address?.post_code,
-            locationCity: event.location?.address?.city,
-          }
-        : null,
+      event: event ? eventDetails(event, booking, withParticipationLink) : null,
     };
   });
 }
@@ -194,9 +228,17 @@ function couponInfo(booking) {
  * @param {Object} params.tenant
  * @param {Object[]} params.bookables The bookables of the booking's positions
  * @param {Map<string, Object>} [params.events] The events of the tickets, by id
+ * @param {boolean} [params.withParticipationLink] The notice names the
+ *   participation link of a confirmed booking's events
  * @returns {string} HTML
  */
-function renderBookingDetails({ booking, tenant, bookables, events }) {
+function renderBookingDetails({
+  booking,
+  tenant,
+  bookables,
+  events,
+  withParticipationLink = false,
+}) {
   const bookingPeriod = Formatters.formatBookingPeriod(
     booking.timeBegin,
     booking.timeEnd,
@@ -217,7 +259,12 @@ function renderBookingDetails({ booking, tenant, bookables, events }) {
 
   return renderSnippet("booking-details", {
     booking,
-    bookingItems: bookingItems(booking, bookables, events ?? new Map()),
+    bookingItems: bookingItems(
+      booking,
+      bookables,
+      events ?? new Map(),
+      withParticipationLink,
+    ),
     coupon: couponInfo(booking),
     bookingPeriod,
     mailCustomFields,
@@ -230,11 +277,21 @@ function renderShortBookingDetails({
   tenant,
   tenantId,
   bookables,
+  events,
   addRejectionLink,
+  withParticipationLink,
 }) {
   const items = (booking.bookableItems || []).map((item) => {
-    const bookable = bookables.find((b) => b.id === item.bookableId);
-    return { amount: item.amount, bookableTitle: bookable?.title };
+    const { bookable, event } = ticketEventOf(item, bookables, events);
+    return {
+      amount: item.amount,
+      bookableTitle: bookable?.title,
+      format: event ? formatLabel(event) : null,
+      participationLink:
+        event && withParticipationLink
+          ? participationLinkForBooking(event, booking)
+          : null,
+    };
   });
   const bookingPeriod = Formatters.formatBookingPeriod(
     booking.timeBegin,
@@ -309,6 +366,7 @@ async function render(
   const includeQRCode = !aggregated && resolve(mailType.includeQRCode, ctx);
   const sendBCC = resolve(mailType.sendBCC, ctx);
   const addRejectionLink = resolve(mailType.addRejectionLink, ctx);
+  const withParticipationLink = Boolean(mailType.showsParticipationLink);
   // The payment link is the wrapper's and, on top, a variable of the overrides.
   const { paymentUrl = null, ...extra } = templateData;
   const { cancelReason = null, rejectionReason = null } = extra;
@@ -360,7 +418,9 @@ async function render(
         tenant,
         tenantId,
         bookables,
+        events,
         addRejectionLink,
+        withParticipationLink,
       }),
     );
     content = renderSnippet("aggregated-booking-wrapper", {
@@ -383,6 +443,7 @@ async function render(
         tenant,
         bookables,
         events,
+        withParticipationLink,
       }),
       ...cancellationContext(booking, tenantId, addRejectionLink),
       qrContent: qr ? qr.content : "",

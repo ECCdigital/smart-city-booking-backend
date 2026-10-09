@@ -8,9 +8,13 @@
  *
  * Per booking: `tenant`, the snapshot of `Tenant#exportBookingSnapshot`
  * (`null` for a deleted tenant), and for a ticket booking `event`, the core
- * data `{ id, title, timeBegin, timeEnd }` of the event (`null` when the
- * event is gone) - no description, no prices, no media: the booking vouches
- * for the tenant and the event, not for their offer. One tenant query and
+ * data `{ id, title, timeBegin, timeEnd, format, participationLink }` of the
+ * event (`null` when the event is gone) - no description, no prices, no
+ * media: the booking vouches for the tenant and the event, not for their
+ * offer. The participation link of an online or hybrid event is the
+ * booker's once the booking is confirmed, with registration too
+ * (ECCdigital/tickets#180); before, and on the login-free status lookups,
+ * it is `null`. One tenant query and
  * one event query per answer, whatever the number of bookings; nothing is
  * written.
  */
@@ -19,6 +23,10 @@ const TenantManager = require("../../data-managers/tenant-manager");
 const EventManager = require("../../data-managers/event-manager");
 const { DOMAIN } = require("../authorization/reach");
 const { BOOKABLE_TYPES } = require("../../entities/bookable/bookable");
+const {
+  formatOf,
+  participationLinkForBooking,
+} = require("../../entities/event/event-format");
 
 const eventKey = (tenantId, id) => `${tenantId}\u0000${id}`;
 
@@ -46,14 +54,20 @@ function eventRefOf(booking) {
  * The core data of an event as a booking carries it.
  *
  * @param {import("../../entities/event/event").Event} event
- * @returns {{ id: string, title: string, timeBegin: number|null, timeEnd: number|null }}
+ * @param {Object} booking
+ * @param {boolean} withParticipationLink
+ * @returns {{ id: string, title: string, timeBegin: number|null, timeEnd: number|null, format: number, participationLink: string|null }}
  */
-function eventCoreData(event) {
+function eventCoreData(event, booking, withParticipationLink) {
   return {
     id: event.id,
     title: event.information?.name ?? "",
     timeBegin: event.getStartDateTime()?.getTime() ?? null,
     timeEnd: event.getEndDateTime()?.getTime() ?? null,
+    format: formatOf(event),
+    participationLink: withParticipationLink
+      ? participationLinkForBooking(event, booking)
+      : null,
   };
 }
 
@@ -63,10 +77,14 @@ function eventCoreData(event) {
  *
  * @param {Object[]} bookings The bookings of the answer (entities or
  *   documents with `tenantId` and `bookableItems`)
+ * @param {Object} [options]
+ * @param {boolean} [options.withParticipationLink] Whether the event core
+ *   data names the participation link: not for the status lookups, which
+ *   answer whoever knows a booking number
  * @returns {Promise<(booking: Object) => { tenant: Object|null, event?: Object|null }>}
  *   `event` is present for a ticket booking only
  */
-async function customerViewOf(bookings) {
+async function customerViewOf(bookings, { withParticipationLink = true } = {}) {
   const tenantIds = [...new Set(bookings.map((b) => b.tenantId))];
   const eventRefs = bookings.map(eventRefOf).filter(Boolean);
 
@@ -79,14 +97,17 @@ async function customerViewOf(bookings) {
     tenants.map((t) => [t.id, t.exportBookingSnapshot()]),
   );
   const eventByKey = new Map(
-    events.map((e) => [eventKey(e.tenantId, e.id), eventCoreData(e)]),
+    events.map((e) => [eventKey(e.tenantId, e.id), e]),
   );
 
   return (booking) => {
     const view = { tenant: snapshotByTenant.get(booking.tenantId) ?? null };
     const ref = eventRefOf(booking);
     if (ref) {
-      view.event = eventByKey.get(eventKey(ref.tenantId, ref.id)) ?? null;
+      const event = eventByKey.get(eventKey(ref.tenantId, ref.id));
+      view.event = event
+        ? eventCoreData(event, booking, withParticipationLink)
+        : null;
     }
     return view;
   };
@@ -98,10 +119,11 @@ async function customerViewOf(bookings) {
  * @param {Object[]} bookings
  * @param {(booking: Object) => Object} project The booking as the route
  *   answers it, e.g. `(b) => b.exportStatus()`
+ * @param {Object} [options] As `customerViewOf`
  * @returns {Promise<Object[]>}
  */
-async function withCustomerView(bookings, project) {
-  const viewOf = await customerViewOf(bookings);
+async function withCustomerView(bookings, project, options) {
+  const viewOf = await customerViewOf(bookings, options);
   return bookings.map((booking) => ({
     ...project(booking),
     ...viewOf(booking),

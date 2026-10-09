@@ -11,7 +11,7 @@
 <p><strong>Artikel:</strong></p>
 <ul>
   {{#each bookingItems}}
-    <li>{{bookableTitle}} (x{{amount}})</li>
+    <li>{{bookableTitle}} (x{{amount}}){{#if format}}<br />Format: {{format}}{{/if}}{{#if participationLink}}<br />Teilnahme-Link: <a href="{{participationLink}}">{{participationLink}}</a>{{/if}}</li>
   {{/each}}
 </ul>
 

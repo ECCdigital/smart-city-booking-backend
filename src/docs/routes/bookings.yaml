@@ -431,7 +431,9 @@ components:
         the title and the period as Unix timestamps in milliseconds (`null`
         where the event names no date). No description, no prices, no media
         - the booking vouches for the event, not for its offer. Present on
-        ticket bookings only; `null` when the event is gone.
+        ticket bookings only; `null` when the event is gone. The format and,
+        for a confirmed booking of an online or hybrid event, its
+        participation link (ECCdigital/tickets#180), with registration too.
       properties:
         id:
           type: string
@@ -443,6 +445,17 @@ components:
         timeEnd:
           type: integer
           nullable: true
+        format:
+          type: integer
+          enum: [0, 1, 2]
+          description: 0 presence, 1 hybrid, 2 online
+        participationLink:
+          type: string
+          nullable: true
+          description: |
+            The event's `eventLocation.url` once the booking is confirmed
+            and the event is online or hybrid; `null` otherwise, and always
+            on the status lookups by booking number.
     CustomerBooking:
       type: object
       description: A booking as stored, with the customer view of ticket 18

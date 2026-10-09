@@ -79,10 +79,11 @@ class BookingStatusControllerV2 {
 
     const byId = new Map(bookings.map((b) => [b.id, b]));
     // The tenant snapshot and the event core data a customer's page renders
-    // from (tenant supervision spec §5.2), one load for the whole answer.
+    // from (tenant supervision spec §5.2), one load for the whole answer;
+    // a lookup by booking number, so without the participation link.
     let viewOf;
     try {
-      viewOf = await customerViewOf(bookings);
+      viewOf = await customerViewOf(bookings, { withParticipationLink: false });
     } catch (err) {
       logger.error(
         { err, tenantId, splitIds },
