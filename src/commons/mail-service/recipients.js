@@ -1,11 +1,11 @@
 /**
  * The recipients of a notice (glossary "Empfängerkreis"; mail-stack spec,
  * section 2.5), resolved from what the loader read: the booker, the
- * tenant behind its gate, the supervisors named at the booker's
- * membership, the organizers of the events the tickets belong to, the
- * instance's address, the instance's or a tenant's owners, or the address
- * the caller named. An empty circle is
- * a valid answer - no mail, no error.
+ * tenant, the supervisors named at the booker's membership, the organizers
+ * of the events the tickets belong to, the instance's address, the
+ * instance's or a tenant's owners, or the address the caller named - each
+ * behind the type's gate where it has one. An empty circle is a valid
+ * answer - no mail, no error.
  */
 
 const bunyan = require("bunyan");

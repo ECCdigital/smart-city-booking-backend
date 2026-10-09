@@ -35,9 +35,9 @@
  * Of a tenant or instance notice (verification, password, user created,
  * card link, invitation, invitation accepted, workflow), `templateData`
  * gets the whole context and `{ tenant, instance, user }`, and `subject`
- * gets `{ tenant }` joined by the template data. The links these notices carry are built here: the
- * storefront's route where the caller names one, the backend's own
- * otherwise.
+ * gets `{ tenant }` joined by the template data. The links these notices
+ * carry are built here: the storefront's route where the caller names
+ * one, the backend's own otherwise.
  */
 
 const {
@@ -46,6 +46,7 @@ const {
 
 const { SupervisionMailType } = require("./supervision-mail-types");
 const { adminTenantMembersUrl } = require("./mail-links");
+const Formatters = require("../utilities/formatters");
 
 /** A storefront route with the hook's token and the address it is for. */
 function hookLink(base, hookId, address) {
@@ -275,8 +276,7 @@ const MailType = Object.freeze({
     gate: (ctx) => ctx.tenant.notifyOwnersOnInvitationAccepted !== false,
     templateData: ({ tenantId, userId, roleNames = [] }, { tenant, user }) => ({
       tenantName: tenant.name,
-      memberName:
-        [user?.firstName, user?.lastName].filter(Boolean).join(" ") || null,
+      memberName: Formatters.formatUserName(user),
       memberEmail: user?.id ?? userId,
       roleNames: roleNames.join(", "),
       membersUrl: adminTenantMembersUrl(tenantId),
