@@ -8,6 +8,13 @@ const ChallengeService = require("./challenge/challenge-service");
 const { normalizeUserId, userIdsMatch } = require("../utilities/user-id-utils");
 const TenantManager = require("../data-managers/tenant-manager");
 const { DOMAIN } = require("./authorization/reach");
+const { RoleManager } = require("../data-managers/role-manager");
+const bunyan = require("bunyan");
+
+const logger = bunyan.createLogger({
+  name: "invitation-service.js",
+  level: process.env.LOG_LEVEL,
+});
 
 class InvitationService {
   static async createInvitation(
@@ -330,9 +337,10 @@ class InvitationService {
         inv.status = "completed";
       }
 
+      const memberRoles = Array.from(new Set([...(mem.roles || []), ...roles]));
       await MembershipManager.updateMembership(tenantID, userID, {
         status: "active",
-        roles: Array.from(new Set([...(mem.roles || []), ...roles])),
+        roles: memberRoles,
         invitations: mem.invitations,
       });
 
@@ -346,6 +354,10 @@ class InvitationService {
             status: "exhausted",
           });
         }
+      }
+
+      if (mem.status !== "active") {
+        await notifyOwnersOfNewMember(tenantID, userID, memberRoles);
       }
 
       return {
@@ -396,6 +408,7 @@ class InvitationService {
     if (!membership) return [];
 
     const results = [];
+    const wasActive = membership.status === "active";
 
     for (const inv of membership.invitations || []) {
       membership = await this._syncChallengeStatesWithInvitation(
@@ -436,6 +449,10 @@ class InvitationService {
       status: membership.status,
       roles: membership.roles,
     });
+
+    if (!wasActive && membership.status === "active") {
+      await notifyOwnersOfNewMember(tenantID, userID, membership.roles);
+    }
 
     for (const inv of membership.invitations || []) {
       results.push({
@@ -815,6 +832,29 @@ module.exports = InvitationService;
 /** The invitation, a tenant notice to the address named. */
 function sendInvitation(tenantId, to, token) {
   return mailService.notify("INVITATION", { tenantId, to, token });
+}
+
+/**
+ * Tells the owners that somebody became an active member by an invitation
+ * (ECCdigital/tickets#36), naming the member's roles. A notice that cannot
+ * be composed or sent is logged; the membership stands.
+ */
+async function notifyOwnersOfNewMember(tenantId, userId, roleIds = []) {
+  try {
+    const roles = await RoleManager.getRolesByIds(roleIds, tenantId);
+    const roleNames = roleIds
+      .map((id) => roles.find((role) => role.id === id)?.name)
+      .filter(Boolean);
+    await mailService.notify("INVITATION_ACCEPTED", {
+      tenantId,
+      userId,
+      roleNames,
+    });
+  } catch (error) {
+    logger.error(
+      `${tenantId} -- owners not told of new member ${userId}: ${error.message}`,
+    );
+  }
 }
 
 function isDuplicateSingleInvitationError(error) {

@@ -30,9 +30,18 @@ function adminInstanceTenantsUrl() {
   return `${process.env.FRONTEND_URL}/instance/mandanten`;
 }
 
+/**
+ * The members of a tenant in the Admin UI (`FRONTEND_URL`), the tenant
+ * named by `?tenant=` so the owner lands in the right one.
+ */
+function adminTenantMembersUrl(tenantId) {
+  return `${process.env.FRONTEND_URL}/tenant/members?tenant=${encodeURIComponent(tenantId)}`;
+}
+
 module.exports = {
   bookingStatusUrl,
   cancellationUrl,
   adminDashboardUrl,
   adminInstanceTenantsUrl,
+  adminTenantMembersUrl,
 };
