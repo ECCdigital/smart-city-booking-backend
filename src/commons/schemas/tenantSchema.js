@@ -103,6 +103,7 @@ const tenantSchemaDefinition = {
   enablePublicStatusView: { type: Boolean, default: false },
   notifyOnNewBooking: { type: Boolean, default: true },
   notifySupervisorsOnBooking: { type: Boolean, default: false },
+  notifyOwnersOnInvitationAccepted: { type: Boolean, default: true },
   catalogParticipation: {
     type: Object,
     default: {

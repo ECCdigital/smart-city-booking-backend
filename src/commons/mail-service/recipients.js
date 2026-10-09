@@ -171,6 +171,9 @@ async function tenantOwnerAddresses(tenantId) {
  * @returns {Promise<string[]>} The addresses, none where the circle is empty
  */
 async function resolveRecipients(mailType, loaded) {
+  if (mailType.gate && !mailType.gate({ tenant: loaded.tenant })) {
+    return [];
+  }
   switch (mailType.audience) {
     case "instanceAdmin":
       return [loaded.instance?.mailAddress].filter(Boolean);
@@ -181,9 +184,6 @@ async function resolveRecipients(mailType, loaded) {
     case "booker":
       return [loaded.bookings[0].mail].filter(Boolean);
     case "tenant":
-      if (mailType.gate && !mailType.gate({ tenant: loaded.tenant })) {
-        return [];
-      }
       return [loaded.tenant.mail].filter(Boolean);
     case "supervisors":
       return supervisorEmails(loaded);

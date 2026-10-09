@@ -53,6 +53,7 @@ Example:
   "defaultEventCreationMode": "simple",
   "enablePublicStatusView": true,
   "notifyOnNewBooking": true,
+  "notifyOwnersOnInvitationAccepted": true,
   "catalogParticipation": {
     "visible": true,
     "restricted": false

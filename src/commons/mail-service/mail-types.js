@@ -28,13 +28,14 @@
  * Of a booking notice, `ctx` of `subject`, `includeQRCode` and `sendBCC`
  * is `{ tenant, hasAttachments }`, and `templateData` gets the
  * type-specific part of the caller's context and the loaded bookings.
- * `includeQRCode`, `sendBCC`, `addRejectionLink`, `attachICal`,
- * `mergeMailAttach` and `gate` are of the booking family only.
+ * `includeQRCode`, `sendBCC`, `addRejectionLink`, `attachICal` and
+ * `mergeMailAttach` are of the booking family only; `gate` is of every
+ * family with a tenant.
  *
  * Of a tenant or instance notice (verification, password, user created,
- * card link, invitation, workflow), `templateData` gets the whole context
- * and `{ tenant, instance, user }`, and `subject` gets `{ tenant }` joined
- * by the template data. The links these notices carry are built here: the
+ * card link, invitation, invitation accepted, workflow), `templateData`
+ * gets the whole context and `{ tenant, instance, user }`, and `subject`
+ * gets `{ tenant }` joined by the template data. The links these notices carry are built here: the
  * storefront's route where the caller names one, the backend's own
  * otherwise.
  */
@@ -44,6 +45,7 @@ const {
 } = require("../services/payment/cancellation-refund-service");
 
 const { SupervisionMailType } = require("./supervision-mail-types");
+const { adminTenantMembersUrl } = require("./mail-links");
 
 /** A storefront route with the hook's token and the address it is for. */
 function hookLink(base, hookId, address) {
@@ -259,6 +261,25 @@ const MailType = Object.freeze({
       tenantName: tenant.name,
       invitationUrl: `${process.env.FRONTEND_URL}/auth/invitation/${tenantId}?token=${token}`,
       supportEmail: tenant.mail,
+    }),
+  },
+
+  // To the owners when somebody became an active member by an invitation
+  // (ECCdigital/tickets#36); `userId` is the new member, `roleNames` the
+  // names of their roles. On unless the tenant switched it off.
+  INVITATION_ACCEPTED: {
+    family: "tenant",
+    templateName: "invitation-accepted",
+    audience: "tenantOwners",
+    subject: (ctx) => `Neues Mitglied im Mandanten ${ctx.tenant.name}`,
+    gate: (ctx) => ctx.tenant.notifyOwnersOnInvitationAccepted !== false,
+    templateData: ({ tenantId, userId, roleNames = [] }, { tenant, user }) => ({
+      tenantName: tenant.name,
+      memberName:
+        [user?.firstName, user?.lastName].filter(Boolean).join(" ") || null,
+      memberEmail: user?.id ?? userId,
+      roleNames: roleNames.join(", "),
+      membersUrl: adminTenantMembersUrl(tenantId),
     }),
   },
 

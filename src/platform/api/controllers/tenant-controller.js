@@ -407,6 +407,7 @@ class TenantController {
         "enablePublicStatusView",
         "notifyOnNewBooking",
         "notifySupervisorsOnBooking",
+        "notifyOwnersOnInvitationAccepted",
         "catalogParticipation",
         "bookableCustomFields",
         "cancellationTemplate",
