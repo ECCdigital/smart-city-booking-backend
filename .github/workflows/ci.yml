@@ -1,0 +1,113 @@
+name: CI
+
+# One workflow, stable job names. The branch rules require `ci-ok` alone, so
+# jobs can be added or renamed here without touching the rules.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - develop
+      - "version/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - name: Install dependencies
+        id: install
+        run: npm ci
+      - name: Run ESLint
+        run: npm run lint:check
+      - name: Check formatting
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run format:check
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22.x, 24.x]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests
+        run: npm test
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      # Gate: a pull request must not bring in a dependency with a known
+      # vulnerability of severity high or above.
+      - name: Review new dependencies
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+      # Advisory only: the base already carries known vulnerabilities, so the
+      # audit reports them without failing the job.
+      - name: Audit production dependencies (advisory)
+        continue-on-error: true
+        run: |
+          status=0
+          npm audit --omit=dev --audit-level=high > "$RUNNER_TEMP/audit.txt" || status=$?
+          cat "$RUNNER_TEMP/audit.txt"
+          {
+            echo '## npm audit (advisory)'
+            echo '```'
+            cat "$RUNNER_TEMP/audit.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+  ci-ok:
+    if: ${{ always() }}
+    needs: [lint, test, build, security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fail unless every gate passed
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
+        run: |
+          echo "lint=${{ needs.lint.result }} test=${{ needs.test.result }} build=${{ needs.build.result }} security=${{ needs.security.result }}"
+          exit 1
+      - run: echo "All gates passed"
