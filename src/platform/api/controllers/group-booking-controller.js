@@ -85,7 +85,9 @@ class GroupBookingController {
       const bookingId = req.params.bookingId;
       const populate = req.query.populate === "true";
 
-      // The group within the reach of the request; none there is a 404.
+      // The group within the reach of the request. A booking without one is
+      // the common case, not a failure: it answers 200 with `null`, as does
+      // a group outside the reach, so the two cannot be told apart.
       const groupBooking = await GroupBookingManager.getGroupBookingByBookingId(
         tenantId,
         bookingId,
@@ -93,7 +95,7 @@ class GroupBookingController {
         scopeOf(req),
       );
       if (!groupBooking) {
-        return GroupBookingController._notFound(res, bookingId);
+        return res.status(200).json(null);
       }
 
       logger.info(
@@ -127,6 +129,7 @@ class GroupBookingController {
         tenantId,
         groupBookingId,
         updateData,
+        scopeOf(req),
       );
 
       return res.status(200).send(updatedGroupBooking);
@@ -256,6 +259,7 @@ class GroupBookingController {
       answerTransitionError(error, res, {
         code: "set_aggregated_booking_payed_failed",
         fallback: (mapped) => ({ message: mapped.message }),
+        answerValidationError: true,
       });
     }
   }
@@ -267,6 +271,8 @@ class GroupBookingController {
       const groupBooking = await GroupBookingManager.getGroupBooking(
         tenantId,
         groupBookingId,
+        false,
+        scopeOf(req),
       );
 
       if (!groupBooking) {

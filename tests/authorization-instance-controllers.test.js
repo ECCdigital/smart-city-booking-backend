@@ -268,9 +268,10 @@ describe("instance controllers on the reach", function () {
 
     it("PUT /users lets the instance owner create", async function () {
       sinon.stub(UserManager, "getUser").resolves(null);
+      // The manager answers the stored entity.
       const create = sinon
         .stub(UserManager, "createUser")
-        .resolves({ id: "new@x" });
+        .callsFake(async (user) => user);
       const res = response();
       await UserController.storeUser(
         request({

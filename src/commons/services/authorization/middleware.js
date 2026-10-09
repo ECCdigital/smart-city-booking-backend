@@ -28,7 +28,8 @@
  *
  * The JWT verification stays in `src/middleware/auth-middleware.js` and is
  * called from here: `authorize` runs `requireAuth`, `public` runs
- * `optionalAuth`. The principal is loaded once per request and memoised
+ * `optionalAuth` - but for the front door `auth.all` (`FRONT_DOOR`), which
+ * reads no token at all. The principal is loaded once per request and memoised
  * on `req.principal`; the tenant is `req.params.tenant`, or what the
  * option `tenantOf(req)` names for a route that carries its tenant
  * elsewhere (`PUT /api/tenants` names it in the body).
@@ -62,6 +63,27 @@ const MARKER = Object.freeze({
   PUBLIC: "public",
   TOKEN: "tokenAuthorized",
 });
+
+/**
+ * The front door: the public entry of the auth router (`/auth/*`, sign-in,
+ * sign-up, refresh, the mails and their hooks), what a session is made of.
+ * Its routes do not read an `Authorization` header sent along: a stale
+ * token there is no 401, or a client that holds one could never sign in
+ * anew or renew it (ECCdigital/tickets#109). Every other public route
+ * refuses a stale token (`optionalAuth`); the routes of the auth router
+ * that need a session carry `authorize` and stay protected.
+ */
+const FRONT_DOOR = Object.freeze({ resource: "auth", action: "all" });
+
+/**
+ * The auth step of the front door: anonymous, whatever header came along.
+ *
+ * @type {import("express").RequestHandler}
+ */
+const withoutToken = (req, res, next) => {
+  req.user = null;
+  next();
+};
 
 /** The tenant of a request as the routers name it: `/:tenant`. */
 const tenantParam = (req) => req.params?.tenant;
@@ -220,7 +242,9 @@ function secondDecisions(principal, others) {
 /**
  * Exported as `public` (the spec's name) and as `publicRoute`: `public` is
  * a reserved word in strict mode, so a destructuring caller needs the
- * second name.
+ * second name. A token sent along is verified (`optionalAuth`), a stale one
+ * refused with 401; on the front door `auth.all` it is not read
+ * (`FRONT_DOOR`).
  *
  * @param {string} [resource]
  * @param {string} [action]
@@ -240,9 +264,13 @@ function publicRoute(resource, action, { also = [] } = {}) {
     throw new Error("authorization: a second decision needs a public entry");
   }
   const others = also.map((name) => secondEntry(resource, name));
+  const auth =
+    resource === FRONT_DOOR.resource && action === FRONT_DOOR.action
+      ? withoutToken
+      : optionalAuth;
 
   const handler = (req, res, next) =>
-    afterAuth(optionalAuth, req, res, next, async () => {
+    afterAuth(auth, req, res, next, async () => {
       if (decided) {
         const principal = await principalOf(req);
         req.reach = decide(principal, resource, action);

@@ -182,11 +182,25 @@ class BookableController {
       ? await EventManager.getEvent(bookable.eventId, bookable.tenantId, scope)
       : null;
     return {
-      event: event ? event.withoutReview() : null,
+      event: event ? BookableController._publicEvent(event) : null,
       relatedBookables: related.map((relatedBookable) =>
         relatedBookable.withResolvedMediaUrls(),
       ),
     };
+  }
+
+  /**
+   * The event embedded in a public bookable: without its review and
+   * without the mail address of the member who created it
+   * (ECCdigital/tickets#260).
+   *
+   * @param {import("../../../commons/entities/event/event").Event} event
+   * @returns {Object}
+   */
+  static _publicEvent(event) {
+    // eslint-disable-next-line no-unused-vars
+    const { ownerUserId, ...fields } = event.withoutReview();
+    return fields;
   }
 
   /**
@@ -332,6 +346,13 @@ class BookableController {
       // The review is the review service's alone (supervision spec §3):
       // an edit keeps the stored one, whatever the body carries.
       bookable.review = existingBookable.review ?? emptyReview();
+
+      // A client that names no owner (field left out, null, empty or blank)
+      // keeps the stored one, so the owner does not lose the bookable.
+      const namedOwner = request.body.ownerUserId;
+      if (typeof namedOwner !== "string" || namedOwner.trim() === "") {
+        bookable.ownerUserId = existingBookable.ownerUserId;
+      }
 
       if (!existingBookable.isPublic && bookable.isPublic) {
         if (

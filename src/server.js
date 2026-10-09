@@ -29,6 +29,7 @@ const {
 const {
   warnIfImportPending,
 } = require("./commons/services/media/media-import-status");
+const { applyTrustedProxies } = require("./commons/utilities/trusted-proxies");
 
 // Fail fast when the explicitly chosen storage provider is misconfigured.
 assertStorageConfig();
@@ -88,7 +89,7 @@ app.use(function (req, res, next) {
 
 app.use(requestLogger);
 app.use(cookieParser());
-app.enable("trust proxy");
+applyTrustedProxies(app);
 app.use(express.urlencoded({ limit: "1mb", extended: true }));
 app.use(express.json({ limit: "1mb" }));
 

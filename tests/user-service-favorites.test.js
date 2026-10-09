@@ -41,7 +41,9 @@ describe("UserService: the favorites follow the user", function () {
     sinon
       .stub(UserManager, "findRawUserByIdOrKeycloak")
       .resolves({ _id: "64f1", id: PREVIOUS });
-    sinon.stub(UserManager, "getRawUserBy").resolves(null);
+    // No account holds the new id yet (ECCdigital/tickets#259: looked up
+    // as every account by its id).
+    sinon.stub(UserManager, "getRawUser").resolves(null);
     sinon.stub(UserManager, "updateUserByMongoId").resolves();
     for (const [Manager, method] of [
       [BookingManager, "reassignUserReferences"],

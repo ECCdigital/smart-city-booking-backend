@@ -350,6 +350,7 @@ class DashboardService {
     const data = await DashboardService._buildInstanceSummary(
       allowedTenants,
       filters,
+      scope,
     );
     DashboardCache.set(key, data);
     return data;
@@ -380,7 +381,13 @@ class DashboardService {
     return data;
   }
 
-  static async _buildInstanceSummary(tenants, filters) {
+  /**
+   * @param {Object[]} tenants - The tenants within the reach.
+   * @param {Object} filters
+   * @param {{reach: string, tenantIds?: string[]}} scope - The reach of
+   *   `instanceDashboard.read`, which `totals.users` counts within.
+   */
+  static async _buildInstanceSummary(tenants, filters, scope) {
     const tenantIds = tenants.map((t) => t.id);
     const { fromMs, toMs, bookableId, statusKeys, isBookable, granularity } =
       filters;
@@ -414,7 +421,7 @@ class DashboardService {
       cancellationsByTenant,
       revenueByTenant,
     ] = await Promise.all([
-      DashboardManager.countUsers(),
+      DashboardManager.countUsers(scope),
       DashboardManager.countActiveMembershipsByTenant(tenantIds),
       DashboardManager.countBookablesByTenant(tenantIds, isBookable),
       DashboardManager.countEventsByTenant(tenantIds),

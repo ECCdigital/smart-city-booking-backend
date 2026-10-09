@@ -63,7 +63,9 @@
       - Instance
     summary: Store the instance
     description: |
-      Stores the instance. Instance owner only. `tenantInitialSupervisionLevel`
+      Stores the instance. Instance owner only. The body is stored as the
+      whole instance, so it has to name at least one instance owner in
+      `ownerUserIds`. `tenantInitialSupervisionLevel`
       is validated against the three levels; a body that does not name it
       keeps the stored one. Changing it is never retroactive: no existing
       tenant changes its level, and nothing promotes a tenant automatically.
@@ -75,7 +77,15 @@
         application/json:
           schema:
             type: object
+            required:
+              - ownerUserIds
             properties:
+              ownerUserIds:
+                type: array
+                minItems: 1
+                items:
+                  type: string
+                description: The instance owners; never empty.
               tenantInitialSupervisionLevel:
                 $ref: "#/components/schemas/TenantInitialSupervisionLevel"
     responses:
@@ -83,7 +93,9 @@
         description: The stored instance.
       "400":
         description: |
-          `invalid_supervision_level` with `params: { field, level, allowed }`
+          `instance_owners_required` with `params: { field: "ownerUserIds" }`
+          for a body without `ownerUserIds`, with an empty list or with a list
+          of only empty or blank ids; nothing is stored. `invalid_supervision_level` with `params: { field, level, allowed }`
           for a `tenantInitialSupervisionLevel` outside the initial levels
           (`allowed: [free, supervised, pending]`; `declined`, `null` and `""`
           included); `validation_failed` for the other fields.

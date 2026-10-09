@@ -138,7 +138,16 @@ class GroupBookingManager {
     return groupBookingEntity;
   }
 
-  static async updateGroupBooking(tenantID, gID, groupBooking) {
+  /**
+   * Update fields of a group booking and read it back
+   * @param {string} tenantID Tenant ID
+   * @param {string} gID Group booking ID
+   * @param {Object} groupBooking The fields to set
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   group is read back under, as of `getGroupBooking`
+   * @returns {Promise<GroupBooking|null>} The updated group booking
+   */
+  static async updateGroupBooking(tenantID, gID, groupBooking, scope) {
     if (!gID || !tenantID) {
       throw new Error("id and tenantId are required");
     }
@@ -156,7 +165,7 @@ class GroupBookingManager {
       throw new Error("Group booking not found");
     }
 
-    return await this.getGroupBooking(tenantID, gID);
+    return await this.getGroupBooking(tenantID, gID, false, scope);
   }
 
   /**
