@@ -267,7 +267,7 @@ function concert(overrides = {}) {
       address: {
         street: "Rathausplatz",
         house_number: "1",
-        post_code: "12345",
+        postcode: "12345",
         city: "Musterstadt",
       },
     },
