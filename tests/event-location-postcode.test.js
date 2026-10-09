@@ -50,7 +50,7 @@ describe("postcode of an event's location", function () {
     });
   });
 
-  it("shows the postcode under Veranstaltungsort in the HTML", async function () {
+  it("shows the postcode before the city in the HTML", async function () {
     sinon.stub(BookableManager, "getEventBookables").resolves([]);
 
     const html = await HtmlEngine.event(kielEvent(), false);

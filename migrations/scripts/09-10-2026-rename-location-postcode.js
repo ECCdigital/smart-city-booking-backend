@@ -8,8 +8,8 @@
  */
 const MODELS = ["Event", "Bookable"];
 
-const POST_CODE = "location.address.post_code";
-const POSTCODE = "location.address.postcode";
+const LEGACY_KEY = "location.address.post_code";
+const KEY = "location.address.postcode";
 
 module.exports = {
   name: "09-10-2026-rename-location-postcode",
@@ -20,16 +20,16 @@ module.exports = {
 
       await Model.updateMany(
         {
-          [POST_CODE]: { $exists: true },
-          [POSTCODE]: { $nin: [null, ""] },
+          [LEGACY_KEY]: { $exists: true },
+          [KEY]: { $nin: [null, ""] },
         },
-        { $unset: { [POST_CODE]: "" } },
+        { $unset: { [LEGACY_KEY]: "" } },
         { strict: false },
       );
 
       await Model.updateMany(
-        { [POST_CODE]: { $exists: true } },
-        { $rename: { [POST_CODE]: POSTCODE } },
+        { [LEGACY_KEY]: { $exists: true } },
+        { $rename: { [LEGACY_KEY]: KEY } },
         { strict: false },
       );
     }
@@ -40,8 +40,8 @@ module.exports = {
       await mongoose
         .model(name)
         .updateMany(
-          { [POSTCODE]: { $exists: true } },
-          { $rename: { [POSTCODE]: POST_CODE } },
+          { [KEY]: { $exists: true } },
+          { $rename: { [KEY]: LEGACY_KEY } },
           { strict: false },
         );
     }
