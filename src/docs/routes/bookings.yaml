@@ -454,7 +454,8 @@ components:
           nullable: true
           description: |
             The event's `eventLocation.url` once the booking is confirmed
-            and the event is online or hybrid; `null` otherwise.
+            and the event is online or hybrid; `null` otherwise, and always
+            on the status lookups by booking number.
     CustomerBooking:
       type: object
       description: A booking as stored, with the customer view of ticket 18

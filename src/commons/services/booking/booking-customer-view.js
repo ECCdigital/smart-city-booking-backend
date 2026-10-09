@@ -13,7 +13,8 @@
  * media: the booking vouches for the tenant and the event, not for their
  * offer. The participation link of an online or hybrid event is the
  * booker's once the booking is confirmed, with registration too
- * (ECCdigital/tickets#180); before, it is `null`. One tenant query and
+ * (ECCdigital/tickets#180); before, and on the login-free status lookups,
+ * it is `null`. One tenant query and
  * one event query per answer, whatever the number of bookings; nothing is
  * written.
  */
@@ -54,16 +55,19 @@ function eventRefOf(booking) {
  *
  * @param {import("../../entities/event/event").Event} event
  * @param {Object} booking
+ * @param {boolean} withParticipationLink
  * @returns {{ id: string, title: string, timeBegin: number|null, timeEnd: number|null, format: number, participationLink: string|null }}
  */
-function eventCoreData(event, booking) {
+function eventCoreData(event, booking, withParticipationLink) {
   return {
     id: event.id,
     title: event.information?.name ?? "",
     timeBegin: event.getStartDateTime()?.getTime() ?? null,
     timeEnd: event.getEndDateTime()?.getTime() ?? null,
     format: formatOf(event),
-    participationLink: participationLinkForBooking(event, booking),
+    participationLink: withParticipationLink
+      ? participationLinkForBooking(event, booking)
+      : null,
   };
 }
 
@@ -73,10 +77,14 @@ function eventCoreData(event, booking) {
  *
  * @param {Object[]} bookings The bookings of the answer (entities or
  *   documents with `tenantId` and `bookableItems`)
+ * @param {Object} [options]
+ * @param {boolean} [options.withParticipationLink] Whether the event core
+ *   data names the participation link: not for the status lookups, which
+ *   answer whoever knows a booking number
  * @returns {Promise<(booking: Object) => { tenant: Object|null, event?: Object|null }>}
  *   `event` is present for a ticket booking only
  */
-async function customerViewOf(bookings) {
+async function customerViewOf(bookings, { withParticipationLink = true } = {}) {
   const tenantIds = [...new Set(bookings.map((b) => b.tenantId))];
   const eventRefs = bookings.map(eventRefOf).filter(Boolean);
 
@@ -97,7 +105,9 @@ async function customerViewOf(bookings) {
     const ref = eventRefOf(booking);
     if (ref) {
       const event = eventByKey.get(eventKey(ref.tenantId, ref.id));
-      view.event = event ? eventCoreData(event, booking) : null;
+      view.event = event
+        ? eventCoreData(event, booking, withParticipationLink)
+        : null;
     }
     return view;
   };
@@ -109,10 +119,11 @@ async function customerViewOf(bookings) {
  * @param {Object[]} bookings
  * @param {(booking: Object) => Object} project The booking as the route
  *   answers it, e.g. `(b) => b.exportStatus()`
+ * @param {Object} [options] As `customerViewOf`
  * @returns {Promise<Object[]>}
  */
-async function withCustomerView(bookings, project) {
-  const viewOf = await customerViewOf(bookings);
+async function withCustomerView(bookings, project, options) {
+  const viewOf = await customerViewOf(bookings, options);
   return bookings.map((booking) => ({
     ...project(booking),
     ...viewOf(booking),

@@ -100,6 +100,15 @@ function event(overrides = {}) {
   });
 }
 
+/** An online event with registration: its link is its bookers' alone. */
+function onlineEventWithRegistration() {
+  return event({
+    format: 2,
+    attendees: { needsRegistration: true },
+    eventLocation: { url: "https://meet.example.test/sommer" },
+  });
+}
+
 function roomBooking(overrides = {}) {
   return new Booking({
     id: "B-1",
@@ -357,6 +366,16 @@ describe("booking-bound customer routes: tenant snapshot and event core data", f
 
       expect(item.tenant).to.equal(null);
     });
+
+    // The lookup answers whoever knows a booking number, signed in or not:
+    // the participation link stays with the booker's account and mails.
+    it("hands out no participation link, even for a confirmed booking", async function () {
+      installWorld({ events: [onlineEventWithRegistration()] });
+
+      const [item] = await statusOf("B-2", [ticketBooking()]);
+
+      expect(item.event).to.include({ format: 2, participationLink: null });
+    });
   });
 
   describe("GET /api/v2/:tenant/bookings/:ids/status", function () {
@@ -427,6 +446,16 @@ describe("booking-bound customer routes: tenant snapshot and event core data", f
 
       expect(tenantsByIds.callCount).to.equal(1);
       expect(tenantsByIds.firstCall.args[0]).to.deep.equal([TENANT]);
+    });
+
+    // The lookup answers whoever knows a booking number, signed in or not:
+    // the participation link stays with the booker's account and mails.
+    it("hands out no participation link, even for a confirmed booking", async function () {
+      installWorld({ events: [onlineEventWithRegistration()] });
+
+      const [item] = await statusOf("B-2", [ticketBooking()]);
+
+      expect(item.event).to.include({ format: 2, participationLink: null });
     });
   });
 });
