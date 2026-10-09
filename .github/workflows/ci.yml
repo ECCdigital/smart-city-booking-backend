@@ -99,15 +99,31 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
 
+  # Gate "protected files" from portolan (ECCdigital/tickets#425): a pull
+  # request must not delete tests, set `.skip`, `.only` or `.todo`, change
+  # existing tests, accepted ADRs or this CI configuration unless its ticket
+  # (`Refs ECCdigital/tickets#<n>` in the pull request text) names the file.
+  # New tests are free. Green on push, it only checks pull requests. The ref
+  # appears twice and must match: after the `@` and in `werkzeug_ref`.
+  protected-files:
+    uses: ECCdigital/portolan/.github/workflows/geschuetzte-dateien.yml@v1
+    secrets: inherit
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      anforderungs_repo: ECCdigital/tickets
+      werkzeug_ref: v1
+
   ci-ok:
     if: ${{ always() }}
-    needs: [lint, test, build, security]
+    needs: [lint, test, build, security, protected-files]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Fail unless every gate passed
         if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
         run: |
-          echo "lint=${{ needs.lint.result }} test=${{ needs.test.result }} build=${{ needs.build.result }} security=${{ needs.security.result }}"
+          echo "lint=${{ needs.lint.result }} test=${{ needs.test.result }} build=${{ needs.build.result }} security=${{ needs.security.result }} protected-files=${{ needs.protected-files.result }}"
           exit 1
       - run: echo "All gates passed"
