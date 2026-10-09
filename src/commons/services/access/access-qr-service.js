@@ -3,6 +3,7 @@ const path = require("path");
 const QRCode = require("qrcode");
 const Handlebars = require("handlebars");
 const PdfService = require("../../pdf-service/pdf-service");
+const { BaseError } = require("../../../errors/BaseError");
 
 /**
  * Renderable formats of an access point QR code. `svg` is the default: it
@@ -44,16 +45,20 @@ class AccessQrService {
    * elsewhere and is not usable here). The scan code - not the entity id -
    * identifies the access point, so a rotated code voids the old sticker.
    *
+   * Without `STORE_FRONT_URL` there is no address to encode. That is the
+   * instance's configuration, not a failure of the request, so it is answered
+   * as such (`503 store_front_url_missing`) for the administration to name,
+   * instead of a bare 500.
+   *
    * @param {string} tenantId The tenant the access point belongs to
    * @param {string} scanCode The current scan code of the access point
    * @returns {string} The encoded store-front URL
+   * @throws {BaseError} `store_front_url_missing` (503) when the env is not set
    */
   static scanUrl(tenantId, scanCode) {
     const base = (process.env.STORE_FRONT_URL || "").replace(/\/+$/, "");
     if (!base) {
-      throw new Error(
-        "STORE_FRONT_URL is not set - cannot build the access point scan URL",
-      );
+      throw new BaseError("store_front_url_missing", 503);
     }
     return `${base}/mobile-key/${tenantId}/${scanCode}`;
   }

@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# Settings not named here come from the organization's settings in CodeRabbit.
+# CodeRabbit stays advisory: no branch rule requires its check.
+inheritance: true
+reviews:
+  auto_review:
+    # Replaces the organization's list, so `develop` is named again. Every
+    # `version/…` branch, e.g. `version/4.3.x`, is reviewed too.
+    base_branches:
+      - "^develop$"
+      - "^version/.+$"

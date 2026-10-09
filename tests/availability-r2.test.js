@@ -23,8 +23,10 @@ const {
 } = require("../src/commons/availability/providers");
 
 const TENANT_ID = "tenant-1";
-const TIME_BEGIN = 1_000;
-const TIME_END = 5_000;
+// Tomorrow: the checkout refuses a begin in the past (ECCdigital/tickets#188),
+// which the availability does not ask.
+const TIME_BEGIN = Date.now() + 24 * 60 * 60 * 1000;
+const TIME_END = TIME_BEGIN + 4_000;
 
 function booking(id, bookableId, amount, overrides = {}) {
   return {

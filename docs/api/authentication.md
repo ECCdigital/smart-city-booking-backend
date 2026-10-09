@@ -8,6 +8,10 @@ For protected routes, send the access token in the `Authorization` header:
 Authorization: Bearer <accessToken>
 ```
 
+Public routes take the header too and then answer for the signed-in user. A token sent along must hold there as well: an expired, revoked or invalid access token is refused with `401` and the same message as on a protected route (`{ "success": false, "message": "Token has expired" }`), not answered as anonymous. Renew it with `POST /auth/refresh` and repeat the request, or send it without the header. Without a token a public route answers anonymously.
+
+The public routes under `/auth` are the exception: sign-in, sign-up, refresh, the verification and password mails, the SSO and card routes and the hooks do not read the `Authorization` header at all. A stale token sent along there is ignored, never answered with `401`, so a client can always sign in anew or renew its token. `GET /auth/me` and `POST /auth/signout` need a session and refuse a stale token like any protected route.
+
 ## Routes
 
 ### POST /auth/signin
@@ -24,6 +28,8 @@ Sign in a user and receive JWT tokens.
 ```
 
 **Response:** `{ user, permissions, accessToken, refreshToken }`. `permissions.tenants[]` carries, per active membership of the user, the merged role levels and the tenant's supervision (see [Tenant supervision in the sign-in](#tenant-supervision-in-the-sign-in)). The SSO and card sign-ins answer the same `permissions`.
+
+The account is found by its exact address, trimmed and without regard to case, never as a pattern. An unknown account, a wrong password and an account that signs in with SSO answer alike: `401` `{ "message": "Invalid email or password" }`. Only with the right password does an unverified account answer `403` `{ "message": "User is not verified" }` and a suspended one `403` `{ "message": "User is suspended" }`.
 
 ### POST /auth/refresh
 
@@ -44,6 +50,17 @@ Sign out the currently authenticated user (revokes the active token; optional re
 ### POST /auth/signup
 
 Register a new user. The answer is account-neutral: `201` whether or not the address already has an account. An existing account is never duplicated; if it is still unverified, it receives its verification mail again (within the verification mail limits below), a verified one receives nothing. `400` when `id` or `password` is missing, `429` with `Retry-After` (seconds) past the per-IP limit — no account is created then.
+
+The answer does not wait: the lookup, the account and the verification mail follow after it, so neither its time nor a failing mail server tells whether the address has an account. A failing mail is only logged; the mail can be requested again with `POST /auth/resend-verification`. The address is stored trimmed and in lower case.
+
+**Response `201`** (the same body as `POST /auth/resend-verification`):
+
+```json
+{
+  "success": true,
+  "message": "If the address is not verified yet, a verification mail has been sent"
+}
+```
 
 **Request body:**
 
@@ -72,7 +89,7 @@ Answers `200` for every well-formed address, known or not (`400` without `email`
 
 ### POST /auth/resend-verification
 
-Sends the verification mail of an unverified account again. Answers `202` with the same body for a known unverified, a known verified and an unknown address (`400` without `id`). The per-account limits (1 per minute and 5 per hour) apply silently; the per-IP limit (30 per hour) answers `429` with `Retry-After` for every address alike. A new mail invalidates the earlier verification links of the account.
+Sends the verification mail of an unverified account again. Answers `202` with the same body for a known unverified, a known verified and an unknown address (`400` without `id`). The per-account limits (1 per minute and 5 per hour) apply silently; the per-IP limit (30 per hour) answers `429` with `Retry-After` for every address alike. A new mail invalidates the earlier verification links of the account. The answer does not wait for the mail; a failing one is only logged.
 
 **Request body:**
 
@@ -147,16 +164,18 @@ Reset a user's password via a hook.
 
 ### POST /auth/resetpassword
 
-Update the password using the hook data.
+Change the password of the signed-in account (Bearer token required). The new password takes effect once the user confirms it from the mail (`GET /auth/reset/:hookId`). Only the own password: an `id` in the body is not read.
 
 **Request body:**
 
 ```json
 {
-  "id": "someone@example.com",
+  "currentPassword": "current-password",
   "password": "new-password"
 }
 ```
+
+**Responses:** `200` the confirmation mail is sent; `400` `currentPassword` or `password` missing; `401` not signed in; `403` the current password is wrong, or the account has no password of its own (SSO). For a forgotten password use `POST /auth/forgot-password` and `POST /auth/reset-password`.
 
 ### GET /auth/me
 
@@ -232,4 +251,4 @@ Sliding windows counted in MongoDB (`rateLimitEvents`, rows expire after 7 days)
 | `RATE_LIMIT_VERIFICATION_MAIL_PER_IP`            | 30/h    | `POST /auth/resend-verification`, per IP |
 | `RATE_LIMIT_TENANT_SELF_CREATION_PER_USER`       | 3/24h   | tenant self-creation per user            |
 
-The client IP is `req.ip`; the server trusts the proxy headers (`trust proxy`), so run it behind a reverse proxy that sets `X-Forwarded-For` from the connection, not from the client.
+The client IP is `req.ip`. The server takes `X-Forwarded-For` only from the proxies `TRUSTED_PROXIES` names (addresses or CIDR networks); without the variable it counts the direct address of the connection. See [docs/migrations/v4.3.1-upgrade.md](../migrations/v4.3.1-upgrade.md).

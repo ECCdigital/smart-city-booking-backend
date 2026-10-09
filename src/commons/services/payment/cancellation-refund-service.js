@@ -158,7 +158,15 @@ class CancellationRefundService {
     };
   }
 
+  /**
+   * The calendar days from the cancellation to the start of the booking, in
+   * Berlin time; `null` for a booking without a time span (`Number(null)`
+   * would read it as 01.01.1970).
+   */
   static calculateDaysBeforeStart(timeBegin, cancelledAt) {
+    if (timeBegin === null || timeBegin === undefined || timeBegin === "") {
+      return null;
+    }
     const beginMs = Number(timeBegin);
     const cancelledMs = Number(cancelledAt);
     if (!Number.isFinite(beginMs) || !Number.isFinite(cancelledMs)) {

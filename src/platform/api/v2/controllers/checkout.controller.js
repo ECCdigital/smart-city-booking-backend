@@ -237,6 +237,7 @@ class CheckoutControllerV2 {
           tenantId: req.params.tenant,
           userId: req.user?.id,
         },
+        loginRefusalAs401: true,
       });
     }
   }
@@ -483,6 +484,7 @@ class CheckoutControllerV2 {
           tenantId: req.params.tenant,
           userId: req.user?.id,
         },
+        loginRefusalAs401: true,
       });
     }
   }
@@ -950,7 +952,18 @@ class CheckoutControllerV2 {
     return err;
   }
 
-  static _respondWithError(res, err, { logMessage, context = {} } = {}) {
+  /**
+   * Answers a failed checkout request with HTTP 200 and the reason. The
+   * one exception is the completion (`loginRefusalAs401`, single and
+   * group): it refuses a customer who is not signed in to an offer behind
+   * a login with 401 (ECCdigital/tickets#123), so a client offers the
+   * sign-in; the pre-check answers the same reason with 200.
+   */
+  static _respondWithError(
+    res,
+    err,
+    { logMessage, context = {}, loginRefusalAs401 = false } = {},
+  ) {
     const normalized = CheckoutControllerV2._toCheckoutError(err);
     const reason = normalized?.reason || CHECKOUT_REASONS.UNKNOWN;
     const checkType = normalized?.checkType || null;
@@ -961,7 +974,12 @@ class CheckoutControllerV2 {
       logMessage || "checkout controller error",
     );
 
-    return res.status(200).json({
+    const status =
+      loginRefusalAs401 && reason === CHECKOUT_REASONS.LOGIN_REQUIRED
+        ? 401
+        : 200;
+
+    return res.status(status).json({
       success: false,
       error: {
         reason,

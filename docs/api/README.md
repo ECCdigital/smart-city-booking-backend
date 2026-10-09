@@ -146,9 +146,11 @@ Tenant-scoped routes under `/api/:tenant/bookables`.
 
 Returns the public list of a tenant's bookables: what asks to be listed and passes the tenant's supervision (ADR 0003). Optional auth; a role holder with `manageBookables.readAny` gets the tenant's bookables whole. A tenant without a public projection answers `404 tenant_not_found`.
 
+Both public bookable routes name no persons, whoever asks: `ownerUserId`, `permittedUsers` and `bookingDiscounts` are left out, also on what `?populate=true` embeds (ECCdigital/tickets#260). `permittedRoles` and `requiresLogin` stay; whether a person may book is the answer of `GET /api/:tenant/checkout/permissions/:id` and of the booking.
+
 ### GET /api/:tenant/bookables/public/:id
 
-Returns a single bookable the public reaches by a direct link (no `isPublic` requirement, under supervision an approval). Optional auth, `manageBookables.readAny` reads whole. `404` for a bookable the public cannot reach, naming no reason.
+Returns a single bookable the public reaches by a direct link (no `isPublic` requirement, under supervision an approval). Optional auth, `manageBookables.readAny` reads whole, without the persons named above. `404` for a bookable the public cannot reach, naming no reason.
 
 ### GET /api/:tenant/bookables
 

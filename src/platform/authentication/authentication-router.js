@@ -16,10 +16,14 @@ const {
  * them consume (the hook ids of `/verify/:hookId` and `/reset/:hookId`, the
  * reset and verification tokens in the body) are checked by the handler, as
  * they were: the marker says who may knock, not what the handler makes of a
- * secret in the request.
+ * secret in the request. Nor do these routes read an `Authorization`
+ * header sent along: a stale token there is no 401, so a client that holds
+ * one signs in anew or renews it (`FRONT_DOOR`, ECCdigital/tickets#109).
  *
- * The two exceptions are `/signout` and `/me`, which answer about the holder
- * of a session and therefore need one (`user.readSelf`).
+ * The exceptions are `/signout` and `/me`, which answer about the holder
+ * of a session and therefore need one (`user.readSelf`), and
+ * `/resetpassword`, which changes the password of the holder and nobody
+ * else's (`user.updateSelf`).
  */
 
 // Public auth endpoints
@@ -33,9 +37,10 @@ router.post(
   publicRoute("auth", "all"),
   AuthenticationController.refreshToken,
 );
+// Not public: the password change of the holder of a session.
 router.post(
   "/resetpassword",
-  publicRoute("auth", "all"),
+  authorize("user", "updateSelf"),
   AuthenticationController.resetPassword,
 );
 router.post(

@@ -4,7 +4,7 @@ const SupervisionService = require("../../../commons/services/supervision/superv
 const ReviewService = require("../../../commons/services/supervision/review-service");
 const ReviewQueueService = require("../../../commons/services/supervision/review-queue-service");
 const TenantApprovalQueueService = require("../../../commons/services/supervision/tenant-approval-queue-service");
-const SupervisionHistoryManager = require("../../../commons/data-managers/supervision-history-manager");
+const SupervisionHistoryService = require("../../../commons/services/supervision/supervision-history-service");
 const {
   OFFER_TYPE_VALUES,
   NOTIFICATION_STATUS_VALUES,
@@ -56,11 +56,12 @@ class SupervisionController {
   /**
    * `GET /api/tenants/:tenant/supervision/history` - the history of the
    * tenant the route names, newest first, paginated
-   * (`?page=&pageSize=&offerType=&offerId=`).
+   * (`?page=&pageSize=&offerType=&offerId=`), each row with the title of
+   * its offer (`offerTitle`).
    */
   static async getTenantHistory(req, res, next) {
     try {
-      const result = await SupervisionHistoryManager.list({
+      const result = await SupervisionHistoryService.list({
         tenantId: req.params.tenant,
         ...SupervisionController._historyFilters(req.query),
       });
@@ -76,7 +77,7 @@ class SupervisionController {
    */
   static async getInstanceHistory(req, res, next) {
     try {
-      const result = await SupervisionHistoryManager.list({
+      const result = await SupervisionHistoryService.list({
         tenantId: req.query.tenantId || undefined,
         ...SupervisionController._historyFilters(req.query),
       });
