@@ -21,7 +21,9 @@
  * without its review (glossary "Prüfstatus"): the module decides records,
  * not fields, and the review is the one field it removes - once, here,
  * so no public answer carries a status or a private reason and asking
- * twice answers the same. Nothing outside this module asks the offer
+ * twice answers the same. The one other is the participation link of an
+ * event with registration (ECCdigital/tickets#180): only its bookers see
+ * it, in their booking, never the public. Nothing outside this module asks the offer
  * gate - the media rights ask `reached` too: a handler that reads through a manager
  * under `public` inherits the projection without a line of its own.
  *
@@ -29,6 +31,7 @@
  */
 
 const { BOOKABLE_TYPES } = require("../../entities/bookable/bookable");
+const { Event } = require("../../entities/event/event");
 const { NotFoundError } = require("../../../errors/BaseError");
 const { DOMAIN } = require("../authorization/reach");
 const {
@@ -99,23 +102,27 @@ async function project(tenantId, offers, passes) {
             event: events.get(offer.eventId) ?? null,
           })),
     )
-    .map(withoutReview);
+    .map(asPublic);
 }
 
 const hangsOnEvent = (offer) =>
   offer?.type === BOOKABLE_TYPES.TICKET && Boolean(offer.eventId);
 
 /**
- * The offer as the public gets it: the same entity, without its review.
- * A copy, so the record the manager read keeps what the review service
- * wrote; the same prototype, so the handlers' entity methods still work.
+ * The offer as the public gets it: the same entity, without its review,
+ * and an event with registration without its participation link. A copy,
+ * so the record the manager read keeps what the review service wrote; the
+ * same prototype, so the handlers' entity methods still work.
  */
-function withoutReview(offer) {
+function asPublic(offer) {
   const copy = Object.assign(
     Object.create(Object.getPrototypeOf(offer)),
     offer,
   );
   delete copy.review;
+  if (copy instanceof Event && copy.participationLinkIsForBookersOnly) {
+    copy.eventLocation = { ...copy.eventLocation, url: "" };
+  }
   return copy;
 }
 

@@ -26,7 +26,9 @@
         Ticket für die Veranstaltung {{event.name}}<br>
         vom {{formatDate event.startDate}} {{event.startTime}}
         bis {{formatDate event.endDate}} {{event.endTime}}<br>
-        Ort: {{event.locationName}}, {{event.locationStreet}}, {{event.locationHouseNumber}} {{event.locationZip}} {{event.locationCity}}
+        Format: {{event.format}}{{#if event.address}}<br>
+        Ort: {{event.address}}{{/if}}{{#if event.participationLink}}<br>
+        Teilnahme-Link: <a href="{{event.participationLink}}">{{event.participationLink}}</a>{{/if}}
       </div>
     {{/if}}
 
