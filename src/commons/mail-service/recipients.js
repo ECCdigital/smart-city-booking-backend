@@ -1,11 +1,11 @@
 /**
  * The recipients of a notice (glossary "Empfängerkreis"; mail-stack spec,
  * section 2.5), resolved from what the loader read: the booker, the
- * tenant behind its gate, the supervisors named at the booker's
- * membership, the organizers of the events the tickets belong to, the
- * instance's address, the instance's or a tenant's owners, or the address
- * the caller named. An empty circle is
- * a valid answer - no mail, no error.
+ * tenant, the supervisors named at the booker's membership, the organizers
+ * of the events the tickets belong to, the instance's address, the
+ * instance's or a tenant's owners, or the address the caller named - each
+ * behind the type's gate where it has one. An empty circle is a valid
+ * answer - no mail, no error.
  */
 
 const bunyan = require("bunyan");
@@ -171,6 +171,9 @@ async function tenantOwnerAddresses(tenantId) {
  * @returns {Promise<string[]>} The addresses, none where the circle is empty
  */
 async function resolveRecipients(mailType, loaded) {
+  if (mailType.gate && !mailType.gate({ tenant: loaded.tenant })) {
+    return [];
+  }
   switch (mailType.audience) {
     case "instanceAdmin":
       return [loaded.instance?.mailAddress].filter(Boolean);
@@ -181,9 +184,6 @@ async function resolveRecipients(mailType, loaded) {
     case "booker":
       return [loaded.bookings[0].mail].filter(Boolean);
     case "tenant":
-      if (mailType.gate && !mailType.gate({ tenant: loaded.tenant })) {
-        return [];
-      }
       return [loaded.tenant.mail].filter(Boolean);
     case "supervisors":
       return supervisorEmails(loaded);

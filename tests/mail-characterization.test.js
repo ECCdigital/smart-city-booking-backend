@@ -1,6 +1,6 @@
 /**
  * Characterization of every notice (glossary "Mitteilung") the platform
- * sends - the 14 booking notices, the two tenant notices and the five
+ * sends - the 14 booking notices, the three tenant notices and the five
  * instance notices, all over `compose` + `send` - each run over the
  * fixture of `helpers/mail-stack-fixtures.js` and the in-memory
  * transport, and pinned as a snapshot of recipient, subject, attachment
@@ -32,6 +32,8 @@ const sinon = require("sinon");
 const { notify } = require("../src/commons/mail-service");
 const mail = require("../src/commons/services/booking-lifecycle/adapters/mail");
 const PaymentService = require("../src/commons/services/payment/providers/payment-service");
+const MembershipManager = require("../src/commons/data-managers/membership-manager");
+const UserManager = require("../src/commons/data-managers/user-manager");
 const { expectSnapshot } = require("./helpers/snapshot");
 const {
   installInMemoryMailTransport,
@@ -363,6 +365,34 @@ describe("mail characterization: every notice as it goes out today", function ()
           tenantId: TENANT,
           to: "neu@example.test",
           token: "invite-token-1",
+        }),
+      );
+    });
+  });
+
+  describe("the owners' notice of an invitation accepted", function () {
+    it("invitation accepted: the new member and their roles, over the tenant's template", async function () {
+      given({
+        users: [
+          {
+            id: "neu@example.test",
+            firstName: "Nora",
+            lastName: "Neumann",
+          },
+        ],
+      });
+      sinon
+        .stub(MembershipManager, "getOwnerMembershipsByTenantID")
+        .resolves([{ tenantId: TENANT, userId: SUPERVISOR }]);
+      sinon
+        .stub(UserManager, "getUsersById")
+        .callsFake(async (ids) => ids.map((id) => ({ id })));
+
+      await pin("invitation-accepted", () =>
+        notify("INVITATION_ACCEPTED", {
+          tenantId: TENANT,
+          userId: "neu@example.test",
+          roleNames: ["Sekretariat", "Hausmeister"],
         }),
       );
     });

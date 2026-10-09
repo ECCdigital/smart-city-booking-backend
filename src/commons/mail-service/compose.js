@@ -129,18 +129,18 @@ async function icalAttachment(loaded) {
 
 /**
  * What a tenant or instance notice is rendered over: the tenant, or the
- * instance and the user the context names - each read once.
+ * instance, and the user the context names - each read once.
  */
 async function loadShell(family, ctx) {
-  if (family === "tenant") {
-    const tenant = await loadTenant(ctx.tenantId);
-    return { tenantId: ctx.tenantId, tenant, instance: null, user: null };
-  }
-  const instance = await InstanceManager.getInstance(false);
   const user = ctx.userId ? await UserManager.getUser(ctx.userId) : null;
   if (ctx.userId && !user) {
     throw new NotFoundError("user_not_found", { userId: ctx.userId });
   }
+  if (family === "tenant") {
+    const tenant = await loadTenant(ctx.tenantId);
+    return { tenantId: ctx.tenantId, tenant, instance: null, user };
+  }
+  const instance = await InstanceManager.getInstance(false);
   return { tenantId: null, tenant: null, instance, user };
 }
 

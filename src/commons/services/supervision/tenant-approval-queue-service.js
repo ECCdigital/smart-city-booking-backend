@@ -30,13 +30,10 @@ const SupervisionHistoryManager = require("../../data-managers/supervision-histo
 const { SUPERVISION_LEVELS } = require("./supervision-constants");
 const { pageWindow } = require("./page-window");
 const { DOMAIN } = require("../authorization/reach");
+const Formatters = require("../../utilities/formatters");
 
 /** Longest waiting first, the id making the order total. */
 const QUEUE_ORDER = Object.freeze({ supervisionChangedAt: 1, id: 1 });
-
-/** A user's name as the row shows it; null without one. */
-const displayNameOf = (user) =>
-  [user?.firstName, user?.lastName].filter(Boolean).join(" ") || null;
 
 class TenantApprovalQueueService {
   /**
@@ -111,7 +108,7 @@ class TenantApprovalQueueService {
     const byId = new Map(users.map((user) => [user.id, user]));
     return memberships.map((membership) => ({
       userId: membership.userId,
-      displayName: displayNameOf(byId.get(membership.userId)),
+      displayName: Formatters.formatUserName(byId.get(membership.userId)),
       mail: membership.userId,
     }));
   }
