@@ -286,6 +286,7 @@ function renderShortBookingDetails({
     return {
       amount: item.amount,
       bookableTitle: bookable?.title,
+      format: event ? formatLabel(event) : null,
       participationLink:
         event && withParticipationLink
           ? participationLinkForBooking(event, booking)

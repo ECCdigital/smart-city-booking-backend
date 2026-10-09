@@ -23,8 +23,8 @@
  * so no public answer carries a status or a private reason and asking
  * twice answers the same. The one other is the participation link of an
  * event with registration (ECCdigital/tickets#180): only its bookers see
- * it, in their booking, never the public. Nothing outside this module asks the offer
- * gate - the media rights ask `reached` too: a handler that reads through a manager
+ * it, in their booking, never the public. Nothing outside this module
+ * asks the offer gate - the media rights ask `reached` too: a handler that reads through a manager
  * under `public` inherits the projection without a line of its own.
  *
  * The rules themselves are `offer-gate.js`; this module applies them.
