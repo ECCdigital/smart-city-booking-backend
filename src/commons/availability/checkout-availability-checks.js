@@ -558,6 +558,36 @@ async function runMinBookingLeadTimeCheck({ originBookable, timeBegin }) {
   };
 }
 
+/**
+ * A self-booking cannot start before now (ECCdigital/tickets#188). Only a
+ * bookable with a booking period has a begin to check; a ticket's date is
+ * the event's (`runEventDateCheck`). The message is the reason itself: v1
+ * answers the message as its body, and a client names the reason from it.
+ *
+ * @param {Object} params
+ * @param {number} [params.now] The current moment, for tests.
+ * @returns {Object}
+ */
+function runTimeInPastCheck({ originBookable, timeBegin, now = Date.now() }) {
+  if (
+    !isTimeRelatedBookable(originBookable) ||
+    timeBegin === null ||
+    timeBegin === undefined ||
+    Number(timeBegin) >= now
+  ) {
+    return { checkType: CHECK_TYPES.TIME_IN_PAST, available: true };
+  }
+
+  throw {
+    checkType: CHECK_TYPES.TIME_IN_PAST,
+    reason: CHECKOUT_REASONS.TIME_IN_PAST,
+    available: false,
+    message: CHECKOUT_REASONS.TIME_IN_PAST,
+    bookableId: originBookable.id,
+    title: originBookable.title,
+  };
+}
+
 module.exports = {
   getBookedAmountForBookableWindow,
   runPermissionCheck,
@@ -571,4 +601,5 @@ module.exports = {
   runEventDateCheck,
   runMaxBookingDateCheck,
   runMinBookingLeadTimeCheck,
+  runTimeInPastCheck,
 };

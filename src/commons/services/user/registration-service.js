@@ -1,4 +1,3 @@
-const bunyan = require("bunyan");
 const UserManager = require("../../data-managers/user-manager");
 const UserService = require("../user-service");
 const { User, USER_HOOK_TYPES } = require("../../entities/user/user");
@@ -6,25 +5,25 @@ const { notify } = require("../../mail-service");
 const RateLimiter = require("../rate-limit/rate-limiter");
 const limits = require("../rate-limit/limits");
 const { TooManyRequestsError } = require("../../../errors/BaseError");
-
-const logger = bunyan.createLogger({
-  name: "registration-service.js",
-  level: process.env.LOG_LEVEL,
-});
+const { afterAnswer } = require("./after-answer");
 
 /**
  * The public registration path (spec §6.3): signup and verification resend
  * are rate-limited and answer account-neutrally. Whatever the caller learns
  * from an outcome here must not depend on whether the address has an
  * account: the per-IP limits are the only ones that surface as a 429, the
- * per-account limits and the "account exists" branches end silently.
+ * per-account limits and the "account exists" branches end silently. All
+ * that depends on the address - the lookup, the account, the mail - runs
+ * after the answer (ECCdigital/tickets#259), so neither the time of the
+ * answer nor a failing mail server tells it; a failure is only logged.
  */
 class RegistrationService {
   /**
    * Signs a user up, or - when the address already has an account - does
    * what is safe instead: an unverified local account gets its verification
    * mail again (within the verification limits), a verified one nothing.
-   * Either way nothing tells the caller which branch ran.
+   * Either way nothing tells the caller which branch ran: everything after
+   * the validation runs after the answer.
    *
    * @param {Object} params
    * @param {User} params.user The account to create
@@ -40,10 +39,22 @@ class RegistrationService {
     // whether or not the address has an account.
     user.validate();
 
+    afterAnswer(
+      () =>
+        RegistrationService._register({
+          user,
+          nextUrl,
+          verifyUrl,
+          invitation,
+          ip,
+        }),
+      `signup of ${user.id}`,
+    );
+  }
+
+  static async _register({ user, nextUrl, verifyUrl, invitation, ip }) {
     const existing = await UserManager.getUser(user.id, true);
     if (existing) {
-      // A failure surfaces like one of a fresh signup would: the answer
-      // must not depend on the branch.
       await RegistrationService._sendVerificationMail(existing, {
         nextUrl,
         verifyUrl,
@@ -55,6 +66,7 @@ class RegistrationService {
     await UserService.singUpUser(user, nextUrl, verifyUrl, invitation);
     // The new account's first verification mail counts toward the
     // verification windows, so a resend right after it waits like any other.
+    // A failed mail counts nothing, so the mail can be requested again.
     await RateLimiter.consumeAll(
       RegistrationService._verificationLimits(user.id, ip),
     );
@@ -75,21 +87,15 @@ class RegistrationService {
   static async requestVerificationMail({ id, verifyUrl, nextUrl, ip }) {
     await RegistrationService._gate(limits.verificationMailPerIp(ip));
 
-    const user = await UserManager.getUser(id, true);
-    try {
+    afterAnswer(async () => {
+      const user = await UserManager.getUser(id, true);
       await RegistrationService._sendVerificationMail(user, {
         nextUrl,
         verifyUrl,
         // The IP limit is already spent above; only the account's own remain.
         ip: null,
       });
-    } catch (error) {
-      // An unknown address never fails here, so a known one must not either.
-      logger.error(
-        { err: error },
-        `Could not send the verification mail for ${id}`,
-      );
-    }
+    }, `verification mail for ${id}`);
   }
 
   static async _gate(limit) {

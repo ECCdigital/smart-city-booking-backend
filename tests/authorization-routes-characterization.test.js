@@ -2,8 +2,10 @@
  * Characterization of the authorization as it is today, route by route:
  * every route of every router under `src/platform` is called with five
  * principals - anonymous, signed in without a role, holder of every role
- * level, tenant owner, instance owner - and the
- * status code each gets is pinned in
+ * level, tenant owner, instance owner - and with the customer's expired
+ * token (ECCdigital/tickets#109: refused like a protected route's, on a
+ * public route too, but not read on the public routes under `/auth`), and
+ * the status code each gets is pinned in
  * `tests/snapshots/authorization/routes.json`. A 403 whose body is more
  * than the bare `Forbidden` of `sendStatus(403)` is pinned with its body,
  * to show the seven answer forms of a refusal that are folded into
@@ -42,13 +44,17 @@ const RESPONSE_TIMEOUT_MS = 2000;
 
 process.env.STORE_FRONT_URL ||= "https://store.example.test";
 
-/** The five principals, in the order of the table. */
+/**
+ * The five principals and the expired token, in the order of the table:
+ * name, user, and the options its token is signed with.
+ */
 const PRINCIPALS = [
   ["anonymous", null],
   ["signedIn", CUSTOMER],
   ["roleHolder", ROLE_HOLDER],
   ["tenantOwner", OWNER],
   ["instanceOwner", ADMIN],
+  ["expiredToken", CUSTOMER, { expiresIn: -60 }],
 ];
 
 /** The values of the route parameters: the tenant, a provider, a target type, the fixture. */
@@ -130,11 +136,11 @@ describe("authorization today: every route with every principal", function () {
     await h.close();
   });
 
-  async function call(route, userId) {
+  async function call(route, userId, signOptions) {
     reseed();
     let req = h.api()[route.method.toLowerCase()](url(route.path));
     if (userId) {
-      req = req.set(h.as(userId));
+      req = req.set(h.as(userId, signOptions));
     }
     if (["POST", "PUT", "PATCH"].includes(route.method)) {
       req = req.send({ id: FIXTURE_ID, tenantId: TENANT });
@@ -156,8 +162,8 @@ describe("authorization today: every route with every principal", function () {
     const table = {};
     for (const route of routes) {
       const row = {};
-      for (const [name, userId] of PRINCIPALS) {
-        row[name] = await call(route, userId);
+      for (const [name, userId, signOptions] of PRINCIPALS) {
+        row[name] = await call(route, userId, signOptions);
       }
       // A route registered twice (`GET /api/instances/public`) is listed twice.
       const key = `${route.method} ${route.path}`;

@@ -6,6 +6,7 @@ const { AccessPoint } = require("../src/commons/entities/access/access-point");
 const { ValidationError } = require("../src/errors/ValidationError");
 const { BaseError, NotFoundError } = require("../src/errors/BaseError");
 const { TEST_GEO_RULE } = require("./helpers/test-validation-rule");
+const TenantManager = require("../src/commons/data-managers/tenant-manager");
 
 function createAccessPoint(overrides = {}) {
   return AccessPoint.create({
@@ -902,6 +903,82 @@ describe("AccessPointController", () => {
       });
     });
 
+    /**
+     * A provider the registry does not know is a typo, and a typo has to show
+     * where it is made, not at the door (tickets#272). The registry decides,
+     * not the tenant's applications: a provider the tenant has not switched
+     * on yet is still one an access point may be prepared for.
+     */
+    describe("provider registry", () => {
+      const unknownProviderError = {
+        field: "provider",
+        code: "unknown_provider",
+        params: { provider: "dummy" },
+      };
+
+      it("refuses to create an access point for a provider the registry does not know", async () => {
+        request.body = { provider: "dummy", externalId: "lock-1" };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        const error = next.firstCall.args[0];
+        expect(error).to.be.instanceOf(ValidationError);
+        expect(error.statusCode).to.equal(400);
+        expect(error.errors).to.deep.equal([unknownProviderError]);
+        expect(storeAccessPoint.called).to.be.false;
+      });
+
+      it("refuses to change an access point to a provider the registry does not know", async () => {
+        sandbox
+          .stub(AccessPointManager, "getAccessPoint")
+          .resolves(createAccessPoint());
+        request.body = { id: "point-1", provider: "dummy" };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        const error = next.firstCall.args[0];
+        expect(error).to.be.instanceOf(ValidationError);
+        expect(error.errors).to.deep.equal([unknownProviderError]);
+        expect(storeAccessPoint.called).to.be.false;
+      });
+
+      it("refuses to store an existing access point whose stored provider the registry does not know", async () => {
+        sandbox
+          .stub(AccessPointManager, "getAccessPoint")
+          .resolves(createAccessPoint({ provider: "dummy" }));
+        request.body = { id: "point-1", label: "Nebeneingang" };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        const error = next.firstCall.args[0];
+        expect(error).to.be.instanceOf(ValidationError);
+        expect(error.errors).to.deep.equal([unknownProviderError]);
+        expect(storeAccessPoint.called).to.be.false;
+      });
+
+      it("does not ask a provider the registry does not know", async () => {
+        request.body = { provider: "dummy", externalId: "lock-1" };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(findListedAccessPoint.called).to.be.false;
+      });
+
+      it("stores an access point for a registered provider the tenant has not switched on", async () => {
+        findListedAccessPoint.restore();
+        sandbox
+          .stub(TenantManager, "getTenant")
+          .resolves({ id: "tenant-1", applications: [] });
+        request.body = { provider: "pareva", externalId: "plant-1" };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.called).to.be.false;
+        expect(storeAccessPoint.calledOnce).to.be.true;
+        expect(response.status.calledWith(201)).to.be.true;
+      });
+    });
+
     it("answers 404 when the tenant has no access point with that id", async () => {
       sandbox.stub(AccessPointManager, "getAccessPoint").resolves(null);
       request.body = { id: "unknown-point", label: "Neuer Name" };
@@ -1043,6 +1120,29 @@ describe("AccessPointController", () => {
       expect(response.status.calledWith(400)).to.be.true;
       expect(getAccessPoint.called).to.be.false;
       expect(render.called).to.be.false;
+    });
+
+    it("answers 503 store_front_url_missing when the instance has no store-front address", async () => {
+      render.restore();
+      const storeFrontUrl = process.env.STORE_FRONT_URL;
+      delete process.env.STORE_FRONT_URL;
+      sandbox
+        .stub(AccessPointManager, "getAccessPoint")
+        .resolves(createAccessPoint());
+
+      try {
+        await AccessPointController.getQrCode(request, response, next);
+      } finally {
+        if (storeFrontUrl !== undefined) {
+          process.env.STORE_FRONT_URL = storeFrontUrl;
+        }
+      }
+
+      const error = next.firstCall.args[0];
+      expect(error).to.be.instanceOf(BaseError);
+      expect(error.statusCode).to.equal(503);
+      expect(error.code).to.equal("store_front_url_missing");
+      expect(response.send.called).to.be.false;
     });
 
     it("hands unexpected errors to the error handler", async () => {

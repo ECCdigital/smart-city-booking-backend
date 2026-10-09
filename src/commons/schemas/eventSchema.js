@@ -38,7 +38,7 @@ const eventSchemaDefinition = {
       address: {
         street: null,
         house_number: null,
-        post_code: null,
+        postcode: null,
         city: null,
         suburb: null,
         state: null,

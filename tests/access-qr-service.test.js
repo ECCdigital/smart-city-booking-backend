@@ -3,6 +3,7 @@ const { expect } = require("chai");
 const sinon = require("sinon");
 
 const { AccessPoint } = require("../src/commons/entities/access/access-point");
+const { BaseError } = require("../src/errors/BaseError");
 
 function createAccessPoint(overrides = {}) {
   return AccessPoint.create({
@@ -65,12 +66,27 @@ describe("AccessQrService", () => {
       );
     });
 
-    it("throws when STORE_FRONT_URL is not configured", () => {
+    it("answers 503 store_front_url_missing when STORE_FRONT_URL is not configured", () => {
       delete process.env.STORE_FRONT_URL;
 
-      expect(() => AccessQrService.scanUrl("tenant-1", "abc123")).to.throw(
-        /STORE_FRONT_URL/,
-      );
+      let error;
+      try {
+        AccessQrService.scanUrl("tenant-1", "abc123");
+      } catch (err) {
+        error = err;
+      }
+
+      expect(error).to.be.instanceOf(BaseError);
+      expect(error.statusCode).to.equal(503);
+      expect(error.code).to.equal("store_front_url_missing");
+    });
+
+    it("counts a STORE_FRONT_URL of slashes alone as not configured", () => {
+      process.env.STORE_FRONT_URL = "/";
+
+      expect(() => AccessQrService.scanUrl("tenant-1", "abc123"))
+        .to.throw(BaseError)
+        .with.property("code", "store_front_url_missing");
     });
 
     it("carries the access point's current scan code, not its id", () => {

@@ -38,7 +38,11 @@ const TenantManager = require("../../data-managers/tenant-manager");
 const { BookableManager } = require("../../data-managers/bookable-manager");
 const EventManager = require("../../data-managers/event-manager");
 const { BOOKABLE_TYPES } = require("../../entities/bookable/bookable");
-const { SUPERVISION_LEVELS, OFFER_TYPES } = require("./supervision-constants");
+const {
+  SUPERVISION_LEVELS,
+  OFFER_TYPES,
+  offerTitleOf,
+} = require("./supervision-constants");
 const { pageWindow } = require("./page-window");
 const { DOMAIN } = require("../authorization/reach");
 
@@ -56,13 +60,12 @@ const editorPath = (editor, offerId) =>
 
 /**
  * What the queue needs from an offer type: the projected pending offers of
- * a set of tenants, and how one of them reads as a row.
+ * a set of tenants, and the admin path of one of them.
  */
 const QUEUE_SOURCES = Object.freeze({
   [OFFER_TYPES.BOOKABLE]: {
     list: (tenantIds) =>
       BookableManager.getPendingReviewOffers(tenantIds, DOMAIN),
-    title: (bookable) => bookable.title || null,
     adminPath: (bookable) => {
       const editor = BOOKABLE_EDITOR_BY_TYPE[bookable.type];
       return editor ? editorPath(editor, bookable.id) : null;
@@ -70,7 +73,6 @@ const QUEUE_SOURCES = Object.freeze({
   },
   [OFFER_TYPES.EVENT]: {
     list: (tenantIds) => EventManager.getPendingReviewOffers(tenantIds, DOMAIN),
-    title: (event) => event.information?.name || null,
     adminPath: (event) => editorPath("events", event.id),
   },
 });
@@ -130,7 +132,7 @@ class ReviewQueueService {
             tenantName: tenantNames.get(offer.tenantId) ?? null,
             offerType: type,
             offerId: offer.id,
-            title: source.title(offer),
+            title: offerTitleOf(type, offer),
             submittedAt: offer.review?.submittedAt ?? null,
             isPublic: offer.isPublic === true,
             adminPath: source.adminPath(offer),

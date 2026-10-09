@@ -218,7 +218,7 @@ Example:
     "address": {
       "street": "Example Street",
       "house_number": "1",
-      "post_code": "12345",
+      "postcode": "12345",
       "city": "Example City",
       "country": "Germany",
       "country_code": "DE"
@@ -530,7 +530,7 @@ Example:
     "address": {
       "street": null,
       "house_number": null,
-      "post_code": null,
+      "postcode": null,
       "city": null,
       "suburb": null,
       "state": null,
