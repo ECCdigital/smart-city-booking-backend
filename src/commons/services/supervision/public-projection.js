@@ -22,11 +22,11 @@
  * created it (`ownerUserId`, a mail address, ECCdigital/tickets#260): the
  * module decides records, not fields, and these are the two fields it
  * removes - once, here, so no public answer carries a status, a private
- * reason or a person and asking twice answers the same. The one other is
+ * reason or a person and asking twice answers the same. It also empties
  * the participation link of an event with registration
  * (ECCdigital/tickets#180): only its bookers see it, in their booking,
- * never the public. Nothing outside this module asks the offer
- * gate - the media rights ask `reached` too: a handler that reads through a manager
+ * never the public. Nothing outside this module asks the offer gate - the
+ * media rights ask `reached` too: a handler that reads through a manager
  * under `public` inherits the projection without a line of its own.
  *
  * The rules themselves are `offer-gate.js`; this module applies them.

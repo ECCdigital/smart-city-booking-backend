@@ -166,6 +166,19 @@ describe("mail: the participation link of an online or hybrid event", function (
     expect(sent[0].html).to.include(`href="${LINK}"`);
   });
 
+  it("the group request names the format at the ticket member, and no link", async function () {
+    installMailStackStore({ events: [online()] });
+    sent = installInMemoryMailTransport();
+    await mail.send("BOOKING_REQUEST_CONFIRMATION", {
+      tenantId: TENANT,
+      bookingIds: GROUP_MEMBER_IDS,
+      groupBookingId: GROUP,
+    });
+    expect(sent).to.have.length(1);
+    expect(sent[0].html).to.include("Format: Online");
+    expect(sent[0].html).to.not.include(LINK);
+  });
+
   it("names the format, and an online event without an address line", async function () {
     given();
     await mail.send("BOOKING_REQUEST_CONFIRMATION", single());
