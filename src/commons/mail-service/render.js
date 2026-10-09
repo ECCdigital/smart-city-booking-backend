@@ -167,7 +167,7 @@ function bookingItems(booking, bookables, events) {
             locationName: event.eventLocation.name,
             locationStreet: event.location?.address?.street,
             locationHouseNumber: event.location?.address?.house_number,
-            locationZip: event.location?.address?.post_code,
+            locationZip: event.location?.address?.postcode,
             locationCity: event.location?.address?.city,
           }
         : null,

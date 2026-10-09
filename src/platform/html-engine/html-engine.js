@@ -444,8 +444,8 @@ class HtmlEngine {
           .filter(Boolean)
           .join(" ")}</div>`
       : "";
-    htmlOutput += event.location?.address?.post_code
-      ? `<div class="zip">${event.location.address.post_code || ""}</div>`
+    htmlOutput += event.location?.address?.postcode
+      ? `<div class="zip">${event.location.address.postcode || ""}</div>`
       : "";
     htmlOutput += event.location?.address?.city
       ? `<div class="city">${event.location.address.city || ""}</div>`

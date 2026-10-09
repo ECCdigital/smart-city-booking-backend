@@ -636,7 +636,7 @@ components:
             house_number:
               type: string
               nullable: true
-            post_code:
+            postcode:
               type: string
               nullable: true
             city:
