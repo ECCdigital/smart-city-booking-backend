@@ -33,6 +33,8 @@ const TenantModel = require("../src/commons/data-managers/models/tenantModel");
 const MediaManager = require("../src/commons/data-managers/media-manager");
 const MediaModel = require("../src/commons/data-managers/models/mediaModel");
 const MembershipManager = require("../src/commons/data-managers/membership-manager");
+const AccessPointManager = require("../src/commons/data-managers/access-point-manager");
+const AccessPointModel = require("../src/commons/data-managers/models/accessPointModel");
 const {
   DOMAIN,
   PUBLIC,
@@ -180,6 +182,19 @@ const READS = [
     "MediaManager.getMediaByLegacyPath",
     () => MediaManager.getMediaByLegacyPath("t1", "old/bild.png"),
   ],
+  // The points of the start view of the map (map ECCdigital/tickets#372).
+  [
+    "BookableManager.getLocationPoints",
+    () => BookableManager.getLocationPoints("t1"),
+  ],
+  [
+    "EventManager.getLocationPoints",
+    () => EventManager.getLocationPoints("t1"),
+  ],
+  [
+    "AccessPointManager.getLocationPoints",
+    () => AccessPointManager.getLocationPoints("t1"),
+  ],
 ];
 
 describe("authorization: the managers' own condition", function () {
@@ -206,6 +221,7 @@ describe("authorization: the managers' own condition", function () {
         [MediaModel, "findOne"],
         [MediaModel, "find"],
         [MediaModel, "countDocuments"],
+        [AccessPointModel, "find"],
       ]) {
         sinon.stub(Model, method).resolves([]);
       }
@@ -670,6 +686,54 @@ describe("authorization: the managers' own condition", function () {
         bookingIds: "b1",
         assignedUserId: "u1",
       });
+    });
+  });
+
+  describe("the location points of the start view of the map", function () {
+    /** A `find` that answers no record and records its filter. */
+    const findOf = (Model) =>
+      sinon.stub(Model, "find").returns({ lean: async () => [] });
+
+    it("reads every point of the tenant under any, the own under own", async function () {
+      const bookables = findOf(BookableModel);
+      const events = findOf(EventModel);
+      await BookableManager.getLocationPoints("t1", ANY);
+      await BookableManager.getLocationPoints("t1", OWN);
+      await EventManager.getLocationPoints("t1", ANY);
+      await EventManager.getLocationPoints("t1", OWN);
+      expect(bookables.args.map(([filter]) => filter)).to.deep.equal([
+        { tenantId: "t1" },
+        { tenantId: "t1", ownerUserId: "u1" },
+      ]);
+      expect(events.args.map(([filter]) => filter)).to.deep.equal([
+        { tenantId: "t1" },
+        { tenantId: "t1", ownerUserId: "u1" },
+      ]);
+    });
+
+    it("reads the points of the access points under any, which have no owner", async function () {
+      const find = findOf(AccessPointModel);
+      await AccessPointManager.getLocationPoints("t1", ANY);
+      expect(find.firstCall.args[0]).to.deep.equal({ tenantId: "t1" });
+      let error = null;
+      try {
+        await AccessPointManager.getLocationPoints("t1", OWN);
+      } catch (err) {
+        error = err;
+      }
+      expect(error?.message).to.match(/no owner key/);
+    });
+
+    it("reads no point under public", async function () {
+      const find = findOf(BookableModel);
+      let error = null;
+      try {
+        await BookableManager.getLocationPoints("t1", PUBLIC);
+      } catch (err) {
+        error = err;
+      }
+      expect(error?.message).to.match(/no record condition/);
+      expect(find.called).to.equal(false);
     });
   });
 

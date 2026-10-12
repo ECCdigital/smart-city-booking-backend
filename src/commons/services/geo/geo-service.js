@@ -271,18 +271,21 @@ class GeoService {
    * The start view of the map of a tenant: the median per axis of every
    * point of its bookables, events and access points at the zoom of a
    * town, all of Germany without one. Computed afresh on every call, from
-   * the points alone.
+   * the points alone, within the reach of the route (ADR 0002): every
+   * member reads the points of the whole tenant.
    *
    * @param {Object} params
    * @param {string} params.tenantId The tenant
+   * @param {{reach: string, userId?: string|null}} params.scope The reach
+   *   of the route
    * @returns {Promise<{lat: number, lon: number, zoom: number}>}
    */
-  static async start({ tenantId }) {
+  static async start({ tenantId, scope }) {
     const stored = (
       await Promise.all([
-        BookableManager.getLocationPoints(tenantId),
-        EventManager.getLocationPoints(tenantId),
-        AccessPointManager.getLocationPoints(tenantId),
+        BookableManager.getLocationPoints(tenantId, scope),
+        EventManager.getLocationPoints(tenantId, scope),
+        AccessPointManager.getLocationPoints(tenantId, scope),
       ])
     ).flat();
     const points = stored.filter(isPoint);

@@ -2,6 +2,7 @@ const GeoService = require("../../../../commons/services/geo/geo-service");
 const TileService = require("../../../../commons/services/geo/tile-service");
 const ApiResponse = require("../../../../commons/utilities/api-response");
 const { CACHE_POLICY } = require("../../../../commons/utilities/cache-headers");
+const { scopeOf } = require("../../../../commons/services/authorization");
 
 /**
  * Search, reverse search, start view and tiles for the location input (map
@@ -37,7 +38,10 @@ class GeoControllerV2 {
 
   /** `GET /api/v2/:tenant/geo/start`: `{ lat, lon, zoom }` of the map. */
   static async start(req, res) {
-    const data = await GeoService.start({ tenantId: req.params.tenant });
+    const data = await GeoService.start({
+      tenantId: req.params.tenant,
+      scope: scopeOf(req),
+    });
     return ApiResponse.ok(res, { data });
   }
 
