@@ -10,6 +10,14 @@
  * window; a value that is not a positive integer falls back to the default.
  */
 
+/**
+ * The environment variable `name` as a positive integer, `fallback` when it
+ * is not one.
+ *
+ * @param {string} name The environment variable
+ * @param {number} fallback The default
+ * @returns {number}
+ */
 function positiveInt(name, fallback) {
   const value = Number(process.env[name]);
   return Number.isInteger(value) && value > 0 ? value : fallback;
@@ -106,4 +114,5 @@ module.exports = {
   geoPerUser,
   geoOutbound,
   geoTilesOutbound,
+  positiveInt,
 };

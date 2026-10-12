@@ -18,6 +18,7 @@
  */
 
 const GeoClient = require("./geo-client");
+const { failureOf } = require("./provider-rules");
 
 const DEFAULT_BASE_URL = "https://photon.komoot.io";
 
@@ -26,6 +27,9 @@ const LANGUAGES = new Set(["de", "en", "fr", "it"]);
 
 /** Photon types whose name is the town itself. */
 const TOWN_TYPES = new Set(["city", "town", "village", "locality", "district"]);
+
+/** Photon types whose name is part of the address: a street, a house, a town. */
+const ADDRESS_TYPES = new Set(["street", "house", ...TOWN_TYPES]);
 
 const baseUrl = () =>
   (process.env.GEOCODER_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
@@ -47,15 +51,20 @@ function hitOf(feature) {
 
   const p = feature.properties ?? {};
   const name = textOf(p.name);
-  const isStreet = p.type === "street";
-  const isTown = TOWN_TYPES.has(p.type);
-  const street = textOf(p.street) ?? (isStreet ? name : null);
   const houseNumber = textOf(p.housenumber);
   const postcode = textOf(p.postcode);
-  const city = textOf(p.city) ?? (isTown ? name : null);
+  const city = textOf(p.city) ?? (TOWN_TYPES.has(p.type) ? name : null);
+  // A place without a house address (a park, a square, a hall): its name
+  // is what to show, a street Photon gives it is only where it lies.
+  const placeName =
+    name && name !== city && !houseNumber && !ADDRESS_TYPES.has(p.type)
+      ? name
+      : null;
+  const street = placeName
+    ? null
+    : textOf(p.street) ?? (p.type === "street" ? name : null);
   const countryCode = textOf(p.countrycode)?.toUpperCase() ?? null;
 
-  const placeName = !street && name && name !== city ? name : null;
   const display = [
     placeName,
     [street, houseNumber].filter(Boolean).join(" "),
@@ -84,11 +93,8 @@ function hitOf(feature) {
  */
 async function ask(path, query) {
   const result = await GeoClient.get({ url: `${baseUrl()}/${path}`, query });
-  if (result.outcome !== "response") {
-    return { ok: false, failure: result.outcome };
-  }
-  if (result.status === 429) return { ok: false, failure: "throttled" };
-  if (result.status !== 200) return { ok: false, failure: "status" };
+  const failure = failureOf(result);
+  if (failure) return { ok: false, failure };
 
   let features;
   try {

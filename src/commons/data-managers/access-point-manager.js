@@ -24,10 +24,12 @@ class AccessPointManager {
    * them: the start view of the map (`GeoService.start`).
    *
    * @param {string} tenantId Tenant ID
+   * @param {{reach: string, userId?: string|null}} scope The reach
+   *   (ADR 0002)
    * @returns {Promise<Array<*>>}
    */
-  static async getLocationPoints(tenantId) {
-    return locationPointsOf(AccessPointModel, tenantId);
+  static async getLocationPoints(tenantId, scope) {
+    return locationPointsOf(AccessPointModel, "accessPoint", tenantId, scope);
   }
 
   /**

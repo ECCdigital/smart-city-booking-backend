@@ -1,4 +1,5 @@
 const { isDeepStrictEqual } = require("node:util");
+
 const { ValidationError } = require("../../../errors/ValidationError");
 const SchemaUtils = require("../../utilities/schemaUtils");
 
@@ -81,14 +82,6 @@ function checkShape(location, storedLocation) {
     ADDRESS_FIELDS.forEach((key) =>
       expectString(`.address.${key}`, address[key]),
     );
-    const code = address.country_code;
-    if (
-      !isAbsent(code) &&
-      code !== "" &&
-      !(typeof code === "string" && COUNTRY_CODE.test(code))
-    ) {
-      refuse(".address.country_code", ERROR_CODES.format);
-    }
   }
 
   const { meta } = location;
@@ -106,7 +99,33 @@ function checkShape(location, storedLocation) {
     }
   }
 
-  return { errors, hasPoint: checkPoint(location.coordinates, refuse) };
+  const hasPoint = checkPoint(location.coordinates, refuse);
+  if (!countryCodeFits(location, storedLocation, hasPoint)) {
+    refuse(".address.country_code", ERROR_CODES.format);
+  }
+  return { errors, hasPoint };
+}
+
+/**
+ * Whether the country code has its form: none, or two letters. An empty
+ * one passes only in an empty location (no content, no point) or as the
+ * stored one: stored locations are never rewritten.
+ */
+function countryCodeFits(location, storedLocation, hasPoint) {
+  const code = isPlainObject(location.address)
+    ? location.address.country_code
+    : undefined;
+  if (isAbsent(code)) {
+    return true;
+  }
+  if (code === "") {
+    const empty = !hasPoint && !hasContent(location);
+    const stored = isPlainObject(storedLocation)
+      ? storedLocation.address?.country_code
+      : undefined;
+    return empty || stored === "";
+  }
+  return typeof code === "string" && COUNTRY_CODE.test(code);
 }
 
 /**
@@ -170,6 +189,7 @@ function checkPoint(coordinates, refuse) {
  * - A new or changed location with an address, a display text or an addition
  *   needs a point; a point alone is enough.
  * - The known fields have their form; unknown ones stay and are not checked.
+ *   An empty country code is a form only in an empty location or as stored.
  */
 class LocationGuard {
   /**

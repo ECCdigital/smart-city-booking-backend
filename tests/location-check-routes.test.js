@@ -455,6 +455,54 @@ describe("location check on the create and update routes", function () {
         });
       }
 
+      it("stores an empty location with an empty country code", async function () {
+        const empty = {
+          coordinates: { type: "Point", points: [null, null] },
+          display_address: "",
+          address: { street: null, city: "", country_code: "" },
+          meta: {},
+        };
+
+        const res = await create(empty);
+
+        expect(res.status).to.equal(201);
+        expect(written).to.deep.equal([empty]);
+      });
+
+      it("refuses an empty country code in a new location with content", async function () {
+        const fields = await refusedFields((location) => ({
+          ...location,
+          address: { ...location.address, country_code: "" },
+        }));
+
+        expect(fields).to.deep.equal(["location.address.country_code"]);
+      });
+
+      it("keeps the empty country code of the stored location when the addition is new", async function () {
+        const stored = withPoint();
+        stored.address.country_code = "";
+        const changed = withPoint();
+        changed.address.country_code = "";
+        changed.meta.additional = "Halle 3";
+
+        const res = await update(stored, changed);
+
+        expect(res.status).to.be.oneOf([200, 201]);
+        expect(written).to.deep.equal([changed]);
+      });
+
+      it("refuses an empty country code where the stored location had one", async function () {
+        const changed = withPoint();
+        changed.address.country_code = "";
+
+        const res = await update(withPoint(), changed);
+
+        expect(res.status).to.equal(400);
+        expect(res.body.details.map((d) => d.field)).to.deep.equal([
+          "location.address.country_code",
+        ]);
+      });
+
       for (const code of ["POL", "D", "D1", 49]) {
         it(`refuses the country code ${code}`, async function () {
           const fields = await refusedFields((location) => ({

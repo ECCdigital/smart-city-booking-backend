@@ -12,24 +12,15 @@
  * text or a point.
  */
 
-const bunyan = require("bunyan");
 const NodeCache = require("node-cache");
 
 const PhotonAdapter = require("./photon-adapter");
+const { consume, unavailable, remember } = require("./provider-rules");
 const { BookableManager } = require("../../data-managers/bookable-manager");
 const EventManager = require("../../data-managers/event-manager");
 const AccessPointManager = require("../../data-managers/access-point-manager");
-const RateLimiter = require("../rate-limit/rate-limiter");
 const { geoPerUser, geoOutbound } = require("../rate-limit/limits");
-const {
-  BadRequestError,
-  ServiceUnavailableError,
-} = require("../../../errors/BaseError");
-
-const logger = bunyan.createLogger({
-  name: "geo-service.js",
-  level: process.env.LOG_LEVEL,
-});
+const { BadRequestError } = require("../../../errors/BaseError");
 
 /** The code of every refusal of search and reverse search for want of the service. */
 const SEARCH_UNAVAILABLE = "geo_search_unavailable";
@@ -53,15 +44,6 @@ const cache = new NodeCache({
   maxKeys: CACHE_MAX_KEYS,
   useClones: false,
 });
-
-/** Keeps an answer unless the cache is full. */
-function remember(key, value) {
-  try {
-    cache.set(key, value);
-  } catch {
-    // ECACHEFULL: answered, not kept.
-  }
-}
 
 /** The zoom of the start view on the tenant's points: a town. */
 const START_ZOOM = 12;
@@ -148,52 +130,40 @@ function queryOf(q) {
 }
 
 /**
- * Counts one attempt against a limit of the geo services.
+ * Counts one attempt of search or reverse search against a limit.
  *
  * @param {string} kind `search` or `reverse`, for the log
  * @param {string} name `perUser` or `outbound`, for the log
  * @param {Object} limit A limit of `limits.js`
  * @throws {ServiceUnavailableError} `geo_search_unavailable` past the limit
  */
-async function consume(kind, name, limit) {
-  const slot = await RateLimiter.consume(limit);
-  if (!slot.allowed) {
-    logger.warn({ kind, limit: name }, "geo limit reached");
-    throw new ServiceUnavailableError(SEARCH_UNAVAILABLE, {
-      retryAfterSeconds: slot.retryAfterSeconds,
-    });
-  }
-}
+const consumeFor = (kind, name, limit) =>
+  consume({ limit, code: SEARCH_UNAVAILABLE, kind, name });
 
 /**
- * The answer of the cache, else of the provider within the limit of the
- * instance; a found answer is kept, a failure is not.
+ * The hits of the cache, else of the provider within the limit of the
+ * instance; found hits are kept, a failure is not.
  *
  * @param {string} kind `search` or `reverse`
  * @param {string} key The cache key
  * @param {() => Promise<Object>} ask Asks the provider
- * @param {(hits: Object[]) => *} pick What of the hits to answer and keep
+ * @returns {Promise<Object[]>} The hits
+ * @throws {ServiceUnavailableError} `geo_search_unavailable`
  */
-async function cachedOrAsked(kind, key, ask, pick) {
+async function cachedOrAsked(kind, key, ask) {
   const cached = cache.get(key);
   if (cached !== undefined) return cached;
 
-  await consume(kind, "outbound", geoOutbound());
-  const value = pick(hitsOf(kind, await ask()));
-  remember(key, value);
-  return value;
-}
-
-/**
- * The hits of the provider, or the refusal for want of it.
- *
- * @throws {ServiceUnavailableError} `geo_search_unavailable`
- */
-function hitsOf(kind, answer) {
+  await consumeFor(kind, "outbound", geoOutbound());
+  const answer = await ask();
   if (!answer.ok) {
-    logger.warn({ kind, failure: answer.failure }, "geo provider failed");
-    throw new ServiceUnavailableError(SEARCH_UNAVAILABLE);
+    throw unavailable({
+      code: SEARCH_UNAVAILABLE,
+      kind,
+      failure: answer.failure,
+    });
   }
+  remember(cache, key, answer.hits);
   return answer.hits;
 }
 
@@ -216,7 +186,7 @@ class GeoService {
     const query = queryOf(q);
     const focus = pointOf({ lat, lon }, 1);
     const language = languageOf(lang);
-    await consume("search", "perUser", geoPerUser(userId));
+    await consumeFor("search", "perUser", geoPerUser(userId));
 
     const key = JSON.stringify([
       "search",
@@ -225,17 +195,8 @@ class GeoService {
       focus?.lon ?? null,
       language,
     ]);
-    return cachedOrAsked(
-      "search",
-      key,
-      () =>
-        geocoder().search({
-          q: query,
-          focus,
-          lang: language,
-          limit: MAX_HITS,
-        }),
-      (hits) => hits,
+    return cachedOrAsked("search", key, () =>
+      geocoder().search({ q: query, focus, lang: language, limit: MAX_HITS }),
     );
   }
 
@@ -256,33 +217,34 @@ class GeoService {
     const point = pointOf({ lat, lon }, 5);
     if (!point) throw new BadRequestError("geo_point_invalid");
     const language = languageOf(lang);
-    await consume("reverse", "perUser", geoPerUser(userId));
+    await consumeFor("reverse", "perUser", geoPerUser(userId));
 
     const key = JSON.stringify(["reverse", point.lat, point.lon, language]);
-    return cachedOrAsked(
-      "reverse",
-      key,
-      () => geocoder().reverse({ point, lang: language }),
-      (hits) => hits[0] ?? null,
+    const hits = await cachedOrAsked("reverse", key, () =>
+      geocoder().reverse({ point, lang: language }),
     );
+    return hits[0] ?? null;
   }
 
   /**
    * The start view of the map of a tenant: the median per axis of every
    * point of its bookables, events and access points at the zoom of a
    * town, all of Germany without one. Computed afresh on every call, from
-   * the points alone.
+   * the points alone, within the reach of the route (ADR 0002): every
+   * member reads the points of the whole tenant.
    *
    * @param {Object} params
    * @param {string} params.tenantId The tenant
+   * @param {{reach: string, userId?: string|null}} params.scope The reach
+   *   of the route
    * @returns {Promise<{lat: number, lon: number, zoom: number}>}
    */
-  static async start({ tenantId }) {
+  static async start({ tenantId, scope }) {
     const stored = (
       await Promise.all([
-        BookableManager.getLocationPoints(tenantId),
-        EventManager.getLocationPoints(tenantId),
-        AccessPointManager.getLocationPoints(tenantId),
+        BookableManager.getLocationPoints(tenantId, scope),
+        EventManager.getLocationPoints(tenantId, scope),
+        AccessPointManager.getLocationPoints(tenantId, scope),
       ])
     ).flat();
     const points = stored.filter(isPoint);

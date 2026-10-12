@@ -1,4 +1,5 @@
 const Handlebars = require("handlebars");
+
 const {
   BookableManager,
 } = require("../../commons/data-managers/bookable-manager");

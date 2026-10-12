@@ -14,21 +14,12 @@
  * tile, and neither does an error: what a person looked at stays theirs.
  */
 
-const bunyan = require("bunyan");
 const NodeCache = require("node-cache");
 
 const TopPlusAdapter = require("./topplus-adapter");
-const RateLimiter = require("../rate-limit/rate-limiter");
-const { geoTilesOutbound } = require("../rate-limit/limits");
-const {
-  BadRequestError,
-  ServiceUnavailableError,
-} = require("../../../errors/BaseError");
-
-const logger = bunyan.createLogger({
-  name: "tile-service.js",
-  level: process.env.LOG_LEVEL,
-});
+const { consume, unavailable, remember } = require("./provider-rules");
+const { geoTilesOutbound, positiveInt } = require("../rate-limit/limits");
+const { BadRequestError } = require("../../../errors/BaseError");
 
 /** The code of every refusal of a tile for want of the tile server. */
 const TILES_UNAVAILABLE = "geo_tiles_unavailable";
@@ -38,11 +29,6 @@ const TILE_INVALID = "geo_tile_invalid";
 /** Defaults of the tile cache: 7 days, 2000 tiles (some 50 to 100 MiB). */
 const DEFAULT_TTL_SECONDS = 7 * 24 * 60 * 60;
 const DEFAULT_MAX_TILES = 2000;
-
-function positiveInt(name, fallback) {
-  const value = Number(process.env[name]);
-  return Number.isInteger(value) && value > 0 ? value : fallback;
-}
 
 /**
  * The tile cache, made on first use with `GEO_TILES_CACHE_TTL_SECONDS` and
@@ -60,15 +46,6 @@ function tileCache() {
     });
   }
   return cache;
-}
-
-/** Keeps a tile unless the cache is full. */
-function remember(key, value) {
-  try {
-    tileCache().set(key, value);
-  } catch {
-    // ECACHEFULL: answered, not kept.
-  }
 }
 
 /**
@@ -117,23 +94,22 @@ class TileService {
     const cached = tileCache().get(key);
     if (cached !== undefined) return cached;
 
-    const slot = await RateLimiter.consume(geoTilesOutbound());
-    if (!slot.allowed) {
-      logger.warn({ kind: "tiles", limit: "outbound" }, "geo limit reached");
-      throw new ServiceUnavailableError(TILES_UNAVAILABLE, {
-        retryAfterSeconds: slot.retryAfterSeconds,
-      });
-    }
+    await consume({
+      limit: geoTilesOutbound(),
+      code: TILES_UNAVAILABLE,
+      kind: "tiles",
+      name: "outbound",
+    });
 
     const answer = await TopPlusAdapter.tile(wanted);
     if (!answer.ok) {
-      logger.warn(
-        { kind: "tiles", failure: answer.failure },
-        "geo provider failed",
-      );
-      throw new ServiceUnavailableError(TILES_UNAVAILABLE);
+      throw unavailable({
+        code: TILES_UNAVAILABLE,
+        kind: "tiles",
+        failure: answer.failure,
+      });
     }
-    remember(key, answer.tile);
+    remember(tileCache(), key, answer.tile);
     return answer.tile;
   }
 

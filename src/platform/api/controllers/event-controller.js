@@ -127,7 +127,7 @@ class EventController {
       }
 
       // A new event has no stored location to compare with.
-      LocationGuard.storable(event.location);
+      event.location = LocationGuard.storable(event.location, null);
       await MediaReferenceGuard.assertEventStorable(
         event,
         tenant,

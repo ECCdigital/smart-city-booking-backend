@@ -283,10 +283,12 @@ class EventManager {
    * them: the start view of the map (`GeoService.start`).
    *
    * @param {string} tenantId Tenant ID
+   * @param {{reach: string, userId?: string|null}} scope The reach
+   *   (ADR 0002)
    * @returns {Promise<Array<*>>}
    */
-  static async getLocationPoints(tenantId) {
-    return locationPointsOf(EventModel, tenantId);
+  static async getLocationPoints(tenantId, scope) {
+    return locationPointsOf(EventModel, "event", tenantId, scope);
   }
 
   /**
