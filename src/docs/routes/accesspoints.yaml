@@ -74,6 +74,14 @@
       as sent rather than normalised away, and an access point the provider
       does not list is not restricted.
 
+      `location` is checked like the location of a bookable or an event
+      (glossary „Standort“): a new or changed location with an address, a
+      display text or an addition needs a point, a point alone is enough, and
+      the known fields must have their form (see `AccessPointLocation`); a
+      refusal names its field, e.g. `location.coordinates`. A location the
+      same as the stored one, also one left out of the body, passes as it
+      was stored, even without a point.
+
       `provider` has to be one the platform has registered (the access
       providers it ships with); any other is answered with an
       `unknown_provider` validation error carrying the offending `provider`,
@@ -611,7 +619,14 @@ components:
       type: object
       description: |
         Where the access point physically is, in the same shape as
-        `bookable.location`. Coordinates without an address are allowed.
+        `bookable.location`. Coordinates without an address are allowed, an
+        address, `display_address` or `meta.additional` without coordinates
+        only when unchanged from the stored location. `points` is
+        `[longitude, latitude]` as numbers within ±180 and ±90, or
+        `[null, null]` for no point; `meta.source` is `photon`, `manual` or
+        `nuki` (an old stored value such as `nominatim` or `legacy` may stay);
+        `address.country_code` has two letters, empty only in an empty
+        location or as stored. Unknown fields are kept unchecked.
       properties:
         coordinates:
           type: object

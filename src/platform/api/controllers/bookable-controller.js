@@ -16,6 +16,7 @@ const {
 } = require("../../../commons/utilities/opening-hours-manager");
 const BookableService = require("../../../commons/services/bookable-service");
 const MediaReferenceGuard = require("../../../commons/services/media/media-reference-guard");
+const LocationGuard = require("../../../commons/services/location/location-guard");
 const {
   withLockerDetails,
 } = require("../../../commons/services/access/bookable-locker-details");
@@ -285,6 +286,7 @@ class BookableController {
         throw new Error(`Maximum number of public bookables reached.`);
       }
 
+      bookable.location = LocationGuard.storable(bookable.location, null);
       await BookableController._validateAccessPointIds(bookable, tenant);
       BookableController._dropAccessPointAmounts(bookable);
       BookableController._validateAccessBuffers(bookable);
@@ -364,6 +366,10 @@ class BookableController {
         }
       }
 
+      bookable.location = LocationGuard.storable(
+        bookable.location,
+        existingBookable.location,
+      );
       await BookableController._validateAccessPointIds(bookable, tenant);
       BookableController._dropAccessPointAmounts(bookable);
       BookableController._validateAccessBuffers(bookable);

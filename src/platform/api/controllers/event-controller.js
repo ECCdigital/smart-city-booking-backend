@@ -4,6 +4,7 @@ const bunyan = require("bunyan");
 const EventService = require("../../../commons/services/event-service");
 const BookingService = require("../../../commons/services/checkout/booking-service");
 const MediaReferenceGuard = require("../../../commons/services/media/media-reference-guard");
+const LocationGuard = require("../../../commons/services/location/location-guard");
 const { BaseError, NotFoundError } = require("../../../errors/BaseError");
 const {
   scopeOf,
@@ -125,6 +126,8 @@ class EventController {
         throw new Error(`Maximum number of  public  events reached.`);
       }
 
+      // A new event has no stored location to compare with.
+      event.location = LocationGuard.storable(event.location, null);
       await MediaReferenceGuard.assertEventStorable(
         event,
         tenant,
@@ -166,6 +169,10 @@ class EventController {
         }
       }
 
+      event.location = LocationGuard.storable(
+        event.location,
+        existingEvent.location,
+      );
       await MediaReferenceGuard.assertEventStorable(
         event,
         tenant,

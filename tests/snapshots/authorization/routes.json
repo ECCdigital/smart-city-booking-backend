@@ -959,6 +959,38 @@
     "instanceOwner": 200,
     "expiredToken": 401
   },
+  "GET /api/v2/:tenant/geo/search": {
+    "anonymous": 401,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400,
+    "expiredToken": 401
+  },
+  "GET /api/v2/:tenant/geo/reverse": {
+    "anonymous": 401,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400,
+    "expiredToken": 401
+  },
+  "GET /api/v2/:tenant/geo/start": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200,
+    "expiredToken": 401
+  },
+  "GET /api/v2/:tenant/geo/tiles/:z/:x/:y": {
+    "anonymous": 401,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400,
+    "expiredToken": 401
+  },
   "GET /api/:tenant/bookables/public": {
     "anonymous": 200,
     "signedIn": 200,
