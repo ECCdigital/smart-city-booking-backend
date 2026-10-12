@@ -10,6 +10,7 @@ const AccessLocationService = require("../../../commons/services/access/access-l
 const AccessEvidenceService = require("../../../commons/services/access/access-evidence-service");
 const AccessInfoService = require("../../../commons/services/access/access-info-service");
 const AccessService = require("../../../commons/services/access/access-service");
+const LocationGuard = require("../../../commons/services/location/location-guard");
 const {
   hasAccessProvider,
 } = require("../../../commons/services/access/providers/access-provider-registry");
@@ -148,6 +149,7 @@ class AccessPointController {
       tenantId: tenantId,
     });
 
+    LocationGuard.storable(accessPoint.location);
     AccessPointController._assertProviderRegistered(accessPoint);
     AccessPointController._assertRulePreconditions(accessPoint);
     const listedAccessPoint =
@@ -180,9 +182,14 @@ class AccessPointController {
       return response.sendStatus(404);
     }
 
+    const storedLocation = accessPoint.location;
     Object.assign(
       accessPoint,
       AccessPointController._writableFields(request.body),
+    );
+    accessPoint.location = LocationGuard.storable(
+      accessPoint.location,
+      storedLocation,
     );
 
     AccessPointController._assertProviderRegistered(accessPoint);
