@@ -86,6 +86,18 @@ function geoOutbound() {
   };
 }
 
+/**
+ * Calls of the instance to the tile server: 600 per minute, only the misses
+ * of the tile cache count. No limit per person: one map view loads dozens
+ * of tiles.
+ */
+function geoTilesOutbound() {
+  return {
+    key: "geo:tiles:outbound",
+    ...limitFrom("RATE_LIMIT_GEO_TILES_OUTBOUND", 600, 60),
+  };
+}
+
 module.exports = {
   signupPerIp,
   verificationMailPerAccount,
@@ -93,4 +105,5 @@ module.exports = {
   tenantSelfCreationPerUser,
   geoPerUser,
   geoOutbound,
+  geoTilesOutbound,
 };

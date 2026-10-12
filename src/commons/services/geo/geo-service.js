@@ -16,6 +16,9 @@ const bunyan = require("bunyan");
 const NodeCache = require("node-cache");
 
 const PhotonAdapter = require("./photon-adapter");
+const { BookableManager } = require("../../data-managers/bookable-manager");
+const EventManager = require("../../data-managers/event-manager");
+const AccessPointManager = require("../../data-managers/access-point-manager");
 const RateLimiter = require("../rate-limit/rate-limiter");
 const { geoPerUser, geoOutbound } = require("../rate-limit/limits");
 const {
@@ -58,6 +61,32 @@ function remember(key, value) {
   } catch {
     // ECACHEFULL: answered, not kept.
   }
+}
+
+/** The zoom of the start view on the tenant's points: a town. */
+const START_ZOOM = 12;
+
+/**
+ * The start view of a tenant without a single point: all of Germany.
+ * Zoom 5 keeps the whole country inside a small map of about 300 px.
+ */
+const GERMANY = { lat: 51.2, lon: 9.4, zoom: 5 };
+
+/** A stored `points` value that is a point: `[lon, lat]` within range. */
+const isPoint = (points) =>
+  Array.isArray(points) &&
+  points.length === 2 &&
+  points.every(Number.isFinite) &&
+  Math.abs(points[0]) <= 180 &&
+  Math.abs(points[1]) <= 90;
+
+/** The median of a non-empty list of numbers. */
+function median(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[middle]
+    : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
 /** The provider of search and reverse search. */
@@ -236,6 +265,33 @@ class GeoService {
       () => geocoder().reverse({ point, lang: language }),
       (hits) => hits[0] ?? null,
     );
+  }
+
+  /**
+   * The start view of the map of a tenant: the median per axis of every
+   * point of its bookables, events and access points at the zoom of a
+   * town, all of Germany without one. Computed afresh on every call, from
+   * the points alone.
+   *
+   * @param {Object} params
+   * @param {string} params.tenantId The tenant
+   * @returns {Promise<{lat: number, lon: number, zoom: number}>}
+   */
+  static async start({ tenantId }) {
+    const stored = (
+      await Promise.all([
+        BookableManager.getLocationPoints(tenantId),
+        EventManager.getLocationPoints(tenantId),
+        AccessPointManager.getLocationPoints(tenantId),
+      ])
+    ).flat();
+    const points = stored.filter(isPoint);
+    if (points.length === 0) return { ...GERMANY };
+    return {
+      lat: median(points.map(([, lat]) => lat)),
+      lon: median(points.map(([lon]) => lon)),
+      zoom: START_ZOOM,
+    };
   }
 
   /** Forgets every cached answer. For tests. */

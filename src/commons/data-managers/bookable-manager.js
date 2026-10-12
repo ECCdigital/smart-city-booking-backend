@@ -1,5 +1,6 @@
 const { Bookable } = require("../entities/bookable/bookable");
 const BookableModel = require("./models/bookableModel");
+const { locationPointsOf } = require("./location-points");
 const {
   CustomFieldCache,
 } = require("../services/custom-field/custom-field-cache");
@@ -554,6 +555,18 @@ class BookableManager {
    */
   static async countBookables(tenantId) {
     return BookableModel.countDocuments({ tenantId });
+  }
+
+  /**
+   * The stored points of the tenant's bookables, one `points` value each
+   * (`[lon, lat]`, `[null, null]` without a point), and nothing else of
+   * them: the start view of the map (`GeoService.start`).
+   *
+   * @param {string} tenantId Tenant ID
+   * @returns {Promise<Array<*>>}
+   */
+  static async getLocationPoints(tenantId) {
+    return locationPointsOf(BookableModel, tenantId);
   }
 
   /**

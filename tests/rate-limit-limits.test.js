@@ -17,6 +17,8 @@ const ENV_KEYS = [
   "RATE_LIMIT_GEO_PER_USER_WINDOW_SECONDS",
   "RATE_LIMIT_GEO_OUTBOUND",
   "RATE_LIMIT_GEO_OUTBOUND_WINDOW_SECONDS",
+  "RATE_LIMIT_GEO_TILES_OUTBOUND",
+  "RATE_LIMIT_GEO_TILES_OUTBOUND_WINDOW_SECONDS",
 ];
 
 describe("rate-limit limits", function () {
@@ -89,6 +91,23 @@ describe("rate-limit limits", function () {
 
     assert.strictEqual(limits.geoPerUser("a@b.c").limit, 10);
     assert.strictEqual(limits.geoOutbound().windowMs, 30_000);
+  });
+
+  it("carries the tile default, 600 towards the tile server per minute, on its own key", function () {
+    assert.deepStrictEqual(limits.geoTilesOutbound(), {
+      key: "geo:tiles:outbound",
+      limit: 600,
+      windowMs: 60_000,
+    });
+
+    process.env.RATE_LIMIT_GEO_TILES_OUTBOUND = "20";
+    process.env.RATE_LIMIT_GEO_TILES_OUTBOUND_WINDOW_SECONDS = "10";
+
+    assert.deepStrictEqual(limits.geoTilesOutbound(), {
+      key: "geo:tiles:outbound",
+      limit: 20,
+      windowMs: 10_000,
+    });
   });
 
   it("reads a differing configuration from the environment", function () {
