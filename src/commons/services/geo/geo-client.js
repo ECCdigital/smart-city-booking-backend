@@ -17,7 +17,7 @@ const axios = require("axios");
 const { geoUserAgent } = require("./user-agent");
 
 /** How long a call may take, socket and in total (spec: 3 s). */
-const GEO_TIMEOUT_MS = 3000;
+const GEO_TIMEOUT_MS = 5000;
 
 /** The most of an answer a call reads by default, far above a search answer. */
 const DEFAULT_MAX_BYTES = 256 * 1024;
