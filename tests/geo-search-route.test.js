@@ -83,6 +83,21 @@ const SPREEAUENPARK = feature([14.3475, 51.7801], {
   countrycode: "DE",
 });
 
+/**
+ * A park that Photon gives the street it lies on: still a place without a
+ * house address.
+ */
+const PUSCHKINPARK = feature([14.3369, 51.7633], {
+  osm_key: "leisure",
+  osm_value: "park",
+  type: "other",
+  name: "Puschkinpark",
+  street: "Puschkinpromenade",
+  postcode: "03044",
+  city: "Cottbus",
+  countrycode: "DE",
+});
+
 /** A street without a house number: Photon names the street `name`. */
 const BERLINER_STRASSE = feature([14.3301, 51.7602], {
   osm_key: "highway",
@@ -202,6 +217,30 @@ describe("GET /api/v2/:tenant/geo/search and /geo/reverse", function () {
       expect(hit.address.street).to.equal(null);
       expect(hit.display_address).to.equal("Spreeauenpark, 03042 Cottbus");
       expect(hit.coordinates.points).to.deep.equal([14.3475, 51.7801]);
+    });
+
+    it("names a park that Photon gives a street in the display text and leaves out the street", async function () {
+      geo.on(
+        "GET",
+        `${PHOTON}/api`,
+        json(200, featureCollection([PUSCHKINPARK])),
+      );
+
+      const res = await search({ q: "Puschkinpark" });
+
+      expect(res.body.data).to.deep.equal([
+        {
+          address: {
+            street: null,
+            house_number: null,
+            postcode: "03044",
+            city: "Cottbus",
+            country_code: "DE",
+          },
+          coordinates: { type: "Point", points: [14.3369, 51.7633] },
+          display_address: "Puschkinpark, 03044 Cottbus",
+        },
+      ]);
     });
 
     it("takes a street's name as its street", async function () {
