@@ -18,6 +18,7 @@
  */
 
 const GeoClient = require("./geo-client");
+const { failureOf } = require("./provider-rules");
 
 const DEFAULT_BASE_URL = "https://photon.komoot.io";
 
@@ -84,11 +85,8 @@ function hitOf(feature) {
  */
 async function ask(path, query) {
   const result = await GeoClient.get({ url: `${baseUrl()}/${path}`, query });
-  if (result.outcome !== "response") {
-    return { ok: false, failure: result.outcome };
-  }
-  if (result.status === 429) return { ok: false, failure: "throttled" };
-  if (result.status !== 200) return { ok: false, failure: "status" };
+  const failure = failureOf(result);
+  if (failure) return { ok: false, failure };
 
   let features;
   try {

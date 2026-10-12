@@ -14,6 +14,7 @@
  */
 
 const GeoClient = require("./geo-client");
+const { failureOf } = require("./provider-rules");
 
 const DEFAULT_TEMPLATE =
   "https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png";
@@ -57,11 +58,8 @@ async function tile({ z, x, y }) {
     responseType: "arraybuffer",
     maxBytes: MAX_TILE_BYTES,
   });
-  if (result.outcome !== "response") {
-    return { ok: false, failure: result.outcome };
-  }
-  if (result.status === 429) return { ok: false, failure: "throttled" };
-  if (result.status !== 200) return { ok: false, failure: "status" };
+  const failure = failureOf(result);
+  if (failure) return { ok: false, failure };
 
   const contentType = mediaTypeOf(result.headers["content-type"]);
   const data = Buffer.from(result.data ?? "");
