@@ -1,5 +1,6 @@
 const { Event } = require("../entities/event/event");
 const EventModel = require("./models/eventModel");
+const { locationPointsOf } = require("./location-points");
 const { ownCondition } = require("../services/authorization/reach");
 const { REACH } = require("../services/authorization/policy");
 const projection = require("../services/supervision/public-projection");
@@ -274,6 +275,20 @@ class EventManager {
       id: doc.id,
       title: doc.information?.name || "",
     }));
+  }
+
+  /**
+   * The stored points of the tenant's events, one `points` value each
+   * (`[lon, lat]`, `[null, null]` without a point), and nothing else of
+   * them: the start view of the map (`GeoService.start`).
+   *
+   * @param {string} tenantId Tenant ID
+   * @param {{reach: string, userId?: string|null}} scope The reach
+   *   (ADR 0002)
+   * @returns {Promise<Array<*>>}
+   */
+  static async getLocationPoints(tenantId, scope) {
+    return locationPointsOf(EventModel, "event", tenantId, scope);
   }
 
   /**

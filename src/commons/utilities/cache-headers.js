@@ -11,6 +11,8 @@ const CACHE_POLICY = {
   PUBLIC_REVALIDATE: "public, max-age=86400",
   // May sit in a private cache, but every use revalidates.
   PRIVATE_NO_CACHE: "private, no-cache",
+  // Kept a day by the browser alone, not revalidated — map tiles.
+  PRIVATE_DAY: "private, max-age=86400",
   // Never stored anywhere — booking documents.
   PRIVATE_NO_STORE: "private, no-store",
 };

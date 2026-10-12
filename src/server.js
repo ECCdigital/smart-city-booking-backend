@@ -30,9 +30,13 @@ const {
   warnIfImportPending,
 } = require("./commons/services/media/media-import-status");
 const { applyTrustedProxies } = require("./commons/utilities/trusted-proxies");
+const { warnIfContactMissing } = require("./commons/services/geo/user-agent");
 
 // Fail fast when the explicitly chosen storage provider is misconfigured.
 assertStorageConfig();
+
+// The geo services work without a contact mail, but say so once.
+warnIfContactMissing();
 
 // Size the libvips thread pool to the container, not to the detected cores.
 applySharpConcurrency();

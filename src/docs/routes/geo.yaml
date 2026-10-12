@@ -1,0 +1,285 @@
+# swagger/routes/geo.yaml
+
+/api/v2/{tenant}/geo/search:
+  get:
+    tags:
+      - Geo
+    summary: Search an address for the location input
+    description: |
+      Asks the search provider (Photon, `GEOCODER_BASE_URL`) on behalf of a
+      member of the tenant (`geo.search`). Only the search text, the focus
+      rounded to 0.1° and the platform's User-Agent go out. No country
+      filter: the focus ranks near hits first. Answers are cached for 24 h
+      by normalized text, rounded focus and language.
+
+      Limits: 60 requests per person per minute (`RATE_LIMIT_GEO_PER_USER`,
+      cache hits counted) and 300 calls of the instance to the provider per
+      minute (`RATE_LIMIT_GEO_OUTBOUND`, cache misses only). Past a limit,
+      and on throttling, an error or a timeout of the provider, the route
+      answers `503 geo_search_unavailable`; there is no second provider.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: q
+        in: query
+        required: true
+        description: Search text, 3 to 200 characters
+        schema:
+          type: string
+      - name: lat
+        in: query
+        required: false
+        description: Latitude of the focus, together with `lon`
+        schema:
+          type: number
+      - name: lon
+        in: query
+        required: false
+        description: Longitude of the focus, together with `lat`
+        schema:
+          type: number
+      - name: lang
+        in: query
+        required: false
+        description: Language of the interface, two letters, `de` by default
+        schema:
+          type: string
+    responses:
+      "200":
+        description: At most 5 hits
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                data:
+                  type: array
+                  maxItems: 5
+                  items:
+                    $ref: "#/components/schemas/GeoHit"
+      "400":
+        description: "`geo_query_invalid` or `geo_point_invalid`"
+      "401":
+        description: Not signed in
+      "403":
+        description: Not a member of the tenant
+      "503":
+        description: "`geo_search_unavailable`, with `Retry-After` past a limit"
+
+/api/v2/{tenant}/geo/reverse:
+  get:
+    tags:
+      - Geo
+    summary: Find the address at a point
+    description: |
+      Asks the search provider for the address at a point, rounded to 5
+      decimals (`geo.reverse`, members of the tenant). Cached for 24 h by
+      rounded point and language; limits and failures as for the search.
+      A hit without `address.street` is a place without a house address.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: lat
+        in: query
+        required: true
+        schema:
+          type: number
+      - name: lon
+        in: query
+        required: true
+        schema:
+          type: number
+      - name: lang
+        in: query
+        required: false
+        description: Language of the interface, two letters, `de` by default
+        schema:
+          type: string
+    responses:
+      "200":
+        description: One hit, or `null`
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                data:
+                  nullable: true
+                  allOf:
+                    - $ref: "#/components/schemas/GeoHit"
+      "400":
+        description: "`geo_point_invalid`"
+      "401":
+        description: Not signed in
+      "403":
+        description: Not a member of the tenant
+      "503":
+        description: "`geo_search_unavailable`, with `Retry-After` past a limit"
+
+/api/v2/{tenant}/geo/start:
+  get:
+    tags:
+      - Geo
+    summary: Start view of the map of the location input
+    description: |
+      The centre of the map for a location without a point (`geo.start`,
+      members of the tenant): the median per axis of every set point of the
+      tenant's bookables, events and access points, at zoom 12. A point
+      `[null, null]` does not count, nor does a point of another tenant.
+      Without a single point the view shows all of Germany:
+      `{ lat: 51.2, lon: 9.4, zoom: 5 }`. Computed afresh on every call,
+      from the points alone, without a cache.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+    responses:
+      "200":
+        description: The start view
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                data:
+                  type: object
+                  properties:
+                    lat:
+                      type: number
+                    lon:
+                      type: number
+                    zoom:
+                      type: integer
+      "401":
+        description: Not signed in
+      "403":
+        description: Not a member of the tenant
+
+/api/v2/{tenant}/geo/tiles/{z}/{x}/{y}:
+  get:
+    tags:
+      - Geo
+    summary: One map tile, over the tile proxy
+    description: |
+      Loads a tile of TopPlusOpen (BKG, Web Mercator) on behalf of a member
+      of the tenant (`geo.tiles`), so the tile server sees the platform's
+      server, never the browser. The URL template is
+      `GEO_TILES_URL_TEMPLATE` (`{z}`, `{x}`, `{y}`), the public service of
+      the BKG by default. Only the tile and the platform's User-Agent go
+      out. Only an image counts as an answer (PNG, JPEG, WebP).
+
+      Tiles are cached in memory by `z/x/y` for every tenant alike, 7 days
+      and at most 2000 tiles by default (`GEO_TILES_CACHE_TTL_SECONDS`,
+      `GEO_TILES_CACHE_MAX_TILES`); a full cache passes a tile on without
+      keeping it. The browser may keep a tile a day
+      (`Cache-Control: private, max-age=86400`).
+
+      Limit: 600 calls of the instance to the tile server per minute
+      (`RATE_LIMIT_GEO_TILES_OUTBOUND`, cache misses only), none per person.
+      Past it, and on throttling, an error, a timeout or an answer that is
+      no image, the route answers `503 geo_tiles_unavailable`.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: z
+        in: path
+        required: true
+        description: Zoom level, 0 to 18
+        schema:
+          type: integer
+          minimum: 0
+          maximum: 18
+      - name: x
+        in: path
+        required: true
+        description: Column, 0 to 2^z − 1
+        schema:
+          type: integer
+          minimum: 0
+      - name: y
+        in: path
+        required: true
+        description: Row, 0 to 2^z − 1
+        schema:
+          type: integer
+          minimum: 0
+    responses:
+      "200":
+        description: The tile
+        headers:
+          Cache-Control:
+            schema:
+              type: string
+              example: private, max-age=86400
+        content:
+          image/png:
+            schema:
+              type: string
+              format: binary
+          image/jpeg:
+            schema:
+              type: string
+              format: binary
+          image/webp:
+            schema:
+              type: string
+              format: binary
+      "400":
+        description: "`geo_tile_invalid`"
+      "401":
+        description: Not signed in
+      "403":
+        description: Not a member of the tenant
+      "503":
+        description: "`geo_tiles_unavailable`, with `Retry-After` past the limit"
+
+components:
+  schemas:
+    GeoHit:
+      type: object
+      description: |
+        A hit in the form of a stored location. A missing field is `null`;
+        a place without a house address carries its name in
+        `display_address`.
+      properties:
+        address:
+          type: object
+          properties:
+            street:
+              type: string
+              nullable: true
+            house_number:
+              type: string
+              nullable: true
+            postcode:
+              type: string
+              nullable: true
+            city:
+              type: string
+              nullable: true
+            country_code:
+              type: string
+              nullable: true
+              description: ISO 3166-1 alpha-2, upper case
+        coordinates:
+          type: object
+          properties:
+            type:
+              type: string
+              enum: [Point]
+            points:
+              type: array
+              description: "[lon, lat]"
+              items:
+                type: number
+        display_address:
+          type: string
