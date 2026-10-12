@@ -36,6 +36,9 @@ services:
       DB_NAME: booking-manager
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
       BACKEND_URL: ${BACKEND_URL:-http://localhost:8081}
+      # The Storefront's public URL: its reset and verify pages are kept only
+      # on this origin (or the Admin UI's / backend's)
+      STORE_FRONT_URL: ${NUXT_PUBLIC_USER_BASE_URL:-http://localhost:3000}
       NODE_ENV: ${NODE_ENV:-production}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     depends_on:

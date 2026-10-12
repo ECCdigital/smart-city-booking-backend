@@ -29,6 +29,19 @@ const link = (url) => Handlebars.Utils.escapeExpression(url);
 describe("the return target of a signup", function () {
   let created;
   let sent;
+  let env;
+
+  // The verify page lies on the frontend, one of the instance's own origins
+  // (ECCdigital/tickets#320).
+  before(function () {
+    env = process.env.FRONTEND_URL;
+    process.env.FRONTEND_URL = FRONTEND_URL;
+  });
+
+  after(function () {
+    if (env === undefined) delete process.env.FRONTEND_URL;
+    else process.env.FRONTEND_URL = env;
+  });
 
   beforeEach(function () {
     installMailStackStore();

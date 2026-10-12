@@ -3,19 +3,13 @@
  * the client sends the user once the account is verified and signed in.
  * Kept only where the client can be sent — a relative path, or an absolute
  * address on the origin of the client's own verify URL or of the frontend.
- * The verify URL is the client's and already the address the mail links, so a
- * target on its origin is trusted exactly as far as the verify URL itself;
- * what the check refuses is a target on a third host planted next to it.
+ * The verify URL is the address the mail links, already checked against the
+ * instance's own origins (`client-page.js`), so a target on its origin is
+ * trusted exactly as far as the verify URL itself; what the check refuses is
+ * a target on a third host planted next to it.
  */
 
-function parseHttpUrl(url) {
-  try {
-    const parsed = new URL(url);
-    return /^https?:$/.test(parsed.protocol) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
+const { parseHttpUrl } = require("./client-page");
 
 /**
  * @param {*} nextUrl the target the client named
