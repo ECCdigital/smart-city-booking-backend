@@ -5,6 +5,7 @@ const UserModel = require("./models/userModel");
 const MembershipManager = require("./membership-manager");
 const TenantManager = require("./tenant-manager");
 const { escapeRegex } = require("../utilities/regex-utils");
+const { userIdsMatch } = require("../utilities/user-id-utils");
 const { DOMAIN } = require("../services/authorization/reach");
 const {
   supervisionOf,
@@ -329,13 +330,19 @@ class UserManager {
       );
     }
 
-    const isInstanceOwner = instance.ownerUserIds.includes(userId);
+    // Compared as the memberships are: case and blanks at the edge don't
+    // count (ECCdigital/tickets#312).
+    const isInstanceOwner = instance.ownerUserIds.some((id) =>
+      userIdsMatch(id, userId),
+    );
     return {
       instanceOwner: isInstanceOwner,
       mayCreateTenant:
         isInstanceOwner ||
         instance.allowAllUsersToCreateTenant === true ||
-        instance.allowedUsersToCreateTenant.includes(userId),
+        instance.allowedUsersToCreateTenant.some((id) =>
+          userIdsMatch(id, userId),
+        ),
       memberships: entries,
     };
   }

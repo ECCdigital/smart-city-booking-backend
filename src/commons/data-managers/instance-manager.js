@@ -19,6 +19,7 @@ const {
   INITIAL_SUPERVISION_LEVELS,
 } = require("../services/supervision/supervision-constants");
 const { NotFoundError } = require("../../errors/BaseError");
+const { userIdsMatch } = require("../utilities/user-id-utils");
 
 const DEFAULT_BRANDING = Object.freeze({
   active: false,
@@ -182,13 +183,24 @@ class InstanceManager {
 
   static async reassignOwnerUserId(previousUserId, newUserId, session = null) {
     const options = session ? { session } : {};
+    // An owner entry names the account in any case and with blanks at the
+    // edge, as the sign-in compares it (ECCdigital/tickets#312).
+    const instance = await InstanceModel.findOne(
+      {},
+      { ownerUserIds: 1 },
+      options,
+    );
+    const ownerUserIds = instance?.ownerUserIds ?? [];
+    if (!ownerUserIds.some((id) => userIdsMatch(id, previousUserId))) {
+      return;
+    }
+    const reassigned = ownerUserIds.map((id) =>
+      userIdsMatch(id, previousUserId) ? newUserId : id,
+    );
     await InstanceModel.updateOne(
-      { ownerUserIds: previousUserId },
-      { $set: { "ownerUserIds.$[elem]": newUserId } },
-      {
-        ...options,
-        arrayFilters: [{ elem: previousUserId }],
-      },
+      { _id: instance._id },
+      { $set: { ownerUserIds: [...new Set(reassigned)] } },
+      options,
     );
   }
 
