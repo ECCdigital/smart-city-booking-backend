@@ -1,5 +1,6 @@
 /**
- * The rate limits of the public entry points (spec §6.3), with their
+ * The rate limits of the public entry points (spec §6.3) and of the geo
+ * services (map ECCdigital/tickets#372), with their
  * defaults and the environment variables that override them. Each limit is
  * read at call time, so a changed environment counts at once. Every limit
  * has its own key even when two of them guard the same subject: the limiter
@@ -63,9 +64,33 @@ function tenantSelfCreationPerUser(userId) {
   };
 }
 
+/**
+ * Search and reverse search per person: 60 per minute, cache hits counted
+ * (map ECCdigital/tickets#372).
+ */
+function geoPerUser(userId) {
+  return {
+    key: `geo:user:${normalizeSubject(userId)}`,
+    ...limitFrom("RATE_LIMIT_GEO_PER_USER", 60, 60),
+  };
+}
+
+/**
+ * Calls of the instance to the search provider: 300 per minute, only the
+ * misses of the cache count.
+ */
+function geoOutbound() {
+  return {
+    key: "geo:outbound",
+    ...limitFrom("RATE_LIMIT_GEO_OUTBOUND", 300, 60),
+  };
+}
+
 module.exports = {
   signupPerIp,
   verificationMailPerAccount,
   verificationMailPerIp,
   tenantSelfCreationPerUser,
+  geoPerUser,
+  geoOutbound,
 };

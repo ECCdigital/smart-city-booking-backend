@@ -13,6 +13,10 @@ const ENV_KEYS = [
   "RATE_LIMIT_VERIFICATION_MAIL_PER_IP_WINDOW_SECONDS",
   "RATE_LIMIT_TENANT_SELF_CREATION_PER_USER",
   "RATE_LIMIT_TENANT_SELF_CREATION_PER_USER_WINDOW_SECONDS",
+  "RATE_LIMIT_GEO_PER_USER",
+  "RATE_LIMIT_GEO_PER_USER_WINDOW_SECONDS",
+  "RATE_LIMIT_GEO_OUTBOUND",
+  "RATE_LIMIT_GEO_OUTBOUND_WINDOW_SECONDS",
 ];
 
 describe("rate-limit limits", function () {
@@ -64,6 +68,27 @@ describe("rate-limit limits", function () {
         windowMs: 86_400_000,
       },
     );
+  });
+
+  it("carries the geo defaults: 60 per person and 300 towards the provider per minute", function () {
+    assert.deepStrictEqual(limits.geoPerUser("Max@Example.test"), {
+      key: "geo:user:max@example.test",
+      limit: 60,
+      windowMs: 60_000,
+    });
+    assert.deepStrictEqual(limits.geoOutbound(), {
+      key: "geo:outbound",
+      limit: 300,
+      windowMs: 60_000,
+    });
+  });
+
+  it("reads the geo limits from the environment", function () {
+    process.env.RATE_LIMIT_GEO_PER_USER = "10";
+    process.env.RATE_LIMIT_GEO_OUTBOUND_WINDOW_SECONDS = "30";
+
+    assert.strictEqual(limits.geoPerUser("a@b.c").limit, 10);
+    assert.strictEqual(limits.geoOutbound().windowMs, 30_000);
   });
 
   it("reads a differing configuration from the environment", function () {
