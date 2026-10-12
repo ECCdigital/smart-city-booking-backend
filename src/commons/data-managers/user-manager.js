@@ -5,6 +5,7 @@ const UserModel = require("./models/userModel");
 const MembershipManager = require("./membership-manager");
 const TenantManager = require("./tenant-manager");
 const { escapeRegex } = require("../utilities/regex-utils");
+const { userIdsMatch } = require("../utilities/user-id-utils");
 const { DOMAIN } = require("../services/authorization/reach");
 const {
   supervisionOf,
@@ -329,13 +330,18 @@ class UserManager {
       );
     }
 
-    const isInstanceOwner = instance.ownerUserIds.includes(userId);
+  
+    const isInstanceOwner = instance.ownerUserIds.some((id) =>
+      userIdsMatch(id, userId),
+    );
     return {
       instanceOwner: isInstanceOwner,
       mayCreateTenant:
         isInstanceOwner ||
         instance.allowAllUsersToCreateTenant === true ||
-        instance.allowedUsersToCreateTenant.includes(userId),
+        instance.allowedUsersToCreateTenant.some((id) =>
+          userIdsMatch(id, userId),
+        ),
       memberships: entries,
     };
   }
@@ -347,7 +353,7 @@ class UserManager {
    * gets every one), `freeBookings`, the role levels written out by group
    * and the supervision of the tenant (tenant supervision spec §6.1). A
    * declined tenant shows every flag here; only the principal lets the
-   * membership rest (#299, Q12).
+   * membership rest.
    *
    * @param {string} userId
    * @returns {Promise<Object>}
