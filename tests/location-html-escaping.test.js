@@ -1,8 +1,8 @@
 /**
  * The location in the HTML output (ECCdigital/tickets#466): the display
  * address and the addition (`meta.additional`) are free text of the admins,
- * as are the name and address of an event's location. The HTML pages show
- * them as text, never as markup.
+ * as are the name, address, phone, email and room title of an event's
+ * location. The HTML pages show them as text, never as markup.
  */
 
 const { expect } = require("chai");
@@ -35,7 +35,7 @@ function hallBookable(location) {
   });
 }
 
-function concertEvent({ name, location }) {
+function concertEvent({ name, location, ...eventLocation }) {
   return new Event({
     id: "concert",
     tenantId: "tenant1",
@@ -47,7 +47,7 @@ function concertEvent({ name, location }) {
       endTime: "22:00",
       flags: [],
     },
-    eventLocation: { name },
+    eventLocation: { name, ...eventLocation },
     location,
   });
 }
@@ -120,6 +120,26 @@ describe("location in the HTML output", function () {
       );
       expect(html).to.include(`<div class="zip">${ESCAPED}</div>`);
       expect(html).to.include(`<div class="city">${ESCAPED}</div>`);
+      expect(html).not.to.include("<img src=x");
+    });
+
+    it("shows phone, email and the room's title as text on the event page", async function () {
+      sinon
+        .stub(BookableManager, "getBookable")
+        .resolves(new Bookable({ id: "hall", title: PAYLOAD }));
+
+      const html = await HtmlEngine.event(
+        concertEvent({
+          phoneNumber: PAYLOAD,
+          emailAddress: PAYLOAD,
+          room: "hall",
+        }),
+        false,
+      );
+
+      expect(html).to.include(`<div class="phone-number">${ESCAPED}</div>`);
+      expect(html).to.include(`<div class="email-address">${ESCAPED}</div>`);
+      expect(html).to.include(`<div class="room">${ESCAPED}</div>`);
       expect(html).not.to.include("<img src=x");
     });
   });

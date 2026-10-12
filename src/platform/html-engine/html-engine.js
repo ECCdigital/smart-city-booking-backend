@@ -458,14 +458,10 @@ class HtmlEngine {
       ? `<div class="city">${escapeHtml(event.location.address.city)}</div>`
       : "";
     htmlOutput += event.eventLocation.phoneNumber
-      ? `<div class="phone-number">${
-          event.eventLocation.phoneNumber || ""
-        }</div>`
+      ? `<div class="phone-number">${escapeHtml(event.eventLocation.phoneNumber)}</div>`
       : "";
     htmlOutput += event.eventLocation.emailAddress
-      ? `<div class="email-address">${
-          event.eventLocation.emailAddress || ""
-        }</div>`
+      ? `<div class="email-address">${escapeHtml(event.eventLocation.emailAddress)}</div>`
       : "";
     if (event.eventLocation.room) {
       let eventLocationBookable = await BookableManager.getBookable(
@@ -474,7 +470,7 @@ class HtmlEngine {
         PUBLIC,
       );
 
-      htmlOutput += `<div class="room">${eventLocationBookable?.title}</div>`;
+      htmlOutput += `<div class="room">${escapeHtml(eventLocationBookable?.title)}</div>`;
     }
     htmlOutput += event.location?.meta?.additional
       ? `<div class="additional">${escapeHtml(event.location.meta.additional)}</div>`
