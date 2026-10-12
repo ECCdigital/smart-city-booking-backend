@@ -330,8 +330,7 @@ class UserManager {
       );
     }
 
-    // Compared as the memberships are: case and blanks at the edge don't
-    // count (ECCdigital/tickets#312).
+  
     const isInstanceOwner = instance.ownerUserIds.some((id) =>
       userIdsMatch(id, userId),
     );
@@ -354,7 +353,7 @@ class UserManager {
    * gets every one), `freeBookings`, the role levels written out by group
    * and the supervision of the tenant (tenant supervision spec §6.1). A
    * declined tenant shows every flag here; only the principal lets the
-   * membership rest (#299, Q12).
+   * membership rest.
    *
    * @param {string} userId
    * @returns {Promise<Object>}
