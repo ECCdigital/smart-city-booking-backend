@@ -625,8 +625,8 @@ components:
         `[longitude, latitude]` as numbers within ±180 and ±90, or
         `[null, null]` for no point; `meta.source` is `photon`, `manual` or
         `nuki` (an old stored value such as `nominatim` or `legacy` may stay);
-        `address.country_code` has two letters. Unknown fields are kept
-        unchecked.
+        `address.country_code` has two letters, empty only in an empty
+        location or as stored. Unknown fields are kept unchecked.
       properties:
         coordinates:
           type: object
