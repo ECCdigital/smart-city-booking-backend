@@ -190,6 +190,12 @@ const TABLE = {
     read: { any: "manageBookings.readAny" },
   },
 
+  // Search and reverse search of the location input: every member.
+  geo: {
+    search: { any: "tenantMember" },
+    reverse: { any: "tenantMember" },
+  },
+
   accessScan: {
     resolve: { self: "signedIn" },
   },

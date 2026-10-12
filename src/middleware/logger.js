@@ -16,8 +16,15 @@ function createComponentLogger(componentName) {
 }
 
 /**
+ * The routes whose query names what a person searched for or where (search
+ * text, focus, point, tile): never logged (map ECCdigital/tickets#372).
+ */
+const UNLOGGED_QUERY = /\/geo(\/|$)/;
+
+/**
  * Request logging middleware that logs all incoming requests in development mode.
- * Logs method, URL, query parameters, body, and headers.
+ * Logs method, URL, query parameters, body, and headers; the URL of a geo
+ * route without its query.
  */
 function requestLogger(req, res, next) {
   // Only log in development mode
@@ -28,14 +35,17 @@ function requestLogger(req, res, next) {
 
   if (isDevelopment) {
     const requestLogger = baseLogger.child({ component: "RequestLogger" });
+    const withoutQuery = (url) => (url || "").split("?")[0];
+    const unlogged = UNLOGGED_QUERY.test(withoutQuery(req.originalUrl));
+    const shown = (url) => (unlogged ? withoutQuery(url) : url);
 
     const logData = {
       method: req.method,
-      url: req.url,
+      url: shown(req.url),
       path: req.path,
       baseUrl: req.baseUrl,
-      originalUrl: req.originalUrl,
-      query: req.query,
+      originalUrl: shown(req.originalUrl),
+      query: unlogged ? "[REDACTED]" : req.query,
       params: req.params,
       headers: {
         host: req.headers.host,
@@ -56,7 +66,7 @@ function requestLogger(req, res, next) {
       logData.body = sanitizedBody;
     }
 
-    requestLogger.info(logData, `${req.method} ${req.originalUrl}`);
+    requestLogger.info(logData, `${req.method} ${shown(req.originalUrl)}`);
   }
 
   next();
