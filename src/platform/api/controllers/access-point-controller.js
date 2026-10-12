@@ -149,7 +149,7 @@ class AccessPointController {
       tenantId: tenantId,
     });
 
-    LocationGuard.storable(accessPoint.location);
+    accessPoint.location = LocationGuard.storable(accessPoint.location, null);
     AccessPointController._assertProviderRegistered(accessPoint);
     AccessPointController._assertRulePreconditions(accessPoint);
     const listedAccessPoint =
