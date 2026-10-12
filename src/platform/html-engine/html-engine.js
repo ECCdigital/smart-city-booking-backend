@@ -1,3 +1,4 @@
+const Handlebars = require("handlebars");
 const {
   BookableManager,
 } = require("../../commons/data-managers/bookable-manager");
@@ -10,6 +11,10 @@ const {
 } = require("../../commons/services/media/media-reference");
 // The embeds render the public's view of the offers, whoever asks.
 const { PUBLIC } = require("../../commons/services/authorization/reach");
+
+// Free text of the admins goes into the markup as text, never as HTML.
+const escapeHtml = (value) =>
+  Handlebars.Utils.escapeExpression(String(value ?? ""));
 
 class HtmlEngine {
   /**
@@ -125,7 +130,7 @@ class HtmlEngine {
         '<p class="description">' + (bookable.description || "") + "</p>";
       htmlOutput += bookable?.location?.display_address
         ? '<p class="location">' +
-          (bookable.location.display_address || "") +
+          escapeHtml(bookable.location.display_address) +
           "</p>"
         : "";
       htmlOutput += '<p class="type">' + (bookable.type || "") + "</p>";
@@ -229,7 +234,7 @@ class HtmlEngine {
         checkoutInstance || (await InstanceManager.getInstance());
       htmlOutput += bookable?.location?.display_address
         ? '<p class="location">' +
-          (bookable.location.display_address || "") +
+          escapeHtml(bookable.location.display_address) +
           "</p>"
         : "";
       htmlOutput += '<p class="type">' + (bookable.type || "") + "</p>";
@@ -434,7 +439,7 @@ class HtmlEngine {
     htmlOutput += `<h5>Veranstaltungsort</h5>`;
 
     htmlOutput += event.eventLocation.name
-      ? `<div class="name">${event.eventLocation.name || ""}</div>`
+      ? `<div class="name">${escapeHtml(event.eventLocation.name)}</div>`
       : "";
     htmlOutput += event.location?.address?.street
       ? `<div class="street">${[
@@ -442,13 +447,14 @@ class HtmlEngine {
           event.location.address.house_number,
         ]
           .filter(Boolean)
+          .map(escapeHtml)
           .join(" ")}</div>`
       : "";
     htmlOutput += event.location?.address?.postcode
-      ? `<div class="zip">${event.location.address.postcode || ""}</div>`
+      ? `<div class="zip">${escapeHtml(event.location.address.postcode)}</div>`
       : "";
     htmlOutput += event.location?.address?.city
-      ? `<div class="city">${event.location.address.city || ""}</div>`
+      ? `<div class="city">${escapeHtml(event.location.address.city)}</div>`
       : "";
     htmlOutput += event.eventLocation.phoneNumber
       ? `<div class="phone-number">${
@@ -470,7 +476,7 @@ class HtmlEngine {
       htmlOutput += `<div class="room">${eventLocationBookable?.title}</div>`;
     }
     htmlOutput += event.location?.meta?.additional
-      ? `<div class="additional">${event.location.meta.additional || ""}</div>`
+      ? `<div class="additional">${escapeHtml(event.location.meta.additional)}</div>`
       : "";
 
     htmlOutput += `</div>`;
