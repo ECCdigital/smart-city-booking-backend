@@ -9,6 +9,7 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ### Security
 
+- The HTML output (`/html/:tenant/…`) shows the location as text (ECCdigital/tickets#466): the display address of a bookable (`location.display_address`) and, for an event, the addition (`location.meta.additional`), the name, street with house number, postcode and city are HTML-escaped; before, markup in them reached the embedding page as is. Plain values, umlauts included, read as before
 - `POST /auth/resetpassword` requires a session and the current password (ECCdigital/tickets#264): it changes only the password of the signed-in account (`user.updateSelf`), takes `{ currentPassword, password }` and no longer reads `id`; `401` without a session, `400` without the current password, `403` for a wrong one or an SSO account. Before, anyone could set a password of their choosing for any account, and the account's click on the confirmation mail put it in force. Breaking change of the API: Admin UI 4.3.1 and Storefront 1.2.1 ask for the current password; deploy them together with the backend, see [docs/migrations/v4.3.1-upgrade.md](migrations/v4.3.1-upgrade.md). Route snapshot updated on purpose
 
 ### Added
