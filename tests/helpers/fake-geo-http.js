@@ -15,6 +15,7 @@
  *
  *   const geo = new FakeGeoHttp().install();
  *   geo.on("GET", `${PHOTON}/api`, json(200, featureCollection([...])));
+ *   geo.on("GET", `${TILES}/12/1373/2237.png`, image(PNG));
  *   ...
  *   geo.requests  // [{ method, url, path, query, headers }]
  *   geo.verify(); // in afterEach
@@ -57,6 +58,20 @@ function json(status, body, headers = {}) {
  */
 function text(status, body = "", headers = { "content-type": "text/plain" }) {
   return { status, headers, body };
+}
+
+/**
+ * An image, the way a tile server sends a tile: the bytes go through as
+ * the body unchanged (a Buffer, as axios reads it with
+ * `responseType: "arraybuffer"`).
+ *
+ * @param {Buffer} bytes The image
+ * @param {string} [contentType="image/png"] Its media type
+ * @param {number} [status=200] HTTP status
+ * @returns {Object} The answer
+ */
+function image(bytes, contentType = "image/png", status = 200) {
+  return { status, headers: { "content-type": contentType }, body: bytes };
 }
 
 /** No answer within the time limit. */
@@ -230,6 +245,7 @@ module.exports = {
   FakeGeoHttp,
   json,
   text,
+  image,
   timeout,
   unreachable,
   GEO_TIMEOUT_MS,

@@ -1,5 +1,6 @@
 const { AccessPoint } = require("../entities/access/access-point");
 const AccessPointModel = require("./models/accessPointModel");
+const { locationPointsOf } = require("./location-points");
 
 /**
  * Data Manager for access point objects. Access points are tenant-wide, every
@@ -15,6 +16,18 @@ class AccessPointManager {
   static async getAccessPoints(tenantId) {
     const rawAccessPoints = await AccessPointModel.find({ tenantId: tenantId });
     return rawAccessPoints.map((doc) => doc.toEntity());
+  }
+
+  /**
+   * The stored points of the tenant's access points, one `points` value each
+   * (`[lon, lat]`, `[null, null]` without a point), and nothing else of
+   * them: the start view of the map (`GeoService.start`).
+   *
+   * @param {string} tenantId Tenant ID
+   * @returns {Promise<Array<*>>}
+   */
+  static async getLocationPoints(tenantId) {
+    return locationPointsOf(AccessPointModel, tenantId);
   }
 
   /**

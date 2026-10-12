@@ -190,10 +190,13 @@ const TABLE = {
     read: { any: "manageBookings.readAny" },
   },
 
-  // Search and reverse search of the location input: every member.
+  // The geo services of the location input - search, reverse search, the
+  // start view and the tiles of the map: every member.
   geo: {
     search: { any: "tenantMember" },
     reverse: { any: "tenantMember" },
+    start: { any: "tenantMember" },
+    tiles: { any: "tenantMember" },
   },
 
   accessScan: {

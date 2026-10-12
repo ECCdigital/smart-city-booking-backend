@@ -17,14 +17,20 @@ function createComponentLogger(componentName) {
 
 /**
  * The routes whose query names what a person searched for or where (search
- * text, focus, point, tile): never logged (map ECCdigital/tickets#372).
+ * text, focus, point): never logged (map ECCdigital/tickets#372).
  */
 const UNLOGGED_QUERY = /\/geo(\/|$)/;
 
 /**
+ * The tiles of the map name in their path where a person looked
+ * (`/geo/tiles/:z/:x/:y`): logged as the pattern of the route alone.
+ */
+const TILE_PATH = /(\/geo\/tiles)(\/[^?]*)?/;
+
+/**
  * Request logging middleware that logs all incoming requests in development mode.
  * Logs method, URL, query parameters, body, and headers; the URL of a geo
- * route without its query.
+ * route without its query, and that of a tile without its coordinates.
  */
 function requestLogger(req, res, next) {
   // Only log in development mode
@@ -37,16 +43,22 @@ function requestLogger(req, res, next) {
     const requestLogger = baseLogger.child({ component: "RequestLogger" });
     const withoutQuery = (url) => (url || "").split("?")[0];
     const unlogged = UNLOGGED_QUERY.test(withoutQuery(req.originalUrl));
-    const shown = (url) => (unlogged ? withoutQuery(url) : url);
+    const tile = TILE_PATH.test(withoutQuery(req.originalUrl));
+    const shown = (url) => {
+      if (!unlogged) return url;
+      const path = withoutQuery(url);
+      return tile ? path.replace(TILE_PATH, "$1/:z/:x/:y") : path;
+    };
+    const tilePart = (url) => (tile ? "[REDACTED]" : url);
 
     const logData = {
       method: req.method,
-      url: shown(req.url),
-      path: req.path,
-      baseUrl: req.baseUrl,
+      url: tilePart(shown(req.url)),
+      path: tilePart(req.path),
+      baseUrl: shown(req.baseUrl),
       originalUrl: shown(req.originalUrl),
       query: unlogged ? "[REDACTED]" : req.query,
-      params: req.params,
+      params: tile ? "[REDACTED]" : req.params,
       headers: {
         host: req.headers.host,
         "user-agent": req.headers["user-agent"],
