@@ -189,7 +189,7 @@ class InstanceManager {
       {},
       { ownerUserIds: 1 },
       options,
-    );
+    ).lean();
     const ownerUserIds = instance?.ownerUserIds ?? [];
     if (!ownerUserIds.some((id) => userIdsMatch(id, previousUserId))) {
       return;
@@ -199,7 +199,7 @@ class InstanceManager {
     );
     await InstanceModel.updateOne(
       { _id: instance._id },
-      { $set: { ownerUserIds: [...new Set(reassigned)] } },
+      { $set: { ownerUserIds: reassigned } },
       options,
     );
   }

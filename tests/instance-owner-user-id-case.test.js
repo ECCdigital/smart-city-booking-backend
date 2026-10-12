@@ -182,14 +182,14 @@ describe("InstanceManager.reassignOwnerUserId: the owner entry in any case", fun
   let stored;
 
   /**
-   * The one instance document in memory: `findOne` hands out a copy,
-   * `updateOne` understands the filter on an owner id and `$set` of the
+   * The one instance document in memory: `findOne(…).lean()` hands out a
+   * copy, `updateOne` understands the filter on an owner id and `$set` of the
    * whole list or of the entries an array filter names.
    */
   beforeEach(function () {
     sinon
       .stub(InstanceModel, "findOne")
-      .callsFake(async () => structuredClone(stored));
+      .callsFake(() => ({ lean: async () => structuredClone(stored) }));
     sinon
       .stub(InstanceModel, "updateOne")
       .callsFake(async (filter, update, options = {}) => {
