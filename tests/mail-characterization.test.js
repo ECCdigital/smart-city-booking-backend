@@ -331,7 +331,7 @@ describe("mail characterization: every notice as it goes out today", function ()
                 provider: "nuki",
                 pin: "482913",
               },
-              { label: "Seiteneingang", provider: "salto-ks", pin: "775310" },
+              { label: "Seiteneingang", provider: "nuki", pin: "775319" },
             ],
           }),
         ),
