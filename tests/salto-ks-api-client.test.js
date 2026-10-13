@@ -129,6 +129,24 @@ describe("SaltoKsApiClient IQ endpoints", () => {
   });
 });
 
+describe("SaltoKsApiClient without guests", () => {
+  // Every PIN in Salto KS hangs on a user, and Biletado creates none there:
+  // the client has no way to create users or give them access.
+  const GUEST_METHODS = [
+    "createUser",
+    "assignAccess",
+    "revokeAccess",
+    "deleteUser",
+  ];
+
+  it("neither has nor declares a method for users or their access", () => {
+    for (const method of GUEST_METHODS) {
+      expect(SaltoKsApiClient.prototype[method], method).to.equal(undefined);
+      expect(SaltoKsApiClient.capabilities).not.to.include(method);
+    }
+  });
+});
+
 describe("Salto KS environments", () => {
   it("maps accept to the accept Connect API and identity server", () => {
     const client = new SaltoKsApiClient("id", "secret", null, "accept");

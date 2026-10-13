@@ -345,57 +345,6 @@ class SaltoKsApiClient extends BaseAccessApiClient {
     return this._request("get", `/v1.2/sites/${resolvedSiteId}/me`);
   }
 
-  async createUser({ firstName, lastName, email }, siteId = this.siteId) {
-    const resolvedSiteId = await this._resolveSiteId(siteId);
-    return this._request("post", `/v1.2/sites/${resolvedSiteId}/users`, {
-      firstName,
-      lastName,
-      email,
-    });
-  }
-
-  async assignAccess(
-    userId,
-    lockIds,
-    validFrom,
-    validTo,
-    pin = null,
-    siteId = this.siteId,
-  ) {
-    const resolvedSiteId = await this._resolveSiteId(siteId);
-    const payload = {
-      lockIds: Array.isArray(lockIds) ? lockIds : [lockIds],
-      validFrom,
-      validTo,
-    };
-
-    if (pin != null) {
-      payload.pin = pin;
-    }
-
-    return this._request(
-      "post",
-      `/v1.2/sites/${resolvedSiteId}/users/${userId}/access`,
-      payload,
-    );
-  }
-
-  async revokeAccess(accessId, siteId = this.siteId) {
-    const resolvedSiteId = await this._resolveSiteId(siteId);
-    return this._request(
-      "delete",
-      `/v1.2/sites/${resolvedSiteId}/access/${accessId}`,
-    );
-  }
-
-  async deleteUser(userId, siteId = this.siteId) {
-    const resolvedSiteId = await this._resolveSiteId(siteId);
-    return this._request(
-      "delete",
-      `/v1.2/sites/${resolvedSiteId}/users/${userId}`,
-    );
-  }
-
   async subscribeNotifications(
     callbackUrl,
     eventTypes = [],
@@ -434,10 +383,6 @@ class SaltoKsApiClient extends BaseAccessApiClient {
       "getLocks",
       "getAccessPoints",
       "openLock",
-      "createUser",
-      "assignAccess",
-      "revokeAccess",
-      "deleteUser",
       "subscribeNotifications",
       "unsubscribeNotifications",
     ];
