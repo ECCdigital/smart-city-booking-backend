@@ -69,7 +69,11 @@ const LOGO_BLOCK = blockOf("default-logo");
 const TITLE_BLOCK = blockOf("default-title");
 const SLOGAN_BLOCK = blockOf("default-subtitle");
 
-/** A stored Hero Layout, as the instance catalog PUT writes one. */
+/**
+ * A stored Hero Layout, as the instance catalog PUT writes one. Its image
+ * Block holds a copy of the logo's media id, as the default's logo Block did
+ * before it followed the app logo.
+ */
 const STORED_LAYOUT = Object.freeze({
   version: 1,
   height: "md",
@@ -77,7 +81,12 @@ const STORED_LAYOUT = Object.freeze({
   compactHeight: "sm",
   blocks: [
     { ...TITLE_BLOCK, id: "own-title", text: { de: "Eigener Titel" } },
-    { ...LOGO_BLOCK, id: "own-image" },
+    {
+      ...LOGO_BLOCK,
+      id: "own-image",
+      image: { source: "media", mediaId: LOGO_MEDIA_ID },
+      invertInDarkMode: true,
+    },
   ],
 });
 
@@ -200,16 +209,14 @@ describe("the derived Default Hero Layout", function () {
     ]);
   });
 
-  it("carries the stored form of the logo reference, not the enriched one", function () {
+  it("names the source app-logo for the logo Block, not the logo's media id", function () {
     const layout = defaultHeroLayout({
       name: PORTAL_NAME,
       logo: BRANDING_LOGO,
     });
 
-    expect(layout.blocks[0].image).to.deep.equal({
-      source: "media",
-      mediaId: LOGO_MEDIA_ID,
-    });
+    expect(layout.blocks[0].image).to.deep.equal({ source: "app-logo" });
+    expect(layout.blocks[0]).to.not.have.property("invertInDarkMode");
   });
 
   it("omits the logo Block without a branding logo", function () {
@@ -288,11 +295,11 @@ describe("the exported Hero Layout", function () {
         {
           ...LOGO_BLOCK,
           image: {
-            source: "media",
-            mediaId: LOGO_MEDIA_ID,
+            source: "app-logo",
             url: LOGO_URL,
             width: 640,
             height: 320,
+            dark: null,
           },
         },
         TITLE_BLOCK,
@@ -322,11 +329,11 @@ describe("the exported Hero Layout", function () {
     });
 
     expect(exported.blocks[0].image).to.deep.equal({
-      source: "media",
-      mediaId: LOGO_MEDIA_ID,
+      source: "app-logo",
       url: LOGO_URL,
       width: null,
       height: null,
+      dark: null,
     });
   });
 

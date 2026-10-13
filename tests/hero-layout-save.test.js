@@ -436,6 +436,12 @@ const CONTENT_BLOCK_FIELDS = {
   image: ["image", "alt", "maxHeight", "invertInDarkMode"],
 };
 
+/** The fields of a Block's content: one that follows the app logo has no switch. */
+const contentFieldsOf = (block) =>
+  block.image?.source === "app-logo"
+    ? CONTENT_BLOCK_FIELDS.image.filter((key) => key !== "invertInDarkMode")
+    : CONTENT_BLOCK_FIELDS[block.type];
+
 const PANEL_FIELDS = ["color", "opacity", "radius", "blur"];
 const OFFSET_FIELDS = ["x", "y"];
 
@@ -453,7 +459,7 @@ describe("the Blocks of the Shared contract's fixtures", function () {
     it(`carries every field of the tables and no other in ${name}`, function () {
       for (const block of layout.blocks) {
         expect(keysOf(block)).to.deep.equal(
-          [...COMMON_BLOCK_FIELDS, ...CONTENT_BLOCK_FIELDS[block.type]].sort(),
+          [...COMMON_BLOCK_FIELDS, ...contentFieldsOf(block)].sort(),
           `Block ${block.id}`,
         );
 
@@ -472,7 +478,14 @@ describe("the colours of a Hero Layout Block", function () {
     sinon.restore();
   });
 
-  const COLORS = ["default", "primary", "secondary", "white", "#1a2b3c"];
+  const COLORS = [
+    "default",
+    "primary",
+    "secondary",
+    "accent",
+    "white",
+    "#1a2b3c",
+  ];
 
   COLORS.forEach(function (color) {
     it(`takes ${color} on a text Block`, async function () {
@@ -569,7 +582,7 @@ describe("the Panel of a Hero Layout Block", function () {
   const refusedPanel = (panel) =>
     refusalOf(layoutOf({ ...MINIMAL_TEXT_BLOCK, panel }));
 
-  ["white", "black", "primary", "secondary", "#1a2b3c"].forEach(
+  ["white", "black", "primary", "secondary", "accent", "#1a2b3c"].forEach(
     function (color) {
       it(`takes ${color} as a Panel colour`, async function () {
         expect(await panelOf({ color })).to.include({ color });
@@ -962,6 +975,24 @@ describe("the media a Hero Layout Block may point at", function () {
     expect((await blockOf(MINIMAL_IMAGE_BLOCK)).image).to.deep.equal(
       MINIMAL_IMAGE_BLOCK.image,
     );
+  });
+
+  it("leaves the source app-logo to the image Block, not the Background", async function () {
+    let refused;
+    try {
+      await normalizeBackground({
+        version: 1,
+        type: "image",
+        image: { source: "app-logo" },
+      });
+    } catch (error) {
+      refused = error;
+    }
+
+    expect(refused).to.be.instanceOf(ValidationError);
+    expect(codesOf(refused.errors)).to.deep.equal([
+      { field: "background.image.source", code: "invalid_enum" },
+    ]);
   });
 
   it("refuses an external reference", async function () {

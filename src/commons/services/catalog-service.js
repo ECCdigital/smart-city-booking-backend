@@ -130,7 +130,11 @@ async function exportTheme(catalog, branding) {
 
   const [heroLayout, background, exportedLogo, logoDark, footerLogos] =
     await Promise.all([
-      exportHeroLayout(catalog?.heroLayout ?? null, { name, logo }),
+      exportHeroLayout(catalog?.heroLayout ?? null, {
+        name,
+        logo,
+        logoDark: activeLogoDark(branding),
+      }),
       exportBackground(activeBackground(branding)),
       enrichHeroMediaReference(logo),
       enrichHeroMediaReference(activeLogoDark(branding)),
@@ -520,6 +524,7 @@ class CatalogService {
         background,
         name: catalog.name,
         logo: activeLogo(branding),
+        logoDark: activeLogoDark(branding),
       })),
       isDefault: heroLayout === null,
     };
@@ -574,6 +579,7 @@ class CatalogService {
       background,
       name: catalog.name,
       logo: activeLogo(branding),
+      logoDark: activeLogoDark(branding),
     });
   }
 
@@ -603,6 +609,7 @@ class CatalogService {
       background,
       name,
       logo: activeLogo(branding),
+      logoDark: activeLogoDark(branding),
     });
   }
 
