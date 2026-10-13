@@ -134,6 +134,7 @@ describe("media usage proof", function () {
       assert.deepStrictEqual(InstanceModel.findOne.firstCall.args[0], {
         $or: [
           { "branding.logo.mediaId": MEDIA },
+          { "branding.logoDark.mediaId": MEDIA },
           { "branding.favicon.mediaId": MEDIA },
           { "dataProtection.reference.mediaId": MEDIA },
           { "legalNotice.reference.mediaId": MEDIA },
@@ -161,6 +162,7 @@ describe("media usage proof", function () {
       assert.deepStrictEqual(InstanceModel.findOne.firstCall.args[0], {
         $or: [
           { "branding.logo.mediaId": MEDIA },
+          { "branding.logoDark.mediaId": MEDIA },
           { "branding.favicon.mediaId": MEDIA },
         ],
       });

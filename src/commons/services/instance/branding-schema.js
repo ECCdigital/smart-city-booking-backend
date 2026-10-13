@@ -8,6 +8,7 @@
  */
 
 const SchemaUtils = require("../../utilities/schemaUtils");
+const { MEDIA_REFERENCE_SOURCE } = require("../../schemas/mediaSchema");
 const {
   HEX_COLOR,
   HeroValidationErrors,
@@ -39,6 +40,7 @@ function defaultBranding() {
     header: "primary",
     authLogoSize: "sm",
     logo: null,
+    logoDark: null,
     favicon: null,
     logoUrl: "",
     faviconUrl: "",
@@ -130,15 +132,59 @@ function checkEnum(branding, key, allowed, errors, path) {
 }
 
 /**
+ * The variant of the app logo for the dark mode as it is stored: null for
+ * none, or the reference `{ source: "media", mediaId }` alone. What the export
+ * adds to it (`url`, `width`, `height`) is dropped, so an enriched reference
+ * comes back from the Admin UI unchanged. A foreign address is refused: the
+ * variant is a public image of the instance library, which the
+ * `MediaReferenceGuard` checks before the instance is written.
+ *
+ * @param {Object} branding - The branding being saved.
+ * @param {HeroValidationErrors} errors - The run the faults go into.
+ * @param {string} path - Path of the branding in the request body.
+ * @returns {?Object} The variant to store, null for none or a fault.
+ */
+function readLogoDark(branding, errors, path) {
+  const logoDark = branding.logoDark;
+  const logoDarkPath = childPath(path, "logoDark");
+
+  if (logoDark === undefined || logoDark === null) {
+    return null;
+  }
+
+  if (!isPlainObject(logoDark)) {
+    errors.add(logoDarkPath, ERROR_CODES.format, {
+      format: "media_reference",
+    });
+    return null;
+  }
+
+  if (logoDark.source !== MEDIA_REFERENCE_SOURCE.MEDIA) {
+    errors.add(childPath(logoDarkPath, "source"), ERROR_CODES.enum, {
+      allowed: [MEDIA_REFERENCE_SOURCE.MEDIA],
+    });
+    return null;
+  }
+
+  if (typeof logoDark.mediaId !== "string" || logoDark.mediaId === "") {
+    errors.add(childPath(logoDarkPath, "mediaId"), ERROR_CODES.required);
+    return null;
+  }
+
+  return { source: MEDIA_REFERENCE_SOURCE.MEDIA, mediaId: logoDark.mediaId };
+}
+
+/**
  * The branding as it is stored: checked field by field, every fault collected
  * so the admin sees all of them at once, then with its defaults filled in.
  * Each field of the appearance has its check here; the fields to come join in
  * the same run.
  *
  * Only the fields of the appearance are checked. The rest of the branding —
- * the switch, the primary and secondary colours, the media references, the
- * derived read fields — is taken as before; the media references are checked
- * by the `MediaReferenceGuard` before the instance is written.
+ * the switch, the primary and secondary colours, logo and favicon, the
+ * derived read fields — is taken as before. Of the variant of the logo only
+ * the shape is checked here; the medium behind every reference is checked by
+ * the `MediaReferenceGuard` before the instance is written.
  *
  * @param {*} branding - The branding of the request body.
  * @param {string} [path="branding"] - Its path in the request body.
@@ -156,10 +202,11 @@ function normalizeBranding(branding, path = "branding") {
   checkAccent(branding, errors, path);
   checkEnum(branding, "header", HEADER_COLORS, errors, path);
   checkEnum(branding, "authLogoSize", AUTH_LOGO_SIZES, errors, path);
+  const logoDark = readLogoDark(branding, errors, path);
 
   errors.throwIfAny();
 
-  return withBrandingDefaults(branding);
+  return { ...withBrandingDefaults(branding), logoDark };
 }
 
 module.exports = {

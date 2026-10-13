@@ -35,6 +35,7 @@ const DEFAULT_PORTAL = Object.freeze({
 // publicly served sites count.
 const BRANDING_MEDIA_PATHS = Object.freeze([
   "branding.logo.mediaId",
+  "branding.logoDark.mediaId",
   "branding.favicon.mediaId",
 ]);
 const DOCUMENT_MEDIA_PATHS = Object.freeze([
