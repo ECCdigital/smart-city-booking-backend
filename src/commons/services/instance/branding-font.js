@@ -164,9 +164,11 @@ function readFont(branding, errors, path) {
 /**
  * The confirmed licence of a font of the library, from the stored instance
  * or from the tick of the form. The stored confirmation holds while the font
- * is the same file; a tick for it again leaves it as it is, so the proof keeps
- * naming whoever confirmed first. A new file needs a new tick, stamped with
- * the person of the session and the moment of the save.
+ * is the same file and the form does not untick it: a licence left out or
+ * ticked again leaves it as it is, so the proof keeps naming whoever
+ * confirmed first, while `confirmed: false` withdraws it. A new file needs a
+ * new tick, stamped with the person of the session and the moment of the
+ * save.
  *
  * @param {?Object} font - The font being saved, as `readFont` answered it.
  * @param {?Object} storedFont - The font as it is stored.
@@ -176,7 +178,7 @@ function readFont(branding, errors, path) {
  * @param {string} [path="branding"] - Path of the branding in the body.
  * @returns {?Object} The font to store.
  * @throws {ValidationError} `required` at `branding.font.license` when a new
- *   file comes without the tick.
+ *   file comes without the tick, or any file with the tick taken off.
  */
 function confirmFontLicense(
   font,
@@ -192,8 +194,9 @@ function confirmFontLicense(
     storedFont?.source === FONT_SOURCE.MEDIA &&
     storedFont.reference?.mediaId === font.reference.mediaId &&
     Boolean(storedFont.license?.confirmedAt);
+  const unticked = font.license?.confirmed === false;
 
-  if (sameFile) {
+  if (sameFile && !unticked) {
     const { confirmedAt, confirmedBy: storedBy } = storedFont.license;
     return { ...font, license: { confirmedAt, confirmedBy: storedBy ?? null } };
   }

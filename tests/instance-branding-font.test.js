@@ -383,6 +383,34 @@ describe("Font of the instance in the branding", function () {
         expect(h.instance.branding.font.license).to.deep.equal(confirmed);
       });
 
+      it("is kept for the same font without a licence or with the tick again", async function () {
+        expect((await save(branded(ownFont(FONT_ID)))).status).to.equal(200);
+        const confirmed = clone(h.instance.branding.font.license);
+
+        for (const font of [
+          { source: "media", reference: { source: "media", mediaId: FONT_ID } },
+          ownFont(FONT_ID, { confirmed: true }),
+        ]) {
+          const res = await save(branded(font));
+
+          expect(res.status).to.equal(200);
+          expect(h.instance.branding.font.license).to.deep.equal(confirmed);
+        }
+      });
+
+      it("is withdrawn by an untick, also for the same font", async function () {
+        expect((await save(branded(ownFont(FONT_ID)))).status).to.equal(200);
+        const before = clone(h.instance);
+
+        const res = await save(branded(ownFont(FONT_ID, { confirmed: false })));
+
+        expect(res.status).to.equal(400);
+        expect(res.body.details).to.deep.equal([
+          { field: "branding.font.license", code: "required" },
+        ]);
+        expect(h.instance).to.deep.equal(before);
+      });
+
       it("no longer holds once the font changes", async function () {
         expect((await save(branded(ownFont(FONT_ID)))).status).to.equal(200);
         const confirmed = clone(h.instance.branding.font.license);
