@@ -61,9 +61,9 @@
 /**
  * The authorization a provider made for a booking at an access point: the
  * handle to take it back by, the principal the provider keeps for it where
- * it keeps one, and the secret the person at the door types. The secret is one-way: it exists in clear only in this answer, the
- * service encrypts it before storing and mails it once. Provider names
- * never appear in it.
+ * it keeps one, and the secret the person at the door types. The secret is
+ * one-way: it exists in clear only in this answer, the service encrypts it
+ * before storing and mails it once. Provider names never appear in it.
  *
  * A locker provider additionally names the compartment the grant is for,
  * where it chooses one - iFBS' box number - so the person knows which box
@@ -353,9 +353,9 @@ class AccessProvider {
 
   /**
    * Grants the booking an authorization at the lock - a keypad code, a
-   * guest with a PIN, a compartment of a locker system - for its access
-   * window. A locker provider consumes the `hold` the context brings and
-   * takes a new one where it lapsed.
+   * compartment of a locker system - for its access window. A locker
+   * provider consumes the `hold` the context brings and takes a new one
+   * where it lapsed.
    *
    * @param {Object} accessPoint The access point to grant access to
    * @param {BookingContext} bookingContext The booking that gets access;
