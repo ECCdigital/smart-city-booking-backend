@@ -280,6 +280,10 @@ Cancels or rejects a booking. Administrators may send an integer `refundPercenta
 
 Returns per-booking calculations and aggregate amounts for a group booking. **Requires JWT and booking update permission.**
 
+### PUT /api/:tenant/group-bookings/:id
+
+Saves the internal comment of a group booking: `{ "updateData": { "internalComments": "…" } }`, a string and nothing else. Any other field, a missing or empty `updateData` and a comment that is not a string answer `400 invalid_group_booking_update` and write nothing. **Requires JWT and booking update permission.**
+
 ### POST /api/:tenant/group-bookings/:id/reject
 
 Cancels or rejects a group booking. Without an override, each booking uses its policy proposal; an optional `refundPercentage` applies to all bookings in the group. Optional `bankDetails` are rendered on the aggregated cancellation PDF when a refund document is generated. A group that is cancelled already, or whose members differ in state, answers `409 invalid_transition`; an unknown group `404`. The same applies to `POST /group-bookings/:id/commit` and `/pay`.

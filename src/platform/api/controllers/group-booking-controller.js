@@ -18,13 +18,20 @@ const {
   TRIGGER,
 } = require("../../../commons/services/booking-lifecycle");
 const { answerTransitionError } = require("./transition-error-answer");
-const { ConflictError, NotFoundError } = require("../../../errors/BaseError");
+const {
+  BadRequestError,
+  ConflictError,
+  NotFoundError,
+} = require("../../../errors/BaseError");
 const ApiResponse = require("../../../commons/utilities/api-response");
 
 const logger = bunyan.createLogger({
   name: "group-booking-controller.js",
   level: process.env.LOG_LEVEL,
 });
+
+/** The fields `PUT /group-bookings/:id` writes: the comment alone. */
+const UPDATABLE_FIELDS = ["internalComments"];
 
 class GroupBookingController {
   static async getGroupBookings(req, res) {
@@ -108,12 +115,25 @@ class GroupBookingController {
     }
   }
 
+  /**
+   * Saves the internal comment of a group: `updateData` carries
+   * `internalComments` as a string and nothing else, any other field is a
+   * 400 and nothing is written (ECCdigital/tickets#303).
+   */
   static async updateGroupBooking(req, res) {
     const tenantId = req.params.tenant;
 
     try {
       const groupBookingId = req.params.id;
-      const { updateData } = req.body;
+      const { updateData } = req.body || {};
+      if (!GroupBookingController._isCommentUpdate(updateData)) {
+        return ApiResponse.fail(
+          res,
+          new BadRequestError("invalid_group_booking_update", {
+            allowed: UPDATABLE_FIELDS,
+          }),
+        );
+      }
 
       const groupBooking = await GroupBookingManager.getGroupBooking(
         tenantId,
@@ -128,7 +148,7 @@ class GroupBookingController {
       const updatedGroupBooking = await GroupBookingManager.updateGroupBooking(
         tenantId,
         groupBookingId,
-        updateData,
+        { internalComments: updateData.internalComments },
         scopeOf(req),
       );
 
@@ -140,6 +160,23 @@ class GroupBookingController {
       );
       res.status(500).send({ message: error.message });
     }
+  }
+
+  /** Whether `updateData` is `{ internalComments: <string> }` and no more. */
+  static _isCommentUpdate(updateData) {
+    if (
+      !updateData ||
+      typeof updateData !== "object" ||
+      Array.isArray(updateData)
+    ) {
+      return false;
+    }
+    const fields = Object.keys(updateData);
+    return (
+      fields.length === UPDATABLE_FIELDS.length &&
+      fields.every((field) => UPDATABLE_FIELDS.includes(field)) &&
+      typeof updateData.internalComments === "string"
+    );
   }
 
   /** Answers the 404 of a group that is not there for this request. */

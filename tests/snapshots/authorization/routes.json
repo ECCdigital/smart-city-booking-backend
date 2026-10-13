@@ -1466,9 +1466,9 @@
   "PUT /api/:tenant/group-bookings/:id": {
     "anonymous": 401,
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
-    "roleHolder": 200,
-    "tenantOwner": 200,
-    "instanceOwner": 200,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400,
     "expiredToken": 401
   },
   "POST /api/:tenant/group-bookings/:id/commit": {
