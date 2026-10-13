@@ -91,14 +91,11 @@ function ico(payload) {
 }
 
 /**
- * A woff2 font as `file-type` recognises it: the signature „wOF2“, the flavour
- * of a TrueType font behind it, and padding up to the given size.
+ * A woff2 font: the signature „wOF2“, the flavour of the font behind it (a
+ * TrueType font unless named), and padding up to the given size.
  */
-function woff2(size = 64) {
-  const header = Buffer.concat([
-    Buffer.from("wOF2"),
-    Buffer.from([0x00, 0x01, 0x00, 0x00]),
-  ]);
+function woff2(size = 64, flavor = Buffer.from([0x00, 0x01, 0x00, 0x00])) {
+  const header = Buffer.concat([Buffer.from("wOF2"), flavor]);
 
   return Buffer.concat([header, Buffer.alloc(Math.max(0, size - 8))]);
 }
@@ -293,6 +290,18 @@ describe("Media upload pipeline", function () {
       assert.strictEqual(media.width, null);
       assert.ok(media.storage.key.endsWith("/original.woff2"));
     });
+
+    for (const flavor of ["true", "ttcf", "OTTO"]) {
+      it(`takes a woff2 file of the flavour ${flavor}`, async function () {
+        const media = await createMedia(
+          woff2(64, Buffer.from(flavor)),
+          "HouseSans.woff2",
+        );
+
+        assert.strictEqual(media.kind, "font");
+        assert.strictEqual(media.mimeType, "font/woff2");
+      });
+    }
 
     it("refuses a TrueType font", async function () {
       await assert.rejects(
