@@ -216,8 +216,8 @@ class MediaReferenceGuard {
   /**
    * Checks the reference sites of the instance before it is stored: branding
    * is served to anonymous visitors and therefore takes public media only,
-   * the sites that show an image only public images; legal documents may be
-   * internal.
+   * the sites that show an image (the dark logo, the footer logos) only
+   * public images; legal documents may be internal.
    *
    * @param {Object} instance - The instance being saved.
    * @param {Object} reaches - The bundle of the saver's route.

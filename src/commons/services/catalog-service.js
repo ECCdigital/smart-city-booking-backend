@@ -22,6 +22,7 @@ const {
 } = require("./hero-layout/hero-validation");
 const { portalNameOf } = require("./hero-layout/hero-default-layout");
 const { withBrandingDefaults } = require("./instance/branding-schema");
+const { exportFooterLogos } = require("./instance/footer-logos");
 const { exportFont } = require("./instance/branding-font");
 const SchemaUtils = require("../utilities/schemaUtils");
 const {
@@ -128,12 +129,13 @@ async function exportTheme(catalog, branding) {
   const name = catalog?.name ?? "";
   const logo = activeLogo(branding);
 
-  const [heroLayout, background, exportedLogo, logoDark, font] =
+  const [heroLayout, background, exportedLogo, logoDark, footerLogos, font] =
     await Promise.all([
       exportHeroLayout(catalog?.heroLayout ?? null, { name, logo }),
       exportBackground(activeBackground(branding)),
       enrichHeroMediaReference(logo),
       enrichHeroMediaReference(activeLogoDark(branding)),
+      exportFooterLogos(branding),
       exportFont(branding),
     ]);
 
@@ -145,6 +147,7 @@ async function exportTheme(catalog, branding) {
     background,
     logo: exportedLogo,
     logoDark,
+    footerLogos,
     font,
     visibility: catalog?.visibility ?? "public",
   };
