@@ -6,6 +6,7 @@ const MembershipManager = require("./membership-manager");
 const TenantManager = require("./tenant-manager");
 const { escapeRegex } = require("../utilities/regex-utils");
 const { userIdsMatch } = require("../utilities/user-id-utils");
+const { NotFoundError } = require("../../errors/BaseError");
 const { DOMAIN } = require("../services/authorization/reach");
 const {
   supervisionOf,
@@ -88,19 +89,29 @@ class UserManager {
     }
   }
 
-  static async updateUser(user, upsert = true) {
-    try {
-      const userEntity = await UserModel.findOneAndUpdate(
-        { id: user.id },
-        user,
-        {
-          upsert: upsert,
-        },
-      );
-      return userEntity.toEntity();
-    } catch (err) {
-      throw err;
+  /**
+   * Writes the given fields to the account the lookup finds by `user.id`
+   * (`_findRawById`), never to a second one (ECCdigital/tickets#322). The
+   * stored spelling of the account id stays as it is; only the signup and
+   * `createUser` make an account.
+   *
+   * @param {Object} user The account id and the fields to write
+   * @returns {Promise<User>} The account as it was before the write
+   * @throws {NotFoundError} When no account has this id
+   */
+  static async updateUser(user) {
+    const rawUser = await UserManager._findRawById(user.id);
+    if (!rawUser) {
+      throw new NotFoundError("user_not_found", { userId: user.id });
     }
+
+    // eslint-disable-next-line no-unused-vars
+    const { id, ...fields } = user;
+    const userEntity = await UserModel.findOneAndUpdate(
+      { _id: rawUser._id },
+      { $set: fields },
+    );
+    return userEntity.toEntity();
   }
 
   static async getUsers(withSensitive = false) {
@@ -218,7 +229,7 @@ class UserManager {
     }
 
     if (syncKeycloakId && keycloakId && userKeycloakId !== keycloakId) {
-      await UserManager.updateUser({ id: user.id, keycloakId }, false);
+      await UserManager.updateUser({ id: user.id, keycloakId });
       user.keycloakId = keycloakId;
     }
 
@@ -259,12 +270,16 @@ class UserManager {
     }).lean();
   }
 
+  /**
+   * Removes the account the lookup finds by `id` (`_findRawById`), in
+   * whatever spelling it is stored (ECCdigital/tickets#322).
+   */
   static async deleteUser(id) {
-    try {
-      return await UserModel.deleteOne({ id: id });
-    } catch (err) {
-      throw err;
+    const rawUser = await UserManager._findRawById(id);
+    if (!rawUser) {
+      return { deletedCount: 0 };
     }
+    return await UserModel.deleteOne({ _id: rawUser._id });
   }
 
   static async getUserByHookID(hookID) {
@@ -330,7 +345,6 @@ class UserManager {
       );
     }
 
-  
     const isInstanceOwner = instance.ownerUserIds.some((id) =>
       userIdsMatch(id, userId),
     );

@@ -1,7 +1,8 @@
 /**
  * The user collection in memory, below `UserManager` at the model, so the
  * query `UserManager` builds is the one answered. Shared by the tests of the
- * public authentication routes (ECCdigital/tickets#259, #320).
+ * public authentication routes (ECCdigital/tickets#259, #320) and of the
+ * writes over the account id (ECCdigital/tickets#322).
  */
 
 const sinon = require("sinon");
@@ -27,11 +28,18 @@ function account(id, password, fields = {}) {
 /**
  * The user collection in memory, behind `UserModel`. It answers the two
  * forms of an id condition MongoDB would - an exact value and `$regex` with
- * `$options` - and refuses every other filter, so a lookup it does not know
- * fails loudly instead of matching by accident.
+ * `$options` - and the document key `_id`, and refuses every other filter,
+ * so a lookup it does not know fails loudly instead of matching by accident.
+ * A write sets the fields it names (`$set`, or a plain object as Mongoose
+ * reads one), inserts only on `upsert` and keeps `keycloakId` unique, as the
+ * index `keycloakId_unique_idx` does.
  */
 function installUserCollection(documents) {
-  const docs = documents.map((doc) => ({ ...doc }));
+  let nextKey = 0;
+  const docs = documents.map((doc) => ({
+    _id: `user-${++nextKey}`,
+    ...doc,
+  }));
 
   const matchesId = (stored, condition) => {
     if (typeof condition === "string") return stored === condition;
@@ -48,6 +56,9 @@ function installUserCollection(documents) {
   };
   const matches = (doc, filter) => {
     const keys = Object.keys(filter);
+    if (keys.length === 1 && keys[0] === "_id") {
+      return doc._id === filter._id;
+    }
     if (keys.length !== 1 || keys[0] !== "id") {
       throw new Error(
         `user collection: unsupported filter ${JSON.stringify(filter)}`,
@@ -62,6 +73,20 @@ function installUserCollection(documents) {
       toEntity: () => new User(JSON.parse(JSON.stringify(doc))),
     };
   const plain = (user) => JSON.parse(JSON.stringify(user));
+  const assertKeycloakIdUnique = (doc) => {
+    if (
+      typeof doc.keycloakId === "string" &&
+      doc.keycloakId !== "" &&
+      docs.some((other) => other !== doc && other.keycloakId === doc.keycloakId)
+    ) {
+      const error = new Error(
+        `E11000 duplicate key error index: keycloakId_unique_idx dup key: { keycloakId: "${doc.keycloakId}" }`,
+      );
+      error.code = 11000;
+      throw error;
+    }
+  };
+  const fieldsOf = (update) => plain(update.$set ?? update);
 
   sinon
     .stub(UserModel, "find")
@@ -81,14 +106,44 @@ function installUserCollection(documents) {
     return asDocument(docs.find((doc) => matches(doc, filter)));
   });
   sinon.stub(UserModel, "create").callsFake(async (user) => {
-    docs.push(plain(user));
-    return asDocument(docs[docs.length - 1]);
+    const doc = { _id: `user-${++nextKey}`, ...plain(user) };
+    assertKeycloakIdUnique(doc);
+    docs.push(doc);
+    return asDocument(doc);
   });
-  sinon.stub(UserModel, "findOneAndUpdate").callsFake(async (filter, user) => {
+  // As MongoDB: the fields of the update over the document found, a new
+  // document only on `upsert`, the document before the write unless `new`.
+  sinon
+    .stub(UserModel, "findOneAndUpdate")
+    .callsFake(async (filter, update, options = {}) => {
+      const index = docs.findIndex((doc) => matches(doc, filter));
+      if (index === -1) {
+        if (!options.upsert) return null;
+        const doc = {
+          _id: `user-${++nextKey}`,
+          ...plain(filter),
+          ...fieldsOf(update),
+        };
+        assertKeycloakIdUnique(doc);
+        docs.push(doc);
+        return options.new ? asDocument(doc) : null;
+      }
+      const before = docs[index];
+      const after = { ...before, ...fieldsOf(update) };
+      docs[index] = after;
+      try {
+        assertKeycloakIdUnique(after);
+      } catch (error) {
+        docs[index] = before;
+        throw error;
+      }
+      return asDocument(options.new ? after : before);
+    });
+  sinon.stub(UserModel, "deleteOne").callsFake(async (filter) => {
     const index = docs.findIndex((doc) => matches(doc, filter));
-    if (index === -1) docs.push(plain(user));
-    else docs[index] = plain(user);
-    return asDocument(plain(user));
+    if (index === -1) return { deletedCount: 0 };
+    docs.splice(index, 1);
+    return { deletedCount: 1 };
   });
 
   return docs;

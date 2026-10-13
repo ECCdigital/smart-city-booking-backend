@@ -109,7 +109,7 @@ class SsoService {
       idpEmailVerifiedAt: new Date(),
       idpEmailVerifiedProvider: SSO_PROVIDER,
     };
-    await UserManager.updateUser({ id: user.id, ...proof }, false);
+    await UserManager.updateUser({ id: user.id, ...proof });
     Object.assign(user, proof);
   }
 
