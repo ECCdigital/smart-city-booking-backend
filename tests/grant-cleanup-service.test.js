@@ -6,6 +6,7 @@ const AccessLogService = require("../src/commons/services/access/access-log-serv
 const BookingManager = require("../src/commons/data-managers/booking-manager");
 const { DOMAIN } = require("../src/commons/services/authorization/reach");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
+const AccessProvider = require("../src/commons/services/access/providers/access-provider");
 const {
   registerAccessProvider,
 } = require("../src/commons/services/access/providers/access-provider-registry");
@@ -200,6 +201,32 @@ describe("GrantCleanupService", () => {
     await GrantCleanupService.cleanupPrincipals();
 
     expect(info.principalCleanupError).to.include("No access provider");
+  });
+
+  it("leaves an entry alone whose provider offers no revoke: no attempt, no error, no log", async () => {
+    registerAccessProvider(
+      "remote-only",
+      class RemoteOnlyAccessProvider extends AccessProvider {
+        static get capabilities() {
+          return ["open"];
+        }
+      },
+    );
+    const info = entry({ provider: "remote-only" });
+    const before = structuredClone(info);
+    stubBookings(booking([info]));
+
+    const result = await GrantCleanupService.cleanupPrincipals();
+
+    expect(result).to.deep.equal({
+      tenants: 1,
+      bookings: 0,
+      principalsRemoved: 0,
+      failures: 0,
+    });
+    expect(info).to.deep.equal(before);
+    expect(BookingManager.storeBooking.called).to.be.false;
+    expect(AccessLogService.log.called).to.be.false;
   });
 
   it("leaves the entries alone that need no cleanup", async () => {

@@ -1,20 +1,25 @@
 /**
  * Finishes the revokes that left an external principal behind. A revoke
  * takes the grant back at the provider and, where the grant has a principal
- * - a Salto guest - removes that too; when the second step fails, the
- * access is gone but the principal lingers. This job finds those entries
- * and asks the provider to revoke the grant again, which by the seam's
- * contract only does what is left.
+ * - an account the provider created for the booking - removes that too;
+ * when the second step fails, the access is gone but the principal lingers.
+ * This job finds those entries and asks the provider to revoke the grant
+ * again, which by the seam's contract only does what is left.
  *
  * Provider-neutral: it never talks to an API client itself, only through
- * `provider.revokeAuthorization(accessPoint, grant)`.
+ * `provider.revokeAuthorization(accessPoint, grant)`. An entry whose provider
+ * offers no revoke is left alone: there is nothing the job could ask for.
  */
 
 const bunyan = require("bunyan");
 const BookingManager = require("../../data-managers/booking-manager");
 const TenantManager = require("../../data-managers/tenant-manager");
 const AccessLogService = require("./access-log-service");
-const { getAccessProvider } = require("./providers/access-provider-registry");
+const {
+  getAccessProvider,
+  getAccessProviderCapabilities,
+  hasAccessProvider,
+} = require("./providers/access-provider-registry");
 const { DOMAIN } = require("../authorization/reach");
 
 require("./providers/register-access-providers");
@@ -210,13 +215,29 @@ class GrantCleanupService {
   /**
    * @private
    * The database filter narrowed down again in memory: a booking matched on
-   * one entry may carry others that need nothing.
+   * one entry may carry others that need nothing. An entry whose provider
+   * does not offer `revokeAuthorization` needs nothing either - no attempt,
+   * no error, no log. A provider this server does not know is still tried,
+   * so its entry records why it failed.
    */
   static _needsCleanup(info) {
     return (
       !!info?.revokedAt &&
       !!info.grant?.externalPrincipalId &&
-      !info.principalRemovedAt
+      !info.principalRemovedAt &&
+      GrantCleanupService._mayRevoke(info.provider)
+    );
+  }
+
+  /**
+   * @private
+   */
+  static _mayRevoke(providerName) {
+    return (
+      !hasAccessProvider(providerName) ||
+      getAccessProviderCapabilities(providerName).includes(
+        "revokeAuthorization",
+      )
     );
   }
 
