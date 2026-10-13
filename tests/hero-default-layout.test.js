@@ -408,6 +408,7 @@ describe("the Theme Bundle carries name, heroLayout, logo and background", funct
         "heroLayout",
         "background",
         "logo",
+        "logoDark",
         "visibility",
       ].sort(),
     );

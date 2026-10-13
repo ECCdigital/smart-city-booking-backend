@@ -83,6 +83,18 @@ function activeLogo(branding) {
 }
 
 /**
+ * The variant of the app logo for the dark mode the Theme Bundle delivers.
+ * It follows `branding.active` like the logo: a switched-off branding
+ * delivers none, and the stored variant stays.
+ *
+ * @param {?Object} branding - The instance branding, as `getBranding` reads it.
+ * @returns {?Object} The reference of the variant, or null.
+ */
+function activeLogoDark(branding) {
+  return branding?.active ? branding.logoDark ?? null : null;
+}
+
+/**
  * The appearance settings of the branding the Theme Bundle delivers beside the
  * theme: the header and the logo size of the sign-in pages. Like the theme
  * they follow `branding.active`, but where the theme goes out as null these go
@@ -115,10 +127,11 @@ async function exportTheme(catalog, branding) {
   const name = catalog?.name ?? "";
   const logo = activeLogo(branding);
 
-  const [heroLayout, background, exportedLogo] = await Promise.all([
+  const [heroLayout, background, exportedLogo, logoDark] = await Promise.all([
     exportHeroLayout(catalog?.heroLayout ?? null, { name, logo }),
     exportBackground(activeBackground(branding)),
     enrichHeroMediaReference(logo),
+    enrichHeroMediaReference(activeLogoDark(branding)),
   ]);
 
   return {
@@ -128,6 +141,7 @@ async function exportTheme(catalog, branding) {
     heroLayout,
     background,
     logo: exportedLogo,
+    logoDark,
     visibility: catalog?.visibility ?? "public",
   };
 }

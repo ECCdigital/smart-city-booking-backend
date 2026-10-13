@@ -65,6 +65,12 @@ function exportInstanceBranding(branding) {
       "";
   }
 
+  // The variant of the logo for the dark mode has no legacy read field: it
+  // goes out as a reference with its URL, like the logo.
+  if (plain.logoDark !== undefined) {
+    plain.logoDark = enrichMediaReference(plain.logoDark, null);
+  }
+
   return plain;
 }
 
@@ -122,6 +128,19 @@ function instanceBrandingReferences(instance) {
 }
 
 /**
+ * The branding reference sites of an instance that must be images: the
+ * variant of the logo for the dark mode. Kept apart from
+ * `BRANDING_REFERENCE_FIELDS`, which the media import walks for the legacy
+ * read fields this site never had.
+ *
+ * @param {Object} instance - The instance being saved.
+ * @returns {Array<Object|string|null>}
+ */
+function instanceBrandingImageReferences(instance) {
+  return [instance?.branding?.logoDark];
+}
+
+/**
  * The legal document reference sites of an instance.
  *
  * @param {Object} instance - The instance being saved.
@@ -157,6 +176,7 @@ module.exports = {
   exportInstanceBranding,
   exportInstanceDocument,
   exportInstanceMedia,
+  instanceBrandingImageReferences,
   instanceBrandingReferences,
   instanceDocumentReferences,
 };
