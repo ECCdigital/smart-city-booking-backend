@@ -203,11 +203,11 @@ class MediaReferenceGuard {
         throw new BadRequestError("media_reference_not_public", { mediaId });
       }
 
+      // `kind` names the kind the site takes, not the one the medium has.
       if (kind && media.kind !== kind) {
         throw new BadRequestError("media_reference_wrong_kind", {
           mediaId,
-          kind: media.kind,
-          expected: kind,
+          kind,
         });
       }
     }

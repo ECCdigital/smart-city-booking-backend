@@ -432,8 +432,7 @@ describe("Font of the instance in the branding", function () {
       expect(res.body.code).to.equal("media_reference_wrong_kind");
       expect(res.body.params).to.deep.equal({
         mediaId: IMAGE_ID,
-        kind: "image",
-        expected: "font",
+        kind: "font",
       });
       expect(h.instance).to.deep.equal(before);
     });
