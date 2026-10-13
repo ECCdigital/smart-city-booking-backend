@@ -229,8 +229,10 @@ function readFooterLogo(logo, errors, path) {
   }
 
   const image = readFooterImage(logo, "image", true, errors, path);
-  const size = logo.size ?? "md";
-  const link = logo.link ?? "";
+  // A field left out reads as its default; null is refused like any other
+  // value outside the field, as it is for `header`.
+  const size = logo.size === undefined ? "md" : logo.size;
+  const link = logo.link === undefined ? "" : logo.link;
 
   if (!FOOTER_LOGO_SIZES.includes(size)) {
     errors.add(childPath(path, "size"), ERROR_CODES.enum, {

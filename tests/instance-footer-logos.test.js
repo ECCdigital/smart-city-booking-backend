@@ -457,6 +457,24 @@ describe("Footer logos in the instance branding", function () {
       });
     });
 
+    // A field left out reads as its default, as above; null is no value of
+    // either list, as for `header`.
+    it("refuses a size of null", async function () {
+      await refuses([logo({ size: null })], {
+        field: "branding.footerLogos[0].size",
+        code: "invalid_enum",
+        params: { allowed: ["sm", "md", "lg"] },
+      });
+    });
+
+    it("refuses a link of null", async function () {
+      await refuses([logo({ link: null })], {
+        field: "branding.footerLogos[0].link",
+        code: "invalid_format",
+        params: { format: "url" },
+      });
+    });
+
     it("names every fault of one save", async function () {
       const res = await save(
         branded({
