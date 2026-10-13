@@ -33,7 +33,7 @@ Wie viele Einheiten eines Bookables eine einzelne Buchung höchstens enthalten d
 _Avoid_: maxAmount (so heißt die Grenze eines externen Anbieters und die des Coupons), Kapazität, verfügbare Anzahl (das ist die Obergrenze gleichzeitiger Buchungen insgesamt)
 
 **Buchungsweg (einer Buchung)**:
-Wie eine Buchung angelegt wurde: über ein _Userkonto_, als _Gast_ oder durch die Verwaltung als manuelle Buchung (_Admin_). Er wird einmal beim Anlegen festgelegt und ändert sich nie. Er hängt am Vorgang, nicht an der Person: Ein Admin, der selbst über den Checkout bucht, bucht über sein Userkonto. Alte Buchungen haben keinen Buchungsweg.
+Wie eine Buchung angelegt wurde: _Angemeldet_ über ein Userkonto, als _Gast_ oder durch die Verwaltung als manuelle Buchung (_Admin_). Er wird einmal beim Anlegen festgelegt und ändert sich nie. Er hängt am Vorgang, nicht an der Person: Ein Admin, der selbst angemeldet über den Checkout bucht, bucht als _Angemeldet_. Alte Buchungen haben keinen Buchungsweg.
 _Avoid_: Herkunft, Origin, Kanal, Buchungsart
 
 ### Mediathek
