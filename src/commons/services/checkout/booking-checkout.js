@@ -662,7 +662,9 @@ async function updateBooking(
   // booking is in, so the checkout prepares it without them.
   const bundleCheckoutService = new BundleCheckoutService(
     {
-      user: updatedBooking.assignedUserId,
+      // The owner is the stored one, not the form's: an edit does not
+      // change whom the booking belongs to.
+      user: oldBooking.assignedUserId,
       tenant: tenantId,
       timeBegin: updatedBooking.timeBegin,
       timeEnd: updatedBooking.timeEnd,
