@@ -39,6 +39,9 @@ const legalDocumentSchema = new Schema(
 const tenantSchemaDefinition = {
   id: { type: String, required: true, unique: true },
   name: { type: String, required: true },
+  // The short description the storefront shows next to the name: plain
+  // text, one language, at most 300 characters (checked by the controller).
+  description: { type: String, default: "" },
   contactName: { type: String, default: "" },
   location: { type: String, default: "" },
   mail: { type: String, default: "" },

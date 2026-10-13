@@ -117,6 +117,21 @@ function validateCancellationRefundTiersField(body) {
   return getCancellationRefundTiersError(body.cancellationRefundTiers);
 }
 
+const TENANT_DESCRIPTION_MAX_LENGTH = 300;
+
+function validateDescriptionField(body) {
+  if (!Object.prototype.hasOwnProperty.call(body, "description")) {
+    return null;
+  }
+  if (typeof body.description !== "string") {
+    return "Invalid description. Must be plain text";
+  }
+  if (body.description.length > TENANT_DESCRIPTION_MAX_LENGTH) {
+    return `Invalid description. At most ${TENANT_DESCRIPTION_MAX_LENGTH} characters`;
+  }
+  return null;
+}
+
 function validateLegalDocumentsField(body) {
   if (!Object.prototype.hasOwnProperty.call(body, "legalDocuments")) {
     return null;
@@ -336,6 +351,11 @@ class TenantController {
         return response.status(400).send(legalDocumentsError);
       }
 
+      const descriptionError = validateDescriptionField(request.body);
+      if (descriptionError) {
+        return response.status(400).send(descriptionError);
+      }
+
       // `storeTenant` routes an unknown id here too: both creation paths
       // share the one contract of the creation service.
       const tenant = await TenantCreationService.create({
@@ -371,6 +391,7 @@ class TenantController {
 
       const fields = [
         "name",
+        "description",
         "contactName",
         "location",
         "mail",
@@ -466,6 +487,11 @@ class TenantController {
       const legalDocumentsError = validateLegalDocumentsField(request.body);
       if (legalDocumentsError) {
         return response.status(400).send(legalDocumentsError);
+      }
+
+      const descriptionError = validateDescriptionField(request.body);
+      if (descriptionError) {
+        return response.status(400).send(descriptionError);
       }
 
       // Checked is what the request brings, not what is already stored: a

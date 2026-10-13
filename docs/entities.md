@@ -16,6 +16,7 @@ Example:
 {
   "id": "default",
   "name": "Example Name",
+  "description": "Example short description",
   "contactName": "Example Contact",
   "location": "Example Location",
   "mail": "example@example.com",

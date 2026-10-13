@@ -51,7 +51,7 @@ A tenant can only be created if one of the following conditions is met:
 - The user is included in `instance.allowedUsersToCreateTenant`, or
 - The user is listed in `instance.ownerUserIds`.
 
-The body needs `name`, `contactName` and a formally valid `mail` (the tenant's contact, not the creator's account address); `phone`, `website` and `location` are optional. Answers `201` with an empty body, or:
+The body needs `name`, `contactName` and a formally valid `mail` (the tenant's contact, not the creator's account address); `phone`, `website`, `location` and `description` (the short description, plain text, at most 300 characters) are optional. Answers `201` with an empty body, or:
 
 | Status | `code`                                                 | When                                                                                                                                                                                                                                                   |
 | ------ | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

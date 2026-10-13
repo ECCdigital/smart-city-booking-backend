@@ -38,6 +38,11 @@
               name:
                 type: string
                 example: Stadthalle
+              description:
+                type: string
+                maxLength: 300
+                description: The short description the storefront shows next to the name; plain text, optional. Longer text is refused with `400`
+                example: Veranstaltungen und Räume im Herzen der Stadt.
               contactName:
                 type: string
                 description: The contact person of the tenant
