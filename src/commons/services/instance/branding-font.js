@@ -15,16 +15,14 @@
  * needed. The licence never leaves the backend except to the instance owner.
  */
 
-const MediaManager = require("../../data-managers/media-manager");
-const { DOMAIN } = require("../authorization/reach");
-const { MEDIA_REFERENCE_SOURCE } = require("../../schemas/mediaSchema");
-const { mediaFileUrl } = require("../media/media-reference");
 const SchemaUtils = require("../../utilities/schemaUtils");
 const {
   HeroValidationErrors,
   carries,
   childPath,
+  isPlainObject,
 } = require("../hero-layout/hero-validation");
+const { readBrandingMedium, readMediaReference } = require("./branding-media");
 
 const ERROR_CODES = SchemaUtils.ERROR_CODES;
 
@@ -48,10 +46,6 @@ const CURATED_FONT_IDS = Object.freeze([
   "noto-serif",
 ]);
 
-function isPlainObject(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
 /**
  * A value of a fixed list at a key of an object, which is required.
  *
@@ -71,47 +65,6 @@ function readEnum(object, key, allowed, errors, path) {
   }
 
   return object[key];
-}
-
-/**
- * The reference of a font of the library: a medium, never a foreign address.
- * The keys the export adds (`url`, `name`, `size`) are dropped, so what
- * `GET /api/instances` answered comes back unchanged.
- *
- * @returns {?Object} `{ source, mediaId }`, or null on a fault.
- */
-function readReference(font, errors, path) {
-  const referencePath = childPath(path, "reference");
-
-  if (!carries(font, "reference") || font.reference == null) {
-    errors.add(referencePath, ERROR_CODES.required);
-    return null;
-  }
-
-  if (!isPlainObject(font.reference)) {
-    errors.add(referencePath, ERROR_CODES.format, { format: "object" });
-    return null;
-  }
-
-  const source = readEnum(
-    font.reference,
-    "source",
-    [MEDIA_REFERENCE_SOURCE.MEDIA],
-    errors,
-    referencePath,
-  );
-  const mediaId = font.reference.mediaId;
-
-  if (source === null) {
-    return null;
-  }
-
-  if (typeof mediaId !== "string" || mediaId.trim() === "") {
-    errors.add(childPath(referencePath, "mediaId"), ERROR_CODES.required);
-    return null;
-  }
-
-  return { source, mediaId };
 }
 
 /**
@@ -152,7 +105,14 @@ function readFont(branding, errors, path) {
   }
 
   if (source === FONT_SOURCE.MEDIA) {
-    const reference = readReference(font, errors, fontPath);
+    // The keys the export adds (`url`, `name`, `size`) are dropped, so what
+    // `GET /api/instances` answered comes back unchanged.
+    const reference = readMediaReference(
+      font.reference,
+      errors,
+      childPath(fontPath, "reference"),
+      { required: true },
+    );
     return reference === null
       ? null
       : { source, reference, license: font.license ?? null };
@@ -164,25 +124,25 @@ function readFont(branding, errors, path) {
 /**
  * The confirmed licence of a font of the library, from the stored instance
  * or from the tick of the form. The stored confirmation holds while the font
- * is the same file; a tick for it again leaves it as it is, so the proof keeps
- * naming whoever confirmed first. A new file needs a new tick, stamped with
- * the person of the session and the moment of the save.
+ * is the same file and the form does not untick it: a licence left out or
+ * ticked again leaves it as it is, so the proof keeps naming whoever
+ * confirmed first, while `confirmed: false` withdraws it. A new file needs a
+ * new tick, stamped with the person of the session and the moment of the
+ * save.
  *
  * @param {?Object} font - The font being saved, as `readFont` answered it.
  * @param {?Object} storedFont - The font as it is stored.
  * @param {Object} session
  * @param {?string} session.confirmedBy - Login of the person saving.
  * @param {Date} [session.now] - The moment of the save.
- * @param {string} [path="branding"] - Path of the branding in the body.
  * @returns {?Object} The font to store.
  * @throws {ValidationError} `required` at `branding.font.license` when a new
- *   file comes without the tick.
+ *   file comes without the tick, or any file with the tick taken off.
  */
 function confirmFontLicense(
   font,
   storedFont,
   { confirmedBy, now = new Date() },
-  path = "branding",
 ) {
   if (font?.source !== FONT_SOURCE.MEDIA) {
     return font ?? null;
@@ -192,18 +152,16 @@ function confirmFontLicense(
     storedFont?.source === FONT_SOURCE.MEDIA &&
     storedFont.reference?.mediaId === font.reference.mediaId &&
     Boolean(storedFont.license?.confirmedAt);
+  const unticked = font.license?.confirmed === false;
 
-  if (sameFile) {
+  if (sameFile && !unticked) {
     const { confirmedAt, confirmedBy: storedBy } = storedFont.license;
     return { ...font, license: { confirmedAt, confirmedBy: storedBy ?? null } };
   }
 
   if (font.license?.confirmed !== true) {
     const errors = new HeroValidationErrors();
-    errors.add(
-      childPath(childPath(path, "font"), "license"),
-      ERROR_CODES.required,
-    );
+    errors.add("branding.font.license", ERROR_CODES.required);
     errors.throwIfAny();
   }
 
@@ -270,24 +228,21 @@ async function exportFont(branding) {
     return null;
   }
 
-  // The font is an instance medium: the lookup carries no tenant.
-  const media = await MediaManager.getMedia(reference.mediaId, null, DOMAIN);
+  const { medium, url, name } = await readBrandingMedium(reference);
 
   return {
     source: FONT_SOURCE.MEDIA,
     reference: {
       source: reference.source,
       mediaId: reference.mediaId,
-      url: mediaFileUrl(reference.mediaId, null),
-      name: media?.title || media?.originalFileName || null,
-      size: media?.size ?? null,
+      url,
+      name,
+      size: medium?.size ?? null,
     },
   };
 }
 
 module.exports = {
-  CURATED_FONT_IDS,
-  FONT_SOURCE,
   confirmFontLicense,
   exportFont,
   fontReference,

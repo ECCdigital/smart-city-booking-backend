@@ -71,7 +71,9 @@
       tenant changes its level, and nothing promotes a tenant automatically.
       A font of the library in `branding.font` needs the tick
       `license: { confirmed: true }` once per file; `confirmedAt` and
-      `confirmedBy` are set from the session, never from the body.
+      `confirmedBy` are set from the session, never from the body. Without
+      `license` the stored confirmation of the same file stays;
+      `license: { confirmed: false }` withdraws it.
     security:
       - bearerAuth: []
     requestBody:
@@ -103,7 +105,7 @@
           (`allowed: [free, supervised, pending]`; `declined`, `null` and `""`
           included); `validation_failed` for the other fields, among them
           `required` at `branding.font.license` for a new font of the library
-          without the tick. A branding medium that is unknown, intern or (for
+          without the tick, or for any with `license: { confirmed: false }`. A branding medium that is unknown, intern or (for
           the font) not of kind `font`: `media_reference_unknown`,
           `media_reference_not_public`, `media_reference_wrong_kind`.
       "401":

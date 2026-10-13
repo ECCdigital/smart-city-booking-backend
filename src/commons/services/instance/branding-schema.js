@@ -8,15 +8,16 @@
  */
 
 const SchemaUtils = require("../../utilities/schemaUtils");
-const { MEDIA_REFERENCE_SOURCE } = require("../../schemas/mediaSchema");
 const {
   HEX_COLOR,
   HeroValidationErrors,
   carries,
   childPath,
   elementPath,
+  isPlainObject,
 } = require("../hero-layout/hero-validation");
 const { readFont } = require("./branding-font");
+const { readMediaReference } = require("./branding-media");
 
 const ERROR_CODES = SchemaUtils.ERROR_CODES;
 
@@ -54,10 +55,6 @@ function defaultBranding() {
     logoUrl: "",
     faviconUrl: "",
   };
-}
-
-function isPlainObject(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 /**
@@ -168,52 +165,6 @@ function isFooterLink(link) {
 }
 
 /**
- * Reads the media reference of a footer logo as it is stored, `{ source,
- * mediaId }`: the keys the export adds are dropped, so an enriched reference
- * comes back unchanged. Only a medium of the library is taken; what the
- * medium has to be, a public image of the instance, is the
- * `MediaReferenceGuard`'s.
- *
- * @param {Object} logo - The footer logo.
- * @param {string} key - `image` or `imageDark`.
- * @param {boolean} required - Whether the logo must carry the reference.
- * @param {HeroValidationErrors} errors - The run the faults go into.
- * @param {string} path - Path of the footer logo in the request body.
- * @returns {?Object} The reference, or null when there is none or it is
- *   faulty.
- */
-function readFooterImage(logo, key, required, errors, path) {
-  const reference = logo[key];
-  const referencePath = childPath(path, key);
-
-  if (reference === undefined || reference === null) {
-    if (required) {
-      errors.add(referencePath, ERROR_CODES.required);
-    }
-    return null;
-  }
-
-  if (!isPlainObject(reference)) {
-    errors.add(referencePath, ERROR_CODES.format, { format: "object" });
-    return null;
-  }
-
-  if (reference.source !== MEDIA_REFERENCE_SOURCE.MEDIA) {
-    errors.add(childPath(referencePath, "source"), ERROR_CODES.enum, {
-      allowed: [MEDIA_REFERENCE_SOURCE.MEDIA],
-    });
-    return null;
-  }
-
-  if (typeof reference.mediaId !== "string" || reference.mediaId === "") {
-    errors.add(childPath(referencePath, "mediaId"), ERROR_CODES.required);
-    return null;
-  }
-
-  return { source: reference.source, mediaId: reference.mediaId };
-}
-
-/**
  * Reads one footer logo as it is stored, `{ image, size, link, imageDark }`
  * with its defaults filled in. Keys beyond these four are not stored.
  *
@@ -228,9 +179,18 @@ function readFooterLogo(logo, errors, path) {
     return null;
   }
 
-  const image = readFooterImage(logo, "image", true, errors, path);
-  const size = logo.size ?? "md";
-  const link = logo.link ?? "";
+  const image = readMediaReference(
+    logo.image,
+    errors,
+    childPath(path, "image"),
+    {
+      required: true,
+    },
+  );
+  // A field left out reads as its default; null is refused like any other
+  // value outside the field, as it is for `header`.
+  const size = logo.size === undefined ? "md" : logo.size;
+  const link = logo.link === undefined ? "" : logo.link;
 
   if (!FOOTER_LOGO_SIZES.includes(size)) {
     errors.add(childPath(path, "size"), ERROR_CODES.enum, {
@@ -242,7 +202,11 @@ function readFooterLogo(logo, errors, path) {
     errors.add(childPath(path, "link"), ERROR_CODES.format, { format: "url" });
   }
 
-  const imageDark = readFooterImage(logo, "imageDark", false, errors, path);
+  const imageDark = readMediaReference(
+    logo.imageDark,
+    errors,
+    childPath(path, "imageDark"),
+  );
 
   return { image, size, link, imageDark };
 }
@@ -284,49 +248,6 @@ function readFooterLogos(branding, errors, path) {
 }
 
 /**
- * The variant of the app logo for the dark mode as it is stored: null for
- * none, or the reference `{ source: "media", mediaId }` alone. What the export
- * adds to it (`url`, `width`, `height`) is dropped, so an enriched reference
- * comes back from the Admin UI unchanged. A foreign address is refused: the
- * variant is a public image of the instance library, which the
- * `MediaReferenceGuard` checks before the instance is written.
- *
- * @param {Object} branding - The branding being saved.
- * @param {HeroValidationErrors} errors - The run the faults go into.
- * @param {string} path - Path of the branding in the request body.
- * @returns {?Object} The variant to store, null for none or a fault.
- */
-function readLogoDark(branding, errors, path) {
-  const logoDark = branding.logoDark;
-  const logoDarkPath = childPath(path, "logoDark");
-
-  if (logoDark === undefined || logoDark === null) {
-    return null;
-  }
-
-  if (!isPlainObject(logoDark)) {
-    errors.add(logoDarkPath, ERROR_CODES.format, {
-      format: "media_reference",
-    });
-    return null;
-  }
-
-  if (logoDark.source !== MEDIA_REFERENCE_SOURCE.MEDIA) {
-    errors.add(childPath(logoDarkPath, "source"), ERROR_CODES.enum, {
-      allowed: [MEDIA_REFERENCE_SOURCE.MEDIA],
-    });
-    return null;
-  }
-
-  if (typeof logoDark.mediaId !== "string" || logoDark.mediaId === "") {
-    errors.add(childPath(logoDarkPath, "mediaId"), ERROR_CODES.required);
-    return null;
-  }
-
-  return { source: MEDIA_REFERENCE_SOURCE.MEDIA, mediaId: logoDark.mediaId };
-}
-
-/**
  * The branding as it is stored: checked field by field, every fault collected
  * so the admin sees all of them at once, then with its defaults filled in.
  * Each field of the appearance has its check here; the fields to come join in
@@ -334,27 +255,32 @@ function readLogoDark(branding, errors, path) {
  *
  * Only the fields of the appearance are checked. The rest of the branding —
  * the switch, the primary and secondary colours, logo and favicon, the
- * derived read fields — is taken as before. Of the variant of the logo only
- * the shape is checked here; the medium behind every reference is checked by
- * the `MediaReferenceGuard` before the instance is written.
+ * derived read fields — is taken as before. Of the variant of the logo for
+ * the dark mode (null for none) only the shape is checked here; the medium
+ * behind every reference is checked by the `MediaReferenceGuard` before the
+ * instance is written.
  *
  * @param {*} branding - The branding of the request body.
- * @param {string} [path="branding"] - Its path in the request body.
  * @returns {*} The branding to store.
  * @throws {ValidationError} With every fault, each at its path below
  *   `branding`.
  */
-function normalizeBranding(branding, path = "branding") {
+function normalizeBranding(branding) {
   if (!isPlainObject(branding)) {
     return withBrandingDefaults(branding);
   }
 
+  const path = "branding";
   const errors = new HeroValidationErrors();
 
   checkAccent(branding, errors, path);
   checkEnum(branding, "header", HEADER_COLORS, errors, path);
   checkEnum(branding, "authLogoSize", AUTH_LOGO_SIZES, errors, path);
-  const logoDark = readLogoDark(branding, errors, path);
+  const logoDark = readMediaReference(
+    branding.logoDark,
+    errors,
+    childPath(path, "logoDark"),
+  );
   const footerLogos = readFooterLogos(branding, errors, path);
   const font = readFont(branding, errors, path);
 
@@ -372,10 +298,6 @@ function normalizeBranding(branding, path = "branding") {
 }
 
 module.exports = {
-  AUTH_LOGO_SIZES,
-  FOOTER_LOGO_SIZES,
-  HEADER_COLORS,
-  MAX_FOOTER_LOGOS,
   defaultBranding,
   normalizeBranding,
   withBrandingDefaults,

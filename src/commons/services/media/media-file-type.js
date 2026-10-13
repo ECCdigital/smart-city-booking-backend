@@ -6,6 +6,9 @@ const { MEDIA_KIND } = require("../../schemas/mediaSchema");
 const { imageMaxPixels } = require("./media-config");
 
 const SVG_MIME_TYPE = "image/svg+xml";
+const WOFF2_MIME_TYPE = "font/woff2";
+// The signature a woff2 file starts with (W3C WOFF2, section 3).
+const WOFF2_SIGNATURE = Buffer.from("wOF2");
 const ICO_MIME_TYPE = "image/x-icon";
 const GENERIC_MIME_TYPE = "application/octet-stream";
 
@@ -33,7 +36,7 @@ const ALLOWED_TYPES = [
   { mimeType: "application/pdf", kind: MEDIA_KIND.DOCUMENT, sharpFormats: [] },
   // A web font is taken as woff2 alone, the one format every browser of the
   // storefront reads; TTF, OTF and WOFF are refused like any other type.
-  { mimeType: "font/woff2", kind: MEDIA_KIND.FONT, sharpFormats: [] },
+  { mimeType: WOFF2_MIME_TYPE, kind: MEDIA_KIND.FONT, sharpFormats: [] },
 ];
 
 const ALLOWED_MIME_TYPES = ALLOWED_TYPES.map((type) => type.mimeType);
@@ -91,6 +94,19 @@ function looksLikeSvg(data) {
 }
 
 /**
+ * Whether the buffer holds a woff2 font. The signature „wOF2“ decides alone:
+ * `file-type` also demands the flavour of a single TrueType or CFF font
+ * behind it and so misses a woff2 of the flavour `true` or a collection
+ * (`ttcf`).
+ *
+ * @param {Buffer} data - The uploaded bytes.
+ * @returns {boolean} True if the bytes start with the woff2 signature.
+ */
+function looksLikeWoff2(data) {
+  return data.subarray(0, WOFF2_SIGNATURE.length).equals(WOFF2_SIGNATURE);
+}
+
+/**
  * Confirms that the bytes really decode as the detected image type, and reads
  * the dimensions the variant presets are measured against.
  *
@@ -141,9 +157,16 @@ async function detectUploadType(data) {
     throw new BadRequestError("empty_file");
   }
 
-  // SVG has to be sniffed first: it is XML, so `file-type` either reports the
-  // generic XML type or nothing at all.
-  let mimeType = looksLikeSvg(data) ? SVG_MIME_TYPE : null;
+  // SVG and woff2 have to be sniffed first: SVG is XML, so `file-type` either
+  // reports the generic XML type or nothing at all, and it knows woff2 only
+  // for some of its flavours.
+  let mimeType = null;
+
+  if (looksLikeSvg(data)) {
+    mimeType = SVG_MIME_TYPE;
+  } else if (looksLikeWoff2(data)) {
+    mimeType = WOFF2_MIME_TYPE;
+  }
 
   if (!mimeType) {
     const { fileTypeFromBuffer } = await loadFileType();

@@ -30,6 +30,14 @@ function carries(body, key) {
 }
 
 /**
+ * @param {*} value - Anything.
+ * @returns {boolean} Whether it is a JSON object rather than an array or null.
+ */
+function isPlainObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
  * The path of a key below an object path — `background` + `light` reads
  * `background.light`.
  *
@@ -122,4 +130,5 @@ module.exports = {
   carries,
   childPath,
   elementPath,
+  isPlainObject,
 };
