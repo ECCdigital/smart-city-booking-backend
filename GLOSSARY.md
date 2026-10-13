@@ -155,24 +155,12 @@ _Avoid_: DTO, View-Model, Payload (als Entity-Name)
 Eine Aktion, die ein Client an diesem AccessPoint anbieten darf: `open`, `close`, `getStatus`. Gefiltert aus dem, was die Provider-Klasse deklariert — der Provider selbst ist nie Grund zu verzweigen. Kann leer sein (eine Pareva-Schließfachanlage).
 _Avoid_: Feature, Fähigkeit, Provider-Capability (das sind die Deklarationen der Provider-Klasse, nicht die des AccessPoints)
 
-**Salto-Guest**:
-Ein Site-User bei Salto KS mit Rolle `site_guest`, den die Plattform für den Keypad-Zugang einer Buchung anlegt: ohne E-Mail, ohne Einladung, nur mit technischem Alias und Ablaufzeitpunkt. Trägt den Salto-generierten PIN und ist der externe Principal des Grants, zu dem er gehört; wird beim Revoke aktiv gelöscht, `expires_at` ist nur Sicherheitsnetz. Belegt einen Seat der Subscription, den erst das Löschen freigibt — nicht der Ablauf. Keine Personendaten des Gastes.
-_Avoid_: Salto-User (der Begriff meint auch Admins), Nutzer pro Buchung, Gastkonto
-
-**Access Group (eines AccessPoints)**:
-Die von der Plattform angelegte und besessene Salto-Access-Group, die ein Salto-Lock mit seinen Salto-Guests verbindet — eine je AccessPoint, lazy beim ersten Grant erzeugt, ID am AccessPoint gespeichert. Ein Override auf eine bestehende Salto-Gruppe ist denkbar, aber nicht Teil des ersten Schritts.
-_Avoid_: Berechtigungsgruppe, Zutrittsgruppe
-
-**Just-in-time-Grant**:
-Die Provisionierung einer Berechtigung erst zu Zugangsbeginn (`accessFrom`) durch einen Job — nicht bei Buchungsbestätigung. Nötig, weil Salto KS für Guest und PIN nur ein Ende kennt, keinen Start. Scheitert der Grant, bleibt die Buchung bestehen; die Provisionierung wird als Failure protokolliert, der Admin benachrichtigt und der Job wiederholt.
-_Avoid_: Scheduled Provisioning, Vorab-Provisionierung
-
 **Salto-Umgebung**:
 Die Wahl `accept` oder `production` in der Salto-Konfiguration eines Tenants. API-Host und Identity-Server ergeben sich daraus; sie sind Salto-Fakten, keine Tenant-Eingaben.
 _Avoid_: apiBaseUrl (als Konfig-Feld), Freitext-URL
 
 **Salto-OTP**:
-Der zeitbasierte Einmalcode (Saltos „ClayCode"), den Salto KS für Remote-Open an einem IQ mit `otp_enabled` verlangt und den die Plattform selbst berechnet: erste 5 Zeichen von `MD5(UTC "YYYYmmDDHHMMSS" + IQ-Secret + IQ-PIN)`, 3 Minuten gültig, innerhalb des Fensters mehrfach nutzbar (Formel am Türbeweis 2026-08-25 belegt). Nie von einem Menschen eingegeben, nie von Salto zugeschickt. `otp_enabled` wird beim Einbuchen des IQ gesetzt und ist einmal eingeschaltet irreversibel — wir können es nirgends umschalten; nur IQs ohne `otp_enabled` brauchen keinen OTP, und das sind Altbestände, nichts Beschaffbares. Nach abgelehntem OTP kein neu berechneter Retry (Gefahr `otp_blocked`, ~20 min Account-Sperre) — maximal ein OTP pro Öffnungsversuch. Nicht zu verwechseln mit dem Keypad-PIN eines Salto-Guests.
+Der zeitbasierte Einmalcode (Saltos „ClayCode"), den Salto KS für Remote-Open an einem IQ mit `otp_enabled` verlangt und den die Plattform selbst berechnet: erste 5 Zeichen von `MD5(UTC "YYYYmmDDHHMMSS" + IQ-Secret + IQ-PIN)`, 3 Minuten gültig, innerhalb des Fensters mehrfach nutzbar (Formel am Türbeweis 2026-08-25 belegt). Nie von einem Menschen eingegeben, nie von Salto zugeschickt. `otp_enabled` wird beim Einbuchen des IQ gesetzt und ist einmal eingeschaltet irreversibel — wir können es nirgends umschalten; nur IQs ohne `otp_enabled` brauchen keinen OTP, und das sind Altbestände, nichts Beschaffbares. Nach abgelehntem OTP kein neu berechneter Retry (Gefahr `otp_blocked`, ~20 min Account-Sperre) — maximal ein OTP pro Öffnungsversuch.
 _Avoid_: TOTP, SMS-Code, PIN (unqualifiziert), Einmalpasswort
 
 **IQ-Aktivierung**:
@@ -180,7 +168,7 @@ Der einmalige, rein API-seitige Vorgang pro IQ, mit dem der System-User des Tena
 _Avoid_: OTP-Einrichtung, Remote-Freischaltung, IQ-Setup, App-Aktivierung (verboten für den System-User)
 
 **Berechtigungsweg (eines Salto-AccessPoints)**:
-Ob ein Gast per Salto-Guest-PIN am Keypad, per Remote-Open aus der Mobile-Key-Seite oder mit beidem hineinkommt. Ergibt sich aus dem Schlosstyp: nur Keypad-Schlösser kennen den PIN-Weg, Remote-Open steht jeder online am IQ hängenden Tür offen. Beim Remote-Open provisioniert die Plattform bei Salto nichts — die Buchung ist die Berechtigung, der System-User öffnet.
+Wie ein Gast an einer Salto-Tür hineinkommt: nur per Remote-Open aus der Mobile-Key-Seite, an jedem Schlosstyp, auch an Schlössern mit Keypad. Einen PIN-Weg gibt es nicht: jeder PIN in Salto KS hängt an einem Nutzer, und die Plattform legt in Salto KS keine Nutzer an. Beim Remote-Open provisioniert die Plattform bei Salto nichts — die Buchung ist die Berechtigung, der System-User öffnet.
 _Avoid_: Zugangsart, Öffnungsart (das ist, was die Tür beim Öffnen tut), Modus (das ist die Admin-Einstellung `remote | authorization | both`, die den Berechtigungsweg wählt)
 
 **Öffnungsart (eines Nuki-AccessPoints)**:
@@ -208,7 +196,7 @@ Die beim Provider angelegte Berechtigung einer Buchung für einen AccessPoint: e
 _Avoid_: Berechtigung (unqualifiziert), Autorisierung, Provisionierung (das ist der Vorgang, der einen Grant erzeugt), Access
 
 **Externer Principal (eines Grants)**:
-Das Subjekt, das der Provider für einen Grant führt und das mit dem Grant wieder verschwinden muss. Der Salto-Guest ist der externe Principal eines Salto-Grants; ein NUKI-Grant hat keinen.
+Das Subjekt, das der Provider für einen Grant führt und das mit dem Grant wieder verschwinden muss. Kein heutiger Provider führt einen — ein NUKI-, iFBS- oder Pareva-Grant hat keinen; die Naht bleibt für einen künftigen Provider.
 _Avoid_: Salto-User (unqualifiziert), Nutzer, Account
 
 **Widerruf (eines Grants)**:

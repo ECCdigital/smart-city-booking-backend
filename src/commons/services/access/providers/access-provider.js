@@ -61,8 +61,7 @@
 /**
  * The authorization a provider made for a booking at an access point: the
  * handle to take it back by, the principal the provider keeps for it where
- * it keeps one - a Salto guest - and the secret the person at the door
- * types. The secret is one-way: it exists in clear only in this answer, the
+ * it keeps one, and the secret the person at the door types. The secret is one-way: it exists in clear only in this answer, the
  * service encrypts it before storing and mails it once. Provider names
  * never appear in it.
  *
