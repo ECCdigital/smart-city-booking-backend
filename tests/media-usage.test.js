@@ -135,6 +135,8 @@ describe("media usage proof", function () {
         $or: [
           { "branding.logo.mediaId": MEDIA },
           { "branding.favicon.mediaId": MEDIA },
+          { "branding.footerLogos.image.mediaId": MEDIA },
+          { "branding.footerLogos.imageDark.mediaId": MEDIA },
           { "dataProtection.reference.mediaId": MEDIA },
           { "legalNotice.reference.mediaId": MEDIA },
           { "termsAndConditions.reference.mediaId": MEDIA },
@@ -162,6 +164,8 @@ describe("media usage proof", function () {
         $or: [
           { "branding.logo.mediaId": MEDIA },
           { "branding.favicon.mediaId": MEDIA },
+          { "branding.footerLogos.image.mediaId": MEDIA },
+          { "branding.footerLogos.imageDark.mediaId": MEDIA },
         ],
       });
     });

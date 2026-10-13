@@ -33,9 +33,12 @@ const DEFAULT_PORTAL = Object.freeze({
 // Where the instance holds a media reference (§4.9 of the media spec). The two
 // halves are searched together for the usage proof and apart wherever only the
 // publicly served sites count.
+// A path into the footer logos matches every logo of the list.
 const BRANDING_MEDIA_PATHS = Object.freeze([
   "branding.logo.mediaId",
   "branding.favicon.mediaId",
+  "branding.footerLogos.image.mediaId",
+  "branding.footerLogos.imageDark.mediaId",
 ]);
 const DOCUMENT_MEDIA_PATHS = Object.freeze([
   "dataProtection.reference.mediaId",

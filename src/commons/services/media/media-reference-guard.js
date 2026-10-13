@@ -6,7 +6,9 @@ const { referenceable } = require("./media-rights");
 const {
   instanceBrandingReferences,
   instanceDocumentReferences,
+  instanceFooterLogoReferences,
 } = require("./instance-media");
+const { MEDIA_KIND } = require("../../schemas/mediaSchema");
 const { tenantDocumentReferences } = require("./tenant-media");
 
 /**
@@ -175,15 +177,18 @@ class MediaReferenceGuard {
    * @param {Array<Object|string>} params.references - Stored reference sites.
    * @param {boolean} params.requirePublic - Whether only public media may be
    *   referenced here.
+   * @param {string} [params.kind] - The kind every medium must be, when the
+   *   site takes one kind only.
    * @returns {Promise<void>}
-   * @throws {BadRequestError} Unknown medium, or an intern medium in a public
-   *   context.
+   * @throws {BadRequestError} Unknown medium, an intern medium in a public
+   *   context, or a medium of another kind than the site takes.
    * @throws {ForbiddenError} The picker right does not cover the medium.
    */
   static async assertInstanceReferencesStorable({
     reaches,
     references,
     requirePublic,
+    kind,
   }) {
     for (const mediaId of collectMediaIds(references)) {
       const media = await MediaManager.getMedia(mediaId, null, DOMAIN);
@@ -197,13 +202,18 @@ class MediaReferenceGuard {
       if (requirePublic && !media.isPublic()) {
         throw new BadRequestError("media_reference_not_public", { mediaId });
       }
+
+      // Named after the kind the site takes: `media_reference_not_image`.
+      if (kind && media.kind !== kind) {
+        throw new BadRequestError(`media_reference_not_${kind}`, { mediaId });
+      }
     }
   }
 
   /**
    * Checks the reference sites of the instance before it is stored: branding
    * is served to anonymous visitors and therefore takes public media only,
-   * legal documents may be internal.
+   * the footer logos public images only, legal documents may be internal.
    *
    * @param {Object} instance - The instance being saved.
    * @param {Object} reaches - The bundle of the saver's route.
@@ -214,6 +224,13 @@ class MediaReferenceGuard {
       reaches,
       references: instanceBrandingReferences(instance),
       requirePublic: true,
+    });
+
+    await MediaReferenceGuard.assertInstanceReferencesStorable({
+      reaches,
+      references: instanceFooterLogoReferences(instance),
+      requirePublic: true,
+      kind: MEDIA_KIND.IMAGE,
     });
 
     await MediaReferenceGuard.assertInstanceReferencesStorable({

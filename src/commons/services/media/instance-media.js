@@ -122,6 +122,25 @@ function instanceBrandingReferences(instance) {
 }
 
 /**
+ * The images of the footer logos, each logo's image and its variant for the
+ * dark mode (map #510) — served to anonymous visitors like the branding
+ * images. Read off the request body before any check, so a list or a logo of
+ * the wrong shape yields nothing here and is refused by the branding check.
+ *
+ * @param {Object} instance - The instance being saved.
+ * @returns {Array<Object|string|null>}
+ */
+function instanceFooterLogoReferences(instance) {
+  const logos = instance?.branding?.footerLogos;
+
+  if (!Array.isArray(logos)) {
+    return [];
+  }
+
+  return logos.flatMap((logo) => [logo?.image, logo?.imageDark]);
+}
+
+/**
  * The legal document reference sites of an instance.
  *
  * @param {Object} instance - The instance being saved.
@@ -159,4 +178,5 @@ module.exports = {
   exportInstanceMedia,
   instanceBrandingReferences,
   instanceDocumentReferences,
+  instanceFooterLogoReferences,
 };
