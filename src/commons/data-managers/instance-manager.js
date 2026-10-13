@@ -17,6 +17,7 @@ const {
   normalizeBranding,
   withBrandingDefaults,
 } = require("../services/instance/branding-schema");
+const { confirmFontLicense } = require("../services/instance/branding-font");
 const {
   SUPERVISION_LEVELS,
   assertSupervisionLevel,
@@ -40,6 +41,7 @@ const BRANDING_MEDIA_PATHS = Object.freeze([
   "branding.favicon.mediaId",
   "branding.footerLogos.image.mediaId",
   "branding.footerLogos.imageDark.mediaId",
+  "branding.font.reference.mediaId",
 ]);
 const DOCUMENT_MEDIA_PATHS = Object.freeze([
   "dataProtection.reference.mediaId",
@@ -74,7 +76,16 @@ class InstanceManager {
     return rawInstance.toEntity();
   }
 
-  static async updateInstance(instance) {
+  /**
+   * Stores the instance as a whole.
+   *
+   * @param {Object} instance - The instance being saved.
+   * @param {Object} [session]
+   * @param {?string} [session.userId] - Login of the person saving: who
+   *   confirms the licence of a new font of the library.
+   * @returns {Promise<?Instance>} The stored instance, or null without one.
+   */
+  static async updateInstance(instance, { userId = null } = {}) {
     // The mirror reads absence, so it has to see the payload as it arrived: a
     // constructed entity carries the schema default `portalUrl: ""` and would
     // make every deliberate clear look like an omission.
@@ -115,6 +126,14 @@ class InstanceManager {
     }
 
     await InstanceManager._applyBackground(instanceEntity, rawInstance);
+
+    // A confirmed licence holds for the font it was given for, so it is
+    // settled against the stored one.
+    instanceEntity.branding.font = confirmFontLicense(
+      instanceEntity.branding.font,
+      rawInstance.branding?.font,
+      { confirmedBy: userId },
+    );
 
     // A write that does not name the Startstufe keeps the stored one: a
     // client from before the field must not reset it to the default.

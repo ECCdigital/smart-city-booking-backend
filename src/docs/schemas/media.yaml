@@ -60,7 +60,7 @@ components:
           example: tenant1
         kind:
           type: string
-          enum: [image, document]
+          enum: [image, document, font]
           example: image
         mimeType:
           type: string

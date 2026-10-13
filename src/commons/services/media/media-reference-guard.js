@@ -10,6 +10,7 @@ const {
 } = require("./instance-media");
 const { MEDIA_KIND } = require("../../schemas/mediaSchema");
 const { tenantDocumentReferences } = require("./tenant-media");
+const { fontReference } = require("../instance/branding-font");
 
 /**
  * Guards the way into the reference sites of an entity (§4.3 of the media
@@ -240,6 +241,15 @@ class MediaReferenceGuard {
       reaches,
       references: instanceDocumentReferences(instance),
       requirePublic: false,
+    });
+
+    // The font is served to anonymous visitors like the branding images, and
+    // only a font will do.
+    await MediaReferenceGuard.assertInstanceReferencesStorable({
+      reaches,
+      references: [fontReference(instance?.branding)],
+      requirePublic: true,
+      kind: MEDIA_KIND.FONT,
     });
   }
 }
