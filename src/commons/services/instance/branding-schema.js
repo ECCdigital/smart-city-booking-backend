@@ -261,16 +261,16 @@ function readFooterLogos(branding, errors, path) {
  * instance is written.
  *
  * @param {*} branding - The branding of the request body.
- * @param {string} [path="branding"] - Its path in the request body.
  * @returns {*} The branding to store.
  * @throws {ValidationError} With every fault, each at its path below
  *   `branding`.
  */
-function normalizeBranding(branding, path = "branding") {
+function normalizeBranding(branding) {
   if (!isPlainObject(branding)) {
     return withBrandingDefaults(branding);
   }
 
+  const path = "branding";
   const errors = new HeroValidationErrors();
 
   checkAccent(branding, errors, path);
@@ -298,10 +298,6 @@ function normalizeBranding(branding, path = "branding") {
 }
 
 module.exports = {
-  AUTH_LOGO_SIZES,
-  FOOTER_LOGO_SIZES,
-  HEADER_COLORS,
-  MAX_FOOTER_LOGOS,
   defaultBranding,
   normalizeBranding,
   withBrandingDefaults,

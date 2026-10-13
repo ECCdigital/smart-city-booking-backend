@@ -135,7 +135,6 @@ function readFont(branding, errors, path) {
  * @param {Object} session
  * @param {?string} session.confirmedBy - Login of the person saving.
  * @param {Date} [session.now] - The moment of the save.
- * @param {string} [path="branding"] - Path of the branding in the body.
  * @returns {?Object} The font to store.
  * @throws {ValidationError} `required` at `branding.font.license` when a new
  *   file comes without the tick, or any file with the tick taken off.
@@ -144,7 +143,6 @@ function confirmFontLicense(
   font,
   storedFont,
   { confirmedBy, now = new Date() },
-  path = "branding",
 ) {
   if (font?.source !== FONT_SOURCE.MEDIA) {
     return font ?? null;
@@ -163,10 +161,7 @@ function confirmFontLicense(
 
   if (font.license?.confirmed !== true) {
     const errors = new HeroValidationErrors();
-    errors.add(
-      childPath(childPath(path, "font"), "license"),
-      ERROR_CODES.required,
-    );
+    errors.add("branding.font.license", ERROR_CODES.required);
     errors.throwIfAny();
   }
 
@@ -248,8 +243,6 @@ async function exportFont(branding) {
 }
 
 module.exports = {
-  CURATED_FONT_IDS,
-  FONT_SOURCE,
   confirmFontLicense,
   exportFont,
   fontReference,
