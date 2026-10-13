@@ -4,6 +4,7 @@ const { exportInstanceMedia } = require("../../services/media/instance-media");
 const {
   withBrandingDefaults,
 } = require("../../services/instance/branding-schema");
+const { withoutFontLicense } = require("../../services/instance/branding-font");
 
 class Instance {
   /**
@@ -22,7 +23,7 @@ class Instance {
    * Remove private data from the instance. `allowAllUsersToCreateTenant`
    * stays: it only says that everyone may create a tenant, and public
    * consumers gate their tenant self-creation entry points on it; the
-   * allow-list and the owners are private.
+   * allow-list, the owners and the licence of the font are private.
    */
   removePrivateData() {
     this.applications = this.applications.map((a) => {
@@ -47,6 +48,8 @@ class Instance {
     delete this.isInitialized;
     delete this.allowedUsersToCreateTenant;
     delete this.bookableCustomFields;
+    // Who confirmed the licence of the font is a proof for customer care.
+    this.branding = withoutFontLicense(this.branding);
   }
 
   /**

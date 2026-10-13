@@ -4,6 +4,9 @@ const MEGABYTE = 1024 * 1024;
 
 const DEFAULT_IMAGE_SIZE_MB = 15;
 const DEFAULT_DOCUMENT_SIZE_MB = 50;
+// A font is loaded on every page of the storefront before it may show, so its
+// limit is fixed and far below the others (map #510).
+const FONT_MAX_BYTES = 500 * 1024;
 // Headroom between the largest media limit and the global express-fileupload
 // backstop: the media layer must be the one answering with a 400, the backstop
 // only catches uploads no route would ever accept.
@@ -54,10 +57,14 @@ function maxDocumentBytes() {
 /**
  * The upload limit that applies to a media kind.
  *
- * @param {string} kind - `image` or `document`.
+ * @param {string} kind - `image`, `document` or `font`.
  * @returns {number} Size in bytes.
  */
 function maxBytesForKind(kind) {
+  if (kind === MEDIA_KIND.FONT) {
+    return FONT_MAX_BYTES;
+  }
+
   return kind === MEDIA_KIND.IMAGE ? maxImageBytes() : maxDocumentBytes();
 }
 

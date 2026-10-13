@@ -3,6 +3,8 @@ const { Schema } = require("mongoose");
 const MEDIA_KIND = {
   IMAGE: "image",
   DOCUMENT: "document",
+  // A web font the instance branding sets (map #510); woff2 only.
+  FONT: "font",
 };
 
 const MEDIA_VISIBILITY = {

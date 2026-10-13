@@ -16,6 +16,7 @@ const {
   childPath,
   elementPath,
 } = require("../hero-layout/hero-validation");
+const { readFont } = require("./branding-font");
 
 const ERROR_CODES = SchemaUtils.ERROR_CODES;
 
@@ -45,6 +46,8 @@ function defaultBranding() {
     header: "primary",
     authLogoSize: "sm",
     footerLogos: [],
+    // The system font; see `branding-font.js`.
+    font: null,
     logo: null,
     logoDark: null,
     favicon: null,
@@ -353,14 +356,18 @@ function normalizeBranding(branding, path = "branding") {
   checkEnum(branding, "authLogoSize", AUTH_LOGO_SIZES, errors, path);
   const logoDark = readLogoDark(branding, errors, path);
   const footerLogos = readFooterLogos(branding, errors, path);
+  const font = readFont(branding, errors, path);
 
   errors.throwIfAny();
 
+  // The font in its stored shape; its licence is settled against the stored
+  // instance (`confirmFontLicense`).
   return {
     ...withBrandingDefaults(
       footerLogos === undefined ? branding : { ...branding, footerLogos },
     ),
     logoDark,
+    font,
   };
 }
 
