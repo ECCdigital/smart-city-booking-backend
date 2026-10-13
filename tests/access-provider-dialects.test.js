@@ -85,6 +85,7 @@ const {
   TENANT_MAIL,
   MINUTE,
   SALTO_LOCK_ID,
+  SALTO_IQ_ID,
   IFBS_BOOKING_ID,
   IFBS_LOCATION_ID,
   IFBS_BOX_NUMBER,
@@ -148,7 +149,7 @@ const SALTO_DOOR = {
   provider: "salto-ks",
   externalId: SALTO_LOCK_ID,
   label: "Tür 01",
-  mode: AccessPointMode.AUTHORIZATION,
+  mode: AccessPointMode.REMOTE,
   validationRules: [],
 };
 
@@ -180,12 +181,11 @@ const PAREVA_LOCKER = {
 const HOLD_TTL_MS = 2 * MINUTE;
 
 /**
- * The same doors with a remote way in: opening through the API is refused at
- * a door that only takes a code, so the open dialects are exercised at doors
- * that take both.
+ * The Nuki door with a remote way in: opening through the API is refused at
+ * a door that only takes a code, so the open dialects are exercised at a
+ * door that takes both. The Salto door opens remotely anyway.
  */
 const REMOTE_NUKI_DOOR = { ...NUKI_DOOR, mode: AccessPointMode.BOTH };
-const REMOTE_SALTO_DOOR = { ...SALTO_DOOR, mode: AccessPointMode.BOTH };
 
 const IN_MEMORY_DOOR = {
   id: "door-3",
@@ -836,113 +836,73 @@ describe("access provider dialects: the adapters as they answer", () => {
       });
     });
 
-    it("answers a grant as a Grant: the access as its id, the guest as its external principal", async () => {
-      const context = doorContext({ pin: "424242" });
-
-      const grant = await provider.grantAuthorization(SALTO_DOOR, context);
-
-      expect(grant).to.deep.equal({
-        authorizationId: "access-2",
-        externalPrincipalId: "user-1",
-        secret: "424242",
+    /**
+     * A keypad lock on an IQ with OTP, the tenant's activation of that IQ in
+     * the given state (none at all for `null`).
+     */
+    function keypadLockOnIq(lockType, activationState) {
+      const tenant = tenantWithSaltoApp();
+      tenant.applications[0].iqActivations = activationState
+        ? [{ iqId: SALTO_IQ_ID, state: activationState }]
+        : [];
+      sinon.stub(TenantManager, "getTenant").resolves(tenant);
+      return new SaltoKsAccessProvider({
+        client: new FakeSaltoKsApiClient({
+          locks: [
+            saltoLock({
+              lock_type: lockType,
+              iq: { id: SALTO_IQ_ID, otp_enabled: true },
+            }),
+          ],
+          iqs: [saltoIq({ otp_enabled: true })],
+        }),
       });
-      expect([...clients["salto-ks"].users.values()]).to.deep.equal([
-        {
-          id: "user-1",
-          firstName: "Erika",
-          lastName: "Muster",
-          email: "erika@example.test",
-        },
-      ]);
-      expect([...clients["salto-ks"].accesses.values()]).to.deep.equal([
-        {
-          id: "access-2",
-          userId: "user-1",
-          lockIds: [SALTO_LOCK_ID],
-          validFrom: new Date(context.accessFrom).toISOString(),
-          validTo: new Date(context.accessTo).toISOString(),
-          pin: "424242",
-        },
-      ]);
+    }
+
+    it("declares neither grantAuthorization nor revokeAuthorization: every Salto PIN hangs on a user, and Biletado creates none in Salto KS", async () => {
+      expect(SaltoKsAccessProvider.capabilities).not.to.include(
+        "grantAuthorization",
+      );
+      expect(SaltoKsAccessProvider.capabilities).not.to.include(
+        "revokeAuthorization",
+      );
+      await rejects(
+        provider.grantAuthorization(SALTO_DOOR, doorContext()),
+        Error,
+        "grantAuthorization() is not supported",
+      );
+      await rejects(
+        provider.revokeAuthorization(SALTO_DOOR, {
+          authorizationId: "access-1",
+          externalPrincipalId: "user-1",
+          secret: null,
+        }),
+        Error,
+        "revokeAuthorization() is not supported",
+      );
     });
 
-    it("answers a revoke with the guest removed, holding neither access nor guest afterwards", async () => {
-      const grant = await provider.grantAuthorization(
-        SALTO_DOOR,
-        doorContext(),
-      );
+    for (const lockType of ["escutcheon_pin", "wall_reader_pin"]) {
+      it(`offers only remote at a ${lockType} lock on an activated IQ: the keypad gives no PIN`, async () => {
+        provider = keypadLockOnIq(lockType, "activated");
 
-      const revocation = await provider.revokeAuthorization(SALTO_DOOR, grant);
+        const [point] = await provider.listAccessPoints(TENANT);
 
-      expect(revocation).to.deep.equal({ principalRemoved: true });
-      expect(clients["salto-ks"].accesses.size).to.equal(0);
-      expect(clients["salto-ks"].users.size).to.equal(0);
-    });
-
-    it("answers a guest that could not be deleted as not removed, the access revoked all the same", async () => {
-      const grant = await provider.grantAuthorization(
-        SALTO_DOOR,
-        doorContext(),
-      );
-      sinon
-        .stub(clients["salto-ks"], "deleteUser")
-        .rejects(saltoHttpError(500, { Message: "Internal error" }));
-
-      const revocation = await provider.revokeAuthorization(SALTO_DOOR, grant);
-
-      expect(revocation).to.deep.equal({ principalRemoved: false });
-      expect(clients["salto-ks"].accesses.size).to.equal(0);
-      expect(clients["salto-ks"].users.size).to.equal(1);
-    });
-
-    it("tolerates revoking an access Salto no longer has, and still removes the guest", async () => {
-      const grant = await provider.grantAuthorization(
-        SALTO_DOOR,
-        doorContext(),
-      );
-      clients["salto-ks"].accesses.clear();
-
-      const revocation = await provider.revokeAuthorization(SALTO_DOOR, grant);
-
-      expect(revocation).to.deep.equal({ principalRemoved: true });
-      expect(clients["salto-ks"].users.size).to.equal(0);
-    });
-
-    it("answers a revoke of a guest Salto already deleted as removed", async () => {
-      const grant = await provider.grantAuthorization(
-        SALTO_DOOR,
-        doorContext(),
-      );
-      clients["salto-ks"].users.clear();
-
-      const revocation = await provider.revokeAuthorization(SALTO_DOOR, grant);
-
-      expect(revocation).to.deep.equal({ principalRemoved: true });
-    });
-
-    it("throws Salto's own error when the access revoke fails for any other reason, leaving the guest", async () => {
-      const grant = await provider.grantAuthorization(
-        SALTO_DOOR,
-        doorContext(),
-      );
-      sinon
-        .stub(clients["salto-ks"], "revokeAccess")
-        .rejects(saltoHttpError(500, { Message: "Internal error" }));
-
-      await rejectsRaw(provider.revokeAuthorization(SALTO_DOOR, grant), (err) =>
-        expect(err.response.status).to.equal(500),
-      );
-      expect(clients["salto-ks"].users.size).to.equal(1);
-    });
-
-    it("answers a grant without any id as nothing to revoke", async () => {
-      const revocation = await provider.revokeAuthorization(SALTO_DOOR, {
-        authorizationId: null,
-        externalPrincipalId: null,
-        secret: null,
+        expect(point.supportedModes).to.deep.equal([AccessPointMode.REMOTE]);
+        expect(point.capabilities).to.deep.equal(["remote"]);
+        expect(
+          await provider.getSupportedModes(SALTO_DOOR, TENANT),
+        ).to.deep.equal([AccessPointMode.REMOTE]);
       });
+    }
 
-      expect(revocation).to.deep.equal({ principalRemoved: null });
+    it("offers no mode at a keypad lock on an IQ without activation", async () => {
+      provider = keypadLockOnIq("escutcheon_pin", null);
+
+      const [point] = await provider.listAccessPoints(TENANT);
+
+      expect(point.supportedModes).to.deep.equal([]);
+      expect(point.capabilities).to.deep.equal([]);
     });
 
     it("maps a failure of the open call itself to an AccessOpenError", async () => {
@@ -1796,7 +1756,7 @@ describe("access provider dialects: what AccessService makes of them", () => {
     });
 
     it("answers a Salto open with no process to poll and audits the outcome", async () => {
-      stubBooking(createBooking(), [REMOTE_SALTO_DOOR]);
+      stubBooking(createBooking(), [SALTO_DOOR]);
 
       const outcome = await AccessService.open(
         TENANT,
@@ -1916,7 +1876,7 @@ describe("access provider dialects: what AccessService makes of them", () => {
         ErrorCode: 1001,
         Message: "Forbidden",
       });
-      stubBooking(createBooking(), [REMOTE_SALTO_DOOR]);
+      stubBooking(createBooking(), [SALTO_DOOR]);
 
       await assert.rejects(
         AccessService.open(TENANT, "booking-1", "door-2", "user-1"),
@@ -2339,7 +2299,7 @@ describe("access provider dialects: what AccessService makes of them", () => {
       });
     });
 
-    it("stores a Salto grant with the guest as its external principal", async () => {
+    it("grants nothing at a Salto door: it opens remotely, with no PIN to mail", async () => {
       stubBooking(createBooking(), [SALTO_DOOR]);
 
       const [entry] = await AccessService.provisionForBooking(
@@ -2347,14 +2307,35 @@ describe("access provider dialects: what AccessService makes of them", () => {
         "booking-1",
       );
 
-      expect(entry).to.include({ provider: "salto-ks", isProvisioned: true });
-      expect(entry.grant).to.include({
-        authorizationId: "access-2",
-        externalPrincipalId: "user-1",
+      expect(entry).to.include({
+        provider: "salto-ks",
+        mode: AccessPointMode.REMOTE,
+        isProvisioned: true,
       });
-      expect(SecurityUtils.decrypt(entry.grant.secret)).to.match(/^\d{6}$/);
+      expect(entry.grant ?? null).to.equal(null);
       expect(loggedPayload("provision").payload).to.deep.equal({
-        grant: { authorizationId: "access-2", externalPrincipalId: "user-1" },
+        mode: AccessPointMode.REMOTE,
+      });
+      expect(mailModule.notify.called).to.be.false;
+    });
+
+    it("skips a Salto door still stored with both as not supported, granting nothing", async () => {
+      const door = { ...SALTO_DOOR, mode: AccessPointMode.BOTH };
+      stubBooking(createBooking(), [door]);
+
+      let error;
+      try {
+        await AccessService.provisionForBooking(TENANT, "booking-1");
+      } catch (err) {
+        error = err;
+      }
+
+      expect(error).to.be.instanceOf(AccessProvisionError);
+      expect(error.message).to.contain("door-2");
+      expect(loggedPayload("provision")).to.include({
+        result: "failure",
+        errorMessage:
+          "Access mode 'both' is not supported by access point 'door-2'",
       });
     });
 
@@ -2397,51 +2378,6 @@ describe("access provider dialects: what AccessService makes of them", () => {
   });
 
   describe("revokeForBooking", () => {
-    it("records a Salto revoke with the guest removed, keeping the grant for the record", async () => {
-      const booking = createBooking();
-      stubBooking(booking, [SALTO_DOOR]);
-      await AccessService.provisionForBooking(TENANT, "booking-1");
-
-      const [entry] = await AccessService.revokeForBooking(TENANT, "booking-1");
-
-      expect(entry).to.include({
-        isProvisioned: false,
-        principalCleanupError: null,
-      });
-      expect(entry.revokedAt).to.be.a("number");
-      expect(entry.principalRemovedAt).to.be.a("number");
-      expect(entry.grant).to.include({
-        authorizationId: "access-2",
-        externalPrincipalId: "user-1",
-      });
-      expect(clients["salto-ks"].accesses.size).to.equal(0);
-      expect(clients["salto-ks"].users.size).to.equal(0);
-      expect(loggedPayload("revoke").payload).to.deep.equal({
-        grant: { authorizationId: "access-2", externalPrincipalId: "user-1" },
-        revocation: { principalRemoved: true },
-      });
-    });
-
-    it("keeps a guest that could not be removed as a cleanup error for the job", async () => {
-      stubBooking(createBooking(), [SALTO_DOOR]);
-      await AccessService.provisionForBooking(TENANT, "booking-1");
-      sandbox
-        .stub(clients["salto-ks"], "deleteUser")
-        .rejects(saltoHttpError(500, { Message: "Internal error" }));
-
-      const [entry] = await AccessService.revokeForBooking(TENANT, "booking-1");
-
-      expect(entry).to.include({
-        isProvisioned: false,
-        principalRemovedAt: null,
-      });
-      expect(entry.revokedAt).to.be.a("number");
-      expect(entry.principalCleanupError).to.be.a("string");
-      expect(loggedPayload("revoke").payload.revocation).to.deep.equal({
-        principalRemoved: false,
-      });
-    });
-
     it("records a NUKI revoke, which has no principal to remove", async () => {
       stubBooking(createBooking(), [NUKI_DOOR]);
       await AccessService.provisionForBooking(TENANT, "booking-1");
