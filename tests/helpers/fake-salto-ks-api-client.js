@@ -42,10 +42,6 @@ class FakeSaltoKsApiClient extends SaltoKsApiClient {
     });
     this.locks = new Map(locks.map((lock) => [String(lock.id), lock]));
     this.iqs = new Map(iqs.map((iq) => [String(iq.id), iq]));
-    /** @type {Map<string, Object>} user id -> user */
-    this.users = new Map();
-    /** @type {Map<string, Object>} access id -> access */
-    this.accesses = new Map();
     this.subscriptions = new Map();
     /** @type {{ lockId: string, otp: string|undefined }[]} every open sent */
     this.openings = [];
@@ -92,40 +88,6 @@ class FakeSaltoKsApiClient extends SaltoKsApiClient {
       this.openings.push({ lockId: match[1], otp: data?.otp });
       lock.locked_state = "unlocked";
       return { ...lock };
-    }
-
-    if (rest === "/users" && method === "post") {
-      const id = `user-${this._nextId++}`;
-      const user = { id, ...data };
-      this.users.set(id, user);
-      return user;
-    }
-
-    if (
-      (match = rest.match(/^\/users\/([^/]+)\/access$/)) &&
-      method === "post"
-    ) {
-      if (!this.users.has(match[1])) {
-        throw saltoHttpError(404, { Message: "User not found" });
-      }
-      const id = `access-${this._nextId++}`;
-      const access = { id, userId: match[1], ...data };
-      this.accesses.set(id, access);
-      return access;
-    }
-
-    if ((match = rest.match(/^\/access\/([^/]+)$/)) && method === "delete") {
-      if (!this.accesses.delete(match[1])) {
-        throw saltoHttpError(404, { Message: "Access not found" });
-      }
-      return "";
-    }
-
-    if ((match = rest.match(/^\/users\/([^/]+)$/)) && method === "delete") {
-      if (!this.users.delete(match[1])) {
-        throw saltoHttpError(404, { Message: "User not found" });
-      }
-      return "";
     }
 
     if (rest === "/subscriptions" && method === "post") {

@@ -362,18 +362,14 @@ describe("SaltoKsAccessProvider capability rule", () => {
     },
   ];
 
-  it("offers remote and authorization for a keypad lock on an activated IQ", async () => {
+  it("offers only remote for a keypad lock on an activated IQ", async () => {
     stubTenant(activated);
     stubLocks([saltoLock({ lock_type: "escutcheon_pin" })]);
 
     const [point] = await provider.listAccessPoints(TENANT_ID);
 
-    expect(point.supportedModes).to.have.members([
-      AccessPointMode.REMOTE,
-      AccessPointMode.AUTHORIZATION,
-      AccessPointMode.BOTH,
-    ]);
-    expect(point.capabilities).to.have.members(["remote", "authorization"]);
+    expect(point.supportedModes).to.deep.equal([AccessPointMode.REMOTE]);
+    expect(point.capabilities).to.deep.equal(["remote"]);
   });
 
   it("offers only remote for a lock without keypad", async () => {
@@ -395,9 +391,7 @@ describe("SaltoKsAccessProvider capability rule", () => {
 
     const points = await provider.listAccessPoints(TENANT_ID);
 
-    expect(points[0].supportedModes).to.deep.equal([
-      AccessPointMode.AUTHORIZATION,
-    ]);
+    expect(points[0].supportedModes).to.deep.equal([]);
     expect(points[1].supportedModes).to.deep.equal([]);
   });
 

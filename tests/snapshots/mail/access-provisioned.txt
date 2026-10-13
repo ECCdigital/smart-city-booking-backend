@@ -58,8 +58,8 @@ Attachments:
       </li>
       <li>
         <strong>Seiteneingang</strong><br>
-        Anbieter: salto-ks<br>
-        PIN: <strong>775310</strong>
+        Anbieter: nuki<br>
+        PIN: <strong>775319</strong>
       </li>
   </ul>
 
