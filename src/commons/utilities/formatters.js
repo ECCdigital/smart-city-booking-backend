@@ -152,7 +152,7 @@ class Formatters {
   static translateBookedVia(value) {
     switch (value) {
       case "user":
-        return "Userkonto";
+        return "Angemeldet";
       case "guest":
         return "Gast";
       case "admin":
