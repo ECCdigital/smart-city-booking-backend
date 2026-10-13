@@ -2,6 +2,7 @@ const { assertHeroLayoutStorable } = require("./hero-media");
 const SchemaUtils = require("../../utilities/schemaUtils");
 const { MEDIA_REFERENCE_SOURCE } = require("../../schemas/mediaSchema");
 const {
+  HEX_COLOR,
   HeroValidationErrors,
   childPath,
   elementPath,
@@ -113,9 +114,6 @@ const MAX_TEXT_LENGTH = 200;
 // empty `en` reads as absent and the consumers fall back to `de`.
 const LOCALES = Object.freeze(["de", "en"]);
 const REQUIRED_LOCALE = "de";
-
-// No alpha, no shorthand — the colour convention of the Shared contract.
-const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
 // Read-only keys the export adds to a media reference; stripped on the way in.
 const MEDIA_REFERENCE_DERIVED_KEYS = Object.freeze(["url", "width", "height"]);

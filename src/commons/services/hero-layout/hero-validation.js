@@ -12,6 +12,10 @@ const { ValidationError } = require("../../../errors/ValidationError");
  * other.
  */
 
+// No alpha, no shorthand — the colour convention of the Shared contract, for
+// the Hero and the branding alike.
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
 /**
  * Whether a body names a key at all. The Hero reads `null` as "use the derived
  * default", so a key that carries null and a key that is not there mean
@@ -113,6 +117,7 @@ class HeroValidationErrors {
 }
 
 module.exports = {
+  HEX_COLOR,
   HeroValidationErrors,
   carries,
   childPath,

@@ -632,7 +632,9 @@ Example:
   "portalUrl": "",
   "branding": {
     "active": false,
-    "theme": { "colors": { "primary": "", "secondary": "" } },
+    "theme": { "colors": { "primary": "", "secondary": "", "accent": "" } },
+    "header": "primary",
+    "authLogoSize": "sm",
     "logoUrl": "",
     "faviconUrl": ""
   },
@@ -641,6 +643,8 @@ Example:
 ```
 
 > **Note:** `publicOffersEnabled` and `portalUrl` replace the legacy fields `enableCatalog` and `catalogUrl`. Instance-level **branding** (theme, logo) applies to catalogs and the public portal; it is not stored on the Catalog entity itself.
+>
+> The appearance in `branding` (map #510): `theme.colors.accent` is `""` (none) or `#rrggbb`, `header` is `neutral`, `primary` or `secondary`, `authLogoSize` (logo on the sign-in pages) is `sm`, `md` or `lg`. `PUT /api/instances` refuses any other value; a field an instance never stored reads as its default shown above. Defaults and the check live in `src/commons/services/instance/branding-schema.js`.
 
 ### GroupBooking
 

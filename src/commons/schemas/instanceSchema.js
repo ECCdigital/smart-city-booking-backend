@@ -5,6 +5,7 @@ const {
   SUPERVISION_LEVELS,
   INITIAL_SUPERVISION_LEVELS,
 } = require("../services/supervision/supervision-constants");
+const { defaultBranding } = require("../services/instance/branding-schema");
 const defaultMailTemplate = fs.readFileSync(
   path.join(
     __dirname,
@@ -98,18 +99,10 @@ const instanceSchemaDefinition = {
   portalUrl: { type: String, default: "" },
   // `logo` and `favicon` hold the media references (§4.9); `logoUrl` and
   // `faviconUrl` stay the derived read fields the frontends use.
+  // The defaults below the top level live in `branding-schema.js`.
   branding: {
     type: Object,
-    default: () => ({
-      active: false,
-      theme: {
-        colors: { primary: "", secondary: "" },
-      },
-      logo: null,
-      favicon: null,
-      logoUrl: "",
-      faviconUrl: "",
-    }),
+    default: defaultBranding,
   },
 
   bookableCustomFields: {
