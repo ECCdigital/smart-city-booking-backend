@@ -402,6 +402,8 @@ describe("the Theme Bundle carries name, heroLayout, logo and background", funct
         "logoUrl",
         "faviconUrl",
         "theme",
+        "header",
+        "authLogoSize",
         "name",
         "heroLayout",
         "background",

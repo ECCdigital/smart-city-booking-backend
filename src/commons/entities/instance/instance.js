@@ -1,6 +1,9 @@
 const { instanceSchemaDefinition } = require("../../schemas/instanceSchema");
 const SchemaUtils = require("../../utilities/schemaUtils");
 const { exportInstanceMedia } = require("../../services/media/instance-media");
+const {
+  withBrandingDefaults,
+} = require("../../services/instance/branding-schema");
 
 class Instance {
   /**
@@ -10,6 +13,9 @@ class Instance {
   constructor(params = {}) {
     const defaults = SchemaUtils.createDefaults(instanceSchemaDefinition);
     Object.assign(this, defaults, params);
+    // The schema fills in the branding only as a whole; a stored one that
+    // lacks a field added since reads its default.
+    this.branding = withBrandingDefaults(this.branding);
   }
 
   /**

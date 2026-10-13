@@ -14,23 +14,16 @@ const {
   normalizeBackground,
 } = require("../services/hero-layout/hero-layout-schema");
 const {
+  normalizeBranding,
+  withBrandingDefaults,
+} = require("../services/instance/branding-schema");
+const {
   SUPERVISION_LEVELS,
   assertSupervisionLevel,
   INITIAL_SUPERVISION_LEVELS,
 } = require("../services/supervision/supervision-constants");
 const { NotFoundError } = require("../../errors/BaseError");
 const { userIdsMatch } = require("../utilities/user-id-utils");
-
-const DEFAULT_BRANDING = Object.freeze({
-  active: false,
-  theme: {
-    colors: { primary: "", secondary: "" },
-  },
-  logo: null,
-  favicon: null,
-  logoUrl: "",
-  faviconUrl: "",
-});
 
 const DEFAULT_PORTAL = Object.freeze({
   publicOffersEnabled: false,
@@ -107,6 +100,10 @@ class InstanceManager {
     );
 
     instanceEntity.validate();
+
+    // The appearance in the branding is refused before anything is read or
+    // written, like the rest of the instance.
+    instanceEntity.branding = normalizeBranding(instanceEntity.branding);
 
     const rawInstance = await InstanceModel.findOne();
     if (!rawInstance) {
@@ -224,10 +221,11 @@ class InstanceManager {
     const raw = await InstanceModel.findOne({}, { branding: 1 }).lean();
     // `logoUrl`/`faviconUrl` are derived from the stored media references
     // (§4.9), so every catalog endpoint keeps reading the fields it always did.
-    const branding = exportInstanceBranding({
-      ...DEFAULT_BRANDING,
-      ...(raw?.branding ?? {}),
-    });
+    // The defaults are filled in deep: an instance from before the accent
+    // colour stored `theme.colors` without it.
+    const branding = exportInstanceBranding(
+      withBrandingDefaults(raw?.branding),
+    );
 
     InstanceCache.setBranding(branding);
     return branding;

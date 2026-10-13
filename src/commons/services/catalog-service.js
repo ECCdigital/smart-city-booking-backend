@@ -21,6 +21,7 @@ const {
   carries,
 } = require("./hero-layout/hero-validation");
 const { portalNameOf } = require("./hero-layout/hero-default-layout");
+const { withBrandingDefaults } = require("./instance/branding-schema");
 const SchemaUtils = require("../utilities/schemaUtils");
 const {
   BadRequestError,
@@ -82,6 +83,24 @@ function activeLogo(branding) {
 }
 
 /**
+ * The appearance settings of the branding the Theme Bundle delivers beside the
+ * theme: the header and the logo size of the sign-in pages. Like the theme
+ * they follow `branding.active`, but where the theme goes out as null these go
+ * out as their defaults, so the storefront always reads a value. The stored
+ * values stay untouched.
+ *
+ * @param {?Object} branding - The instance branding.
+ * @returns {{header: string, authLogoSize: string}} The settings in force.
+ */
+function activeAppearance(branding) {
+  const { header, authLogoSize } = withBrandingDefaults(
+    branding?.active ? branding : null,
+  );
+
+  return { header, authLogoSize };
+}
+
+/**
  * The Theme Bundle of one Catalog (hero-layout spec, Shared contract): the
  * exported branding and, on every bundle, the Portal Name, the Hero Layout
  * (stored or the derived default), the Background and the logo, media
@@ -104,6 +123,7 @@ async function exportTheme(catalog, branding) {
 
   return {
     ...exportBranding(branding),
+    ...activeAppearance(branding),
     name,
     heroLayout,
     background,
