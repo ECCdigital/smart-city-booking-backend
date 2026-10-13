@@ -11,25 +11,14 @@
 const { expect } = require("chai");
 const sinon = require("sinon");
 
+const { ADMIN } = require("./helpers/booking-lifecycle-harness");
 const {
-  installHarness,
-  bookable,
-  TENANT,
-  ADMIN,
-  ROLE_HOLDER,
-} = require("./helpers/booking-lifecycle-harness");
-const { installRouteWorld, FIXTURE_ID } = require("./helpers/route-world");
+  installStoredInstanceHarness,
+} = require("./helpers/stored-instance-harness");
 const InstanceManager = require("../src/commons/data-managers/instance-manager");
 const InstanceModel = require("../src/commons/data-managers/models/instanceModel");
 const MediaManager = require("../src/commons/data-managers/media-manager");
-const Instance = require("../src/commons/entities/instance/instance");
 const { Media } = require("../src/commons/entities/media/media");
-const {
-  InstanceCache,
-} = require("../src/commons/services/instance/instance-cache");
-const {
-  ThemeExportCache,
-} = require("../src/commons/services/catalog/theme-export-cache");
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
@@ -78,72 +67,13 @@ describe("Footer logos in the instance branding", function () {
   this.timeout(20000);
 
   let h;
-  let kept;
 
-  before(async function () {
-    h = await installHarness({
-      bookables: {
-        [FIXTURE_ID]: bookable({
-          id: FIXTURE_ID,
-          title: "Fixture",
-          ownerUserId: ROLE_HOLDER,
-        }),
-      },
-      instance: { isInitialized: true },
-    });
-    installRouteWorld({
-      tenantId: TENANT,
-      tenant: h.tenant,
-      ownerUserId: ROLE_HOLDER,
-      bookables: h.bookables,
-    });
+  installStoredInstanceHarness((harness) => {
+    h = harness;
 
     for (const medium of MEDIA) {
       MediaManager.getMedia.withArgs(medium.id).resolves(medium);
     }
-
-    // The model keeps the harness' stored instance: a write replaces it as
-    // the database would, and every read of the instance sees the result —
-    // the branding read of the Theme Bundle included, lean as stored.
-    const stored = () => ({
-      ...clone(h.instance),
-      toEntity: () => new Instance(clone(h.instance)),
-    });
-    InstanceManager.updateInstance.restore();
-    InstanceManager.getBranding.restore();
-    InstanceModel.findOne.callsFake(async () => stored());
-    InstanceModel.findOne
-      .withArgs({}, sinon.match.has("branding"))
-      .returns({ lean: async () => clone(h.instance) });
-    sinon
-      .stub(InstanceModel, "findOneAndUpdate")
-      .callsFake(async (filter, { $set }) => {
-        replaceStored(clone($set));
-        return stored();
-      });
-    sinon.stub(InstanceModel.collection, "updateOne").resolves();
-  });
-
-  after(async function () {
-    sinon.restore();
-    await h.close();
-  });
-
-  function replaceStored(record) {
-    for (const key of Object.keys(h.instance)) delete h.instance[key];
-    Object.assign(h.instance, record);
-  }
-
-  beforeEach(function () {
-    kept = clone(h.instance);
-    InstanceCache.invalidate();
-    ThemeExportCache.invalidateAll();
-  });
-
-  afterEach(function () {
-    replaceStored(kept);
-    InstanceCache.invalidate();
-    ThemeExportCache.invalidateAll();
   });
 
   /** Saves the instance with the given branding, as the tab „Portal“ does. */
