@@ -366,7 +366,7 @@ describe("Variant of the app logo for the dark mode", function () {
         {
           field: "branding.logoDark",
           code: "invalid_format",
-          params: { format: "media_reference" },
+          params: { format: "object" },
         },
       ],
       [

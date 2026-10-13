@@ -6,6 +6,7 @@ const {
   HeroValidationErrors,
   childPath,
   elementPath,
+  isPlainObject,
 } = require("./hero-validation");
 const { sanitizeHeroRichText } = require("./hero-richtext-sanitizer");
 
@@ -217,14 +218,6 @@ const BLOCK_DEFAULTS = Object.freeze({
 
 const DEFAULT_FOCAL_POINT = Object.freeze({ x: 50, y: 50 });
 const DEFAULT_OVERLAY_ENTRY = Object.freeze({ color: "#000000", opacity: 40 });
-
-/**
- * @param {*} value - Anything.
- * @returns {boolean} Whether it is a JSON object rather than an array or null.
- */
-function isPlainObject(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 /**
  * One object being read: it knows where the object sits in the request body,

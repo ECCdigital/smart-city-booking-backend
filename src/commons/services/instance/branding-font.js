@@ -15,16 +15,14 @@
  * needed. The licence never leaves the backend except to the instance owner.
  */
 
-const MediaManager = require("../../data-managers/media-manager");
-const { DOMAIN } = require("../authorization/reach");
-const { MEDIA_REFERENCE_SOURCE } = require("../../schemas/mediaSchema");
-const { mediaFileUrl } = require("../media/media-reference");
 const SchemaUtils = require("../../utilities/schemaUtils");
 const {
   HeroValidationErrors,
   carries,
   childPath,
+  isPlainObject,
 } = require("../hero-layout/hero-validation");
+const { readBrandingMedium, readMediaReference } = require("./branding-media");
 
 const ERROR_CODES = SchemaUtils.ERROR_CODES;
 
@@ -48,10 +46,6 @@ const CURATED_FONT_IDS = Object.freeze([
   "noto-serif",
 ]);
 
-function isPlainObject(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
 /**
  * A value of a fixed list at a key of an object, which is required.
  *
@@ -71,47 +65,6 @@ function readEnum(object, key, allowed, errors, path) {
   }
 
   return object[key];
-}
-
-/**
- * The reference of a font of the library: a medium, never a foreign address.
- * The keys the export adds (`url`, `name`, `size`) are dropped, so what
- * `GET /api/instances` answered comes back unchanged.
- *
- * @returns {?Object} `{ source, mediaId }`, or null on a fault.
- */
-function readReference(font, errors, path) {
-  const referencePath = childPath(path, "reference");
-
-  if (!carries(font, "reference") || font.reference == null) {
-    errors.add(referencePath, ERROR_CODES.required);
-    return null;
-  }
-
-  if (!isPlainObject(font.reference)) {
-    errors.add(referencePath, ERROR_CODES.format, { format: "object" });
-    return null;
-  }
-
-  const source = readEnum(
-    font.reference,
-    "source",
-    [MEDIA_REFERENCE_SOURCE.MEDIA],
-    errors,
-    referencePath,
-  );
-  const mediaId = font.reference.mediaId;
-
-  if (source === null) {
-    return null;
-  }
-
-  if (typeof mediaId !== "string" || mediaId.trim() === "") {
-    errors.add(childPath(referencePath, "mediaId"), ERROR_CODES.required);
-    return null;
-  }
-
-  return { source, mediaId };
 }
 
 /**
@@ -152,7 +105,14 @@ function readFont(branding, errors, path) {
   }
 
   if (source === FONT_SOURCE.MEDIA) {
-    const reference = readReference(font, errors, fontPath);
+    // The keys the export adds (`url`, `name`, `size`) are dropped, so what
+    // `GET /api/instances` answered comes back unchanged.
+    const reference = readMediaReference(
+      font.reference,
+      errors,
+      childPath(fontPath, "reference"),
+      { required: true },
+    );
     return reference === null
       ? null
       : { source, reference, license: font.license ?? null };
@@ -273,17 +233,16 @@ async function exportFont(branding) {
     return null;
   }
 
-  // The font is an instance medium: the lookup carries no tenant.
-  const media = await MediaManager.getMedia(reference.mediaId, null, DOMAIN);
+  const { medium, url, name } = await readBrandingMedium(reference);
 
   return {
     source: FONT_SOURCE.MEDIA,
     reference: {
       source: reference.source,
       mediaId: reference.mediaId,
-      url: mediaFileUrl(reference.mediaId, null),
-      name: media?.title || media?.originalFileName || null,
-      size: media?.size ?? null,
+      url,
+      name,
+      size: medium?.size ?? null,
     },
   };
 }

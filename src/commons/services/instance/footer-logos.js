@@ -1,6 +1,4 @@
-const MediaManager = require("../../data-managers/media-manager");
-const { mediaFileUrl } = require("../media/media-reference");
-const { DOMAIN } = require("../authorization/reach");
+const { readBrandingMedium } = require("./branding-media");
 
 /**
  * The footer logos as the Theme Bundle delivers them (map #510). They follow
@@ -23,16 +21,15 @@ async function exportFooterImage(reference) {
     return null;
   }
 
-  // Branding media are instance media: the lookup carries no tenant.
-  const media = await MediaManager.getMedia(reference.mediaId, null, DOMAIN);
+  const { medium, url, name } = await readBrandingMedium(reference);
 
   return {
     source: reference.source,
     mediaId: reference.mediaId,
-    url: mediaFileUrl(reference.mediaId, null),
-    width: media?.width ?? null,
-    height: media?.height ?? null,
-    name: media?.title || media?.originalFileName || "",
+    url,
+    width: medium?.width ?? null,
+    height: medium?.height ?? null,
+    name: name ?? "",
   };
 }
 
