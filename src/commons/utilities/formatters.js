@@ -147,6 +147,20 @@ class Formatters {
         return "Unbekannt";
     }
   }
+
+  /** The Buchungsweg of a booking in words; a booking without one is "Unbekannt". */
+  static translateBookedVia(value) {
+    switch (value) {
+      case "user":
+        return "Userkonto";
+      case "guest":
+        return "Gast";
+      case "admin":
+        return "Admin";
+      default:
+        return "Unbekannt";
+    }
+  }
 }
 
 Formatters.MAIL_BOOKING_PERIOD_FORMATS = MAIL_BOOKING_PERIOD_FORMATS;
