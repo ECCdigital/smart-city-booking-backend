@@ -459,7 +459,7 @@ async function generateGroupBookingReference(
  * deleted, the coupons given back and what caused the abort thrown.
  *
  * @param {{ tenantId: string, user?: Object, contactData: Object, bookingAttempts: Object[], paymentProvider: string, simulate: boolean, policy?: string }} params
- * @returns {Promise<GroupBooking>} The group with its members as stored after the admission
+ * @returns {Promise<GroupBooking>} The group with its members as stored after the admission; under `simulate` the group it would book, unstored, with the computed members
  */
 async function createGroupBooking({
   tenantId,
@@ -530,23 +530,28 @@ async function createGroupBooking({
     mail: contactData.mail,
   });
 
+  // A simulation stores no member, so it stores no group either: it
+  // answers the group it would book, with the members it computed.
+  if (simulate) {
+    groupBooking.bookings = allBookings;
+    return groupBooking;
+  }
+
   await GroupBookingManager.storeGroupBooking(groupBooking);
 
-  if (!simulate) {
-    try {
-      await groupBookingLifecycle.admit(tenantId, uniqueId, {
-        trigger: triggerOf(policy),
-      });
-    } catch (err) {
-      logger.error(
-        `${tenantId} -- admission of group booking ${uniqueId} aborted, rolling back: ${err.message}`,
-      );
-      for (const booking of allBookings) {
-        await rollback(tenantId, booking);
-      }
-      await GroupBookingManager.deleteGroupBooking(tenantId, uniqueId);
-      throw causeOf(err);
+  try {
+    await groupBookingLifecycle.admit(tenantId, uniqueId, {
+      trigger: triggerOf(policy),
+    });
+  } catch (err) {
+    logger.error(
+      `${tenantId} -- admission of group booking ${uniqueId} aborted, rolling back: ${err.message}`,
+    );
+    for (const booking of allBookings) {
+      await rollback(tenantId, booking);
     }
+    await GroupBookingManager.deleteGroupBooking(tenantId, uniqueId);
+    throw causeOf(err);
   }
 
   return await GroupBookingManager.getGroupBooking(
