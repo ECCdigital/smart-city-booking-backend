@@ -31,6 +31,9 @@ const ALLOWED_TYPES = [
   // — so nothing is lost by having no variants (§4.9).
   { mimeType: ICO_MIME_TYPE, kind: MEDIA_KIND.IMAGE, sharpFormats: [] },
   { mimeType: "application/pdf", kind: MEDIA_KIND.DOCUMENT, sharpFormats: [] },
+  // A web font is taken as woff2 alone, the one format every browser of the
+  // storefront reads; TTF, OTF and WOFF are refused like any other type.
+  { mimeType: "font/woff2", kind: MEDIA_KIND.FONT, sharpFormats: [] },
 ];
 
 const ALLOWED_MIME_TYPES = ALLOWED_TYPES.map((type) => type.mimeType);

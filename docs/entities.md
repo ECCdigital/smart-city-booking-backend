@@ -635,6 +635,7 @@ Example:
     "theme": { "colors": { "primary": "", "secondary": "", "accent": "" } },
     "header": "primary",
     "authLogoSize": "sm",
+    "font": null,
     "logoUrl": "",
     "faviconUrl": ""
   },
@@ -645,6 +646,8 @@ Example:
 > **Note:** `publicOffersEnabled` and `portalUrl` replace the legacy fields `enableCatalog` and `catalogUrl`. Instance-level **branding** (theme, logo) applies to catalogs and the public portal; it is not stored on the Catalog entity itself.
 >
 > The appearance in `branding` (map #510): `theme.colors.accent` is `""` (none) or `#rrggbb`, `header` is `neutral`, `primary` or `secondary`, `authLogoSize` (logo on the sign-in pages) is `sm`, `md` or `lg`. `PUT /api/instances` refuses any other value; a field an instance never stored reads as its default shown above. Defaults and the check live in `src/commons/services/instance/branding-schema.js`.
+>
+> The font in `branding.font` (ECCdigital/tickets#524): `null` (system font), `{ "source": "curated", "id": "inter" }` with an id of the curated list (`inter`, `open-sans`, `roboto`, `noto-sans`, `public-sans`, `atkinson-hyperlegible-next`, `ibm-plex-sans`, `figtree`, `noto-serif`), or `{ "source": "media", "reference": { "source": "media", "mediaId": "…" }, "license": { "confirmedAt": "…", "confirmedBy": "<login>" } }` for a public instance medium of kind `font`. The form sends `license: { "confirmed": true }`; person and time come from the session. A confirmation holds while the reference stays the same. The licence goes out only in `GET /api/instances`; the check lives in `src/commons/services/instance/branding-font.js`.
 
 ### GroupBooking
 

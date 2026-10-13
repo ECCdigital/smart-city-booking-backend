@@ -663,6 +663,20 @@ describe("MediaControllerV2", function () {
       assert.deepStrictEqual(args.visibility, ["intern"]);
     });
 
+    it("filters by the kind font, the picker's „Nur Schriften“", async function () {
+      grant({ manageMedia: { readAny: true } });
+
+      await MediaControllerV2.getMediaList(
+        createRequest({ user: MEMBER, query: { kind: "font" } }),
+        createResponse(),
+      );
+
+      assert.strictEqual(
+        MediaManager.getMediaList.firstCall.args[0].kind,
+        "font",
+      );
+    });
+
     it("rejects an unknown kind filter", async function () {
       grant({ manageMedia: { readAny: true } });
 

@@ -8,6 +8,8 @@ const {
   instanceDocumentReferences,
 } = require("./instance-media");
 const { tenantDocumentReferences } = require("./tenant-media");
+const { fontReference } = require("../instance/branding-font");
+const { MEDIA_KIND } = require("../../schemas/mediaSchema");
 
 /**
  * Guards the way into the reference sites of an entity (§4.3 of the media
@@ -175,15 +177,18 @@ class MediaReferenceGuard {
    * @param {Array<Object|string>} params.references - Stored reference sites.
    * @param {boolean} params.requirePublic - Whether only public media may be
    *   referenced here.
+   * @param {string} [params.kind] - The kind of medium the site takes, when
+   *   it takes one kind alone.
    * @returns {Promise<void>}
-   * @throws {BadRequestError} Unknown medium, or an intern medium in a public
-   *   context.
+   * @throws {BadRequestError} Unknown medium, an intern medium in a public
+   *   context, or a medium of another kind.
    * @throws {ForbiddenError} The picker right does not cover the medium.
    */
   static async assertInstanceReferencesStorable({
     reaches,
     references,
     requirePublic,
+    kind,
   }) {
     for (const mediaId of collectMediaIds(references)) {
       const media = await MediaManager.getMedia(mediaId, null, DOMAIN);
@@ -196,6 +201,14 @@ class MediaReferenceGuard {
 
       if (requirePublic && !media.isPublic()) {
         throw new BadRequestError("media_reference_not_public", { mediaId });
+      }
+
+      if (kind && media.kind !== kind) {
+        throw new BadRequestError("media_reference_wrong_kind", {
+          mediaId,
+          kind: media.kind,
+          expected: kind,
+        });
       }
     }
   }
@@ -220,6 +233,15 @@ class MediaReferenceGuard {
       reaches,
       references: instanceDocumentReferences(instance),
       requirePublic: false,
+    });
+
+    // The font is served to anonymous visitors like the branding images, and
+    // only a font will do.
+    await MediaReferenceGuard.assertInstanceReferencesStorable({
+      reaches,
+      references: [fontReference(instance?.branding)],
+      requirePublic: true,
+      kind: MEDIA_KIND.FONT,
     });
   }
 }

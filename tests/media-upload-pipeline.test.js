@@ -90,6 +90,27 @@ function ico(payload) {
   return Buffer.concat([header, entry, payload]);
 }
 
+/**
+ * A woff2 font as `file-type` recognises it: the signature „wOF2“, the flavour
+ * of a TrueType font behind it, and padding up to the given size.
+ */
+function woff2(size = 64) {
+  const header = Buffer.concat([
+    Buffer.from("wOF2"),
+    Buffer.from([0x00, 0x01, 0x00, 0x00]),
+  ]);
+
+  return Buffer.concat([header, Buffer.alloc(Math.max(0, size - 8))]);
+}
+
+/** A TrueType font: the version 1.0 of the sfnt header. */
+function ttf() {
+  return Buffer.concat([
+    Buffer.from([0x00, 0x01, 0x00, 0x00, 0x00]),
+    Buffer.alloc(64),
+  ]);
+}
+
 function upload(data, name) {
   return {
     name,
@@ -258,6 +279,50 @@ describe("Media upload pipeline", function () {
       await assert.rejects(
         () => MediaService.createMedia({ tenantId: TENANT, file }),
         (error) => error.code === "file_too_large",
+      );
+    });
+  });
+
+  describe("fonts", function () {
+    it("takes a woff2 file as a font, known by its magic number", async function () {
+      const media = await createMedia(woff2(), "HouseSans.woff2");
+
+      assert.strictEqual(media.kind, "font");
+      assert.strictEqual(media.mimeType, "font/woff2");
+      assert.deepStrictEqual(media.variants, []);
+      assert.strictEqual(media.width, null);
+      assert.ok(media.storage.key.endsWith("/original.woff2"));
+    });
+
+    it("refuses a TrueType font", async function () {
+      await assert.rejects(
+        () => createMedia(ttf(), "HouseSans.ttf"),
+        (error) =>
+          error.statusCode === 400 && error.code === "unsupported_file_type",
+      );
+      assert.strictEqual(provider.put.called, false);
+    });
+
+    it("refuses a TrueType font renamed to woff2", async function () {
+      await assert.rejects(
+        () => createMedia(ttf(), "HouseSans.woff2"),
+        (error) =>
+          error.statusCode === 400 && error.code === "unsupported_file_type",
+      );
+      assert.strictEqual(provider.put.called, false);
+    });
+
+    it("takes a font of 500 KB and refuses one above", async function () {
+      const media = await createMedia(woff2(500 * 1024), "full.woff2");
+      assert.strictEqual(media.kind, "font");
+
+      await assert.rejects(
+        () => createMedia(woff2(500 * 1024 + 1), "large.woff2"),
+        (error) =>
+          error.statusCode === 400 &&
+          error.code === "file_too_large" &&
+          error.params?.kind === "font" &&
+          error.params?.maxBytes === 500 * 1024,
       );
     });
   });
