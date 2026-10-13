@@ -22,6 +22,7 @@ const { GroupBooking } = require("../../entities/groupBooking/groupBooking");
 const { BundleCheckoutService } = require("./bundle-checkout-service");
 const checkoutPolicy = require("./checkout-policy");
 const { CheckoutPolicy } = checkoutPolicy;
+const { bookedViaOf } = require("./booked-via");
 const { CustomFieldService } = require("../custom-field/custom-field-service");
 const { CheckoutError } = require("../../../errors/CheckoutError");
 const { CHECKOUT_REASONS } = require("./checkout-reasons");
@@ -305,6 +306,10 @@ async function createBooking({
   if (!(booking instanceof Booking)) {
     booking = new Booking(booking);
   }
+
+  // The Buchungsweg is set here and nowhere else (GLOSSARY.md), from the
+  // policy and the sign-in; a value the client sends is never read.
+  booking.bookedVia = bookedViaOf(policy, user);
 
   booking.validate();
 
@@ -708,6 +713,12 @@ async function updateBooking(
 
   if (!(booking instanceof Booking)) {
     booking = new Booking(booking);
+  }
+
+  // An edit keeps the Buchungsweg the booking was created with, and one
+  // without stays without; the form's value is never read.
+  if (oldBooking.bookedVia) {
+    booking.bookedVia = oldBooking.bookedVia;
   }
 
   if (onUnreject) {
