@@ -3,6 +3,7 @@ const bunyan = require("bunyan");
 const InstanceManager = require("../../data-managers/instance-manager");
 const UserManager = require("../../data-managers/user-manager");
 const mailService = require("../../mail-service");
+const { normalizeClientPage } = require("../user/client-page");
 
 const logger = bunyan.createLogger({
   name: "card-auth-service",
@@ -174,7 +175,7 @@ class CardAuthService {
         firstName: existingEmailUser.firstName,
         hookId: hook.id,
         cardLabel: app.label,
-        linkUrlBase: linkUrl,
+        linkUrlBase: normalizeClientPage(linkUrl),
       });
 
       logger.info(

@@ -1,8 +1,9 @@
 /**
  * The links in the mails of the public authentication routes lead only to the
- * instance's own pages (ECCdigital/tickets#320): forgot password takes the
- * client's `resetUrl`, signup and verification resend the client's
- * `verifyUrl`, only when it is an http(s) address on the origin of
+ * instance's own pages (ECCdigital/tickets#320, #480): forgot password takes
+ * the client's `resetUrl`, signup and verification resend the client's
+ * `verifyUrl`, the card signup the client's `linkUrl`, only when it is an
+ * http(s) address on the origin of
  * `FRONTEND_URL`, `STORE_FRONT_URL` or `BACKEND_URL`. Anything else gets the
  * link built as without one, so a token never reaches a foreign host. The
  * answer is the same either way (ECCdigital/tickets#259).
@@ -16,6 +17,7 @@ const express = require("express");
 const request = require("supertest");
 const sinon = require("sinon");
 const Handlebars = require("handlebars");
+const axios = require("axios");
 
 process.env.CRYPTO_SECRET =
   process.env.CRYPTO_SECRET || "0123456789abcdef0123456789abcdef";
@@ -26,6 +28,7 @@ const authenticationRouter = require("../src/platform/authentication/authenticat
 const UserManager = require("../src/commons/data-managers/user-manager");
 const { USER_HOOK_TYPES } = require("../src/commons/entities/user/userHook");
 const JwtHelper = require("../src/commons/utilities/jwt-helper");
+const CardAuthService = require("../src/commons/services/card-auth/card-auth-service");
 const { whenIdle } = require("../src/commons/services/user/after-answer");
 const {
   installInMemoryRateLimitEvents,
@@ -52,6 +55,10 @@ const NEW = "neu@example.test";
 
 const RESET_SUBJECT = "Kennwort zurücksetzen";
 const VERIFICATION_SUBJECT = "Bestätigen Sie Ihre E-Mail-Adresse";
+const LINK_CARD_SUBJECT = "Karte mit Ihrem Account verknüpfen";
+
+const CARD_APP = "stadtkarte";
+const CARD = { publicId: "karte-1", secret: "geheim-1" };
 
 /** The address as it stands in the rendered mail. */
 const inMail = (url) => Handlebars.Utils.escapeExpression(url);
@@ -264,6 +271,92 @@ describe("auth: mail links lead to the instance's own pages (ECCdigital/tickets#
       assert.ok(
         !lastMail(NEW, VERIFICATION_SUBJECT).html.includes("angreifer.example"),
       );
+    });
+  });
+  describe("POST /auth/card/signup", function () {
+    const cardSignup = (linkUrl) =>
+      request(app)
+        .post("/auth/card/signup")
+        .send({ appId: CARD_APP, ...CARD, email: OWNER, linkUrl });
+
+    beforeEach(function () {
+      sinon.stub(CardAuthService, "getCardApp").resolves({
+        id: CARD_APP,
+        label: "Stadtkarte",
+        serviceUrl: "https://karten.example.test",
+        apiToken: "token",
+        cardType: "stadtkarte",
+      });
+      // The card service knows the card; no account has it yet.
+      sinon.stub(axios, "post").resolves({
+        data: { valid: true, cardType: "stadtkarte" },
+      });
+      sinon.stub(UserManager, "getUserByCard").resolves(null);
+    });
+
+    it("links the backend's link route instead of a foreign host", async function () {
+      const res = await cardSignup(ATTACKER);
+
+      assert.strictEqual(res.status, 202);
+      const hook = activeHook(OWNER, USER_HOOK_TYPES.LINK_CARD);
+      const mail = lastMail(OWNER, LINK_CARD_SUBJECT);
+      assert.ok(
+        mail.html.includes(
+          inMail(
+            `${BACKEND_URL}/auth/card/link?token=${hook.id}&id=${encodeURIComponent(OWNER)}`,
+          ),
+        ),
+      );
+      assert.ok(!mail.html.includes("angreifer.example"));
+    });
+
+    it("keeps a link page on an own origin, path and language prefix as named", async function () {
+      for (const page of [
+        `${STORE_FRONT_URL}/en/card/link`,
+        `${FRONTEND_URL}/card/link`,
+      ]) {
+        await cardSignup(page);
+
+        const hook = activeHook(OWNER, USER_HOOK_TYPES.LINK_CARD);
+        assert.ok(
+          lastMail(OWNER, LINK_CARD_SUBJECT).html.includes(
+            inMail(`${page}?token=${hook.id}&id=${encodeURIComponent(OWNER)}`),
+          ),
+          page,
+        );
+      }
+    });
+
+    it("drops every page off the own origins", async function () {
+      for (const page of [
+        "https://store.example.test.angreifer.example/card/link",
+        "http://store.example.test/card/link",
+        "//angreifer.example/fang",
+        "/card/link",
+        { href: ATTACKER },
+      ]) {
+        await cardSignup(page);
+
+        const hook = activeHook(OWNER, USER_HOOK_TYPES.LINK_CARD);
+        assert.ok(
+          lastMail(OWNER, LINK_CARD_SUBJECT).html.includes(
+            inMail(`${BACKEND_URL}/auth/card/link?token=${hook.id}&`),
+          ),
+          String(page),
+        );
+      }
+    });
+
+    it("answers a foreign link page like an own one and like none", async function () {
+      const own = await cardSignup(`${STORE_FRONT_URL}/card/link`);
+      const foreign = await cardSignup(ATTACKER);
+      const none = await cardSignup(undefined);
+
+      for (const res of [foreign, none]) {
+        assert.strictEqual(res.status, own.status);
+        assert.strictEqual(res.text, own.text);
+      }
+      assert.strictEqual(own.status, 202);
     });
   });
 });

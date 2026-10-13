@@ -1,10 +1,11 @@
 /**
  * A page of the client's that a mail of the public authentication routes
- * links with its token: the reset page of forgot password (`resetUrl`) and the
- * verify page of signup and verification resend (`verifyUrl`). Whoever opens
- * the link hands the token to that page, so the backend takes the client's
- * page only on the instance's own origins - those of `FRONTEND_URL`,
- * `STORE_FRONT_URL` and `BACKEND_URL` (ECCdigital/tickets#320). Path and
+ * links with its token: the reset page of forgot password (`resetUrl`), the
+ * verify page of signup and verification resend (`verifyUrl`) and the link
+ * page of the card signup (`linkUrl`). Whoever opens the link hands the token
+ * to that page, so the backend takes the client's page only on the instance's
+ * own origins - those of `FRONTEND_URL`, `STORE_FRONT_URL` and `BACKEND_URL`
+ * (ECCdigital/tickets#320, #480). Path and
  * language prefix stay as the client named them; a page anywhere else is
  * dropped silently, and the mail links the backend's default instead, so the
  * answer does not change (ECCdigital/tickets#259).
