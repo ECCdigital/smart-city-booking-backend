@@ -91,13 +91,20 @@ async function normalizeHeroEditorBody(body) {
  * @param {?Object} state.background - The stored Background, or null.
  * @param {?string} state.name - The Catalog's `name`, the Portal Name.
  * @param {?Object} state.logo - The branding logo reference, or null.
+ * @param {?Object} [state.logoDark] - Its variant for the dark mode, or null.
  * @returns {Promise<{heroLayout: Object, background: Object, name: string}>}
  */
-async function exportHeroEditorState({ heroLayout, background, name, logo }) {
+async function exportHeroEditorState({
+  heroLayout,
+  background,
+  name,
+  logo,
+  logoDark = null,
+}) {
   const portalName = name ?? "";
 
   const [exportedLayout, exportedBackground] = await Promise.all([
-    exportHeroLayout(heroLayout ?? null, { name: portalName, logo }),
+    exportHeroLayout(heroLayout ?? null, { name: portalName, logo, logoDark }),
     exportBackground(background ?? null),
   ]);
 
