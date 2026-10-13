@@ -254,14 +254,11 @@ class SaltoKsAccessProvider extends AccessProvider {
 
     return extractSaltoList(locks).map((lock) => {
       const externalId = String(lock.id || lock.lockId);
-      const supportedModes = this._deriveSupportedModes(
+      const { supportedModes, capabilities } = this._deriveOffer(
         lock,
         iqList,
         activations,
       );
-      const capabilities = supportedModes.includes(AccessPointMode.REMOTE)
-        ? ["remote"]
-        : [];
 
       return {
         id: externalId,
@@ -286,14 +283,15 @@ class SaltoKsAccessProvider extends AccessProvider {
 
   /**
    * @private
-   * The capability rule for one lock: remote open or nothing. Biletado
-   * creates no users in Salto KS, and every Salto PIN hangs on a user, so no
-   * lock - not even one with a keypad - offers `authorization` or `both`.
+   * The capability rule for one lock, for its modes and capabilities alike:
+   * remote open or nothing. The platform creates no users in Salto KS, and
+   * every Salto PIN hangs on a user, so no lock - not even one with a
+   * keypad - offers `authorization` or `both`.
    */
-  _deriveSupportedModes(lock, iqList, activations) {
+  _deriveOffer(lock, iqList, activations) {
     return this._supportsRemoteOpen(lock, iqList, activations)
-      ? [AccessPointMode.REMOTE]
-      : [];
+      ? { supportedModes: [AccessPointMode.REMOTE], capabilities: ["remote"] }
+      : { supportedModes: [], capabilities: [] };
   }
 
   /**

@@ -130,7 +130,7 @@ describe("SaltoKsApiClient IQ endpoints", () => {
 });
 
 describe("SaltoKsApiClient without guests", () => {
-  // Every PIN in Salto KS hangs on a user, and Biletado creates none there:
+  // Every PIN in Salto KS hangs on a user, and the platform creates none there:
   // the client has no way to create users or give them access.
   const GUEST_METHODS = [
     "createUser",

@@ -859,7 +859,7 @@ describe("access provider dialects: the adapters as they answer", () => {
       });
     }
 
-    it("declares neither grantAuthorization nor revokeAuthorization: every Salto PIN hangs on a user, and Biletado creates none in Salto KS", async () => {
+    it("declares neither grantAuthorization nor revokeAuthorization: every Salto PIN hangs on a user, and the platform creates none in Salto KS", async () => {
       expect(SaltoKsAccessProvider.capabilities).not.to.include(
         "grantAuthorization",
       );
