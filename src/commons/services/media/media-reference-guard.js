@@ -7,7 +7,6 @@ const {
   instanceBrandingImageReferences,
   instanceBrandingReferences,
   instanceDocumentReferences,
-  instanceFooterLogoReferences,
 } = require("./instance-media");
 const { MEDIA_KIND } = require("../../schemas/mediaSchema");
 const { tenantDocumentReferences } = require("./tenant-media");
@@ -232,10 +231,7 @@ class MediaReferenceGuard {
 
     await MediaReferenceGuard.assertInstanceReferencesStorable({
       reaches,
-      references: [
-        ...instanceBrandingImageReferences(instance),
-        ...instanceFooterLogoReferences(instance),
-      ],
+      references: instanceBrandingImageReferences(instance),
       requirePublic: true,
       kind: MEDIA_KIND.IMAGE,
     });

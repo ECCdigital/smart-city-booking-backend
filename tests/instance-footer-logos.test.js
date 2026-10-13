@@ -495,22 +495,42 @@ describe("Footer logos in the instance branding", function () {
     });
 
     describe("the media behind a logo", function () {
-      for (const [name, key, mediaId, code] of [
-        ["an intern image", "image", INTERN, "media_reference_not_public"],
+      for (const [name, key, mediaId, code, params] of [
+        [
+          "an intern image",
+          "image",
+          INTERN,
+          "media_reference_not_public",
+          { mediaId: INTERN },
+        ],
         [
           "an intern variant",
           "imageDark",
           INTERN,
           "media_reference_not_public",
+          { mediaId: INTERN },
         ],
-        ["a document as image", "image", DOCUMENT, "media_reference_not_image"],
+        [
+          "a document as image",
+          "image",
+          DOCUMENT,
+          "media_reference_wrong_kind",
+          { mediaId: DOCUMENT, kind: "image" },
+        ],
         [
           "a document as variant",
           "imageDark",
           DOCUMENT,
-          "media_reference_not_image",
+          "media_reference_wrong_kind",
+          { mediaId: DOCUMENT, kind: "image" },
         ],
-        ["an unknown medium", "image", "gone", "media_reference_unknown"],
+        [
+          "an unknown medium",
+          "image",
+          "gone",
+          "media_reference_unknown",
+          { mediaId: "gone" },
+        ],
       ]) {
         it(`refuses ${name} with 400 and keeps the instance`, async function () {
           const before = clone(h.instance);
@@ -521,7 +541,7 @@ describe("Footer logos in the instance branding", function () {
 
           expect(res.status).to.equal(400);
           expect(res.body.code).to.equal(code);
-          expect(res.body.params).to.deep.equal({ mediaId });
+          expect(res.body.params).to.deep.equal(params);
           expect(h.instance).to.deep.equal(before);
         });
       }
