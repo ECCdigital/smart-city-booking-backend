@@ -636,6 +636,7 @@ Example:
     "header": "primary",
     "authLogoSize": "sm",
     "logoDark": null,
+    "footerLogos": [],
     "logoUrl": "",
     "faviconUrl": ""
   },
@@ -648,6 +649,8 @@ Example:
 > The appearance in `branding` (map #510): `theme.colors.accent` is `""` (none) or `#rrggbb`, `header` is `neutral`, `primary` or `secondary`, `authLogoSize` (logo on the sign-in pages) is `sm`, `md` or `lg`. `PUT /api/instances` refuses any other value; a field an instance never stored reads as its default shown above. Defaults and the check live in `src/commons/services/instance/branding-schema.js`.
 >
 > `logoDark` is the variant of the app logo for the dark mode: `null` or `{ "source": "media", "mediaId": "…" }`, a public image of the instance library (refused otherwise: `media_reference_not_public`, `media_reference_wrong_kind`, `media_reference_unknown`, or `400 ValidationError` for any other shape). It goes out with its `url`; the Theme Bundle carries it as `logoDark` with `url`, `width` and `height` while `active` is on, `null` otherwise. A medium held there cannot be deleted or turned internal (`409 media_in_use`).
+>
+> `footerLogos` (ECCdigital/tickets#523) is the sorted list of at most 12 logos of the storefront footer, each `{ "image": { "source": "media", "mediaId": "…" }, "size": "md", "link": "", "imageDark": null }`: `image` required, `imageDark` optional, both public images of the instance library; `size` `sm`, `md` or `lg`; `link` `""` or an absolute `http`/`https` URL. A medium held there is in use and cannot be deleted.
 
 ### GroupBooking
 

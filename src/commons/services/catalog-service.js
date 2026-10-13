@@ -22,6 +22,7 @@ const {
 } = require("./hero-layout/hero-validation");
 const { portalNameOf } = require("./hero-layout/hero-default-layout");
 const { withBrandingDefaults } = require("./instance/branding-schema");
+const { exportFooterLogos } = require("./instance/footer-logos");
 const SchemaUtils = require("../utilities/schemaUtils");
 const {
   BadRequestError,
@@ -127,12 +128,14 @@ async function exportTheme(catalog, branding) {
   const name = catalog?.name ?? "";
   const logo = activeLogo(branding);
 
-  const [heroLayout, background, exportedLogo, logoDark] = await Promise.all([
-    exportHeroLayout(catalog?.heroLayout ?? null, { name, logo }),
-    exportBackground(activeBackground(branding)),
-    enrichHeroMediaReference(logo),
-    enrichHeroMediaReference(activeLogoDark(branding)),
-  ]);
+  const [heroLayout, background, exportedLogo, logoDark, footerLogos] =
+    await Promise.all([
+      exportHeroLayout(catalog?.heroLayout ?? null, { name, logo }),
+      exportBackground(activeBackground(branding)),
+      enrichHeroMediaReference(logo),
+      enrichHeroMediaReference(activeLogoDark(branding)),
+      exportFooterLogos(branding),
+    ]);
 
   return {
     ...exportBranding(branding),
@@ -142,6 +145,7 @@ async function exportTheme(catalog, branding) {
     background,
     logo: exportedLogo,
     logoDark,
+    footerLogos,
     visibility: catalog?.visibility ?? "public",
   };
 }

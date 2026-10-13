@@ -14,6 +14,7 @@ const {
   HeroValidationErrors,
   carries,
   childPath,
+  elementPath,
 } = require("../hero-layout/hero-validation");
 
 const ERROR_CODES = SchemaUtils.ERROR_CODES;
@@ -24,6 +25,10 @@ const HEADER_COLORS = Object.freeze(["neutral", "primary", "secondary"]);
 
 // The sizes of the logo on the sign-in pages.
 const AUTH_LOGO_SIZES = Object.freeze(["sm", "md", "lg"]);
+
+// The sizes of a footer logo, and how many logos the footer holds.
+const FOOTER_LOGO_SIZES = Object.freeze(["sm", "md", "lg"]);
+const MAX_FOOTER_LOGOS = 12;
 
 /**
  * The branding of an instance that stored none: the default look, switched
@@ -39,6 +44,7 @@ function defaultBranding() {
     },
     header: "primary",
     authLogoSize: "sm",
+    footerLogos: [],
     logo: null,
     logoDark: null,
     favicon: null,
@@ -131,6 +137,149 @@ function checkEnum(branding, key, allowed, errors, path) {
   errors.add(childPath(path, key), ERROR_CODES.enum, { allowed: [...allowed] });
 }
 
+// The schemes a footer link may take. Anything else, `javascript:` first of
+// all, would run or open something else than a page when the logo is clicked.
+const FOOTER_LINK_PROTOCOLS = Object.freeze(["http:", "https:"]);
+
+/**
+ * Whether a footer link is empty or an absolute `http`/`https` URL.
+ *
+ * @param {*} link - The link as sent.
+ * @returns {boolean} Whether it may be stored.
+ */
+function isFooterLink(link) {
+  if (link === "") {
+    return true;
+  }
+
+  if (typeof link !== "string") {
+    return false;
+  }
+
+  try {
+    return FOOTER_LINK_PROTOCOLS.includes(new URL(link).protocol);
+  } catch {
+    // No absolute URL: a relative path, a bare host, a broken address.
+    return false;
+  }
+}
+
+/**
+ * Reads the media reference of a footer logo as it is stored, `{ source,
+ * mediaId }`: the keys the export adds are dropped, so an enriched reference
+ * comes back unchanged. Only a medium of the library is taken; what the
+ * medium has to be, a public image of the instance, is the
+ * `MediaReferenceGuard`'s.
+ *
+ * @param {Object} logo - The footer logo.
+ * @param {string} key - `image` or `imageDark`.
+ * @param {boolean} required - Whether the logo must carry the reference.
+ * @param {HeroValidationErrors} errors - The run the faults go into.
+ * @param {string} path - Path of the footer logo in the request body.
+ * @returns {?Object} The reference, or null when there is none or it is
+ *   faulty.
+ */
+function readFooterImage(logo, key, required, errors, path) {
+  const reference = logo[key];
+  const referencePath = childPath(path, key);
+
+  if (reference === undefined || reference === null) {
+    if (required) {
+      errors.add(referencePath, ERROR_CODES.required);
+    }
+    return null;
+  }
+
+  if (!isPlainObject(reference)) {
+    errors.add(referencePath, ERROR_CODES.format, { format: "object" });
+    return null;
+  }
+
+  if (reference.source !== MEDIA_REFERENCE_SOURCE.MEDIA) {
+    errors.add(childPath(referencePath, "source"), ERROR_CODES.enum, {
+      allowed: [MEDIA_REFERENCE_SOURCE.MEDIA],
+    });
+    return null;
+  }
+
+  if (typeof reference.mediaId !== "string" || reference.mediaId === "") {
+    errors.add(childPath(referencePath, "mediaId"), ERROR_CODES.required);
+    return null;
+  }
+
+  return { source: reference.source, mediaId: reference.mediaId };
+}
+
+/**
+ * Reads one footer logo as it is stored, `{ image, size, link, imageDark }`
+ * with its defaults filled in. Keys beyond these four are not stored.
+ *
+ * @param {*} logo - The footer logo as sent.
+ * @param {HeroValidationErrors} errors - The run the faults go into.
+ * @param {string} path - Path of the footer logo in the request body.
+ * @returns {?Object} The logo to store, or null when it is no object.
+ */
+function readFooterLogo(logo, errors, path) {
+  if (!isPlainObject(logo)) {
+    errors.add(path, ERROR_CODES.format, { format: "object" });
+    return null;
+  }
+
+  const image = readFooterImage(logo, "image", true, errors, path);
+  const size = logo.size ?? "md";
+  const link = logo.link ?? "";
+
+  if (!FOOTER_LOGO_SIZES.includes(size)) {
+    errors.add(childPath(path, "size"), ERROR_CODES.enum, {
+      allowed: [...FOOTER_LOGO_SIZES],
+    });
+  }
+
+  if (!isFooterLink(link)) {
+    errors.add(childPath(path, "link"), ERROR_CODES.format, { format: "url" });
+  }
+
+  const imageDark = readFooterImage(logo, "imageDark", false, errors, path);
+
+  return { image, size, link, imageDark };
+}
+
+/**
+ * Reads the footer logos as they are stored, in their order. The list holds
+ * at most `MAX_FOOTER_LOGOS`; every logo is checked all the same, so one save
+ * names every fault.
+ *
+ * @param {Object} branding - The branding being saved.
+ * @param {HeroValidationErrors} errors - The run the faults go into.
+ * @param {string} path - Path of the branding in the request body.
+ * @returns {Array<Object>|undefined} The logos to store, or undefined when
+ *   the branding does not name them.
+ */
+function readFooterLogos(branding, errors, path) {
+  if (!carries(branding, "footerLogos")) {
+    return undefined;
+  }
+
+  const listPath = childPath(path, "footerLogos");
+  const logos = branding.footerLogos;
+
+  if (!Array.isArray(logos)) {
+    errors.add(listPath, ERROR_CODES.format, { format: "array" });
+    return undefined;
+  }
+
+  if (logos.length > MAX_FOOTER_LOGOS) {
+    errors.add(listPath, ERROR_CODES.maxItems, {
+      max: MAX_FOOTER_LOGOS,
+      actual: logos.length,
+    });
+  }
+
+  return logos.map((logo, index) =>
+    readFooterLogo(logo, errors, elementPath(listPath, index)),
+  );
+}
+
 /**
  * The variant of the app logo for the dark mode as it is stored: null for
  * none, or the reference `{ source: "media", mediaId }` alone. What the export
@@ -203,15 +352,23 @@ function normalizeBranding(branding, path = "branding") {
   checkEnum(branding, "header", HEADER_COLORS, errors, path);
   checkEnum(branding, "authLogoSize", AUTH_LOGO_SIZES, errors, path);
   const logoDark = readLogoDark(branding, errors, path);
+  const footerLogos = readFooterLogos(branding, errors, path);
 
   errors.throwIfAny();
 
-  return { ...withBrandingDefaults(branding), logoDark };
+  return {
+    ...withBrandingDefaults(
+      footerLogos === undefined ? branding : { ...branding, footerLogos },
+    ),
+    logoDark,
+  };
 }
 
 module.exports = {
   AUTH_LOGO_SIZES,
+  FOOTER_LOGO_SIZES,
   HEADER_COLORS,
+  MAX_FOOTER_LOGOS,
   defaultBranding,
   normalizeBranding,
   withBrandingDefaults,

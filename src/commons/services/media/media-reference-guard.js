@@ -7,6 +7,7 @@ const {
   instanceBrandingImageReferences,
   instanceBrandingReferences,
   instanceDocumentReferences,
+  instanceFooterLogoReferences,
 } = require("./instance-media");
 const { MEDIA_KIND } = require("../../schemas/mediaSchema");
 const { tenantDocumentReferences } = require("./tenant-media");
@@ -215,8 +216,8 @@ class MediaReferenceGuard {
   /**
    * Checks the reference sites of the instance before it is stored: branding
    * is served to anonymous visitors and therefore takes public media only,
-   * the sites that show an image only public images; legal documents may be
-   * internal.
+   * the sites that show an image (the dark logo, the footer logos) only
+   * public images; legal documents may be internal.
    *
    * @param {Object} instance - The instance being saved.
    * @param {Object} reaches - The bundle of the saver's route.
@@ -231,7 +232,10 @@ class MediaReferenceGuard {
 
     await MediaReferenceGuard.assertInstanceReferencesStorable({
       reaches,
-      references: instanceBrandingImageReferences(instance),
+      references: [
+        ...instanceBrandingImageReferences(instance),
+        ...instanceFooterLogoReferences(instance),
+      ],
       requirePublic: true,
       kind: MEDIA_KIND.IMAGE,
     });
