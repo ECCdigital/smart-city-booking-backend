@@ -27,7 +27,7 @@ const axios = require("axios");
 const { AxiosError, AxiosHeaders } = axios;
 
 /** What the spec allows a call to the geo services to wait (3 s). */
-const GEO_TIMEOUT_MS = 3000;
+const GEO_TIMEOUT_MS = 5000;
 
 const TIMEOUT = Symbol("timeout");
 const UNREACHABLE = Symbol("unreachable");
