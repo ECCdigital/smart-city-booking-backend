@@ -216,8 +216,7 @@ function createBookingLifecycle(adapters) {
   }
 
   /**
-   * The admission (spec part 1, 5.2; part 2, section 8, `admit`; glossary
-   * "Aufnahme"): the checkout stored the booking in the state it chose,
+   * The admission: the checkout stored the booking in the state it chose,
    * the lifecycle runs the effects of that state. Nothing is written: the
    * compartments are held - in every state, the hold being the one step
    * that checks their capacity and aborts, so a booking that finds none
@@ -317,7 +316,7 @@ function createBookingLifecycle(adapters) {
   }
 
   /**
-   * The confirmation (spec part 2, section 8, `confirm`): `requested →
+   * The confirmation: `requested →
    * payment_due` for a priced booking, which is then asked to pay
    * (glossary "Zahlungsaufforderung") in the form the payment provider
    * answers, `requested → confirmed` for a free one, which is granted and
@@ -377,7 +376,7 @@ function createBookingLifecycle(adapters) {
   }
 
   /**
-   * The payment (spec part 2, section 8, `pay`): `payment_due → confirmed`.
+   * The payment: `payment_due → confirmed`.
    *
    * @param {string} tenantId
    * @param {string} bookingId
@@ -442,7 +441,7 @@ function createBookingLifecycle(adapters) {
   }
 
   /**
-   * The cancellation (spec part 2, section 8, `cancel`): `requested →
+   * The cancellation: `requested →
    * rejected`, `payment_due | confirmed → cancelled`. The state write
    * carries the reason, the refund audit with the state cancelled from
    * (glossary "Wiederherstellung" returns to it) and, where a refund is
@@ -554,8 +553,7 @@ function createBookingLifecycle(adapters) {
   }
 
   /**
-   * The cancellation request (spec part 2, section 8, `requestCancel`;
-   * glossary "Stornoanfrage"): the state stays, a hook `REJECT` with the
+   * The cancellation request: the state stays, a hook `REJECT` with the
    * reason and the bank details is written, and the customer is asked to
    * verify, with the refund the customer's cancellation would bring. Only
    * where the booking's cancellation policy allows it: otherwise
@@ -587,8 +585,6 @@ function createBookingLifecycle(adapters) {
     const payload = { reason };
     const sanitizedBankDetails = sanitizeBankDetails(bankDetails);
     if (sanitizedBankDetails) {
-      // At rest only encrypted (ECCdigital/tickets#16): without a valid
-      // `CRYPTO_SECRET` this throws before anything is written.
       payload.bankDetails = encryptBankDetails(sanitizedBankDetails);
     }
     const hook = booking.addHook(BOOKING_HOOK_TYPES.REJECT, payload);
@@ -621,8 +617,7 @@ function createBookingLifecycle(adapters) {
   }
 
   /**
-   * The reinstatement (spec part 2, section 8, `reinstate`; glossary
-   * "Wiederherstellung"): `rejected → requested`, `cancelled → ` the state
+   * The reinstatement: `rejected → requested`, `cancelled → ` the state
    * it was cancelled from. Price, positions and coupon are what the stored
    * booking still carries from before the cancellation; the reason is
    * cleared and the refund audit removed. The access is granted again at
