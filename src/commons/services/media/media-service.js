@@ -181,6 +181,7 @@ class MediaService {
       checksum: crypto.createHash("sha256").update(data).digest("hex"),
       originalFileName: file.name,
       ...imageDimensions(detected),
+      defaultWeight: detected.font?.defaultWeight ?? null,
       title: metadata.title || file.name,
       altText: metadata.altText || "",
       tags: metadata.tags || [],

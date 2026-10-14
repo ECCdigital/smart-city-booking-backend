@@ -500,6 +500,26 @@ describe("MediaControllerV2", function () {
       assert.strictEqual("bookingId" in res.body, false);
     });
 
+    it("tells the default weight of a variable font", async function () {
+      sandbox.stub(MediaManager, "getMedia").resolves(
+        mediaFixture({
+          kind: "font",
+          mimeType: "font/woff2",
+          originalFileName: "HouseSans.woff2",
+          defaultWeight: 300,
+        }),
+      );
+      grant({ manageMedia: { readAny: true } });
+      const res = createResponse();
+
+      await MediaControllerV2.getMedia(
+        createRequest({ user: MEMBER, params: { id: "media-1" } }),
+        res,
+      );
+
+      assert.strictEqual(res.body.defaultWeight, 300);
+    });
+
     it("serves an uploader their own medium with readOwn", async function () {
       sandbox
         .stub(MediaManager, "getMedia")

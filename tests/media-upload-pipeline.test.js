@@ -1,4 +1,5 @@
 const assert = require("assert");
+const zlib = require("zlib");
 const sinon = require("sinon");
 const sharp = require("sharp");
 
@@ -99,6 +100,66 @@ function woff2(size = 64, flavor = Buffer.from([0x00, 0x01, 0x00, 0x00])) {
 
   return Buffer.concat([header, Buffer.alloc(Math.max(0, size - 8))]);
 }
+
+// The tags of the woff2 table directory by index (W3C WOFF2, 5.1).
+const WOFF2_TAG_INDEX = { glyf: 10, loca: 11, gasp: 17, fvar: 47 };
+
+function base128(value) {
+  const bytes = [value & 0x7f];
+  for (let rest = value >>> 7; rest > 0; rest >>>= 7) {
+    bytes.unshift((rest & 0x7f) | 0x80);
+  }
+  return bytes;
+}
+
+/** An `fvar` table with the axes `[tag, min, default, max]`. */
+function fvar(axes) {
+  const table = Buffer.alloc(16 + axes.length * 20);
+  table.writeUInt16BE(1, 0);
+  table.writeUInt16BE(16, 4);
+  table.writeUInt16BE(2, 6);
+  table.writeUInt16BE(axes.length, 8);
+  table.writeUInt16BE(20, 10);
+  axes.forEach(([tag, min, value, max], index) => {
+    const offset = 16 + index * 20;
+    table.write(tag, offset, "latin1");
+    table.writeInt32BE(min * 65536, offset + 4);
+    table.writeInt32BE(value * 65536, offset + 8);
+    table.writeInt32BE(max * 65536, offset + 12);
+  });
+  return table;
+}
+
+/**
+ * A woff2 font of the given tables, in one Brotli stream as an encoder
+ * writes it. A table either has a known tag or is written with its tag in
+ * full; `glyf` and `loca` stay transformed, so their entry has two lengths.
+ */
+function woff2Font(tables) {
+  const entries = [];
+  for (const { tag, data } of tables) {
+    const index = WOFF2_TAG_INDEX[tag];
+    entries.push(index === undefined ? 63 : index);
+    if (index === undefined) entries.push(...Buffer.from(tag, "latin1"));
+    const transformed = tag === "glyf" || tag === "loca";
+    entries.push(...base128(transformed ? data.length + 10 : data.length));
+    if (transformed) entries.push(...base128(data.length));
+  }
+  const stream = zlib.brotliCompressSync(
+    Buffer.concat(tables.map(({ data }) => data)),
+  );
+  const header = Buffer.alloc(48);
+  header.write("wOF2", 0, "latin1");
+  header.writeUInt32BE(0x00010000, 4);
+  header.writeUInt32BE(48 + entries.length + stream.length, 8);
+  header.writeUInt16BE(tables.length, 12);
+  header.writeUInt32BE(stream.length, 20);
+  return Buffer.concat([header, Buffer.from(entries), stream]);
+}
+
+const GLYF = { tag: "glyf", data: Buffer.alloc(64, 7) };
+const LOCA = { tag: "loca", data: Buffer.alloc(8) };
+const GASP = { tag: "gasp", data: Buffer.alloc(12, 1) };
 
 /** A TrueType font: the version 1.0 of the sfnt header. */
 function ttf() {
@@ -302,6 +363,73 @@ describe("Media upload pipeline", function () {
         assert.strictEqual(media.mimeType, "font/woff2");
       });
     }
+
+    describe("default weight", function () {
+      it("reads the default of the weight axis of a variable font", async function () {
+        const media = await createMedia(
+          woff2Font([
+            GASP,
+            { tag: "fvar", data: fvar([["wght", 100, 400, 900]]) },
+            GLYF,
+            LOCA,
+          ]),
+          "HouseSans.woff2",
+        );
+
+        assert.strictEqual(media.defaultWeight, 400);
+      });
+
+      it("reads a default other than 400, among other axes and behind a table with a full tag", async function () {
+        const media = await createMedia(
+          woff2Font([
+            { tag: "STAT", data: Buffer.alloc(20, 3) },
+            GASP,
+            {
+              tag: "fvar",
+              data: fvar([
+                ["opsz", 14, 14, 32],
+                ["wght", 200, 200, 900],
+              ]),
+            },
+            GLYF,
+            LOCA,
+          ]),
+          "HouseSans.woff2",
+        );
+
+        assert.strictEqual(media.defaultWeight, 200);
+      });
+
+      it("has none for a static font or a variable font without weight axis", async function () {
+        const fixed = await createMedia(
+          woff2Font([GASP, GLYF, LOCA]),
+          "HouseSans.woff2",
+        );
+        const width = await createMedia(
+          woff2Font([
+            { tag: "fvar", data: fvar([["wdth", 75, 100, 125]]) },
+            GLYF,
+          ]),
+          "HouseSans.woff2",
+        );
+
+        assert.strictEqual(fixed.defaultWeight, null);
+        assert.strictEqual(width.defaultWeight, null);
+      });
+
+      it("takes a font whose tables it cannot read, without a default", async function () {
+        const media = await createMedia(woff2(), "HouseSans.woff2");
+
+        assert.strictEqual(media.kind, "font");
+        assert.strictEqual(media.defaultWeight, null);
+      });
+
+      it("has none on an image", async function () {
+        const media = await createMedia(await png(100), "picture.png");
+
+        assert.strictEqual(media.defaultWeight, null);
+      });
+    });
 
     it("refuses a TrueType font", async function () {
       await assert.rejects(

@@ -3,6 +3,7 @@ const sharp = require("sharp");
 
 const { BadRequestError } = require("../../../errors/BaseError");
 const { MEDIA_KIND } = require("../../schemas/mediaSchema");
+const { fontDefaultWeight } = require("./font-default-weight");
 const { imageMaxPixels } = require("./media-config");
 
 const SVG_MIME_TYPE = "image/svg+xml";
@@ -146,10 +147,11 @@ async function readImageMetadata(data, type) {
 /**
  * Decides the type of an upload from its content: magic bytes for binary
  * formats, an XML sniff for SVG, and a sharp decode for every image on top.
+ * A font gets the default of its weight axis read (`font.defaultWeight`).
  *
  * @param {Buffer} data - The uploaded bytes.
  * @returns {Promise<{mimeType: string, kind: string, image: Object|null,
- *   variants: boolean}>}
+ *   font: {defaultWeight: number|null}|null, variants: boolean}>}
  * @throws {BadRequestError} On empty files and types outside the allowlist.
  */
 async function detectUploadType(data) {
@@ -190,6 +192,10 @@ async function detectUploadType(data) {
     mimeType: type.mimeType,
     kind: type.kind,
     image: decodable ? await readImageMetadata(data, type) : null,
+    font:
+      type.kind === MEDIA_KIND.FONT
+        ? { defaultWeight: fontDefaultWeight(data) }
+        : null,
     variants: decodable,
   };
 }
@@ -205,7 +211,7 @@ async function detectUploadType(data) {
  * @param {Buffer} data - The stored bytes.
  * @param {string} [fileName] - Name the file had in the legacy tree.
  * @returns {Promise<{mimeType: string, kind: string, image: Object|null,
- *   variants: boolean}>}
+ *   font: Object|null, variants: boolean}>}
  * @throws {BadRequestError} On empty files.
  */
 async function detectStoredType(data, fileName) {
@@ -224,6 +230,7 @@ async function detectStoredType(data, fileName) {
       mimeType,
       kind: MEDIA_KIND.DOCUMENT,
       image: null,
+      font: null,
       variants: false,
     };
   }
