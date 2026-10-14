@@ -160,6 +160,13 @@ class EventController {
         throw new NotFoundError("event_not_found", { eventId: event.id });
       }
 
+      // A client that names no owner (field left out, null, empty or blank)
+      // keeps the stored one, so the owner does not lose the event.
+      const namedOwner = request.body.ownerUserId;
+      if (typeof namedOwner !== "string" || namedOwner.trim() === "") {
+        event.ownerUserId = existingEvent.ownerUserId;
+      }
+
       if (!existingEvent.isPublic && event.isPublic) {
         if ((await EventManager.checkPublicEventCount(tenant)) === false) {
           throw new Error(`Maximum number of public events reached.`);
