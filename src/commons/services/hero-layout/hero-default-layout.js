@@ -1,6 +1,7 @@
 const { MEDIA_REFERENCE_SOURCE } = require("../../schemas/mediaSchema");
 const {
   BLOCK_DEFAULTS,
+  HERO_APP_LOGO_SOURCE,
   HERO_LAYOUT_DEFAULTS,
   HERO_LAYOUT_VERSION,
 } = require("./hero-layout-schema");
@@ -17,7 +18,9 @@ const {
  * Two of its Blocks depend on the instance: the logo Block is there only when
  * the branding carries a logo medium, the title Block only when the Portal
  * Name is non-empty. There is no fallback title - a Catalog without a name
- * shows the slogan alone.
+ * shows the slogan alone. The logo Block names the source `app-logo` rather
+ * than the logo's media id, so it follows a new app logo and its variant for
+ * the dark mode, also once the layout is saved.
  */
 
 // The slogan every Default Hero Layout ends with. It replaced the removed
@@ -40,22 +43,21 @@ function portalNameOf(name) {
 }
 
 /**
- * The logo Block: the branding logo, stacked above the title on mobile.
+ * The logo Block: the app logo, stacked above the title on mobile. It has no
+ * switch for the dark mode - the app logo brings its own rule.
  *
- * @param {string} mediaId - The medium of the branding logo.
  * @param {string} portalName - The alt text of the logo.
  * @returns {Object} The Block in its stored form.
  */
-function logoBlock(mediaId, portalName) {
+function logoBlock(portalName) {
   return {
     id: "default-logo",
     type: "image",
     zone: "middle-right",
     ...BLOCK_DEFAULTS,
-    image: { source: MEDIA_REFERENCE_SOURCE.MEDIA, mediaId },
+    image: { source: HERO_APP_LOGO_SOURCE },
     alt: { de: portalName },
     maxHeight: "sm",
-    invertInDarkMode: true,
   };
 }
 
@@ -100,8 +102,9 @@ function sloganBlock() {
 
 /**
  * Derives the Default Hero Layout of one Catalog, in the stored form of the
- * contract: media references are `{ source, mediaId }` and get their URL and
- * dimensions on the way out like any stored layout.
+ * contract: the logo Block's reference is `{ source: "app-logo" }` and gets
+ * the URL and dimensions of the app logo on the way out like any stored
+ * layout.
  *
  * @param {Object} instance - What the layout is derived from.
  * @param {?string} instance.name - The Catalog's `name`, the Portal Name.
@@ -114,7 +117,7 @@ function defaultHeroLayout({ name, logo }) {
   const blocks = [];
 
   if (logo?.source === MEDIA_REFERENCE_SOURCE.MEDIA && logo.mediaId) {
-    blocks.push(logoBlock(logo.mediaId, portalName));
+    blocks.push(logoBlock(portalName));
   }
 
   if (portalName) {

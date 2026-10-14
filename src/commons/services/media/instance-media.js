@@ -65,6 +65,12 @@ function exportInstanceBranding(branding) {
       "";
   }
 
+  // The variant of the logo for the dark mode has no legacy read field: it
+  // goes out as a reference with its URL, like the logo.
+  if (plain.logoDark !== undefined) {
+    plain.logoDark = enrichMediaReference(plain.logoDark, null);
+  }
+
   return plain;
 }
 
@@ -122,6 +128,30 @@ function instanceBrandingReferences(instance) {
 }
 
 /**
+ * The branding reference sites of an instance that must be images: the
+ * variant of the logo for the dark mode and, per footer logo, its image and
+ * its variant for the dark mode (map #510). Kept apart from
+ * `BRANDING_REFERENCE_FIELDS`, which the media import walks for the legacy
+ * read fields these sites never had. Read off the request body before any
+ * check, so a list or a logo of the wrong shape yields nothing here and is
+ * refused by the branding check.
+ *
+ * @param {Object} instance - The instance being saved.
+ * @returns {Array<Object|string|null>}
+ */
+function instanceBrandingImageReferences(instance) {
+  const branding = instance?.branding;
+  const footerLogos = Array.isArray(branding?.footerLogos)
+    ? branding.footerLogos
+    : [];
+
+  return [
+    branding?.logoDark,
+    ...footerLogos.flatMap((logo) => [logo?.image, logo?.imageDark]),
+  ];
+}
+
+/**
  * The legal document reference sites of an instance.
  *
  * @param {Object} instance - The instance being saved.
@@ -157,6 +187,7 @@ module.exports = {
   exportInstanceBranding,
   exportInstanceDocument,
   exportInstanceMedia,
+  instanceBrandingImageReferences,
   instanceBrandingReferences,
   instanceDocumentReferences,
 };

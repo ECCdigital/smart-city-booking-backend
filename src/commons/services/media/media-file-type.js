@@ -3,9 +3,13 @@ const sharp = require("sharp");
 
 const { BadRequestError } = require("../../../errors/BaseError");
 const { MEDIA_KIND } = require("../../schemas/mediaSchema");
+const { fontDefaultWeight } = require("./font-default-weight");
 const { imageMaxPixels } = require("./media-config");
 
 const SVG_MIME_TYPE = "image/svg+xml";
+const WOFF2_MIME_TYPE = "font/woff2";
+// The signature a woff2 file starts with (W3C WOFF2, section 3).
+const WOFF2_SIGNATURE = Buffer.from("wOF2");
 const ICO_MIME_TYPE = "image/x-icon";
 const GENERIC_MIME_TYPE = "application/octet-stream";
 
@@ -31,6 +35,9 @@ const ALLOWED_TYPES = [
   // — so nothing is lost by having no variants (§4.9).
   { mimeType: ICO_MIME_TYPE, kind: MEDIA_KIND.IMAGE, sharpFormats: [] },
   { mimeType: "application/pdf", kind: MEDIA_KIND.DOCUMENT, sharpFormats: [] },
+  // A web font is taken as woff2 alone, the one format every browser of the
+  // storefront reads; TTF, OTF and WOFF are refused like any other type.
+  { mimeType: WOFF2_MIME_TYPE, kind: MEDIA_KIND.FONT, sharpFormats: [] },
 ];
 
 const ALLOWED_MIME_TYPES = ALLOWED_TYPES.map((type) => type.mimeType);
@@ -88,6 +95,19 @@ function looksLikeSvg(data) {
 }
 
 /**
+ * Whether the buffer holds a woff2 font. The signature „wOF2“ decides alone:
+ * `file-type` also demands the flavour of a single TrueType or CFF font
+ * behind it and so misses a woff2 of the flavour `true` or a collection
+ * (`ttcf`).
+ *
+ * @param {Buffer} data - The uploaded bytes.
+ * @returns {boolean} True if the bytes start with the woff2 signature.
+ */
+function looksLikeWoff2(data) {
+  return data.subarray(0, WOFF2_SIGNATURE.length).equals(WOFF2_SIGNATURE);
+}
+
+/**
  * Confirms that the bytes really decode as the detected image type, and reads
  * the dimensions the variant presets are measured against.
  *
@@ -127,10 +147,11 @@ async function readImageMetadata(data, type) {
 /**
  * Decides the type of an upload from its content: magic bytes for binary
  * formats, an XML sniff for SVG, and a sharp decode for every image on top.
+ * A font gets the default of its weight axis read (`font.defaultWeight`).
  *
  * @param {Buffer} data - The uploaded bytes.
  * @returns {Promise<{mimeType: string, kind: string, image: Object|null,
- *   variants: boolean}>}
+ *   font: {defaultWeight: number|null}|null, variants: boolean}>}
  * @throws {BadRequestError} On empty files and types outside the allowlist.
  */
 async function detectUploadType(data) {
@@ -138,9 +159,16 @@ async function detectUploadType(data) {
     throw new BadRequestError("empty_file");
   }
 
-  // SVG has to be sniffed first: it is XML, so `file-type` either reports the
-  // generic XML type or nothing at all.
-  let mimeType = looksLikeSvg(data) ? SVG_MIME_TYPE : null;
+  // SVG and woff2 have to be sniffed first: SVG is XML, so `file-type` either
+  // reports the generic XML type or nothing at all, and it knows woff2 only
+  // for some of its flavours.
+  let mimeType = null;
+
+  if (looksLikeSvg(data)) {
+    mimeType = SVG_MIME_TYPE;
+  } else if (looksLikeWoff2(data)) {
+    mimeType = WOFF2_MIME_TYPE;
+  }
 
   if (!mimeType) {
     const { fileTypeFromBuffer } = await loadFileType();
@@ -164,6 +192,10 @@ async function detectUploadType(data) {
     mimeType: type.mimeType,
     kind: type.kind,
     image: decodable ? await readImageMetadata(data, type) : null,
+    font:
+      type.kind === MEDIA_KIND.FONT
+        ? { defaultWeight: fontDefaultWeight(data) }
+        : null,
     variants: decodable,
   };
 }
@@ -179,7 +211,7 @@ async function detectUploadType(data) {
  * @param {Buffer} data - The stored bytes.
  * @param {string} [fileName] - Name the file had in the legacy tree.
  * @returns {Promise<{mimeType: string, kind: string, image: Object|null,
- *   variants: boolean}>}
+ *   font: Object|null, variants: boolean}>}
  * @throws {BadRequestError} On empty files.
  */
 async function detectStoredType(data, fileName) {
@@ -198,6 +230,7 @@ async function detectStoredType(data, fileName) {
       mimeType,
       kind: MEDIA_KIND.DOCUMENT,
       image: null,
+      font: null,
       variants: false,
     };
   }

@@ -1,8 +1,10 @@
 /**
  * The Default Hero Layout of the Shared contract (hero-layout spec), the
  * layout the backend derives when a Catalog stores none. It is the contract's
- * JSON verbatim, with the two placeholders filled: `<catalog.name>` is the
- * Portal Name below, `<branding.logo.mediaId>` the logo medium below.
+ * JSON verbatim, with the placeholder `<catalog.name>` filled with the Portal
+ * Name below. Its logo Block follows the app logo (`source: "app-logo"`,
+ * ECCdigital/tickets#522) and is there only while the branding carries a logo
+ * medium, such as the one below.
  *
  * The storefront copies this file for its own guard tests
  * (`smart-city-booking-store-front`, hero-layout-impl). A change to the layout
@@ -36,10 +38,9 @@ const DEFAULT_HERO_LAYOUT = Object.freeze({
       layer: "back",
       homeOnly: false,
       hideOnMobile: false,
-      image: { source: "media", mediaId: LOGO_MEDIA_ID },
+      image: { source: "app-logo" },
       alt: { de: PORTAL_NAME },
       maxHeight: "sm",
-      invertInDarkMode: true,
     },
     {
       id: "default-title",

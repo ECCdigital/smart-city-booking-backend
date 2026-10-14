@@ -14,23 +14,17 @@ const {
   normalizeBackground,
 } = require("../services/hero-layout/hero-layout-schema");
 const {
+  normalizeBranding,
+  withBrandingDefaults,
+} = require("../services/instance/branding-schema");
+const { confirmFontLicense } = require("../services/instance/branding-font");
+const {
   SUPERVISION_LEVELS,
   assertSupervisionLevel,
   INITIAL_SUPERVISION_LEVELS,
 } = require("../services/supervision/supervision-constants");
 const { NotFoundError } = require("../../errors/BaseError");
 const { userIdsMatch } = require("../utilities/user-id-utils");
-
-const DEFAULT_BRANDING = Object.freeze({
-  active: false,
-  theme: {
-    colors: { primary: "", secondary: "" },
-  },
-  logo: null,
-  favicon: null,
-  logoUrl: "",
-  faviconUrl: "",
-});
 
 const DEFAULT_PORTAL = Object.freeze({
   publicOffersEnabled: false,
@@ -40,9 +34,14 @@ const DEFAULT_PORTAL = Object.freeze({
 // Where the instance holds a media reference (§4.9 of the media spec). The two
 // halves are searched together for the usage proof and apart wherever only the
 // publicly served sites count.
+// A path into the footer logos matches every logo of the list.
 const BRANDING_MEDIA_PATHS = Object.freeze([
   "branding.logo.mediaId",
+  "branding.logoDark.mediaId",
   "branding.favicon.mediaId",
+  "branding.footerLogos.image.mediaId",
+  "branding.footerLogos.imageDark.mediaId",
+  "branding.font.reference.mediaId",
 ]);
 const DOCUMENT_MEDIA_PATHS = Object.freeze([
   "dataProtection.reference.mediaId",
@@ -77,7 +76,16 @@ class InstanceManager {
     return rawInstance.toEntity();
   }
 
-  static async updateInstance(instance) {
+  /**
+   * Stores the instance as a whole.
+   *
+   * @param {Object} instance - The instance being saved.
+   * @param {Object} [session]
+   * @param {?string} [session.userId] - Login of the person saving: who
+   *   confirms the licence of a new font of the library.
+   * @returns {Promise<?Instance>} The stored instance, or null without one.
+   */
+  static async updateInstance(instance, { userId = null } = {}) {
     // The mirror reads absence, so it has to see the payload as it arrived: a
     // constructed entity carries the schema default `portalUrl: ""` and would
     // make every deliberate clear look like an omission.
@@ -108,12 +116,24 @@ class InstanceManager {
 
     instanceEntity.validate();
 
+    // The appearance in the branding is refused before anything is read or
+    // written, like the rest of the instance.
+    instanceEntity.branding = normalizeBranding(instanceEntity.branding);
+
     const rawInstance = await InstanceModel.findOne();
     if (!rawInstance) {
       return null;
     }
 
     await InstanceManager._applyBackground(instanceEntity, rawInstance);
+
+    // A confirmed licence holds for the font it was given for, so it is
+    // settled against the stored one.
+    instanceEntity.branding.font = confirmFontLicense(
+      instanceEntity.branding.font,
+      rawInstance.branding?.font,
+      { confirmedBy: userId },
+    );
 
     // A write that does not name the Startstufe keeps the stored one: a
     // client from before the field must not reset it to the default.
@@ -224,10 +244,11 @@ class InstanceManager {
     const raw = await InstanceModel.findOne({}, { branding: 1 }).lean();
     // `logoUrl`/`faviconUrl` are derived from the stored media references
     // (§4.9), so every catalog endpoint keeps reading the fields it always did.
-    const branding = exportInstanceBranding({
-      ...DEFAULT_BRANDING,
-      ...(raw?.branding ?? {}),
-    });
+    // The defaults are filled in deep: an instance from before the accent
+    // colour stored `theme.colors` without it.
+    const branding = exportInstanceBranding(
+      withBrandingDefaults(raw?.branding),
+    );
 
     InstanceCache.setBranding(branding);
     return branding;

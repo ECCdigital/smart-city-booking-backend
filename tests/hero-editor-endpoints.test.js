@@ -88,6 +88,13 @@ const enriched = (mediaId) => ({
   height: 800,
 });
 
+/** What a Block that follows the app logo answers, without a variant. */
+const appLogo = (mediaId) => {
+  const { url, width, height } = enriched(mediaId);
+
+  return { source: "app-logo", url, width, height, dark: null };
+};
+
 /** The branding logo as `getBranding` hands it out. */
 const BRANDING_LOGO = Object.freeze({
   source: "media",
@@ -328,7 +335,7 @@ describe("the Hero editor endpoints", function () {
 
       expect(res.body.heroLayout.blocks[0].id).to.equal("default-logo");
       expect(res.body.heroLayout.blocks[0].image).to.deep.equal(
-        enriched(LOGO_MEDIA_ID),
+        appLogo(LOGO_MEDIA_ID),
       );
     });
 
@@ -765,7 +772,7 @@ describe("the Hero editor endpoints", function () {
         ...DEFAULT_HERO_LAYOUT,
         blocks: DEFAULT_HERO_LAYOUT.blocks.map((block) =>
           block.type === "image"
-            ? { ...block, image: enriched(LOGO_MEDIA_ID) }
+            ? { ...block, image: appLogo(LOGO_MEDIA_ID) }
             : block,
         ),
       });

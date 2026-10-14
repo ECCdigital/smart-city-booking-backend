@@ -3,6 +3,7 @@ const { Schema } = require("mongoose");
 const MEDIA_KIND = {
   IMAGE: "image",
   DOCUMENT: "document",
+  FONT: "font",
 };
 
 const MEDIA_VISIBILITY = {
@@ -122,6 +123,10 @@ const mediaSchemaDefinition = {
   // backfill-dimensions` has run.
   width: { type: Number, default: null },
   height: { type: Number, default: null },
+  // The default of the weight axis of a variable font, as read at upload
+  // time (ECCdigital/tickets#524). Null on every other medium, on a static
+  // font and on a font whose tables could not be read.
+  defaultWeight: { type: Number, default: null },
 
   title: { type: String, default: "" },
   altText: { type: String, default: "" },

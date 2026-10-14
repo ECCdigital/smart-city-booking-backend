@@ -12,9 +12,11 @@
 
       The type is decided from the content (magic bytes plus an image decode),
       never from the file name: JPEG, PNG, WebP, GIF, SVG, ICO and PDF are
-      accepted. ICO is let in by its magic bytes alone and gets no variants —
-      sharp cannot read it.
-      Uploads are limited per kind (images 15 MB, documents 50 MB by default).
+      accepted, and woff2 as kind `font` (magic number „wOF2“; TTF, OTF and
+      WOFF are refused). ICO and woff2 are let in by their magic bytes alone
+      and get no variants.
+      Uploads are limited per kind (images 15 MB, documents 50 MB by default,
+      fonts 500 KB fixed).
       Image uploads generate their variants synchronously — if one of them
       fails, the whole upload fails and no medium is created.
     security:
@@ -101,7 +103,7 @@
         in: query
         schema:
           type: string
-          enum: [image, document]
+          enum: [image, document, font]
       - name: tag
         in: query
         schema:
@@ -448,7 +450,7 @@
         in: query
         schema:
           type: string
-          enum: [image, document]
+          enum: [image, document, font]
       - name: tag
         in: query
         schema:
