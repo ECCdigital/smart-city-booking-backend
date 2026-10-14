@@ -30,6 +30,17 @@ function clone(value) {
 }
 
 /**
+ * A booking entity as `updateOne` stores it: the own fields of its hooks,
+ * not their API form (`BookingHook#toJSON` masks the bank details).
+ */
+function toDocument(booking) {
+  return clone({
+    ...booking,
+    hooks: (booking.hooks || []).map((hook) => ({ ...hook })),
+  });
+}
+
+/**
  * An adapter of async methods that records every call, throws for the
  * operations named in `failOn` and answers `SKIPPED` for those named in
  * `skipOn` (a tenant without a payment service, say).
@@ -129,7 +140,7 @@ function inMemoryStore(seed = [], tenant = DEFAULT_TENANT, groups = []) {
         });
       }
       const previous = clone(row);
-      const next = clone(booking);
+      const next = toDocument(booking);
       for (const field of unset) {
         delete next[field];
       }

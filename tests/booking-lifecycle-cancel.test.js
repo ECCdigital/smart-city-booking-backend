@@ -7,6 +7,9 @@
  * the state cancelled from with the grant or the hold.
  */
 
+process.env.CRYPTO_SECRET =
+  process.env.CRYPTO_SECRET || "0123456789abcdef0123456789abcdef";
+
 const { expect } = require("chai");
 
 const {
@@ -27,6 +30,7 @@ const {
   inMemoryAdapters,
   effectTable,
 } = require("./helpers/in-memory-lifecycle-adapters");
+const { decryptBankDetails } = require("../src/commons/utilities/bank-details");
 
 const TENANT = "tenant-1";
 const NOW = 1_756_800_000_000;
@@ -637,14 +641,14 @@ describe("booking lifecycle: requestCancel", function () {
     expect(stored.status).to.equal("confirmed");
     expect(stored.hooks).to.have.length(1);
     expect(stored.hooks[0]).to.include({ type: "REJECT" });
-    expect(stored.hooks[0].payload).to.deep.equal({
-      reason: "Krank",
-      bankDetails: {
-        accountHolder: "Erika",
-        bankName: "",
-        iban: "DE123456",
-        bic: "ABC",
-      },
+    expect(stored.hooks[0].payload.reason).to.equal("Krank");
+    expect(
+      decryptBankDetails(stored.hooks[0].payload.bankDetails),
+    ).to.deep.equal({
+      accountHolder: "Erika",
+      bankName: "",
+      iban: "DE123456",
+      bic: "ABC",
     });
     expect(adapters.store.calls).to.deep.equal([
       { op: "save", args: ["B-1", "confirmed"] },

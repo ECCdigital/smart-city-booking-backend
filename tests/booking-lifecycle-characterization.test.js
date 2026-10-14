@@ -41,6 +41,7 @@ const {
   BookingStatusAction,
 } = require("../src/commons/services/workflow/workflow-action");
 const BookingCheckout = require("../src/commons/services/checkout/booking-checkout");
+const { decryptBankDetails } = require("../src/commons/utilities/bank-details");
 
 describe("booking lifecycle today: what each state change does at the seam", function () {
   let h;
@@ -1013,7 +1014,9 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         },
       });
 
-      expect(h.stored(id).hooks[0].payload.bankDetails).to.deep.equal({
+      expect(
+        decryptBankDetails(h.stored(id).hooks[0].payload.bankDetails),
+      ).to.deep.equal({
         accountHolder: "Erika Muster",
         bankName: "",
         iban: "DE123456",

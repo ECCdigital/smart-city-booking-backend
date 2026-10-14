@@ -41,6 +41,7 @@ const {
   sanitizeBankDetails,
 } = require("../payment/cancellation-refund-service");
 const { BOOKING_HOOK_TYPES } = require("../../entities/booking/bookingHook");
+const { encryptBankDetails } = require("../../utilities/bank-details");
 const { NotFoundError, ForbiddenError } = require("../../../errors/BaseError");
 
 const WORKFLOW_EVENT = Object.freeze({
@@ -586,7 +587,9 @@ function createBookingLifecycle(adapters) {
     const payload = { reason };
     const sanitizedBankDetails = sanitizeBankDetails(bankDetails);
     if (sanitizedBankDetails) {
-      payload.bankDetails = sanitizedBankDetails;
+      // At rest only encrypted (ECCdigital/tickets#16): without a valid
+      // `CRYPTO_SECRET` this throws before anything is written.
+      payload.bankDetails = encryptBankDetails(sanitizedBankDetails);
     }
     const hook = booking.addHook(BOOKING_HOOK_TYPES.REJECT, payload);
 
