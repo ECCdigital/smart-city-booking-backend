@@ -260,6 +260,32 @@ describe("group booking lifecycle today: what each state change does at the seam
         "store.remove B2",
       ]);
     });
+
+    it("a simulated group checkout stores neither the members nor the group and answers the members it would book; the real one stores the group", async function () {
+      const res = await api()
+        .post(`/api/v2/${TENANT}/checkout/group?simulate=true`)
+        .set(h.as(CUSTOMER))
+        .send({
+          bookableItems: [{ bookableId: "room", amount: 1 }],
+          bookingAttempts: [
+            { timeBegin: TIME_BEGIN, timeEnd: TIME_END },
+            { timeBegin: TIME_BEGIN + DAY, timeEnd: TIME_END + DAY },
+          ],
+          name: "Erika Muster",
+          mail: CUSTOMER,
+          paymentProvider: "giroCockpit",
+        });
+
+      expect(res.status).to.equal(200);
+      expect(res.body.data.groupBooking.bookings).to.have.length(2);
+      expect(h.store.size).to.equal(0);
+      expect(h.groups.size).to.equal(0);
+      expect(h.takeEffects()).to.deep.equal([]);
+
+      const { groupBooking } = (await groupCheckout("room")).data;
+      expect(h.groups.has(groupBooking.id)).to.equal(true);
+      expect(states(groupBooking.id)).to.deep.equal(["requested", "requested"]);
+    });
   });
 
   // -----------------------------------------------------------------------

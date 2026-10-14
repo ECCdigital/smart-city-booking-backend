@@ -1178,6 +1178,51 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       ]);
     });
 
+    // The owner (`assignedUserId`) is set when the booking is created and
+    // an edit keeps it (ECCdigital/tickets#484). Before, the PUT took the
+    // first mail of the form as owner, like a manual booking: a guest
+    // booking fell silently to the account of that mail, and a booking of
+    // an account left the customer's list when the admin changed the mail.
+    describe("the owner stays the one the booking was created with", function () {
+      const OTHER = "max@example.test";
+
+      it("a guest booking stays without owner when the admin changes the mail", async function () {
+        const res = await api()
+          .post(`/api/v2/${TENANT}/checkout`)
+          .send(checkoutBody("room"));
+        expect(res.status).to.equal(200);
+        const id = res.body.data.booking.id;
+        expect(h.stored(id).assignedUserId).to.not.be.ok;
+
+        const put = await update(id, { mail: OTHER });
+
+        expect(put.status).to.equal(201);
+        expect(h.stored(id).mail).to.equal(OTHER);
+        expect(h.stored(id).assignedUserId).to.not.be.ok;
+      });
+
+      it("a booking of an account stays the account's when the admin changes the mail", async function () {
+        const id = await bookingIn("requested");
+        expect(h.stored(id).assignedUserId).to.equal(CUSTOMER);
+
+        const put = await update(id, { mail: OTHER, assignedUserId: OTHER });
+
+        expect(put.status).to.equal(201);
+        expect(h.stored(id).mail).to.equal(OTHER);
+        expect(h.stored(id).assignedUserId).to.equal(CUSTOMER);
+      });
+
+      it("a manual booking belongs to the first mail it is created with", async function () {
+        const booking = await h.manualBooking(
+          "room",
+          {},
+          { mail: `Max@Example.test, ${CUSTOMER}` },
+        );
+
+        expect(h.stored(booking.id).assignedUserId).to.equal(OTHER);
+      });
+    });
+
     // The PUT is the plan of spec part 1, section 6 (`update-plan.js`):
     // `amend` first, the content write in the state the booking is in with
     // the access following the content, then the transitions the flags ask

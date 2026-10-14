@@ -8,6 +8,7 @@ const {
 const {
   REFUND_STATE,
 } = require("../services/payment/cancellation-refund-service");
+const { BOOKED_VIA } = require("../services/checkout/booked-via");
 
 const bookingHookSchemaDefinition = {
   id: { type: String, required: true },
@@ -114,6 +115,9 @@ const bookingSchemaDefinition = {
   id: { type: String, required: true, unique: true },
   tenantId: { type: String, required: true, ref: "Tenant" },
   assignedUserId: { type: String, ref: "User", default: "" },
+  // The Buchungsweg (booked-via.js), set once when the checkout creates the
+  // booking. No default: a booking from before it has none.
+  bookedVia: { type: String, enum: BOOKED_VIA },
   attachments: {
     type: [new Schema(attachmentSchemaDefinition, { _id: false })],
     default: [],

@@ -32,6 +32,10 @@ _Avoid_: Preisüberschreibung (technischer Jargon), Fixpreis (das ist die Eigens
 Wie viele Einheiten eines Bookables eine einzelne Buchung höchstens enthalten darf, über alle ihre Positionen dieses Bookables zusammengezählt. Leer heißt unbegrenzt. Gilt für jede vom Buchenden gewählte Position, ob Hauptposition, Addon oder Teil eines Bundles; Pflicht-Addons nicht, ihre Menge folgt der Position, zu der sie gehören. Eine Buchbarkeits-Prüfung: Sie gilt in der Selbstbuchung, nicht in der manuellen Buchung. Unabhängig von der Kapazität des Bookables und von einer Höchstmenge, die ein externer Anbieter vorgibt. Gelten mehrere Grenzen, gilt jede, die strengere entscheidet.
 _Avoid_: maxAmount (so heißt die Grenze eines externen Anbieters und die des Coupons), Kapazität, verfügbare Anzahl (das ist die Obergrenze gleichzeitiger Buchungen insgesamt)
 
+**Buchungsweg (einer Buchung)**:
+Wie eine Buchung angelegt wurde: _Angemeldet_ über ein Userkonto, als _Gast_ oder durch die Verwaltung als manuelle Buchung (_Admin_). Er wird einmal beim Anlegen festgelegt und ändert sich nie. Er hängt am Vorgang, nicht an der Person: Ein Admin, der selbst angemeldet über den Checkout bucht, bucht als _Angemeldet_. Alte Buchungen haben keinen Buchungsweg.
+_Avoid_: Herkunft, Origin, Kanal, Buchungsart
+
 ### Mediathek
 
 **Medium**:

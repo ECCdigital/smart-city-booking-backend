@@ -22,6 +22,7 @@ const { GroupBooking } = require("../../entities/groupBooking/groupBooking");
 const { BundleCheckoutService } = require("./bundle-checkout-service");
 const checkoutPolicy = require("./checkout-policy");
 const { CheckoutPolicy } = checkoutPolicy;
+const { bookedViaOf } = require("./booked-via");
 const { CustomFieldService } = require("../custom-field/custom-field-service");
 const { CheckoutError } = require("../../../errors/CheckoutError");
 const { CHECKOUT_REASONS } = require("./checkout-reasons");
@@ -306,6 +307,10 @@ async function createBooking({
     booking = new Booking(booking);
   }
 
+  // The Buchungsweg is set here and nowhere else (GLOSSARY.md), from the
+  // policy and the sign-in; a value the client sends is never read.
+  booking.bookedVia = bookedViaOf(policy, user);
+
   booking.validate();
 
   logger.debug(
@@ -454,7 +459,7 @@ async function generateGroupBookingReference(
  * deleted, the coupons given back and what caused the abort thrown.
  *
  * @param {{ tenantId: string, user?: Object, contactData: Object, bookingAttempts: Object[], paymentProvider: string, simulate: boolean, policy?: string }} params
- * @returns {Promise<GroupBooking>} The group with its members as stored after the admission
+ * @returns {Promise<GroupBooking>} The group with its members as stored after the admission; under `simulate` the group it would book, unstored, with the computed members
  */
 async function createGroupBooking({
   tenantId,
@@ -525,23 +530,28 @@ async function createGroupBooking({
     mail: contactData.mail,
   });
 
+  // A simulation stores no member, so it stores no group either: it
+  // answers the group it would book, with the members it computed.
+  if (simulate) {
+    groupBooking.bookings = allBookings;
+    return groupBooking;
+  }
+
   await GroupBookingManager.storeGroupBooking(groupBooking);
 
-  if (!simulate) {
-    try {
-      await groupBookingLifecycle.admit(tenantId, uniqueId, {
-        trigger: triggerOf(policy),
-      });
-    } catch (err) {
-      logger.error(
-        `${tenantId} -- admission of group booking ${uniqueId} aborted, rolling back: ${err.message}`,
-      );
-      for (const booking of allBookings) {
-        await rollback(tenantId, booking);
-      }
-      await GroupBookingManager.deleteGroupBooking(tenantId, uniqueId);
-      throw causeOf(err);
+  try {
+    await groupBookingLifecycle.admit(tenantId, uniqueId, {
+      trigger: triggerOf(policy),
+    });
+  } catch (err) {
+    logger.error(
+      `${tenantId} -- admission of group booking ${uniqueId} aborted, rolling back: ${err.message}`,
+    );
+    for (const booking of allBookings) {
+      await rollback(tenantId, booking);
     }
+    await GroupBookingManager.deleteGroupBooking(tenantId, uniqueId);
+    throw causeOf(err);
   }
 
   return await GroupBookingManager.getGroupBooking(
@@ -662,7 +672,9 @@ async function updateBooking(
   // booking is in, so the checkout prepares it without them.
   const bundleCheckoutService = new BundleCheckoutService(
     {
-      user: updatedBooking.assignedUserId,
+      // The owner is the stored one, not the form's: an edit does not
+      // change whom the booking belongs to.
+      user: oldBooking.assignedUserId,
       tenant: tenantId,
       timeBegin: updatedBooking.timeBegin,
       timeEnd: updatedBooking.timeEnd,
@@ -706,6 +718,12 @@ async function updateBooking(
 
   if (!(booking instanceof Booking)) {
     booking = new Booking(booking);
+  }
+
+  // An edit keeps the Buchungsweg the booking was created with, and one
+  // without stays without; the form's value is never read.
+  if (oldBooking.bookedVia) {
+    booking.bookedVia = oldBooking.bookedVia;
   }
 
   if (onUnreject) {
