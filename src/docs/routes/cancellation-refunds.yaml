@@ -127,6 +127,51 @@
           `invalid_transition` - the booking is cancelled or rejected already
           (params carry `status` and `transition`)
 
+/api/{tenant}/bookings/{bookingId}/request-reject:
+  post:
+    tags:
+      - Bookings
+    summary: Request the cancellation of a booking as its customer
+    description: |
+      Writes a pending `REJECT` hook and mails the customer a verification
+      link with the refund preview; the booking keeps its state until the
+      hook is released (`GET /bookings/{bookingId}/hooks/{hookId}/release`).
+      Only where the booking's cancellation policy is user-cancellable.
+
+      The optional `bankDetails` are stored in the hook only encrypted with
+      `CRYPTO_SECRET` (AES-256-CBC), each field on its own; the release
+      decrypts them for the cancellation document. Every booking response
+      (one booking, the list, the customer's own bookings) answers them in
+      `hooks[].payload.bankDetails` only masked, see `MaskedBankDetails`.
+      Without a valid `CRYPTO_SECRET` nothing is written and the request
+      answers `500`.
+    parameters:
+      - $ref: "#/components/parameters/CancellationTenantParam"
+      - $ref: "#/components/parameters/CancellationBookingIdParam"
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/BookingCancellationCustomerRequest"
+    responses:
+      "201":
+        description: Hook written, verification mail sent
+      "400":
+        description: Missing booking id
+      "403":
+        description: >-
+          `booking_user_cancellation_disabled` - the booking's policy is not
+          user-cancellable
+      "404":
+        description: Booking not found
+      "409":
+        description: >-
+          `invalid_transition` - the booking is cancelled or rejected already
+      "500":
+        description: >-
+          `booking_reject_request_failed`, also when `CRYPTO_SECRET` is
+          missing or not 32 bytes long and bank details were given
+
 /api/{tenant}/group-bookings/{groupBookingId}/cancellation-refund-preview:
   get:
     tags:
@@ -247,6 +292,47 @@ components:
               type: string
             bic:
               type: string
+
+    BookingCancellationCustomerRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+        bankDetails:
+          type: object
+          description: >-
+            Optional bank details for the refund. Trimmed, IBAN and BIC
+            without spaces and upper-cased, then stored only encrypted.
+          properties:
+            accountHolder:
+              type: string
+            bankName:
+              type: string
+            iban:
+              type: string
+            bic:
+              type: string
+
+    MaskedBankDetails:
+      type: object
+      description: >-
+        The bank details of a cancellation request as every booking response
+        answers them in `hooks[].payload.bankDetails`: the last four digits
+        of the IBAN, `***` for every other field given, `""` for a field left
+        empty. A field that cannot be decrypted is answered `***`.
+      properties:
+        accountHolder:
+          type: string
+          example: "***"
+        bankName:
+          type: string
+          example: "***"
+        iban:
+          type: string
+          example: "****3000"
+        bic:
+          type: string
+          example: "***"
 
     GroupBookingCancellationRequest:
       type: object

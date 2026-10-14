@@ -1,6 +1,7 @@
 const { v4: uuidv4 } = require("uuid");
 const { bookingHookSchemaDefinition } = require("../../schemas/bookingSchema");
 const SchemaUtils = require("../../utilities/schemaUtils");
+const { maskBankDetails } = require("../../utilities/bank-details");
 
 const BOOKING_HOOK_TYPES = Object.freeze({
   REJECT: "REJECT",
@@ -25,6 +26,24 @@ class BookingHook {
     }
 
     return true;
+  }
+
+  /**
+   * The hook as the API answers it: the bank details of a cancellation
+   * request only masked (ECCdigital/tickets#16). Mongoose stores the
+   * hook's own fields and never calls this.
+   */
+  toJSON() {
+    if (!this.payload?.bankDetails) {
+      return { ...this };
+    }
+    return {
+      ...this,
+      payload: {
+        ...this.payload,
+        bankDetails: maskBankDetails(this.payload.bankDetails),
+      },
+    };
   }
 
   static create(params) {

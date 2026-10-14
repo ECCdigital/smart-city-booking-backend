@@ -19,6 +19,9 @@ const {
   NotFoundError,
 } = require("../../../errors/BaseError");
 const ApiResponse = require("../../../commons/utilities/api-response");
+const {
+  decryptBankDetails,
+} = require("../../../commons/utilities/bank-details");
 const BookingService = require("../../../commons/services/checkout/booking-service");
 const BookingCheckout = require("../../../commons/services/checkout/booking-checkout");
 const {
@@ -800,7 +803,7 @@ class BookingController {
             trigger: TRIGGER.CUSTOMER,
             reason,
             hookId,
-            bankDetails: bankDetails || null,
+            bankDetails: decryptBankDetails(bankDetails),
           });
         } else {
           return response.sendStatus(400);

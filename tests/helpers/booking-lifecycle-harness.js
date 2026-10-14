@@ -218,6 +218,17 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+/**
+ * A booking entity as `updateOne` stores it: the own fields of its hooks,
+ * not their API form (`BookingHook#toJSON` masks the bank details).
+ */
+function toDocument(entity) {
+  return clone({
+    ...entity,
+    hooks: (entity.hooks || []).map((hook) => ({ ...hook })),
+  });
+}
+
 function bookable(overrides = {}) {
   return new Bookable({
     tenantId: TENANT,
@@ -555,7 +566,7 @@ async function installHarness({
       }
       // `updateOne(filter, document)` is a `$set` of the document's fields:
       // what the document does not carry stays as it was.
-      const merged = { ...(store.get(entity.id) || {}), ...clone(entity) };
+      const merged = { ...(store.get(entity.id) || {}), ...toDocument(entity) };
       for (const field of unset) {
         delete merged[field];
       }
@@ -593,7 +604,7 @@ async function installHarness({
       if (shouldFail("store.save", label(entity.id))) {
         record("store.save", label(entity.id));
       }
-      const merged = { ...previous, ...clone(entity) };
+      const merged = { ...previous, ...toDocument(entity) };
       for (const field of unset) {
         delete merged[field];
       }
