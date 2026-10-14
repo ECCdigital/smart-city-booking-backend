@@ -1,6 +1,9 @@
 const CatalogManager = require("../data-managers/catalog-manager");
 const TenantManager = require("../data-managers/tenant-manager");
 const InstanceManager = require("../data-managers/instance-manager");
+const { BookableManager } = require("../data-managers/bookable-manager");
+const EventManager = require("../data-managers/event-manager");
+const { BOOKABLE_TYPES } = require("../entities/bookable/bookable");
 const {
   getMemberTenantIds,
   isTenantListedInCatalog,
@@ -184,6 +187,29 @@ async function previewPortalName(body) {
   return catalog?.name ?? "";
 }
 
+/**
+ * The offers of a tenant the storefront counts in „Angebot nach Anbietern“
+ * (ECCdigital/tickets#478): what the public projection lists (ADR 0003),
+ * without tickets - they belong to an event - and without events that have
+ * ended.
+ *
+ * @param {string} tenantId A tenant with a public projection
+ * @returns {Promise<{bookableCount: number, eventCount: number}>}
+ */
+async function listedOfferCounts(tenantId) {
+  const [bookables, events] = await Promise.all([
+    BookableManager.getBookables(tenantId, PUBLIC),
+    EventManager.getEvents(tenantId, PUBLIC),
+  ]);
+  const now = new Date();
+  return {
+    bookableCount: bookables.filter(
+      (bookable) => bookable.type !== BOOKABLE_TYPES.TICKET,
+    ).length,
+    eventCount: events.filter((event) => !event.isPast(now)).length,
+  };
+}
+
 class CatalogService {
   static async getInstanceCatalog() {
     const catalog = await CatalogManager.getInstanceCatalog();
@@ -233,15 +259,17 @@ class CatalogService {
         branding: exportBranding(branding),
         portalUrl: portal.portalUrl,
         catalog: catalog.exportPublic(),
-        tenants: allowedTenants.map((tenant) => {
-          return {
+        tenants: await Promise.all(
+          allowedTenants.map(async (tenant) => ({
             id: tenant.id,
             name: tenant.name,
+            description: tenant.description ?? "",
             contactName: tenant.contactName,
             mail: tenant.mail,
             phone: tenant.phone,
-          };
-        }),
+            ...(await listedOfferCounts(tenant.id)),
+          })),
+        ),
       };
     }
   }
