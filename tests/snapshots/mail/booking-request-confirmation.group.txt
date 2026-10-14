@@ -147,7 +147,7 @@ Attachments: Hausordnung.pdf
 </p>
 <p><strong>Artikel:</strong></p>
 <ul>
-    <li>Konzertkarte (x2)</li>
+    <li>Konzertkarte (x2)<br />Format: Präsenz</li>
 </ul>
 
   <a

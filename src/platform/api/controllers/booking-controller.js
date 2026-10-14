@@ -356,8 +356,11 @@ class BookingController {
         );
         // The tenant snapshot and the event core data a customer's page
         // renders from (tenant supervision spec §5.2), whatever the level.
-        const bookingsStatus = await withCustomerView(bookings, (booking) =>
-          booking.exportStatus(),
+        // A lookup by booking number, so without the participation link.
+        const bookingsStatus = await withCustomerView(
+          bookings,
+          (booking) => booking.exportStatus(),
+          { withParticipationLink: false },
         );
 
         logger.info(
