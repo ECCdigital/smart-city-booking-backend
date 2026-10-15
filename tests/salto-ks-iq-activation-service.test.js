@@ -655,6 +655,101 @@ describe("SaltoKsIqActivationService open bookkeeping", () => {
   });
 });
 
+/**
+ * The other tests stub `TenantModel.updateOne`; these let the tenant model
+ * cast the updates and their `arrayFilters` as it does in production, and
+ * stub only the driver's collection behind it. No MongoDB runs: the cast
+ * update is applied to the fake collection.
+ */
+describe("SaltoKsIqActivationService open bookkeeping through the tenant model's casting", () => {
+  beforeEach(() => {
+    sinon.useFakeTimers({
+      now: Date.UTC(2026, 7, 25, 7, 25, 0),
+      toFake: ["Date"],
+    });
+  });
+
+  afterEach(() => {
+    sinon.restore();
+    forgetSaltoKsClients();
+  });
+
+  /** Like {@link stubTenant}, but the write passes the model's casting. */
+  function storeTenant(entryOverrides = {}) {
+    forgetSaltoKsClients();
+    sinon
+      .stub(clientRegistry, "createClient")
+      .callsFake(() => new FakeSaltoKsApiClient());
+    tenants = createFakeMongoose({
+      Tenant: [
+        {
+          id: TENANT_ID,
+          applications: [
+            saltoApp({
+              iqActivations: [
+                {
+                  iqId: IQ_ID,
+                  ...IDENTITY,
+                  secret: SecurityUtils.encrypt("ABCDEFGHIJKLMNOP"),
+                  pin: SecurityUtils.encrypt("1234"),
+                  state: "activated",
+                  activatedAt: new Date(),
+                  failureCount: 0,
+                  blockedUntil: null,
+                  lastError: null,
+                  ...entryOverrides,
+                },
+              ],
+            }),
+          ],
+        },
+      ],
+    }).model("Tenant");
+    sinon.stub(TenantManager, "getTenant").callsFake(async (id) => {
+      const tenant = tenants.documents.find((candidate) => candidate.id === id);
+      return tenant ? structuredClone(tenant) : null;
+    });
+    sinon
+      .stub(TenantModel.collection, "updateOne")
+      .callsFake((filter, update, options) =>
+        tenants.collection.updateOne(filter, update, options),
+      );
+  }
+
+  it("degrades the activation after three otp_invalid in a row", async () => {
+    storeTenant({ failureCount: 2 });
+
+    await SaltoKsIqActivationService.recordOtpInvalid(
+      TENANT_ID,
+      IQ_ID,
+      "otp_invalid",
+    );
+
+    const [entry] = persistedActivations();
+    expect(entry).to.include({
+      failureCount: 3,
+      state: "degraded",
+      lastError: "otp_invalid",
+    });
+  });
+
+  it("backs off after otp_blocked", async () => {
+    storeTenant();
+
+    await SaltoKsIqActivationService.recordOtpBlocked(
+      TENANT_ID,
+      IQ_ID,
+      "otp_blocked",
+    );
+
+    const [entry] = persistedActivations();
+    expect(new Date(entry.blockedUntil).toISOString()).to.equal(
+      new Date(Date.UTC(2026, 7, 25, 7, 50, 0)).toISOString(),
+    );
+    expect(entry.state).to.equal("activated");
+  });
+});
+
 describe("SaltoKsIqActivationService open bookkeeping (reactivation)", () => {
   afterEach(() => {
     sinon.restore();
