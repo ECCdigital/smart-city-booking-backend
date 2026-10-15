@@ -1,4 +1,3 @@
-const crypto = require("crypto");
 const AccessProvider = require("./access-provider");
 const { createClient } = require("../clients/access-client-registry");
 const {
@@ -326,88 +325,12 @@ class SaltoKsAccessProvider extends AccessProvider {
   // only its country code and time zone, a lock only its floor inside the
   // building. Leaving the optional capability undeclared is what tells an admin
   // UI not to offer a location prefill that could never fill anything in.
-
-  async registerWebhook(tenant, callbackUrl) {
-    const client = await this._getClient(tenant);
-    return client.subscribeNotifications(callbackUrl);
-  }
-
-  async unregisterWebhook(tenant, id) {
-    if (!id) {
-      return { success: true, skipped: true, reason: "missing subscriptionId" };
-    }
-
-    const client = await this._getClient(tenant);
-    return client.unsubscribeNotifications(id);
-  }
-
-  parseWebhook(rawPayload, _headers = {}) {
-    const payload =
-      typeof rawPayload === "string" ? JSON.parse(rawPayload) : rawPayload;
-
-    return {
-      provider: PROVIDER_ID,
-      externalId: String(payload.lockId || payload.lock_id || payload.id || ""),
-      eventType:
-        payload.eventType ||
-        payload.event ||
-        payload.type ||
-        payload.name ||
-        null,
-      timestamp:
-        payload.timestamp || payload.eventTime || payload.date || Date.now(),
-      payload,
-    };
-  }
-
-  verifyWebhookSignature(rawPayload, headers = {}, secret = null) {
-    if (!secret) {
-      return true;
-    }
-
-    const signature =
-      headers["x-salto-signature"] ||
-      headers["X-Salto-Signature"] ||
-      headers["x-signature"];
-
-    if (!signature) {
-      return false;
-    }
-
-    const body =
-      typeof rawPayload === "string"
-        ? rawPayload
-        : JSON.stringify(rawPayload || {});
-    const expected = crypto
-      .createHmac("sha256", secret)
-      .update(body)
-      .digest("hex");
-
-    return this._safeEqual(signature.replace(/^sha256=/, ""), expected);
-  }
-
-  _safeEqual(a, b) {
-    const left = Buffer.from(a);
-    const right = Buffer.from(b);
-
-    if (left.length !== right.length) {
-      return false;
-    }
-
-    return crypto.timingSafeEqual(left, right);
-  }
+  //
+  // No webhooks either: Salto KS sends no events, so there is nothing to
+  // register when a tenant is saved and nothing to receive.
 
   static get capabilities() {
-    return [
-      "open",
-      "getStatus",
-      "listAccessPoints",
-      "getSupportedModes",
-      "registerWebhook",
-      "unregisterWebhook",
-      "parseWebhook",
-      "verifyWebhookSignature",
-    ];
+    return ["open", "getStatus", "listAccessPoints", "getSupportedModes"];
   }
 }
 
