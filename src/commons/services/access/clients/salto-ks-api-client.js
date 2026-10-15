@@ -314,10 +314,6 @@ class SaltoKsApiClient extends BaseAccessApiClient {
     return this._request("get", `/v1.2/sites/${resolvedSiteId}/locks`);
   }
 
-  async getAccessPoints() {
-    return this.getLocks();
-  }
-
   async openLock(lockId, siteId = this.siteId, options = {}) {
     if (siteId && typeof siteId === "object") {
       options = siteId;
@@ -380,49 +376,6 @@ class SaltoKsApiClient extends BaseAccessApiClient {
   async getSiteMe(siteId = this.siteId) {
     const resolvedSiteId = await this._resolveSiteId(siteId);
     return this._request("get", `/v1.2/sites/${resolvedSiteId}/me`);
-  }
-
-  async subscribeNotifications(
-    callbackUrl,
-    eventTypes = [],
-    siteId = this.siteId,
-  ) {
-    const resolvedSiteId = await this._resolveSiteId(siteId);
-    return this._request(
-      "post",
-      `/v1.2/sites/${resolvedSiteId}/subscriptions`,
-      {
-        callbackUrl,
-        eventTypes,
-      },
-    );
-  }
-
-  async unsubscribeNotifications(subscriptionId, siteId = this.siteId) {
-    const resolvedSiteId = await this._resolveSiteId(siteId);
-    return this._request(
-      "delete",
-      `/v1.2/sites/${resolvedSiteId}/subscriptions/${subscriptionId}`,
-    );
-  }
-
-  // Aliases to satisfy the common notification interface of BaseAccessApiClient.
-  async registerNotification(callbackUrl) {
-    return this.subscribeNotifications(callbackUrl);
-  }
-
-  async unregisterNotification(notificationId) {
-    return this.unsubscribeNotifications(notificationId);
-  }
-
-  static get capabilities() {
-    return [
-      "getLocks",
-      "getAccessPoints",
-      "openLock",
-      "subscribeNotifications",
-      "unsubscribeNotifications",
-    ];
   }
 
   /**

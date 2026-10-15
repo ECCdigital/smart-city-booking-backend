@@ -23,8 +23,7 @@ class InMemoryAccessProvider extends AccessProvider {
    * @param {boolean} [options.broken=false] Whether every call fails the way
    *   an unreachable provider would
    * @param {boolean} [options.principalRemovalFails=false] Whether a revoke
-   *   takes the grant back but cannot remove its principal - the case the
-   *   cleanup job exists for
+   *   takes the grant back but cannot remove its principal
    */
   constructor({
     locks = [],

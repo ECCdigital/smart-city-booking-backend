@@ -518,7 +518,6 @@ class TenantController {
       // Backend-owned access-app state (e.g. Salto IQ activations) is
       // neither written by a tenant update nor sent back in the answer.
       AccessAppLifecycleService.preserveBackendState(previousTenant, tenant);
-      await AccessAppLifecycleService.syncWebhooks(previousTenant, tenant);
 
       const updatedTenant = await TenantManager.storeTenant(tenant);
       logger.info(`updated tenant ${tenant.id} by user ${user?.id}`);
