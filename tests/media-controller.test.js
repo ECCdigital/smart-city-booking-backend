@@ -500,6 +500,26 @@ describe("MediaControllerV2", function () {
       assert.strictEqual("bookingId" in res.body, false);
     });
 
+    it("tells the default weight of a variable font", async function () {
+      sandbox.stub(MediaManager, "getMedia").resolves(
+        mediaFixture({
+          kind: "font",
+          mimeType: "font/woff2",
+          originalFileName: "HouseSans.woff2",
+          defaultWeight: 300,
+        }),
+      );
+      grant({ manageMedia: { readAny: true } });
+      const res = createResponse();
+
+      await MediaControllerV2.getMedia(
+        createRequest({ user: MEMBER, params: { id: "media-1" } }),
+        res,
+      );
+
+      assert.strictEqual(res.body.defaultWeight, 300);
+    });
+
     it("serves an uploader their own medium with readOwn", async function () {
       sandbox
         .stub(MediaManager, "getMedia")
@@ -661,6 +681,20 @@ describe("MediaControllerV2", function () {
       assert.strictEqual(args.q, "2026");
       assert.strictEqual(args.page, "2");
       assert.deepStrictEqual(args.visibility, ["intern"]);
+    });
+
+    it("filters by the kind font, the picker's „Nur Schriften“", async function () {
+      grant({ manageMedia: { readAny: true } });
+
+      await MediaControllerV2.getMediaList(
+        createRequest({ user: MEMBER, query: { kind: "font" } }),
+        createResponse(),
+      );
+
+      assert.strictEqual(
+        MediaManager.getMediaList.firstCall.args[0].kind,
+        "font",
+      );
     });
 
     it("rejects an unknown kind filter", async function () {

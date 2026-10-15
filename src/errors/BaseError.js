@@ -70,6 +70,18 @@ class TooManyRequestsError extends BaseError {
   }
 }
 
+/**
+ * A service the request depends on cannot answer now (a provider down,
+ * throttling, a limit of the instance). `params.retryAfterSeconds`, when
+ * known, becomes the `Retry-After` header of the answer.
+ */
+class ServiceUnavailableError extends BaseError {
+  constructor(code = "service_unavailable", params = {}) {
+    super(code, 503, params);
+    this.name = "ServiceUnavailableError";
+  }
+}
+
 module.exports = {
   BaseError,
   NotFoundError,
@@ -79,4 +91,5 @@ module.exports = {
   MethodNotAllowedError,
   ConflictError,
   TooManyRequestsError,
+  ServiceUnavailableError,
 };

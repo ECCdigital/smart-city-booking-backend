@@ -52,6 +52,51 @@ components:
           nullable: true
           readOnly: true
 
+    HeroAppLogoReference:
+      type: object
+      description: |
+        `image` Blocks only: the Block follows the app logo of the branding
+        and its variant for the dark mode, instead of a medium of its own. It
+        carries no `mediaId`, and its Block no `invertInDarkMode`: in the dark
+        mode the variant shows, or without one the inverted app logo. On input
+        `source` is all that is read — the derived keys `url`, `width`,
+        `height` and `dark` are stripped silently, so an exported reference
+        round-trips. On output they are filled from the app logo and its
+        variant; without an app logo, or while the branding is switched off,
+        all four are `null` and the Block shows no image.
+      required: [source]
+      properties:
+        source:
+          type: string
+          enum: [app-logo]
+        url:
+          type: string
+          nullable: true
+          readOnly: true
+          example: /api/v2/instance/media/66f1c2aa.../file
+        width:
+          type: integer
+          nullable: true
+          readOnly: true
+        height:
+          type: integer
+          nullable: true
+          readOnly: true
+        dark:
+          type: object
+          nullable: true
+          readOnly: true
+          description: The variant for the dark mode, `null` without one.
+          properties:
+            url:
+              type: string
+            width:
+              type: integer
+              nullable: true
+            height:
+              type: integer
+              nullable: true
+
     HeroPanel:
       type: object
       description: |
@@ -63,8 +108,9 @@ components:
         color:
           type: string
           description: |
-            `white`, `black`, `primary`, `secondary` or `#rrggbb`. Panel-only
-            vocabulary: `black` is new here and a Panel has no `default`.
+            `white`, `black`, `primary`, `secondary`, `accent` or `#rrggbb`.
+            Panel-only vocabulary: `black` is new here and a Panel has no
+            `default`.
           default: white
           example: black
         opacity:
@@ -214,7 +260,8 @@ components:
         color:
           type: string
           description: |
-            `text` and `richtext` Blocks: a token or `#rrggbb`.
+            `text` and `richtext` Blocks: a token (`default`, `primary`,
+            `secondary`, `accent`, `white`) or `#rrggbb`.
           default: default
           example: primary
         shadow:
@@ -222,9 +269,12 @@ components:
           description: "`text` and `richtext` Blocks: the readability toggle."
           default: false
         image:
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/HeroMediaReference"
-          description: "`image` Blocks: required."
+            - $ref: "#/components/schemas/HeroAppLogoReference"
+          description: |
+            `image` Blocks: required. A medium of the instance library, or
+            `{ "source": "app-logo" }` to follow the app logo.
         alt:
           allOf:
             - $ref: "#/components/schemas/HeroLocalizedString"
@@ -236,14 +286,18 @@ components:
           default: md
         invertInDarkMode:
           type: boolean
-          description: "`image` Blocks only."
+          description: |
+            `image` Blocks with a medium of their own only. A Block that
+            follows the app logo has none and is refused with one.
           default: false
 
     HeroLayout:
       type: object
       description: |
         The Hero of the catalog layout. `null` on the Catalog means the backend
-        derives the Default Hero Layout at read time.
+        derives the Default Hero Layout at read time; its logo Block follows
+        the app logo (`source: "app-logo"`) and is there only while the
+        branding carries a logo medium.
       required: [version, blocks]
       properties:
         version:

@@ -52,7 +52,10 @@ class InstanceController {
         reachesOf(request),
       );
 
-      const updatedInstance = await InstanceManger.updateInstance(body);
+      // The person of the session confirms the licence of a new font.
+      const updatedInstance = await InstanceManger.updateInstance(body, {
+        userId: request.user?.id ?? null,
+      });
       response
         .status(200)
         .send(updatedInstance?.exportWithMedia() ?? updatedInstance);

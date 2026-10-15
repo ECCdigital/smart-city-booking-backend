@@ -15,5 +15,6 @@ router.use("/:tenant/bookings", require("./tenant.booking-status.routes"));
 router.use("/:tenant/media", require("./tenant.media.routes"));
 router.use("/:tenant/dashboard", require("./tenant.dashboard.routes"));
 router.use("/:tenant/favorites", require("./tenant.favorite.routes"));
+router.use("/:tenant/geo", require("./tenant.geo.routes"));
 
 module.exports = router;

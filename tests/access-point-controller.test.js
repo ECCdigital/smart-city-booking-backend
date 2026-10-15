@@ -289,7 +289,10 @@ describe("AccessPointController", () => {
       it("accepts a rule together with the field it needs", async () => {
         request.body = {
           provider: "nuki",
-          location: { display_address: "Rathaus" },
+          location: {
+            display_address: "Rathaus",
+            coordinates: { type: "Point", points: [7.1, 51.2] },
+          },
           validationRules: [{ type: TEST_GEO_RULE }],
         };
 
@@ -363,7 +366,10 @@ describe("AccessPointController", () => {
       it("checks the preconditions against the state the update would leave behind", async () => {
         request.body = {
           id: "point-1",
-          location: { display_address: "Rathaus" },
+          location: {
+            display_address: "Rathaus",
+            coordinates: { type: "Point", points: [7.1, 51.2] },
+          },
           validationRules: [{ type: TEST_GEO_RULE }],
         };
 

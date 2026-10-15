@@ -1,6 +1,10 @@
 const { instanceSchemaDefinition } = require("../../schemas/instanceSchema");
 const SchemaUtils = require("../../utilities/schemaUtils");
 const { exportInstanceMedia } = require("../../services/media/instance-media");
+const {
+  withBrandingDefaults,
+} = require("../../services/instance/branding-schema");
+const { withoutFontLicense } = require("../../services/instance/branding-font");
 
 class Instance {
   /**
@@ -10,13 +14,16 @@ class Instance {
   constructor(params = {}) {
     const defaults = SchemaUtils.createDefaults(instanceSchemaDefinition);
     Object.assign(this, defaults, params);
+    // The schema fills in the branding only as a whole; a stored one that
+    // lacks a field added since reads its default.
+    this.branding = withBrandingDefaults(this.branding);
   }
 
   /**
    * Remove private data from the instance. `allowAllUsersToCreateTenant`
    * stays: it only says that everyone may create a tenant, and public
    * consumers gate their tenant self-creation entry points on it; the
-   * allow-list and the owners are private.
+   * allow-list, the owners and the licence of the font are private.
    */
   removePrivateData() {
     this.applications = this.applications.map((a) => {
@@ -41,6 +48,8 @@ class Instance {
     delete this.isInitialized;
     delete this.allowedUsersToCreateTenant;
     delete this.bookableCustomFields;
+    // Who confirmed the licence of the font is a proof for customer care.
+    this.branding = withoutFontLicense(this.branding);
   }
 
   /**
