@@ -152,6 +152,7 @@ class AccessPointController {
     accessPoint.location = LocationGuard.storable(accessPoint.location, null);
     AccessPointController._assertProviderRegistered(accessPoint);
     AccessPointController._assertRulePreconditions(accessPoint);
+    AccessInfoService.validateAccessPointWithoutListing(accessPoint);
     const listedAccessPoint =
       await AccessPointController._fetchListedAccessPoint(
         accessPoint,
@@ -194,6 +195,7 @@ class AccessPointController {
 
     AccessPointController._assertProviderRegistered(accessPoint);
     AccessPointController._assertRulePreconditions(accessPoint);
+    AccessInfoService.validateAccessPointWithoutListing(accessPoint);
     const listedAccessPoint =
       await AccessPointController._fetchListedAccessPoint(
         accessPoint,
@@ -486,8 +488,8 @@ class AccessPointController {
    * it can never do the mode, and lets it through as well (tickets#570). The
    * access point opens once the lock can; until then the open fails on its
    * own. Only a mode the lock reports it cannot do is refused here; a mode a
-   * provider rules out for every lock is its `validateAccessPoint`'s to
-   * refuse.
+   * provider rules out for every lock is its
+   * `validateAccessPointWithoutListing`'s to refuse, before the listing.
    *
    * @param {AccessPoint} accessPoint The access point as it would be stored
    * @param {Object|null} listedAccessPoint The provider's listed entry for

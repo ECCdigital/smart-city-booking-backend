@@ -442,6 +442,20 @@ class AccessProvider {
   validateAccessPoint(_accessPoint, _listedAccessPoint) {}
 
   /**
+   * Refuse an access point by a rule that holds for every lock of the
+   * provider, before the listing is fetched - so the rule holds when the
+   * provider cannot be asked, and is answered with its `400` rather than a
+   * `503`. Optional capability, like `validateAccessPoint`; this base
+   * implementation checks nothing.
+   *
+   * @param {Object} _accessPoint The access point as it would be stored
+   * @returns {void}
+   * @throws {ValidationError} What the provider will not store, field by
+   *   field; nothing else
+   */
+  validateAccessPointWithoutListing(_accessPoint) {}
+
+  /**
    * Where the physical lock stands, as far as the provider knows it. Optional
    * capability: only providers that declare `getLocation` are asked, and even
    * they may answer `null`. The result is a prefill suggestion - it is never

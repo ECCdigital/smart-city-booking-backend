@@ -319,6 +319,19 @@ for (const implementation of IMPLEMENTATIONS) {
       );
     });
 
+    it("refuses nothing before the listing unless it declares validateAccessPointWithoutListing", function () {
+      if (declares("validateAccessPointWithoutListing")) {
+        return this.skip();
+      }
+
+      assert.doesNotThrow(() =>
+        provider.validateAccessPointWithoutListing({
+          ...accessPoint,
+          mode: "not-a-mode",
+        }),
+      );
+    });
+
     when("listAccessPoints")(
       "lists the access points of the tenant in the shared shape",
       async function () {
