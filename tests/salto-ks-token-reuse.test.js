@@ -5,6 +5,7 @@ process.env.CRYPTO_SECRET =
   process.env.CRYPTO_SECRET || "0123456789abcdef0123456789abcdef";
 
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
+const TenantModel = require("../src/commons/data-managers/models/tenantModel");
 const clientRegistry = require("../src/commons/services/access/clients/access-client-registry");
 const {
   forgetSaltoKsClients,
@@ -150,5 +151,58 @@ describe("Salto KS token reuse", () => {
     await SaltoKsIqActivationService.listIqs(OTHER_TENANT_ID);
 
     expect(api.tokenRequests).to.have.length(2);
+  });
+
+  /**
+   * A kept client holds the decrypted secrets and the token. Once Salto is
+   * not active at the tenant, or the tenant is gone, it is dropped: the
+   * next call signs in anew.
+   */
+  describe("letting go of the client", () => {
+    beforeEach(() => {
+      sinon.stub(TenantModel, "findOne").returns({ lean: async () => null });
+      sinon.stub(TenantModel, "updateOne").resolves();
+      sinon.stub(TenantModel, "deleteOne").resolves();
+    });
+
+    /** The tenant saved with the given applications. */
+    function storeTenant(applications) {
+      return TenantManager.storeTenant({
+        id: TENANT_ID,
+        name: "Tenant 1",
+        applications,
+      });
+    }
+
+    it("keeps the client when the tenant is saved with Salto active", async () => {
+      await SaltoKsIqActivationService.listIqs(TENANT_ID);
+      await storeTenant([saltoApp()]);
+      await SaltoKsIqActivationService.listIqs(TENANT_ID);
+
+      expect(api.tokenRequests).to.have.length(1);
+    });
+
+    for (const [change, applications] of [
+      ["Salto deactivated", [saltoApp({ active: false })]],
+      ["the Salto application removed", []],
+    ]) {
+      it(`drops the client when the tenant is saved with ${change}`, async () => {
+        await SaltoKsIqActivationService.listIqs(TENANT_ID);
+        await storeTenant(applications);
+        await SaltoKsIqActivationService.listIqs(TENANT_ID);
+
+        expect(api.tokenRequests).to.have.length(2);
+      });
+    }
+
+    it("drops the client when the tenant is removed, and only that tenant's", async () => {
+      await SaltoKsIqActivationService.listIqs(TENANT_ID);
+      await SaltoKsIqActivationService.listIqs(OTHER_TENANT_ID);
+      await TenantManager.removeTenant(TENANT_ID);
+      await SaltoKsIqActivationService.listIqs(TENANT_ID);
+      await SaltoKsIqActivationService.listIqs(OTHER_TENANT_ID);
+
+      expect(api.tokenRequests).to.have.length(3);
+    });
   });
 });

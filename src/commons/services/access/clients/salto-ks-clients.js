@@ -63,9 +63,30 @@ function saltoKsClientFor(tenantId, app) {
   return client;
 }
 
+/**
+ * Drops the tenant's client, and with it the decrypted secrets and the
+ * token it holds, unless the tenant has an active Salto application. Called
+ * when a tenant is stored (with the tenant) and when it is removed (without).
+ *
+ * @param {string} tenantId
+ * @param {Object|null} [tenant] The tenant as stored, `null` when removed
+ */
+function releaseSaltoKsClient(tenantId, tenant = null) {
+  const active = (tenant?.applications || []).some(
+    (app) => app?.type === "access" && app?.id === "salto-ks" && app?.active,
+  );
+  if (!active) {
+    clients.delete(tenantId);
+  }
+}
+
 /** Drops every kept client; for tests that swap the client factory. */
 function forgetSaltoKsClients() {
   clients.clear();
 }
 
-module.exports = { saltoKsClientFor, forgetSaltoKsClients };
+module.exports = {
+  saltoKsClientFor,
+  releaseSaltoKsClient,
+  forgetSaltoKsClients,
+};
