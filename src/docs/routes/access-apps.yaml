@@ -205,6 +205,56 @@
       "500":
         description: Could not discard Salto KS IQ activation
 
+/api/{tenant}/access-apps/{provider}/test:
+  post:
+    tags:
+      - Access Apps
+    summary: Test the connection to an access provider
+    description: |
+      Tests the configuration in the body, as the admin form holds it, against
+      the provider; nothing is stored. Reserved for the tenant owner
+      (`accessApp.manage`).
+
+      For `salto-ks` a secret left empty or out is taken from the tenant's
+      stored Salto KS application, but only while it belongs to what the body
+      names: the client secret while `clientId` and `environment` are the
+      stored ones, the password while `username` and `environment` are. The
+      site plays no part. Only then are the required fields checked. A secret
+      that is still missing stops the test before Salto is asked, with
+      `code: "missing_secret"` and the reason per secret.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - $ref: "#/components/parameters/AccessProviderParam"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: true
+            description: |
+              The provider's credentials. `salto-ks`: `clientId`,
+              `clientSecret`, `siteId`, `environment`, `username`, `password`.
+    responses:
+      "200":
+        description: |
+          The outcome of the test, also when it failed. `salto-ks` adds
+          `details` to a working connection.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessConnectionTestResult"
+      "400":
+        description: No test available for the provider
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the tenant owner
+      "500":
+        description: Could not test access connection
+
 components:
   schemas:
     ListedAccessPoint:
@@ -316,6 +366,60 @@ components:
           type: string
           nullable: true
           description: The last Salto error booked on this activation
+
+    AccessConnectionTestResult:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+          description: What the provider answered, for the log; not a UI text
+        code:
+          type: string
+          enum:
+            - missing_secret
+          description: |
+            `missing_secret` (`salto-ks`): a secret is neither in the body nor
+            stored for the identity the body names; Salto was not asked.
+        missing:
+          type: array
+          description: With `missing_secret`, the secrets that are missing
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                enum:
+                  - clientSecret
+                  - password
+              reason:
+                type: string
+                enum:
+                  - client_id_changed
+                  - username_changed
+                  - environment_changed
+                  - not_stored
+        details:
+          type: object
+          description: |
+            `salto-ks` with a site: the system user's `remoteAccess`
+            (`null` when Salto does not say), `remoteLockingRight` always
+            `not_verifiable`, and the IQs with their activation state.
+          properties:
+            remoteAccess:
+              type: boolean
+              nullable: true
+            remoteLockingRight:
+              type: string
+              enum:
+                - not_verifiable
+            iqs:
+              type: array
+              items:
+                $ref: "#/components/schemas/SaltoKsIq"
 
     SaltoKsIqActivationState:
       type: object
