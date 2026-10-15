@@ -5,6 +5,8 @@ process.env.CRYPTO_SECRET =
   process.env.CRYPTO_SECRET || "0123456789abcdef0123456789abcdef";
 
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
+const TenantModel = require("../src/commons/data-managers/models/tenantModel");
+const SecurityUtils = require("../src/commons/utilities/security-utils");
 const {
   SaltoKsApiClient,
 } = require("../src/commons/services/access/clients/salto-ks-api-client");
@@ -14,10 +16,22 @@ const { AccessOpenError } = require("../src/errors/AccessOpenError");
 const {
   AccessPointMode,
 } = require("../src/commons/entities/access/access-point");
+const {
+  FakeSaltoKsApiClient,
+  saltoHttpError,
+  FAKE_SITE_ID,
+} = require("./helpers/fake-salto-ks-api-client");
+const { createFakeMongoose } = require("./helpers/fake-mongoose");
 
 const TENANT_ID = "tenant-1";
 const IQ_ID = "5dfdc54e-8335-11f0-a2ed-6045bd92d38f";
 const LOCK_ID = "4d77312f-4a87-41db-a97b-f9d948dcc908";
+/** The identity of the tenant's Salto application below. */
+const IDENTITY = Object.freeze({
+  siteId: FAKE_SITE_ID,
+  username: "system-user@example.test",
+  environment: "accept",
+});
 
 function stubTenant(iqActivations = []) {
   sinon.stub(TenantManager, "getTenant").resolves({
@@ -31,7 +45,7 @@ function stubTenant(iqActivations = []) {
         clientSecret: "client-secret",
         username: "system-user@example.test",
         password: "password",
-        siteId: "site-1",
+        siteId: FAKE_SITE_ID,
         environment: "accept",
         iqActivations,
       },
@@ -285,6 +299,151 @@ describe("SaltoKsAccessProvider.open", () => {
   });
 });
 
+describe("SaltoKsAccessProvider.open against the fake Connect API: the time to retry after otp_blocked", () => {
+  const NOW = new Date("2026-10-15T10:00:00.000Z");
+  // Salto's block lasts about 20 minutes; the platform backs off for 25.
+  const BLOCKED_UNTIL = "2026-10-15T10:25:00.000Z";
+
+  let tenant;
+  let client;
+  let provider;
+
+  /**
+   * A tenant whose system user is activated at the lock's IQ. Writes go
+   * through the update operators onto the stored tenant, so the next open
+   * reads them.
+   */
+  function activatedTenant() {
+    const stored = {
+      id: TENANT_ID,
+      applications: [
+        {
+          type: "access",
+          id: "salto-ks",
+          active: true,
+          clientId: "client-id",
+          clientSecret: "client-secret",
+          username: "system-user@example.test",
+          password: "password",
+          siteId: FAKE_SITE_ID,
+          environment: "accept",
+          iqActivations: [
+            {
+              iqId: IQ_ID,
+              ...IDENTITY,
+              secret: SecurityUtils.encrypt("ABCDEFGHIJKLMNOP"),
+              pin: SecurityUtils.encrypt("1234"),
+              state: "activated",
+              failureCount: 0,
+              blockedUntil: null,
+            },
+          ],
+        },
+      ],
+    };
+    const tenants = createFakeMongoose({ Tenant: [stored] }).model("Tenant");
+    sinon
+      .stub(TenantManager, "getTenant")
+      .callsFake(async () => structuredClone(tenants.documents[0]));
+    sinon
+      .stub(TenantModel, "updateOne")
+      .callsFake((filter, update, options) =>
+        tenants.updateOne(filter, update, options),
+      );
+    return tenants.documents[0];
+  }
+
+  beforeEach(() => {
+    sinon.useFakeTimers({ now: NOW, toFake: ["Date"] });
+    tenant = activatedTenant();
+    client = new FakeSaltoKsApiClient({
+      locks: [saltoLock()],
+      iqs: [saltoIq()],
+    });
+    provider = new SaltoKsAccessProvider({ client });
+  });
+
+  afterEach(() => {
+    sinon.restore();
+  });
+
+  const accessPoint = { externalId: LOCK_ID, provider: "salto-ks" };
+  const bookingContext = { tenant: TENANT_ID };
+
+  async function failedOpen() {
+    try {
+      await provider.open(accessPoint, bookingContext);
+    } catch (err) {
+      return err;
+    }
+    throw new Error("expected open to throw");
+  }
+
+  it("carries the end of the new block when Salto answers otp_blocked", async () => {
+    client.openError = saltoHttpError(403, {
+      ErrorCode: 3102,
+      Message: "otp_blocked",
+    });
+
+    const err = await failedOpen();
+
+    expect(err).to.be.instanceOf(AccessOpenError);
+    expect(err.failureClass).to.equal("temporary");
+    expect(err.retryAfter.toISOString()).to.equal(BLOCKED_UNTIL);
+  });
+
+  it("carries the stored end of the block when it refuses locally during the backoff", async () => {
+    tenant.applications[0].iqActivations[0].blockedUntil = new Date(
+      BLOCKED_UNTIL,
+    );
+
+    const err = await failedOpen();
+
+    expect(err.failureClass).to.equal("temporary");
+    expect(err.retryAfter.toISOString()).to.equal(BLOCKED_UNTIL);
+    expect(client.openings).to.deep.equal([]);
+  });
+
+  it("refuses the next attempt until the end of the block it reported", async () => {
+    client.openError = saltoHttpError(403, {
+      ErrorCode: 3102,
+      Message: "otp_blocked",
+    });
+    await failedOpen();
+    client.openError = null;
+
+    const err = await failedOpen();
+
+    expect(err.retryAfter.toISOString()).to.equal(BLOCKED_UNTIL);
+    // Salto would open now; the backoff keeps the attempt from reaching it.
+    expect(client.openings).to.deep.equal([]);
+  });
+
+  it("knows no time to retry after a rejected OTP", async () => {
+    client.openError = saltoHttpError(400, {
+      ErrorCode: 3102,
+      Message: "otp_invalid",
+    });
+
+    const err = await failedOpen();
+
+    expect(err.failureClass).to.equal("temporary");
+    expect(err.retryAfter).to.equal(null);
+  });
+
+  it("knows no time to retry when the lock does not answer", async () => {
+    client.openError = saltoHttpError(409, {
+      ErrorCode: 4000,
+      Message: "lock offline",
+    });
+
+    const err = await failedOpen();
+
+    expect(err.failureClass).to.equal("temporary");
+    expect(err.retryAfter).to.equal(null);
+  });
+});
+
 describe("AccessController rendering of open failures", () => {
   const AccessController = require("../src/platform/api/controllers/access-controller");
   const AccessService = require("../src/commons/services/access/access-service");
@@ -325,6 +484,37 @@ describe("AccessController rendering of open failures", () => {
     expect(JSON.stringify(body)).to.not.include("Salto");
   });
 
+  it("tells the guest when to try again, as an ISO time next to the failure class", async () => {
+    sinon.stub(AccessService, "open").rejects(
+      AccessOpenError.temporary(
+        "backing off after otp_blocked",
+        {},
+        {
+          retryAfter: new Date("2026-10-15T10:25:00.000Z"),
+        },
+      ),
+    );
+
+    await AccessController.open(request, response);
+
+    const body = response.json.firstCall.args[0];
+    expect(body.data).to.deep.equal({
+      openFailure: "temporary",
+      retryAfter: "2026-10-15T10:25:00.000Z",
+    });
+  });
+
+  it("leaves retryAfter out when no time is known", async () => {
+    sinon
+      .stub(AccessService, "open")
+      .rejects(AccessOpenError.temporary("Salto KS open failed: offline"));
+
+    await AccessController.open(request, response);
+
+    const body = response.json.firstCall.args[0];
+    expect(body.data).to.deep.equal({ openFailure: "temporary" });
+  });
+
   it("renders a configuration failure as such", async () => {
     sinon
       .stub(AccessService, "open")
@@ -356,6 +546,7 @@ describe("SaltoKsAccessProvider capability rule", () => {
   const activated = [
     {
       iqId: IQ_ID,
+      ...IDENTITY,
       secret: { iv: "iv", data: "data" },
       pin: { iv: "iv", data: "data" },
       state: "activated",

@@ -19,8 +19,11 @@
       Opener `auto` alone, an unknown device type all five). Providers
       without the notion leave the field out.
 
-      Requires `accessApp.read` in the tenant. A provider that does not list
-      access points (Pareva) answers 500.
+      Requires `accessApp.read` in the tenant. A provider the tenant has no
+      active application for answers `404 <provider>_application_not_found`
+      (e.g. `salto_ks_application_not_found`). A provider that does not list
+      access points (Pareva) answers 500, as does a provider that fails
+      otherwise.
     security:
       - bearerAuth: []
     parameters:
@@ -39,6 +42,10 @@
         description: Not authenticated
       "403":
         description: Not allowed to read the tenant's access applications
+      "404":
+        description: |
+          The tenant has no active application for the provider, code
+          `<provider>_application_not_found`
       "500":
         description: Could not get access points
 
@@ -198,6 +205,57 @@
       "500":
         description: Could not discard Salto KS IQ activation
 
+/api/{tenant}/access-apps/{provider}/test:
+  post:
+    tags:
+      - Access Apps
+    summary: Test the connection to an access provider
+    description: |
+      Tests the configuration in the body, as the admin form holds it, against
+      the provider; nothing is stored. Reserved for the tenant owner
+      (`accessApp.manage`).
+
+      For `salto-ks` a secret left empty or out is taken from the tenant's
+      stored Salto KS application, but only while it belongs to what the body
+      names: the client secret while `clientId` and `environment` are the
+      stored ones, the password while `username` and `environment` are. The
+      site plays no part. Only then are the required fields checked. A secret
+      that is still missing stops the test before Salto is asked, with
+      `code: "missing_secret"` and the reason per secret.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - $ref: "#/components/parameters/AccessProviderParam"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: true
+            description: |
+              The provider's credentials. `salto-ks`: `clientId`,
+              `clientSecret`, `siteId`, `environment`, `username`, `password`.
+    responses:
+      "200":
+        description: |
+          The outcome of the test, also when it failed. `salto-ks` adds
+          `checks`, `testedWith`, `testedAt` and `environment` to every test
+          it ran, and `details` to a working connection.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessConnectionTestResult"
+      "400":
+        description: No test available for the provider
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the tenant owner
+      "500":
+        description: Could not test access connection
+
 components:
   schemas:
     ListedAccessPoint:
@@ -309,6 +367,156 @@ components:
           type: string
           nullable: true
           description: The last Salto error booked on this activation
+
+    AccessConnectionTestResult:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+          description: What the provider answered, for the log; not a UI text
+        code:
+          type: string
+          enum:
+            - missing_fields
+            - missing_secret
+          description: |
+            `missing_fields` (`salto-ks`): `clientId` or `username` is empty or
+            left out; Salto was not asked. Checked before `missing_secret`.
+            `missing_secret` (`salto-ks`): a secret is neither in the body nor
+            stored for the identity the body names; Salto was not asked.
+        missing:
+          type: array
+          description: |
+            With `missing_fields`, the required fields that are missing
+            (`clientId`, `username`), named as in the request, `field` only.
+            With `missing_secret`, the secrets that are missing (`clientSecret`,
+            `password`), with the `reason`.
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                enum:
+                  - clientId
+                  - clientSecret
+                  - username
+                  - password
+              reason:
+                type: string
+                enum:
+                  - client_id_changed
+                  - username_changed
+                  - environment_changed
+                  - not_stored
+        environment:
+          type: string
+          enum:
+            - accept
+            - production
+          description: "`salto-ks`: the Salto KS environment tested"
+        testedAt:
+          type: string
+          format: date-time
+          description: "`salto-ks`: when the test ran"
+        testedWith:
+          type: object
+          description: "`salto-ks`: where each tested secret came from"
+          properties:
+            clientSecret:
+              $ref: "#/components/schemas/SaltoKsSecretSource"
+            password:
+              $ref: "#/components/schemas/SaltoKsSecretSource"
+        checks:
+          type: object
+          description: |
+            `salto-ks`: one entry per check, in the order an admin works
+            through them. The first failure in `credentials`, `login` or
+            `site` fails the test (`success: false`) and skips the checks
+            after it. `remoteLockingRight` is always `not_verifiable`, the
+            API cannot tell. `remoteAccess` and `iqs` are `unknown` when Salto
+            does not answer them; the test still succeeds.
+          properties:
+            credentials:
+              $ref: "#/components/schemas/SaltoKsConnectionCheck"
+            login:
+              $ref: "#/components/schemas/SaltoKsConnectionCheck"
+            site:
+              allOf:
+                - $ref: "#/components/schemas/SaltoKsConnectionCheck"
+                - type: object
+                  properties:
+                    locks:
+                      type: integer
+                      description: With `ok`, the number of locks of the site
+            remoteAccess:
+              $ref: "#/components/schemas/SaltoKsConnectionCheck"
+            remoteLockingRight:
+              $ref: "#/components/schemas/SaltoKsConnectionCheck"
+            iqs:
+              $ref: "#/components/schemas/SaltoKsConnectionCheck"
+        details:
+          type: object
+          description: |
+            `salto-ks` with a site: the system user's `remoteAccess`
+            (`null` when Salto does not say), `remoteLockingRight` always
+            `not_verifiable`, and the IQs with their activation state.
+          properties:
+            remoteAccess:
+              type: boolean
+              nullable: true
+            remoteLockingRight:
+              type: string
+              enum:
+                - not_verifiable
+            iqs:
+              type: array
+              items:
+                $ref: "#/components/schemas/SaltoKsIq"
+
+    SaltoKsSecretSource:
+      type: string
+      enum:
+        - stored
+        - form
+      description: |
+        `stored`: taken from the tenant's stored application, `form`: sent in
+        the body.
+
+    SaltoKsConnectionCheck:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+            - failed
+            - skipped
+            - unknown
+            - not_verifiable
+        code:
+          type: string
+          enum:
+            - invalid_client
+            - invalid_grant
+            - site_forbidden
+            - site_missing
+            - timeout
+            - remote_access_off
+          description: |
+            With `failed`, what Salto objected to, instead of its raw message.
+            `invalid_client`: client id or client secret rejected (also those
+            of the other environment). `invalid_grant`: system user or
+            password rejected. `site_forbidden`: the site is not there or the
+            system user may not read it. `site_missing`: no site configured.
+            `timeout`: Salto did not answer in time. `remote_access_off`: the
+            system user may not open remotely. A failure without code keeps
+            Salto's answer in `message`.
 
     SaltoKsIqActivationState:
       type: object

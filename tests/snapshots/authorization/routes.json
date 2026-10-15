@@ -2018,9 +2018,9 @@
   "GET /api/:tenant/access-apps/:provider/access-points": {
     "anonymous": 401,
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
-    "roleHolder": 500,
-    "tenantOwner": 500,
-    "instanceOwner": 500,
+    "roleHolder": 404,
+    "tenantOwner": 404,
+    "instanceOwner": 404,
     "expiredToken": 401
   },
   "GET /api/:tenant/access-apps/salto-ks/iqs": {
@@ -2091,8 +2091,8 @@
     "anonymous": 401,
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
-    "tenantOwner": 404,
-    "instanceOwner": 404,
+    "tenantOwner": 200,
+    "instanceOwner": 200,
     "expiredToken": 401
   },
   "GET /api/:tenant/accesspoints/:id": {

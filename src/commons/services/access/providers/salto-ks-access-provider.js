@@ -1,6 +1,5 @@
-const crypto = require("crypto");
 const AccessProvider = require("./access-provider");
-const { createClient } = require("../clients/access-client-registry");
+const { saltoKsClientFor } = require("../clients/salto-ks-clients");
 const {
   classifySaltoError,
   extractSaltoList,
@@ -9,6 +8,7 @@ const SaltoKsIqActivationService = require("../salto-ks-iq-activation-service");
 const { AccessPointMode } = require("../../../entities/access/access-point");
 const { AccessOpenError } = require("../../../../errors/AccessOpenError");
 const { NotFoundError } = require("../../../../errors/BaseError");
+const { ValidationError } = require("../../../../errors/ValidationError");
 
 require("../clients");
 
@@ -35,7 +35,10 @@ class SaltoKsAccessProvider extends AccessProvider {
    *   read it already
    */
   async _getClient(tenant, app = null) {
-    return this._client || createClient(app || (await this._getApp(tenant)));
+    return (
+      this._client ||
+      saltoKsClientFor(tenant, app || (await this._getApp(tenant)))
+    );
   }
 
   /**
@@ -79,8 +82,9 @@ class SaltoKsAccessProvider extends AccessProvider {
    */
   async _attemptOpen(tenant, lockId) {
     // A lock whose IQ is already known can be refused - backoff after
-    // otp_blocked, missing activation - without any Salto call (§4/§7 of the
-    // spec). When this passes, the attempt continues on live data.
+    // otp_blocked, missing activation - without any Salto call, so a refused
+    // attempt spends no OTP. When this passes, the attempt continues on live
+    // data.
     const knownIq = this._knownIqByLock.get(`${tenant}:${lockId}`);
     if (knownIq) {
       await SaltoKsIqActivationService.resolveOtpForOpen(tenant, knownIq);
@@ -112,7 +116,7 @@ class SaltoKsAccessProvider extends AccessProvider {
         (candidate) => String(candidate.id) === iq.id,
       );
       if (liveIq?.restore_required) {
-        // §7: the IQ was reset - the stored ingredients are dead. Book it so
+        // The IQ was reset - the stored ingredients are dead. Book it so
         // the capability is withdrawn and the admin sees why.
         await SaltoKsIqActivationService.markReactivationRequired(
           tenant,
@@ -145,7 +149,7 @@ class SaltoKsAccessProvider extends AccessProvider {
   /**
    * @private
    * Books a failed locking call on the IQ's activation and turns it into the
-   * failure class the guest sees (§7 of the spec): OTP rejections and an
+   * failure class the guest sees: OTP rejections and an
    * offline lock are temporary, a missing right of the system user - which
    * only ever shows itself here - is configurative.
    */
@@ -159,9 +163,15 @@ class SaltoKsAccessProvider extends AccessProvider {
     }
 
     if (kind === "otp_blocked" && iq) {
-      await SaltoKsIqActivationService.recordOtpBlocked(tenant, iq.id, detail);
+      const blockedUntil = await SaltoKsIqActivationService.recordOtpBlocked(
+        tenant,
+        iq.id,
+        detail,
+      );
       return AccessOpenError.temporary(
         `Salto KS blocked OTP submissions: ${detail}`,
+        {},
+        { retryAfter: blockedUntil },
       );
     }
 
@@ -234,23 +244,21 @@ class SaltoKsAccessProvider extends AccessProvider {
 
   /**
    * The access points of the site, each with the modes its lock really
-   * supports right now (§6 of the spec). Remote open is the only mode, at
+   * supports right now. Remote open is the only mode, at
    * every lock type, keypad or not: it needs the lock's IQ to be locally
-   * activated (IQs without `otp_enabled` need no activation) and not in
-   * `restore_required`. Deliberately no condition on `online` - an offline IQ
+   * activated under the tenant's current identity (IQs without `otp_enabled`
+   * need no activation) and not in `restore_required`. Deliberately no condition on `online` - an offline IQ
    * is a runtime failure of the open attempt, not a capability.
    */
   async listAccessPoints(tenant) {
     const app = await this._getApp(tenant);
     const client = await this._getClient(tenant, app);
-    const [locks, iqs] = await Promise.all([
+    const [locks, iqs, activations] = await Promise.all([
       client.getLocks(),
       client.getIqs(),
+      SaltoKsIqActivationService.currentActivations(app, client),
     ]);
     const iqList = extractSaltoList(iqs);
-    const activations = Array.isArray(app.iqActivations)
-      ? app.iqActivations
-      : [];
 
     return extractSaltoList(locks).map((lock) => {
       const externalId = String(lock.id || lock.lockId);
@@ -279,6 +287,36 @@ class SaltoKsAccessProvider extends AccessProvider {
     const externalId = String(accessPoint.externalId);
     const point = points.find((p) => p.externalId === externalId);
     return point ? point.supportedModes : null;
+  }
+
+  /**
+   * Refuse `authorization` and `both` at every Salto door, without asking
+   * Salto: the rule of `_deriveOffer` holds for every lock, so it needs no
+   * listing and runs before it is fetched. A save the listing cannot judge -
+   * the tenant's application is not active, Salto does not list the lock or
+   * cannot be reached - still gets the mode Salto doors have, `remote`.
+   * `remote` itself passes here; whether the lock can do it right now is the
+   * listing's to say.
+   *
+   * @param {Object} accessPoint The access point as it would be stored
+   * @returns {void}
+   * @throws {ValidationError} `unsupported_mode` for any mode but `remote`
+   */
+  validateAccessPointWithoutListing(accessPoint) {
+    if (accessPoint.mode === AccessPointMode.REMOTE) {
+      return;
+    }
+
+    throw new ValidationError([
+      {
+        field: "mode",
+        code: "unsupported_mode",
+        params: {
+          mode: accessPoint.mode,
+          supportedModes: [AccessPointMode.REMOTE],
+        },
+      },
+    ]);
   }
 
   /**
@@ -326,76 +364,9 @@ class SaltoKsAccessProvider extends AccessProvider {
   // only its country code and time zone, a lock only its floor inside the
   // building. Leaving the optional capability undeclared is what tells an admin
   // UI not to offer a location prefill that could never fill anything in.
-
-  async registerWebhook(tenant, callbackUrl) {
-    const client = await this._getClient(tenant);
-    return client.subscribeNotifications(callbackUrl);
-  }
-
-  async unregisterWebhook(tenant, id) {
-    if (!id) {
-      return { success: true, skipped: true, reason: "missing subscriptionId" };
-    }
-
-    const client = await this._getClient(tenant);
-    return client.unsubscribeNotifications(id);
-  }
-
-  parseWebhook(rawPayload, _headers = {}) {
-    const payload =
-      typeof rawPayload === "string" ? JSON.parse(rawPayload) : rawPayload;
-
-    return {
-      provider: PROVIDER_ID,
-      externalId: String(payload.lockId || payload.lock_id || payload.id || ""),
-      eventType:
-        payload.eventType ||
-        payload.event ||
-        payload.type ||
-        payload.name ||
-        null,
-      timestamp:
-        payload.timestamp || payload.eventTime || payload.date || Date.now(),
-      payload,
-    };
-  }
-
-  verifyWebhookSignature(rawPayload, headers = {}, secret = null) {
-    if (!secret) {
-      return true;
-    }
-
-    const signature =
-      headers["x-salto-signature"] ||
-      headers["X-Salto-Signature"] ||
-      headers["x-signature"];
-
-    if (!signature) {
-      return false;
-    }
-
-    const body =
-      typeof rawPayload === "string"
-        ? rawPayload
-        : JSON.stringify(rawPayload || {});
-    const expected = crypto
-      .createHmac("sha256", secret)
-      .update(body)
-      .digest("hex");
-
-    return this._safeEqual(signature.replace(/^sha256=/, ""), expected);
-  }
-
-  _safeEqual(a, b) {
-    const left = Buffer.from(a);
-    const right = Buffer.from(b);
-
-    if (left.length !== right.length) {
-      return false;
-    }
-
-    return crypto.timingSafeEqual(left, right);
-  }
+  //
+  // No webhooks either: Salto KS sends no events, so there is nothing to
+  // register when a tenant is saved and nothing to receive.
 
   static get capabilities() {
     return [
@@ -403,10 +374,7 @@ class SaltoKsAccessProvider extends AccessProvider {
       "getStatus",
       "listAccessPoints",
       "getSupportedModes",
-      "registerWebhook",
-      "unregisterWebhook",
-      "parseWebhook",
-      "verifyWebhookSignature",
+      "validateAccessPointWithoutListing",
     ];
   }
 }

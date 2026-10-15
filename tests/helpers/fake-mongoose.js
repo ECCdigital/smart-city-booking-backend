@@ -1,7 +1,8 @@
 /**
  * A tiny in-memory stand-in for a mongoose connection, just large enough for
- * the operations the migration scripts use. Anything else throws, so the fake
- * can never quietly pretend to support an operation it does not.
+ * the operations the migration scripts and the targeted updates of the
+ * Salto IQ activations use. Anything else throws, so the fake can never
+ * quietly pretend to support an operation it does not.
  */
 
 function isPlainObject(value) {
@@ -69,6 +70,29 @@ function matchesCondition(values, condition) {
           );
         }
 
+        if (operator === "$elemMatch") {
+          return values.some(
+            (value) =>
+              Array.isArray(value) &&
+              value.some(
+                (element) =>
+                  isPlainObject(element) &&
+                  matches(element, condition.$elemMatch),
+              ),
+          );
+        }
+
+        if (operator === "$not") {
+          return !matchesCondition(values, condition.$not);
+        }
+
+        if (operator === "$gte") {
+          const limit = comparable(condition.$gte);
+          return values.some(
+            (value) => value != null && comparable(value) >= limit,
+          );
+        }
+
         if (operator === "$lte") {
           // Documents hold dates as ISO strings (see `clone`), which order
           // like the dates they stand for.
@@ -123,11 +147,94 @@ function unsetPath(document, path) {
   if (isPlainObject(parent)) delete parent[lastKey];
 }
 
-function applyUpdate(document, update, { inserted = false } = {}) {
+/**
+ * The places a path names in a document, as `[parent, key]` pairs. A filtered
+ * positional segment `$[name]` stands for every element of the array there
+ * that its array filter (`name.<field>` conditions) matches, as in MongoDB.
+ */
+function targetsOf(document, path, arrayFilters = []) {
+  const keys = path.split(".");
+  let parents = [document];
+
+  keys.slice(0, -1).forEach((key, index) => {
+    const next = [];
+    for (const parent of parents) {
+      const positional = key.match(/^\$\[(\w+)\]$/);
+      if (positional) {
+        if (!Array.isArray(parent)) continue;
+        next.push(
+          ...parent.filter((el) =>
+            elementMatches(el, positional[1], arrayFilters),
+          ),
+        );
+      } else {
+        if (!isPlainObject(parent[key]) && !Array.isArray(parent[key])) {
+          // A plain path creates what is missing, a positional one does not.
+          if (keys.slice(index + 1).some((k) => k.startsWith("$["))) continue;
+          parent[key] = {};
+        }
+        next.push(parent[key]);
+      }
+    }
+    parents = next;
+  });
+
+  const lastKey = keys[keys.length - 1];
+  if (lastKey.startsWith("$[")) {
+    throw new Error(`fake-mongoose: unsupported path ${path}`);
+  }
+  return parents.map((parent) => [parent, lastKey]);
+}
+
+function elementMatches(element, name, arrayFilters) {
+  const filter = arrayFilters.find((candidate) =>
+    Object.keys(candidate).some((key) => key.startsWith(`${name}.`)),
+  );
+  if (!filter) {
+    throw new Error(`fake-mongoose: no array filter for $[${name}]`);
+  }
+
+  const condition = Object.fromEntries(
+    Object.entries(filter).map(([key, value]) => [
+      key.slice(name.length + 1),
+      value,
+    ]),
+  );
+  return isPlainObject(element) && matches(element, condition);
+}
+
+function applyUpdate(
+  document,
+  update,
+  { inserted = false, arrayFilters = [] } = {},
+) {
+  const each = (path, apply) => {
+    if (!path.includes("$")) {
+      apply(...targetsOf(document, path)[0]);
+      return;
+    }
+    targetsOf(document, path, arrayFilters).forEach(([parent, key]) =>
+      apply(parent, key),
+    );
+  };
+
   for (const [operator, fields] of Object.entries(update)) {
     if (operator === "$set") {
+      // As in MongoDB, the array filters pick their elements from the
+      // document before the update: every filtered place is found first.
+      const filtered = Object.entries(fields)
+        .filter(([path]) => path.includes("$"))
+        .flatMap(([path, value]) =>
+          targetsOf(document, path, arrayFilters).map((target) => [
+            target,
+            value,
+          ]),
+        );
+      for (const [[parent, key], value] of filtered) {
+        parent[key] = clone(value);
+      }
       for (const [path, value] of Object.entries(fields)) {
-        setPath(document, path, value);
+        if (!path.includes("$")) setPath(document, path, value);
       }
     } else if (operator === "$unset") {
       for (const path of Object.keys(fields)) {
@@ -138,10 +245,49 @@ function applyUpdate(document, update, { inserted = false } = {}) {
       for (const [path, value] of Object.entries(fields)) {
         setPath(document, path, value);
       }
+    } else if (operator === "$inc") {
+      for (const [path, amount] of Object.entries(fields)) {
+        each(path, (parent, key) => {
+          parent[key] = (parent[key] ?? 0) + amount;
+        });
+      }
+    } else if (operator === "$push") {
+      for (const [path, value] of Object.entries(fields)) {
+        each(path, (parent, key) => {
+          if (parent[key] === undefined) parent[key] = [];
+          parent[key].push(clone(value));
+        });
+      }
+    } else if (operator === "$pull") {
+      for (const [path, condition] of Object.entries(fields)) {
+        each(path, (parent, key) => {
+          if (!Array.isArray(parent[key])) return;
+          parent[key] = parent[key].filter(
+            (element) =>
+              !(isPlainObject(element) && matches(element, condition)),
+          );
+        });
+      }
     } else {
       throw new Error(`fake-mongoose: unsupported update operator ${operator}`);
     }
   }
+}
+
+/**
+ * Applies an update to the first matching document and answers like the
+ * driver: how many documents matched and how many changed.
+ */
+function updateFirst(documents, filter, update, options = {}) {
+  const document = documents.find((candidate) => matches(candidate, filter));
+  if (!document) return { matchedCount: 0, modifiedCount: 0 };
+
+  const before = JSON.stringify(document);
+  applyUpdate(document, update, { arrayFilters: options.arrayFilters });
+  return {
+    matchedCount: 1,
+    modifiedCount: JSON.stringify(document) === before ? 0 : 1,
+  };
 }
 
 function createQuery(documents) {
@@ -158,11 +304,31 @@ function createQuery(documents) {
 
 function createCollection(documents, indexes) {
   return {
-    async updateOne(filter, update) {
-      const document = documents.find((candidate) =>
-        matches(candidate, filter),
-      );
-      if (document) applyUpdate(document, update);
+    async updateOne(filter, update, options = {}) {
+      return updateFirst(documents, filter, update, options);
+    },
+
+    /** `updateOne` operations only, with their `arrayFilters`. */
+    async bulkWrite(operations) {
+      // The driver refuses an empty batch.
+      if (operations.length === 0) {
+        throw new Error("Invalid BulkOperation, Batch cannot be empty");
+      }
+
+      let matchedCount = 0;
+      let modifiedCount = 0;
+      for (const operation of operations) {
+        const [kind] = Object.keys(operation);
+        if (kind !== "updateOne") {
+          throw new Error(`fake-mongoose: unsupported bulk operation ${kind}`);
+        }
+
+        const { filter, update, arrayFilters } = operation.updateOne;
+        const result = updateFirst(documents, filter, update, { arrayFilters });
+        matchedCount += result.matchedCount;
+        modifiedCount += result.modifiedCount;
+      }
+      return { matchedCount, modifiedCount };
     },
 
     async updateMany(filter, update) {
@@ -232,16 +398,8 @@ function createModel(name, documents, indexes, uniqueFields = []) {
     },
 
     async updateOne(filter, update, options = {}) {
-      const document = documents.find((candidate) =>
-        matches(candidate, filter),
-      );
-
-      if (document) {
-        applyUpdate(document, update);
-        return;
-      }
-
-      if (!options.upsert) return;
+      const result = updateFirst(documents, filter, update, options);
+      if (result.matchedCount > 0 || !options.upsert) return result;
 
       const inserted = {};
       for (const [path, condition] of Object.entries(filter)) {

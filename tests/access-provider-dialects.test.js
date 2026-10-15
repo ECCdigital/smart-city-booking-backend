@@ -65,6 +65,7 @@ const {
   FakeSaltoKsApiClient,
   brokenSaltoKsApiClient,
   saltoHttpError,
+  FAKE_SITE_ID,
 } = require("./helpers/fake-salto-ks-api-client");
 const {
   FakeIfbsApiClient,
@@ -843,7 +844,15 @@ describe("access provider dialects: the adapters as they answer", () => {
     function keypadLockOnIq(lockType, activationState) {
       const tenant = tenantWithSaltoApp();
       tenant.applications[0].iqActivations = activationState
-        ? [{ iqId: SALTO_IQ_ID, state: activationState }]
+        ? [
+            {
+              iqId: SALTO_IQ_ID,
+              siteId: FAKE_SITE_ID,
+              username: "system-user@example.test",
+              environment: "accept",
+              state: activationState,
+            },
+          ]
         : [];
       sinon.stub(TenantManager, "getTenant").resolves(tenant);
       return new SaltoKsAccessProvider({
@@ -2394,6 +2403,38 @@ describe("access provider dialects: what AccessService makes of them", () => {
       expect(loggedPayload("revoke").payload).to.deep.equal({
         grant: { authorizationId: "auth-1", externalPrincipalId: null },
         revocation: { principalRemoved: null },
+      });
+    });
+
+    it("records a revoke that took the grant back but left its external principal", async () => {
+      registerAccessProvider(
+        IN_MEMORY_PROVIDER_ID,
+        class extends InMemoryAccessProvider {
+          constructor() {
+            super({
+              locks: [{ externalId: "lock-1" }],
+              principalRemovalFails: true,
+            });
+          }
+        },
+      );
+      const door = { ...IN_MEMORY_DOOR, mode: AccessPointMode.AUTHORIZATION };
+      stubBooking(createBooking(), [door]);
+      await AccessService.provisionForBooking(TENANT, "booking-1");
+
+      const [entry] = await AccessService.revokeForBooking(TENANT, "booking-1");
+
+      expect(entry).to.include({
+        isProvisioned: false,
+        principalRemovedAt: null,
+        principalCleanupError:
+          "The provider could not remove the external principal of the grant",
+      });
+      expect(AccessService.PRINCIPAL_NOT_REMOVED_ERROR).to.equal(
+        entry.principalCleanupError,
+      );
+      expect(loggedPayload("revoke").payload.revocation).to.deep.equal({
+        principalRemoved: false,
       });
     });
 

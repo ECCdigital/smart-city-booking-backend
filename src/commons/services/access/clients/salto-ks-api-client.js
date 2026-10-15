@@ -80,10 +80,11 @@ function describeUpstreamError(err) {
 /**
  * What a failed Salto call means for the open path.
  *
- * Measured contract (docs/research/salto-ks-api-contract.md §9): a rejected
- * OTP answers 400 with `ErrorCode` 3102 and "otp_invalid"; the per-command
- * block after repeated rejections answers 403 with the same `ErrorCode` and
- * "otp_blocked". Any other 403 is a missing right of the system user.
+ * Measured on the accept environment on 2026-08-18 and 2026-08-19: a
+ * rejected OTP answers 400 with `ErrorCode` 3102 and "otp_invalid"; the
+ * per-command block after repeated rejections answers 403 with the same
+ * `ErrorCode` and "otp_blocked". Any other 403 is a missing right of the
+ * system user.
  *
  * @param {Error} err An axios error from the Connect API
  * @returns {"otp_invalid"|"otp_blocked"|"forbidden"|"other"}
@@ -178,24 +179,64 @@ class SaltoKsApiClient extends BaseAccessApiClient {
 
     this._token = null;
     this._tokenExpiresAt = 0;
+    this._tokenRequest = null;
+    this._siteUuid = null;
   }
 
   /**
    * Returns a valid bearer token, requesting (or refreshing) it if needed.
+   *
+   * The token is kept for its lifetime, so a client that lives on (see
+   * `salto-ks-clients`) signs in once per token, not once per call. Calls
+   * that need a token while one is being requested wait for that request
+   * instead of starting their own.
+   *
    * @returns {Promise<string>}
    */
   async _getToken() {
-    const now = Date.now();
-    if (this._token && now < this._tokenExpiresAt - TOKEN_REFRESH_SKEW_MS) {
+    if (
+      this._token &&
+      Date.now() < this._tokenExpiresAt - TOKEN_REFRESH_SKEW_MS
+    ) {
       return this._token;
     }
 
+    if (!this._tokenRequest) {
+      this._tokenRequest = this._signIn().finally(() => {
+        this._tokenRequest = null;
+      });
+    }
+
+    return this._tokenRequest;
+  }
+
+  /**
+   * @private
+   * Requests a new token and keeps it until shortly before it expires.
+   * @returns {Promise<string>}
+   */
+  async _signIn() {
     if (!this.username || !this.password) {
       throw new Error(
         "Salto KS requires a system user (username and password) for the password grant",
       );
     }
 
+    const requestedAt = Date.now();
+    const { accessToken, expiresIn } = await this._requestToken();
+    this._token = accessToken;
+    this._tokenExpiresAt = requestedAt + (expiresIn || 3600) * 1000;
+    return this._token;
+  }
+
+  /**
+   * @private
+   * The token request at the identity server: the password grant with the
+   * client ID/secret as HTTP Basic auth.
+   *
+   * @returns {Promise<{accessToken: string, expiresIn: number|undefined}>}
+   */
+  async _requestToken() {
     const basic = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString(
       "base64",
     );
@@ -226,9 +267,7 @@ class SaltoKsApiClient extends BaseAccessApiClient {
         throw new Error("Salto KS token endpoint returned no access_token");
       }
 
-      this._token = accessToken;
-      this._tokenExpiresAt = now + (expiresIn || 3600) * 1000;
-      return this._token;
+      return { accessToken, expiresIn };
     } catch (err) {
       const upstream = describeUpstreamError(err);
       if (upstream) {
@@ -245,6 +284,24 @@ class SaltoKsApiClient extends BaseAccessApiClient {
     return this._request("get", "/v1.2/sites");
   }
 
+  /**
+   * The UUID of the client's own site, however the tenant names it (UUID,
+   * `site_uid` or `customer_reference`). The client is bound to its site, so
+   * a reference is looked up once and the answer kept while the client
+   * lives; a failed lookup is tried again on the next call.
+   *
+   * @returns {Promise<string>}
+   */
+  resolveSiteId() {
+    if (!this._siteUuid) {
+      this._siteUuid = this._resolveSiteId().catch((err) => {
+        this._siteUuid = null;
+        throw err;
+      });
+    }
+    return this._siteUuid;
+  }
+
   async _resolveSiteId(siteId = this.siteId) {
     if (!siteId) {
       throw new Error("Salto KS siteId is required");
@@ -252,7 +309,8 @@ class SaltoKsApiClient extends BaseAccessApiClient {
 
     const normalizedSiteId = String(siteId).trim();
     if (UUID_RE.test(normalizedSiteId)) {
-      return normalizedSiteId;
+      // Salto lists its UUIDs in lower case; one spelling, one identity.
+      return normalizedSiteId.toLowerCase();
     }
 
     const sites = this._extractList(await this.getSites());
@@ -275,10 +333,6 @@ class SaltoKsApiClient extends BaseAccessApiClient {
   async getLocks(siteId = this.siteId) {
     const resolvedSiteId = await this._resolveSiteId(siteId);
     return this._request("get", `/v1.2/sites/${resolvedSiteId}/locks`);
-  }
-
-  async getAccessPoints() {
-    return this.getLocks();
   }
 
   async openLock(lockId, siteId = this.siteId, options = {}) {
@@ -345,125 +399,50 @@ class SaltoKsApiClient extends BaseAccessApiClient {
     return this._request("get", `/v1.2/sites/${resolvedSiteId}/me`);
   }
 
-  async subscribeNotifications(
-    callbackUrl,
-    eventTypes = [],
-    siteId = this.siteId,
-  ) {
-    const resolvedSiteId = await this._resolveSiteId(siteId);
-    return this._request(
-      "post",
-      `/v1.2/sites/${resolvedSiteId}/subscriptions`,
-      {
-        callbackUrl,
-        eventTypes,
-      },
-    );
-  }
+  async _request(method, path, data = null, options = {}) {
+    const token = await this._getToken();
 
-  async unsubscribeNotifications(subscriptionId, siteId = this.siteId) {
-    const resolvedSiteId = await this._resolveSiteId(siteId);
-    return this._request(
-      "delete",
-      `/v1.2/sites/${resolvedSiteId}/subscriptions/${subscriptionId}`,
-    );
-  }
-
-  // Aliases to satisfy the common notification interface of BaseAccessApiClient.
-  async registerNotification(callbackUrl) {
-    return this.subscribeNotifications(callbackUrl);
-  }
-
-  async unregisterNotification(notificationId) {
-    return this.unsubscribeNotifications(notificationId);
-  }
-
-  static get capabilities() {
-    return [
-      "getLocks",
-      "getAccessPoints",
-      "openLock",
-      "subscribeNotifications",
-      "unsubscribeNotifications",
-    ];
+    try {
+      return await this._send(method, path, data, {
+        token,
+        timeout: options.timeout || this.defaultTimeout,
+      });
+    } catch (err) {
+      if (err?.response?.status === 401 && this._token === token) {
+        // Salto no longer accepts the token before its lifetime is over
+        // (e.g. revoked): the next call signs in again instead of reusing it.
+        this._token = null;
+        this._tokenExpiresAt = 0;
+      }
+      logger.error(
+        `Salto KS API request failed: ${method.toUpperCase()} ${path} - ${err.message}`,
+      );
+      throw err;
+    }
   }
 
   /**
-   * Checks credentials against the identity server and, if a site is
-   * configured, the site scope against the Connect API.
-   *
-   * A failure names what the upstream server objected to (e.g.
-   * `invalid_client`) rather than only the HTTP status, so a wrong client
-   * secret, a wrong environment and a wrong site can be told apart.
-   *
-   * @returns {Promise<{success: boolean, message: string}>}
+   * @private
+   * The HTTP transport to the Connect API.
+   * @returns {Promise<*>} The response body
    */
-  static async testConnection(
-    clientId,
-    clientSecret,
-    siteId,
-    environment = DEFAULT_SALTO_ENVIRONMENT,
-    options = {},
-  ) {
-    let client;
-    try {
-      client = new SaltoKsApiClient(
-        clientId,
-        clientSecret,
-        siteId,
-        environment,
-        options,
-      );
-    } catch (err) {
-      return { success: false, message: err.message };
-    }
-
-    try {
-      // Token request validates the credentials; listing locks validates the
-      // site scope when a siteId is configured.
-      await client._getToken();
-      if (siteId) {
-        await client.getLocks(siteId);
-      }
-      return {
-        success: true,
-        message: `Connection successful (${client.environment})`,
-      };
-    } catch (err) {
-      const upstream = describeUpstreamError(err);
-      if (upstream) {
-        return { success: false, message: upstream };
-      }
-      return BaseAccessApiClient.handleConnectionError(err);
-    }
-  }
-
-  async _request(method, path, data = null, options = {}) {
-    const token = await this._getToken();
-    const url = `${this.baseUrl}${path}`;
+  async _send(method, path, data, { token, timeout }) {
     const config = {
       method,
-      url,
+      url: `${this.baseUrl}${path}`,
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      timeout: options.timeout || this.defaultTimeout,
+      timeout,
     };
 
     if (data) {
       config.data = data;
     }
 
-    try {
-      const response = await axios.request(config);
-      return response.data;
-    } catch (err) {
-      logger.error(
-        `Salto KS API request failed: ${method.toUpperCase()} ${path} - ${err.message}`,
-      );
-      throw err;
-    }
+    const response = await axios.request(config);
+    return response.data;
   }
 
   _extractList(value) {
