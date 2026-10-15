@@ -1,5 +1,5 @@
 const AccessProvider = require("./access-provider");
-const { createClient } = require("../clients/access-client-registry");
+const { saltoKsClientFor } = require("../clients/salto-ks-clients");
 const {
   classifySaltoError,
   extractSaltoList,
@@ -34,7 +34,10 @@ class SaltoKsAccessProvider extends AccessProvider {
    *   read it already
    */
   async _getClient(tenant, app = null) {
-    return this._client || createClient(app || (await this._getApp(tenant)));
+    return (
+      this._client ||
+      saltoKsClientFor(tenant, app || (await this._getApp(tenant)))
+    );
   }
 
   /**
