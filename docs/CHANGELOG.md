@@ -32,6 +32,10 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 - Merge of `version/4.3.x` (ECCdigital/tickets#424): the route snapshot gives the four favorites routes the column `expiredToken` of ECCdigital/tickets#109 (`401`, as every protected route); the favorites test of the account id change stubs `UserManager.getRawUser`, which replaced `getRawUserBy` (ECCdigital/tickets#259). No code change
 - Glossary: `GLOSSARY.md` gains the section "Favoriten" with the terms "Favorit" and "Favoritenliste" (a signed-in user marks an offer for themselves; the list reads under `self`), decided while charting the favorites map. No code change
 
+### Removed
+
+- Salto KS webhooks ([ECCdigital/tickets#579](https://github.com/ECCdigital/tickets/issues/579)): Salto KS sends no events, so saving a tenant no longer registers a subscription there (the automatic registration on tenant save, which served Salto alone, is gone, and `ACCESS_WEBHOOK_BASE_URL` is ignored). The Salto KS provider no longer declares `registerWebhook`, `unregisterWebhook`, `parseWebhook` or `verifyWebhookSignature`, and its client loses the subscription methods, the alias `getAccessPoints` and its static list of capabilities, so `GET /api/:tenant/access-apps/providers` answers `capabilities: []` for Salto. The provider-neutral webhook route stays
+
 ### Fixed
 
 - Editing an event without `ownerUserId` emptied its owner ([ECCdigital/tickets#300](https://github.com/ECCdigital/tickets/issues/300)): as for bookables (ECCdigital/tickets#263), a `PUT /api/:tenant/events` body without `ownerUserId`, or with `null`, `""` or a blank one, now keeps the stored owner; a body that names it is stored as before

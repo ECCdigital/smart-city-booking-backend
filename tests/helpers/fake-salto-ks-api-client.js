@@ -42,12 +42,10 @@ class FakeSaltoKsApiClient extends SaltoKsApiClient {
     });
     this.locks = new Map(locks.map((lock) => [String(lock.id), lock]));
     this.iqs = new Map(iqs.map((iq) => [String(iq.id), iq]));
-    this.subscriptions = new Map();
     /** @type {{ lockId: string, otp: string|undefined }[]} every open sent */
     this.openings = [];
     /** An error the next lock opening answers with, e.g. a 403 or an OTP rejection. */
     this.openError = null;
-    this._nextId = 1;
   }
 
   async _getToken() {
@@ -88,20 +86,6 @@ class FakeSaltoKsApiClient extends SaltoKsApiClient {
       this.openings.push({ lockId: match[1], otp: data?.otp });
       lock.locked_state = "unlocked";
       return { ...lock };
-    }
-
-    if (rest === "/subscriptions" && method === "post") {
-      const id = `subscription-${this._nextId++}`;
-      this.subscriptions.set(id, { id, ...data });
-      return { id, ...data };
-    }
-
-    if (
-      (match = rest.match(/^\/subscriptions\/([^/]+)$/)) &&
-      method === "delete"
-    ) {
-      this.subscriptions.delete(match[1]);
-      return "";
     }
 
     throw new Error(`fake-salto-ks-api-client: unexpected request ${route}`);
