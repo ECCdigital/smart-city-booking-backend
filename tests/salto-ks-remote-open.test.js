@@ -20,6 +20,7 @@ const {
   FakeSaltoKsApiClient,
   saltoHttpError,
 } = require("./helpers/fake-salto-ks-api-client");
+const { createFakeMongoose } = require("./helpers/fake-mongoose");
 
 const TENANT_ID = "tenant-1";
 const IQ_ID = "5dfdc54e-8335-11f0-a2ed-6045bd92d38f";
@@ -301,11 +302,12 @@ describe("SaltoKsAccessProvider.open against the fake Connect API: the time to r
   let provider;
 
   /**
-   * A tenant whose system user is activated at the lock's IQ. Writes of the
-   * activation list land on this tenant, so the next open reads them.
+   * A tenant whose system user is activated at the lock's IQ. Writes go
+   * through the update operators onto the stored tenant, so the next open
+   * reads them.
    */
   function activatedTenant() {
-    const tenant = {
+    const stored = {
       id: TENANT_ID,
       applications: [
         {
@@ -331,12 +333,16 @@ describe("SaltoKsAccessProvider.open against the fake Connect API: the time to r
         },
       ],
     };
-    sinon.stub(TenantManager, "getTenant").callsFake(async () => tenant);
-    sinon.stub(TenantModel, "updateOne").callsFake(async (_filter, update) => {
-      tenant.applications[0].iqActivations =
-        update.$set["applications.$.iqActivations"];
-    });
-    return tenant;
+    const tenants = createFakeMongoose({ Tenant: [stored] }).model("Tenant");
+    sinon
+      .stub(TenantManager, "getTenant")
+      .callsFake(async () => structuredClone(tenants.documents[0]));
+    sinon
+      .stub(TenantModel, "updateOne")
+      .callsFake((filter, update, options) =>
+        tenants.updateOne(filter, update, options),
+      );
+    return tenants.documents[0];
   }
 
   beforeEach(() => {

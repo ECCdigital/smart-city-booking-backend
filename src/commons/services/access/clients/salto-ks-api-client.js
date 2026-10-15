@@ -179,24 +179,63 @@ class SaltoKsApiClient extends BaseAccessApiClient {
 
     this._token = null;
     this._tokenExpiresAt = 0;
+    this._tokenRequest = null;
   }
 
   /**
    * Returns a valid bearer token, requesting (or refreshing) it if needed.
+   *
+   * The token is kept for its lifetime, so a client that lives on (see
+   * `salto-ks-clients`) signs in once per token, not once per call. Calls
+   * that need a token while one is being requested wait for that request
+   * instead of starting their own.
+   *
    * @returns {Promise<string>}
    */
   async _getToken() {
-    const now = Date.now();
-    if (this._token && now < this._tokenExpiresAt - TOKEN_REFRESH_SKEW_MS) {
+    if (
+      this._token &&
+      Date.now() < this._tokenExpiresAt - TOKEN_REFRESH_SKEW_MS
+    ) {
       return this._token;
     }
 
+    if (!this._tokenRequest) {
+      this._tokenRequest = this._signIn().finally(() => {
+        this._tokenRequest = null;
+      });
+    }
+
+    return this._tokenRequest;
+  }
+
+  /**
+   * @private
+   * Requests a new token and keeps it until shortly before it expires.
+   * @returns {Promise<string>}
+   */
+  async _signIn() {
     if (!this.username || !this.password) {
       throw new Error(
         "Salto KS requires a system user (username and password) for the password grant",
       );
     }
 
+    const requestedAt = Date.now();
+    const { accessToken, expiresIn } = await this._requestToken();
+    this._token = accessToken;
+    this._tokenExpiresAt = requestedAt + (expiresIn || 3600) * 1000;
+    return this._token;
+  }
+
+  /**
+   * @private
+   * The token request at the identity server: the password grant with the
+   * client ID/secret as HTTP Basic auth.
+   *
+   * @returns {Promise<{accessToken: string, expiresIn: number|undefined}>}
+   */
+  async _requestToken() {
     const basic = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString(
       "base64",
     );
@@ -227,9 +266,7 @@ class SaltoKsApiClient extends BaseAccessApiClient {
         throw new Error("Salto KS token endpoint returned no access_token");
       }
 
-      this._token = accessToken;
-      this._tokenExpiresAt = now + (expiresIn || 3600) * 1000;
-      return this._token;
+      return { accessToken, expiresIn };
     } catch (err) {
       const upstream = describeUpstreamError(err);
       if (upstream) {
@@ -394,30 +431,48 @@ class SaltoKsApiClient extends BaseAccessApiClient {
 
   async _request(method, path, data = null, options = {}) {
     const token = await this._getToken();
-    const url = `${this.baseUrl}${path}`;
+
+    try {
+      return await this._send(method, path, data, {
+        token,
+        timeout: options.timeout || this.defaultTimeout,
+      });
+    } catch (err) {
+      if (err?.response?.status === 401 && this._token === token) {
+        // Salto no longer accepts the token before its lifetime is over
+        // (e.g. revoked): the next call signs in again instead of reusing it.
+        this._token = null;
+        this._tokenExpiresAt = 0;
+      }
+      logger.error(
+        `Salto KS API request failed: ${method.toUpperCase()} ${path} - ${err.message}`,
+      );
+      throw err;
+    }
+  }
+
+  /**
+   * @private
+   * The HTTP transport to the Connect API.
+   * @returns {Promise<*>} The response body
+   */
+  async _send(method, path, data, { token, timeout }) {
     const config = {
       method,
-      url,
+      url: `${this.baseUrl}${path}`,
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      timeout: options.timeout || this.defaultTimeout,
+      timeout,
     };
 
     if (data) {
       config.data = data;
     }
 
-    try {
-      const response = await axios.request(config);
-      return response.data;
-    } catch (err) {
-      logger.error(
-        `Salto KS API request failed: ${method.toUpperCase()} ${path} - ${err.message}`,
-      );
-      throw err;
-    }
+    const response = await axios.request(config);
+    return response.data;
   }
 
   _extractList(value) {

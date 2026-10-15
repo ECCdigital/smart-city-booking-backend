@@ -1,5 +1,5 @@
 const AccessProvider = require("./access-provider");
-const { createClient } = require("../clients/access-client-registry");
+const { saltoKsClientFor } = require("../clients/salto-ks-clients");
 const {
   classifySaltoError,
   extractSaltoList,
@@ -8,6 +8,7 @@ const SaltoKsIqActivationService = require("../salto-ks-iq-activation-service");
 const { AccessPointMode } = require("../../../entities/access/access-point");
 const { AccessOpenError } = require("../../../../errors/AccessOpenError");
 const { NotFoundError } = require("../../../../errors/BaseError");
+const { ValidationError } = require("../../../../errors/ValidationError");
 
 require("../clients");
 
@@ -34,7 +35,10 @@ class SaltoKsAccessProvider extends AccessProvider {
    *   read it already
    */
   async _getClient(tenant, app = null) {
-    return this._client || createClient(app || (await this._getApp(tenant)));
+    return (
+      this._client ||
+      saltoKsClientFor(tenant, app || (await this._getApp(tenant)))
+    );
   }
 
   /**
@@ -288,6 +292,37 @@ class SaltoKsAccessProvider extends AccessProvider {
   }
 
   /**
+   * Refuse `authorization` and `both` at every Salto door, without asking
+   * Salto: the rule of `_deriveOffer` holds for every lock, so it needs no
+   * listing. A save the listing cannot judge - the tenant's application is
+   * not active, Salto does not list the lock - still gets the mode Salto
+   * doors have, `remote`. `remote` itself passes here; whether the lock can
+   * do it right now is the listing's to say.
+   *
+   * @param {Object} accessPoint The access point as it would be stored
+   * @param {Object|null} _listedAccessPoint The lock as `listAccessPoints`
+   *   lists it, `null` when it is not listed; not read
+   * @returns {void}
+   * @throws {ValidationError} `unsupported_mode` for any mode but `remote`
+   */
+  validateAccessPoint(accessPoint, _listedAccessPoint) {
+    if (accessPoint.mode === AccessPointMode.REMOTE) {
+      return;
+    }
+
+    throw new ValidationError([
+      {
+        field: "mode",
+        code: "unsupported_mode",
+        params: {
+          mode: accessPoint.mode,
+          supportedModes: [AccessPointMode.REMOTE],
+        },
+      },
+    ]);
+  }
+
+  /**
    * @private
    * The capability rule for one lock, for its modes and capabilities alike:
    * remote open or nothing. The platform creates no users in Salto KS, and
@@ -337,7 +372,13 @@ class SaltoKsAccessProvider extends AccessProvider {
   // register when a tenant is saved and nothing to receive.
 
   static get capabilities() {
-    return ["open", "getStatus", "listAccessPoints", "getSupportedModes"];
+    return [
+      "open",
+      "getStatus",
+      "listAccessPoints",
+      "getSupportedModes",
+      "validateAccessPoint",
+    ];
   }
 }
 

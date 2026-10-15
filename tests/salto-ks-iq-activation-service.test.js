@@ -7,9 +7,13 @@ process.env.CRYPTO_SECRET =
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const TenantModel = require("../src/commons/data-managers/models/tenantModel");
 const clientRegistry = require("../src/commons/services/access/clients/access-client-registry");
+const {
+  forgetSaltoKsClients,
+} = require("../src/commons/services/access/clients/salto-ks-clients");
 const SecurityUtils = require("../src/commons/utilities/security-utils");
 const SaltoKsIqActivationService = require("../src/commons/services/access/salto-ks-iq-activation-service");
 const { AccessOpenError } = require("../src/errors/AccessOpenError");
+const { createFakeMongoose } = require("./helpers/fake-mongoose");
 
 const TENANT_ID = "tenant-1";
 const IQ_ID = "5dfdc54e-8335-11f0-a2ed-6045bd92d38f";
@@ -30,10 +34,26 @@ function saltoApp(overrides = {}) {
   };
 }
 
+/** The stored tenants, as the fake Tenant collection holds them. */
+let tenants;
+
+/**
+ * Stores the tenant with the given Salto application: reads answer a copy of
+ * what is stored at that moment, writes go through the update operators.
+ */
 function stubTenant(app) {
+  tenants = createFakeMongoose({
+    Tenant: [{ id: TENANT_ID, applications: [app] }],
+  }).model("Tenant");
+  sinon.stub(TenantManager, "getTenant").callsFake(async (id) => {
+    const tenant = tenants.documents.find((candidate) => candidate.id === id);
+    return tenant ? structuredClone(tenant) : null;
+  });
   sinon
-    .stub(TenantManager, "getTenant")
-    .resolves({ id: TENANT_ID, applications: [app] });
+    .stub(TenantModel, "updateOne")
+    .callsFake((filter, update, options) =>
+      tenants.updateOne(filter, update, options),
+    );
 }
 
 function fakeClient(overrides = {}) {
@@ -44,31 +64,30 @@ function fakeClient(overrides = {}) {
     putIqPin: sinon.stub().resolves(),
     ...overrides,
   };
+  forgetSaltoKsClients();
   sinon.stub(clientRegistry, "createClient").returns(client);
   return client;
 }
 
+/** The activation entries as stored now. */
 function persistedActivations() {
-  const updates = TenantModel.updateOne
-    .getCalls()
-    .map((call) => call.args[1].$set["applications.$.iqActivations"]);
-  return updates[updates.length - 1];
+  return tenants.documents[0].applications[0].iqActivations;
 }
 
 describe("SaltoKsIqActivationService.startActivation", () => {
-  let updateOne;
-
-  beforeEach(() => {
-    updateOne = sinon.stub(TenantModel, "updateOne").resolves();
-  });
-
   afterEach(() => {
     sinon.restore();
+    forgetSaltoKsClients();
   });
 
   it("persists the encrypted first secret before triggering the PIN mail", async () => {
     stubTenant(saltoApp());
-    const client = fakeClient();
+    let storedWhenMailed;
+    fakeClient({
+      sendIqPinEmail: sinon.stub().callsFake(async () => {
+        storedWhenMailed = structuredClone(persistedActivations());
+      }),
+    });
 
     const result = await SaltoKsIqActivationService.startActivation(
       TENANT_ID,
@@ -76,12 +95,11 @@ describe("SaltoKsIqActivationService.startActivation", () => {
     );
 
     expect(result.state).to.equal("pending_pin");
-    expect(updateOne.calledOnce).to.be.true;
-    expect(updateOne.calledBefore(client.sendIqPinEmail)).to.be.true;
-    expect(updateOne.firstCall.args[0]).to.deep.equal({
-      id: TENANT_ID,
-      applications: { $elemMatch: { type: "access", id: "salto-ks" } },
-    });
+    expect(storedWhenMailed).to.have.length(1);
+    expect(storedWhenMailed[0].iqId).to.equal(IQ_ID);
+    expect(SecurityUtils.decrypt(storedWhenMailed[0].secret)).to.equal(
+      "ABCDEFGHIJKLMNOP",
+    );
 
     const [entry] = persistedActivations();
     expect(entry.iqId).to.equal(IQ_ID);
@@ -114,7 +132,7 @@ describe("SaltoKsIqActivationService.startActivation", () => {
     expect(result.state).to.equal("pending_pin");
     expect(client.getIqFirstSecret.called).to.be.false;
     expect(client.sendIqPinEmail.calledOnceWith(IQ_ID)).to.be.true;
-    expect(updateOne.called).to.be.false;
+    expect(TenantModel.updateOne.called).to.be.false;
   });
 
   it("refuses to start over an activated IQ", async () => {
@@ -168,7 +186,7 @@ describe("SaltoKsIqActivationService.startActivation", () => {
     } catch (err) {
       expect(err.code).to.equal("salto_iq_already_activated_at_salto");
     }
-    expect(TenantModel.updateOne.called).to.be.false;
+    expect(persistedActivations()).to.deep.equal([]);
   });
 
   it("passes an unrelated 403 through instead of claiming an app legacy", async () => {
@@ -188,7 +206,6 @@ describe("SaltoKsIqActivationService.startActivation", () => {
 
 describe("SaltoKsIqActivationService.completeActivation", () => {
   beforeEach(() => {
-    sinon.stub(TenantModel, "updateOne").resolves();
     sinon.useFakeTimers({
       now: Date.UTC(2026, 7, 25, 7, 25, 0),
       toFake: ["Date"],
@@ -197,6 +214,7 @@ describe("SaltoKsIqActivationService.completeActivation", () => {
 
   afterEach(() => {
     sinon.restore();
+    forgetSaltoKsClients();
   });
 
   function pendingApp() {
@@ -323,12 +341,9 @@ describe("SaltoKsIqActivationService.completeActivation", () => {
 });
 
 describe("SaltoKsIqActivationService.discardActivation", () => {
-  beforeEach(() => {
-    sinon.stub(TenantModel, "updateOne").resolves();
-  });
-
   afterEach(() => {
     sinon.restore();
+    forgetSaltoKsClients();
   });
 
   it("removes the local entry without calling Salto", async () => {
@@ -371,7 +386,6 @@ describe("SaltoKsIqActivationService.discardActivation", () => {
 
 describe("SaltoKsIqActivationService.resolveOtpForOpen", () => {
   beforeEach(() => {
-    sinon.stub(TenantModel, "updateOne").resolves();
     sinon.useFakeTimers({
       now: Date.UTC(2026, 7, 25, 7, 25, 0),
       toFake: ["Date"],
@@ -380,6 +394,7 @@ describe("SaltoKsIqActivationService.resolveOtpForOpen", () => {
 
   afterEach(() => {
     sinon.restore();
+    forgetSaltoKsClients();
   });
 
   function activatedEntry(overrides = {}) {
@@ -529,7 +544,6 @@ describe("SaltoKsIqActivationService.resolveOtpForOpen", () => {
 
 describe("SaltoKsIqActivationService open bookkeeping", () => {
   beforeEach(() => {
-    sinon.stub(TenantModel, "updateOne").resolves();
     sinon.useFakeTimers({
       now: Date.UTC(2026, 7, 25, 7, 25, 0),
       toFake: ["Date"],
@@ -538,6 +552,7 @@ describe("SaltoKsIqActivationService open bookkeeping", () => {
 
   afterEach(() => {
     sinon.restore();
+    forgetSaltoKsClients();
   });
 
   function appWithEntry(overrides = {}) {
@@ -617,12 +632,9 @@ describe("SaltoKsIqActivationService open bookkeeping", () => {
 });
 
 describe("SaltoKsIqActivationService open bookkeeping (reactivation)", () => {
-  beforeEach(() => {
-    sinon.stub(TenantModel, "updateOne").resolves();
-  });
-
   afterEach(() => {
     sinon.restore();
+    forgetSaltoKsClients();
   });
 
   it("marks an activation as reactivation_required", async () => {
@@ -713,12 +725,9 @@ describe("SaltoKsIqActivationService.preserveActivations", () => {
 });
 
 describe("SaltoKsIqActivationService.listIqs", () => {
-  beforeEach(() => {
-    sinon.stub(TenantModel, "updateOne").resolves();
-  });
-
   afterEach(() => {
     sinon.restore();
+    forgetSaltoKsClients();
   });
 
   it("merges the live IQ flags with the local activation state, without secrets", async () => {
@@ -819,5 +828,117 @@ describe("SaltoKsIqActivationService.listIqs", () => {
     expect(iqs[0].state).to.equal("reactivation_required");
     const [entry] = persistedActivations();
     expect(entry.state).to.equal("reactivation_required");
+  });
+});
+
+describe("SaltoKsIqActivationService concurrent changes at different IQs", () => {
+  const OTHER_IQ_ID = "7a1c3e5f-8335-11f0-a2ed-6045bd92d38f";
+
+  beforeEach(() => {
+    sinon.useFakeTimers({
+      now: Date.UTC(2026, 7, 25, 7, 25, 0),
+      toFake: ["Date"],
+    });
+  });
+
+  afterEach(() => {
+    sinon.restore();
+    forgetSaltoKsClients();
+  });
+
+  function entry(iqId, overrides = {}) {
+    return {
+      iqId,
+      secret: SecurityUtils.encrypt("ABCDEFGHIJKLMNOP"),
+      pin: SecurityUtils.encrypt("1234"),
+      state: "activated",
+      activatedAt: new Date(),
+      failureCount: 0,
+      blockedUntil: null,
+      lastError: null,
+      ...overrides,
+    };
+  }
+
+  it("keeps both activations started at the same time", async () => {
+    stubTenant(saltoApp());
+    fakeClient({
+      getIqFirstSecret: sinon
+        .stub()
+        .callsFake(async (iqId) =>
+          iqId === IQ_ID ? "ABCDEFGHIJKLMNOP" : "QRSTUVWXYZABCDEF",
+        ),
+    });
+
+    await Promise.all([
+      SaltoKsIqActivationService.startActivation(TENANT_ID, IQ_ID),
+      SaltoKsIqActivationService.startActivation(TENANT_ID, OTHER_IQ_ID),
+    ]);
+
+    const stored = persistedActivations();
+    expect(stored.map((a) => [a.iqId, a.state])).to.have.deep.members([
+      [IQ_ID, "pending_pin"],
+      [OTHER_IQ_ID, "pending_pin"],
+    ]);
+    expect(
+      SecurityUtils.decrypt(stored.find((a) => a.iqId === OTHER_IQ_ID).secret),
+    ).to.equal("QRSTUVWXYZABCDEF");
+  });
+
+  it("keeps an activation completed while an open at another IQ is booked", async () => {
+    stubTenant(
+      saltoApp({
+        iqActivations: [
+          entry(IQ_ID, { state: "pending_pin", pin: null }),
+          entry(OTHER_IQ_ID),
+        ],
+      }),
+    );
+    fakeClient();
+
+    await Promise.all([
+      SaltoKsIqActivationService.completeActivation(TENANT_ID, IQ_ID, "1234"),
+      SaltoKsIqActivationService.recordOtpBlocked(
+        TENANT_ID,
+        OTHER_IQ_ID,
+        "otp_blocked",
+      ),
+    ]);
+
+    const stored = persistedActivations();
+    const completed = stored.find((a) => a.iqId === IQ_ID);
+    const blocked = stored.find((a) => a.iqId === OTHER_IQ_ID);
+    expect(completed.state).to.equal("activated");
+    expect(SecurityUtils.decrypt(completed.pin)).to.equal("1234");
+    expect(new Date(blocked.blockedUntil).toISOString()).to.equal(
+      "2026-08-25T07:50:00.000Z",
+    );
+    expect(blocked.state).to.equal("activated");
+  });
+
+  it("keeps both bookings of opens at two IQs at the same time", async () => {
+    stubTenant(
+      saltoApp({
+        iqActivations: [
+          entry(IQ_ID, { failureCount: 2 }),
+          entry(OTHER_IQ_ID, { state: "degraded", failureCount: 3 }),
+        ],
+      }),
+    );
+
+    await Promise.all([
+      SaltoKsIqActivationService.recordOtpInvalid(
+        TENANT_ID,
+        IQ_ID,
+        "otp_invalid",
+      ),
+      SaltoKsIqActivationService.recordOpenSuccess(TENANT_ID, OTHER_IQ_ID),
+    ]);
+
+    const stored = persistedActivations();
+    const failed = stored.find((a) => a.iqId === IQ_ID);
+    const opened = stored.find((a) => a.iqId === OTHER_IQ_ID);
+    expect([failed.state, failed.failureCount]).to.deep.equal(["degraded", 3]);
+    expect([opened.state, opened.failureCount]).to.deep.equal(["activated", 0]);
   });
 });
