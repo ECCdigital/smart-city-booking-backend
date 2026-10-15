@@ -424,16 +424,20 @@ class AccessPointController {
    * stores anything. The status codes are the only provider-neutral
    * distinction there is, so this holds for every provider alike.
    *
-   * A `NotFoundError` passes through untouched: every provider raises one
-   * (`<provider>_application_not_found`) when the tenant has no application
-   * for it, and that is the platform refusing to call at all - a `404`, not
-   * a provider that cannot be reached, and no amount of retrying will make
-   * it reachable. Anything else the provider raises is translated.
+   * A `NotFoundError` counts as "the provider does not list it": every
+   * provider raises one (`<provider>_application_not_found`) when the tenant
+   * has no active application for it, and that says nothing about the lock.
+   * The access point is stored, and the checks that need the listing let
+   * through what they cannot judge without it - so an access point can be
+   * prepared before its provider is switched on (tickets#311), and is
+   * checked on the first save once the provider is active. Anything else the
+   * provider raises is translated.
    *
    * @param {AccessPoint} accessPoint The access point as it would be stored
    * @param {string} tenantId Tenant the access point belongs to
    * @returns {Promise<Object|null>} The listed entry, or `null` when the
-   *   provider does not list the access point
+   *   provider does not list the access point or the tenant has not switched
+   *   the provider on
    * @throws {BaseError} `access_provider_rejected` (502) or
    *   `access_provider_unreachable` (503)
    */
@@ -445,7 +449,10 @@ class AccessPointController {
       );
     } catch (err) {
       if (err instanceof NotFoundError) {
-        throw err;
+        logger.info(
+          `${tenantId} -- Provider ${accessPoint.provider} is not active, access point stored without its listing: ${err.code}`,
+        );
+        return null;
       }
 
       const status = err?.response?.status;

@@ -19,8 +19,11 @@
       Opener `auto` alone, an unknown device type all five). Providers
       without the notion leave the field out.
 
-      Requires `accessApp.read` in the tenant. A provider that does not list
-      access points (Pareva) answers 500.
+      Requires `accessApp.read` in the tenant. A provider the tenant has no
+      active application for answers `404 <provider>_application_not_found`
+      (e.g. `salto_ks_application_not_found`). A provider that does not list
+      access points (Pareva) answers 500, as does a provider that fails
+      otherwise.
     security:
       - bearerAuth: []
     parameters:
@@ -39,6 +42,10 @@
         description: Not authenticated
       "403":
         description: Not allowed to read the tenant's access applications
+      "404":
+        description: |
+          The tenant has no active application for the provider, code
+          `<provider>_application_not_found`
       "500":
         description: Could not get access points
 
