@@ -256,12 +256,16 @@ function identityError(error) {
  *   username, password }` the identity server accepts
  * @param {Object[]} [options.locks]
  * @param {Object[]} [options.iqs]
- * @returns {{ site: FakeSaltoKsApiClient, logins: Object[] }} The site, and
- *   every token request as `{ environment, clientId, username }`
+ * @returns {{ site: FakeSaltoKsApiClient, logins: Object[],
+ *   failures: Object<string, Error> }} The site; every token request as
+ *   `{ environment, clientId, username }`; and the errors to answer with
+ *   instead: `failures.token` for the token request, `failures["/locks"]`,
+ *   `failures["/me"]` or `failures["/iqs"]` for a read of the site
  */
 function installFakeSaltoKsConnectApi(sinon, { accounts, locks, iqs } = {}) {
   const site = new FakeSaltoKsApiClient({ locks, iqs });
   const logins = [];
+  const failures = {};
 
   sinon
     .stub(SaltoKsApiClient.prototype, "_requestToken")
@@ -271,6 +275,9 @@ function installFakeSaltoKsConnectApi(sinon, { accounts, locks, iqs } = {}) {
         clientId: this.clientId,
         username: this.username,
       });
+      if (failures.token) {
+        return Promise.reject(failures.token);
+      }
       const client = accounts.find(
         (account) =>
           account.environment === this.environment &&
@@ -290,17 +297,22 @@ function installFakeSaltoKsConnectApi(sinon, { accounts, locks, iqs } = {}) {
     });
   sinon
     .stub(SaltoKsApiClient.prototype, "_send")
-    .callsFake((method, path, data, options) =>
-      FakeSaltoKsApiClient.prototype._send.call(
+    .callsFake((method, path, data, options) => {
+      const failure =
+        failures[path.slice(`/v1.2/sites/${FAKE_SITE_ID}`.length)];
+      if (failure) {
+        return Promise.reject(failure);
+      }
+      return FakeSaltoKsApiClient.prototype._send.call(
         site,
         method,
         path,
         data,
         options,
-      ),
-    );
+      );
+    });
 
-  return { site, logins };
+  return { site, logins, failures };
 }
 
 module.exports = {
@@ -309,6 +321,7 @@ module.exports = {
   installFakeSaltoKsConnectApi,
   brokenSaltoKsApiClient,
   saltoHttpError,
+  identityError,
   FAKE_SITE_ID,
   FAKE_SITE,
 };
