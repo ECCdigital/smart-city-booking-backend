@@ -209,7 +209,10 @@ async function readDetails(client, tenantId) {
     // Lazy require: the activation service requires the client registry,
     // which registers this test.
     const SaltoKsIqActivationService = require("./salto-ks-iq-activation-service");
-    const states = await SaltoKsIqActivationService.getLocalStates(tenantId);
+    const states = await SaltoKsIqActivationService.getLocalStates(
+      tenantId,
+      client,
+    );
     const iqs = extractSaltoList(await client.getIqs());
     details.iqs = iqs.map((iq) => ({
       id: String(iq.id),

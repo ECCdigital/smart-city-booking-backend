@@ -18,6 +18,7 @@ const {
 require("../src/commons/services/access/clients");
 
 const IQ_ID = "5dfdc54e-8335-11f0-a2ed-6045bd92d38f";
+const OTHER_SYSTEM_USER = "other-system-user@example.test";
 
 const CONFIG = {
   clientId: "client-id",
@@ -58,6 +59,9 @@ describe("Salto KS connection test", () => {
           iqActivations: [
             {
               iqId: IQ_ID,
+              siteId: FAKE_SITE_ID,
+              username: "system-user@example.test",
+              environment: "accept",
               secret: { iv: "iv", data: "data" },
               pin: { iv: "iv", data: "data" },
               state: "activated",
@@ -69,7 +73,10 @@ describe("Salto KS connection test", () => {
       ],
     });
     salto = installFakeSaltoKsConnectApi(sinon, {
-      accounts: [ACCOUNT_OF_CONFIG],
+      accounts: [
+        ACCOUNT_OF_CONFIG,
+        { ...ACCOUNT_OF_CONFIG, username: OTHER_SYSTEM_USER },
+      ],
       locks: [
         { id: "lock-1", iq_id: IQ_ID },
         { id: "lock-2", iq_id: IQ_ID },
@@ -113,6 +120,17 @@ describe("Salto KS connection test", () => {
         state: "activated",
       },
     ]);
+  });
+
+  it("reports the activation state of the identity under test", async () => {
+    const result = await testProvider(
+      "salto-ks",
+      { ...CONFIG, username: OTHER_SYSTEM_USER },
+      { tenantId: "tenant-1" },
+    );
+
+    expect(result.success).to.be.true;
+    expect(result.details.iqs[0].state).to.equal("not_activated");
   });
 
   it("reports IQs as not_activated without a stored tenant application", async () => {

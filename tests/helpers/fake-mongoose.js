@@ -220,14 +220,21 @@ function applyUpdate(
 
   for (const [operator, fields] of Object.entries(update)) {
     if (operator === "$set") {
+      // As in MongoDB, the array filters pick their elements from the
+      // document before the update: every filtered place is found first.
+      const filtered = Object.entries(fields)
+        .filter(([path]) => path.includes("$"))
+        .flatMap(([path, value]) =>
+          targetsOf(document, path, arrayFilters).map((target) => [
+            target,
+            value,
+          ]),
+        );
+      for (const [[parent, key], value] of filtered) {
+        parent[key] = clone(value);
+      }
       for (const [path, value] of Object.entries(fields)) {
-        if (path.includes("$")) {
-          each(path, (parent, key) => {
-            parent[key] = clone(value);
-          });
-        } else {
-          setPath(document, path, value);
-        }
+        if (!path.includes("$")) setPath(document, path, value);
       }
     } else if (operator === "$unset") {
       for (const path of Object.keys(fields)) {

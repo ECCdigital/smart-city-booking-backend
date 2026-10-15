@@ -180,6 +180,7 @@ class SaltoKsApiClient extends BaseAccessApiClient {
     this._token = null;
     this._tokenExpiresAt = 0;
     this._tokenRequest = null;
+    this._siteUuid = null;
   }
 
   /**
@@ -281,6 +282,24 @@ class SaltoKsApiClient extends BaseAccessApiClient {
 
   async getSites() {
     return this._request("get", "/v1.2/sites");
+  }
+
+  /**
+   * The UUID of the client's own site, however the tenant names it (UUID,
+   * `site_uid` or `customer_reference`). The client is bound to its site, so
+   * a reference is looked up once and the answer kept while the client
+   * lives; a failed lookup is tried again on the next call.
+   *
+   * @returns {Promise<string>}
+   */
+  resolveSiteId() {
+    if (!this._siteUuid) {
+      this._siteUuid = this._resolveSiteId().catch((err) => {
+        this._siteUuid = null;
+        throw err;
+      });
+    }
+    return this._siteUuid;
   }
 
   async _resolveSiteId(siteId = this.siteId) {

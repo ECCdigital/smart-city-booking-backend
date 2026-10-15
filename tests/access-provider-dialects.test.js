@@ -65,6 +65,7 @@ const {
   FakeSaltoKsApiClient,
   brokenSaltoKsApiClient,
   saltoHttpError,
+  FAKE_SITE_ID,
 } = require("./helpers/fake-salto-ks-api-client");
 const {
   FakeIfbsApiClient,
@@ -843,7 +844,15 @@ describe("access provider dialects: the adapters as they answer", () => {
     function keypadLockOnIq(lockType, activationState) {
       const tenant = tenantWithSaltoApp();
       tenant.applications[0].iqActivations = activationState
-        ? [{ iqId: SALTO_IQ_ID, state: activationState }]
+        ? [
+            {
+              iqId: SALTO_IQ_ID,
+              siteId: FAKE_SITE_ID,
+              username: "system-user@example.test",
+              environment: "accept",
+              state: activationState,
+            },
+          ]
         : [];
       sinon.stub(TenantManager, "getTenant").resolves(tenant);
       return new SaltoKsAccessProvider({

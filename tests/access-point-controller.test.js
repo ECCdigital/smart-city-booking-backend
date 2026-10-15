@@ -11,7 +11,10 @@ const SaltoKsAccessProvider = require("../src/commons/services/access/providers/
 const {
   registerAccessProvider,
 } = require("../src/commons/services/access/providers/access-provider-registry");
-const { FakeSaltoKsApiClient } = require("./helpers/fake-salto-ks-api-client");
+const {
+  FakeSaltoKsApiClient,
+  FAKE_SITE_ID,
+} = require("./helpers/fake-salto-ks-api-client");
 const {
   SALTO_LOCK_ID,
   SALTO_IQ_ID,
@@ -790,6 +793,9 @@ describe("AccessPointController", () => {
             saltoApp(true, [
               {
                 iqId: SALTO_IQ_ID,
+                siteId: FAKE_SITE_ID,
+                username: "system-user@example.test",
+                environment: "accept",
                 state: "reactivation_required",
                 failureCount: 0,
                 blockedUntil: null,
