@@ -5,6 +5,7 @@ const {
   hasTestHandler,
 } = require("../../../commons/services/access/clients/access-test-registry");
 const { BaseError, NotFoundError } = require("../../../errors/BaseError");
+const ApiResponse = require("../../../commons/utilities/api-response");
 
 const logger = bunyan.createLogger({
   name: "access-app-controller.js",
@@ -43,7 +44,7 @@ class AccessAppController {
       return response.status(200).send(points);
     } catch (err) {
       if (err instanceof NotFoundError) {
-        return response.status(err.statusCode).send(err.toJSON());
+        return ApiResponse.fail(response, err);
       }
 
       logger.error(err);

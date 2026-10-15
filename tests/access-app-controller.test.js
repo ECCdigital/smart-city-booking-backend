@@ -24,6 +24,8 @@ describe("AccessAppController.getAccessPoints", () => {
     response = {
       status: sandbox.stub().returnsThis(),
       send: sandbox.stub(),
+      json: sandbox.stub(),
+      set: sandbox.stub(),
     };
   });
 
@@ -56,7 +58,8 @@ describe("AccessAppController.getAccessPoints", () => {
       await AccessAppController.getAccessPoints(request, response);
 
       expect(response.status.calledOnceWith(404)).to.be.true;
-      expect(response.send.firstCall.args[0]).to.include({
+      // In the one JSON form of the central error handler (`api-response`).
+      expect(response.json.firstCall.args[0]).to.include({
         code,
         statusCode: 404,
       });
