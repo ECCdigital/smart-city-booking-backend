@@ -135,12 +135,16 @@ function identityError(error) {
  *   username, password }` the identity server accepts
  * @param {Object[]} [options.locks]
  * @param {Object[]} [options.iqs]
- * @returns {{ site: FakeSaltoKsApiClient, logins: Object[] }} The site, and
- *   every token request as `{ environment, clientId, username }`
+ * @returns {{ site: FakeSaltoKsApiClient, logins: Object[],
+ *   failures: Object<string, Error> }} The site; every token request as
+ *   `{ environment, clientId, username }`; and the errors to answer with
+ *   instead: `failures.token` for the token request, `failures["/locks"]`,
+ *   `failures["/me"]` or `failures["/iqs"]` for a read of the site
  */
 function installFakeSaltoKsConnectApi(sinon, { accounts, locks, iqs } = {}) {
   const site = new FakeSaltoKsApiClient({ locks, iqs });
   const logins = [];
+  const failures = {};
 
   sinon.stub(SaltoKsApiClient.prototype, "_getToken").callsFake(function () {
     logins.push({
@@ -148,6 +152,9 @@ function installFakeSaltoKsConnectApi(sinon, { accounts, locks, iqs } = {}) {
       clientId: this.clientId,
       username: this.username,
     });
+    if (failures.token) {
+      return Promise.reject(failures.token);
+    }
     const client = accounts.find(
       (account) =>
         account.environment === this.environment &&
@@ -167,11 +174,28 @@ function installFakeSaltoKsConnectApi(sinon, { accounts, locks, iqs } = {}) {
   });
   sinon
     .stub(SaltoKsApiClient.prototype, "_request")
-    .callsFake((method, path, data) =>
-      FakeSaltoKsApiClient.prototype._request.call(site, method, path, data),
-    );
+    .callsFake((method, path, data) => {
+      // The site as `/sites` lists it, for a client that names it by
+      // reference.
+      if (path === "/v1.2/sites" && method === "get") {
+        return Promise.resolve({
+          items: [{ id: FAKE_SITE_ID, customer_reference: "Labor" }],
+        });
+      }
+      const failure =
+        failures[path.slice(`/v1.2/sites/${FAKE_SITE_ID}`.length)];
+      if (failure) {
+        return Promise.reject(failure);
+      }
+      return FakeSaltoKsApiClient.prototype._request.call(
+        site,
+        method,
+        path,
+        data,
+      );
+    });
 
-  return { site, logins };
+  return { site, logins, failures };
 }
 
 module.exports = {
@@ -179,5 +203,6 @@ module.exports = {
   installFakeSaltoKsConnectApi,
   brokenSaltoKsApiClient,
   saltoHttpError,
+  identityError,
   FAKE_SITE_ID,
 };
