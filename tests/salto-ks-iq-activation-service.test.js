@@ -14,9 +14,20 @@ const SecurityUtils = require("../src/commons/utilities/security-utils");
 const SaltoKsIqActivationService = require("../src/commons/services/access/salto-ks-iq-activation-service");
 const { AccessOpenError } = require("../src/errors/AccessOpenError");
 const { createFakeMongoose } = require("./helpers/fake-mongoose");
+const {
+  FakeSaltoKsApiClient,
+  FAKE_SITE_ID,
+} = require("./helpers/fake-salto-ks-api-client");
 
 const TENANT_ID = "tenant-1";
 const IQ_ID = "5dfdc54e-8335-11f0-a2ed-6045bd92d38f";
+
+/** The identity of `saltoApp()`, which its activation entries belong to. */
+const IDENTITY = Object.freeze({
+  siteId: FAKE_SITE_ID,
+  username: "system-user@example.test",
+  environment: "accept",
+});
 
 function saltoApp(overrides = {}) {
   return {
@@ -27,7 +38,7 @@ function saltoApp(overrides = {}) {
     clientSecret: "client-secret",
     username: "system-user@example.test",
     password: "password",
-    siteId: "site-1",
+    siteId: FAKE_SITE_ID,
     environment: "accept",
     iqActivations: [],
     ...overrides,
@@ -40,8 +51,13 @@ let tenants;
 /**
  * Stores the tenant with the given Salto application: reads answer a copy of
  * what is stored at that moment, writes go through the update operators.
+ * Its Salto client is the fake Connect API until {@link fakeClient} swaps it.
  */
 function stubTenant(app) {
+  forgetSaltoKsClients();
+  sinon
+    .stub(clientRegistry, "createClient")
+    .callsFake(() => new FakeSaltoKsApiClient());
   tenants = createFakeMongoose({
     Tenant: [{ id: TENANT_ID, applications: [app] }],
   }).model("Tenant");
@@ -56,16 +72,20 @@ function stubTenant(app) {
     );
 }
 
+/**
+ * The tenant's Salto client: the fake Connect API acting as the identity of
+ * `saltoApp()`, with the IQ calls stubbed. After {@link stubTenant}.
+ */
 function fakeClient(overrides = {}) {
-  const client = {
+  const client = Object.assign(new FakeSaltoKsApiClient(), {
     getIqs: sinon.stub().resolves([]),
     getIqFirstSecret: sinon.stub().resolves("ABCDEFGHIJKLMNOP"),
     sendIqPinEmail: sinon.stub().resolves(),
     putIqPin: sinon.stub().resolves(),
     ...overrides,
-  };
+  });
   forgetSaltoKsClients();
-  sinon.stub(clientRegistry, "createClient").returns(client);
+  clientRegistry.createClient.returns(client);
   return client;
 }
 
@@ -115,6 +135,7 @@ describe("SaltoKsIqActivationService.startActivation", () => {
         iqActivations: [
           {
             iqId: IQ_ID,
+            ...IDENTITY,
             secret: storedSecret,
             pin: null,
             state: "pending_pin",
@@ -138,7 +159,7 @@ describe("SaltoKsIqActivationService.startActivation", () => {
   it("refuses to start over an activated IQ", async () => {
     stubTenant(
       saltoApp({
-        iqActivations: [{ iqId: IQ_ID, state: "activated" }],
+        iqActivations: [{ iqId: IQ_ID, ...IDENTITY, state: "activated" }],
       }),
     );
     fakeClient();
@@ -222,6 +243,7 @@ describe("SaltoKsIqActivationService.completeActivation", () => {
       iqActivations: [
         {
           iqId: IQ_ID,
+          ...IDENTITY,
           secret: SecurityUtils.encrypt("ABCDEFGHIJKLMNOP"),
           pin: null,
           state: "pending_pin",
@@ -350,8 +372,8 @@ describe("SaltoKsIqActivationService.discardActivation", () => {
     stubTenant(
       saltoApp({
         iqActivations: [
-          { iqId: IQ_ID, state: "degraded" },
-          { iqId: "other-iq", state: "activated" },
+          { iqId: IQ_ID, ...IDENTITY, state: "degraded" },
+          { iqId: "other-iq", ...IDENTITY, state: "activated" },
         ],
       }),
     );
@@ -364,7 +386,7 @@ describe("SaltoKsIqActivationService.discardActivation", () => {
 
     expect(result.state).to.equal("not_activated");
     expect(persistedActivations()).to.deep.equal([
-      { iqId: "other-iq", state: "activated" },
+      { iqId: "other-iq", ...IDENTITY, state: "activated" },
     ]);
     expect(client.getIqs.called).to.be.false;
     expect(client.putIqPin.called).to.be.false;
@@ -400,6 +422,7 @@ describe("SaltoKsIqActivationService.resolveOtpForOpen", () => {
   function activatedEntry(overrides = {}) {
     return {
       iqId: IQ_ID,
+      ...IDENTITY,
       secret: SecurityUtils.encrypt("ABCDEFGHIJKLMNOP"),
       pin: SecurityUtils.encrypt("1234"),
       state: "activated",
@@ -560,6 +583,7 @@ describe("SaltoKsIqActivationService open bookkeeping", () => {
       iqActivations: [
         {
           iqId: IQ_ID,
+          ...IDENTITY,
           secret: SecurityUtils.encrypt("ABCDEFGHIJKLMNOP"),
           pin: SecurityUtils.encrypt("1234"),
           state: "activated",
@@ -640,7 +664,9 @@ describe("SaltoKsIqActivationService open bookkeeping (reactivation)", () => {
   it("marks an activation as reactivation_required", async () => {
     stubTenant(
       saltoApp({
-        iqActivations: [{ iqId: IQ_ID, state: "activated", lastError: null }],
+        iqActivations: [
+          { iqId: IQ_ID, ...IDENTITY, state: "activated", lastError: null },
+        ],
       }),
     );
 
@@ -736,6 +762,7 @@ describe("SaltoKsIqActivationService.listIqs", () => {
         iqActivations: [
           {
             iqId: IQ_ID,
+            ...IDENTITY,
             secret: SecurityUtils.encrypt("ABCDEFGHIJKLMNOP"),
             pin: SecurityUtils.encrypt("1234"),
             state: "activated",
@@ -800,6 +827,7 @@ describe("SaltoKsIqActivationService.listIqs", () => {
         iqActivations: [
           {
             iqId: IQ_ID,
+            ...IDENTITY,
             secret: SecurityUtils.encrypt("ABCDEFGHIJKLMNOP"),
             pin: SecurityUtils.encrypt("1234"),
             state: "activated",
@@ -849,6 +877,7 @@ describe("SaltoKsIqActivationService concurrent changes at different IQs", () =>
   function entry(iqId, overrides = {}) {
     return {
       iqId,
+      ...IDENTITY,
       secret: SecurityUtils.encrypt("ABCDEFGHIJKLMNOP"),
       pin: SecurityUtils.encrypt("1234"),
       state: "activated",

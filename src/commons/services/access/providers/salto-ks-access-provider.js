@@ -245,21 +245,19 @@ class SaltoKsAccessProvider extends AccessProvider {
    * The access points of the site, each with the modes its lock really
    * supports right now (§6 of the spec). Remote open is the only mode, at
    * every lock type, keypad or not: it needs the lock's IQ to be locally
-   * activated (IQs without `otp_enabled` need no activation) and not in
-   * `restore_required`. Deliberately no condition on `online` - an offline IQ
+   * activated under the tenant's current identity (IQs without `otp_enabled`
+   * need no activation) and not in `restore_required`. Deliberately no condition on `online` - an offline IQ
    * is a runtime failure of the open attempt, not a capability.
    */
   async listAccessPoints(tenant) {
     const app = await this._getApp(tenant);
     const client = await this._getClient(tenant, app);
-    const [locks, iqs] = await Promise.all([
+    const [locks, iqs, activations] = await Promise.all([
       client.getLocks(),
       client.getIqs(),
+      SaltoKsIqActivationService.currentActivations(app, client),
     ]);
     const iqList = extractSaltoList(iqs);
-    const activations = Array.isArray(app.iqActivations)
-      ? app.iqActivations
-      : [];
 
     return extractSaltoList(locks).map((lock) => {
       const externalId = String(lock.id || lock.lockId);

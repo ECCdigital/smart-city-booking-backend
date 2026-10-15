@@ -19,12 +19,19 @@ const {
 const {
   FakeSaltoKsApiClient,
   saltoHttpError,
+  FAKE_SITE_ID,
 } = require("./helpers/fake-salto-ks-api-client");
 const { createFakeMongoose } = require("./helpers/fake-mongoose");
 
 const TENANT_ID = "tenant-1";
 const IQ_ID = "5dfdc54e-8335-11f0-a2ed-6045bd92d38f";
 const LOCK_ID = "4d77312f-4a87-41db-a97b-f9d948dcc908";
+/** The identity of the tenant's Salto application below. */
+const IDENTITY = Object.freeze({
+  siteId: FAKE_SITE_ID,
+  username: "system-user@example.test",
+  environment: "accept",
+});
 
 function stubTenant(iqActivations = []) {
   sinon.stub(TenantManager, "getTenant").resolves({
@@ -38,7 +45,7 @@ function stubTenant(iqActivations = []) {
         clientSecret: "client-secret",
         username: "system-user@example.test",
         password: "password",
-        siteId: "site-1",
+        siteId: FAKE_SITE_ID,
         environment: "accept",
         iqActivations,
       },
@@ -318,11 +325,12 @@ describe("SaltoKsAccessProvider.open against the fake Connect API: the time to r
           clientSecret: "client-secret",
           username: "system-user@example.test",
           password: "password",
-          siteId: "site-1",
+          siteId: FAKE_SITE_ID,
           environment: "accept",
           iqActivations: [
             {
               iqId: IQ_ID,
+              ...IDENTITY,
               secret: SecurityUtils.encrypt("ABCDEFGHIJKLMNOP"),
               pin: SecurityUtils.encrypt("1234"),
               state: "activated",
@@ -538,6 +546,7 @@ describe("SaltoKsAccessProvider capability rule", () => {
   const activated = [
     {
       iqId: IQ_ID,
+      ...IDENTITY,
       secret: { iv: "iv", data: "data" },
       pin: { iv: "iv", data: "data" },
       state: "activated",

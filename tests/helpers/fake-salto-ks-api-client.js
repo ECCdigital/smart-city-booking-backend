@@ -46,6 +46,9 @@ class FakeSaltoKsApiClient extends SaltoKsApiClient {
    * @param {Object[]} [options.tokenRequests] The identity server's log of
    *   token requests, shared by every client of one fake Connect API
    * @param {number} [options.tokenLifetimeSeconds] `expires_in` of a token
+   * @param {Set<string>} [options.issuedFirstSecrets] Which system user got
+   *   the first secret of which IQ (`<username>:<iqId>`), shared by every
+   *   client of one fake Connect API
    */
   constructor({
     locks = [],
@@ -53,6 +56,7 @@ class FakeSaltoKsApiClient extends SaltoKsApiClient {
     credentials = {},
     tokenRequests = [],
     tokenLifetimeSeconds = 3600,
+    issuedFirstSecrets = new Set(),
   } = {}) {
     super(
       credentials.clientId ?? "client-id",
@@ -77,6 +81,11 @@ class FakeSaltoKsApiClient extends SaltoKsApiClient {
     this.tokenLifetimeSeconds = tokenLifetimeSeconds;
     /** Tokens the Connect API refuses with 401, as after a revocation. */
     this.revokedTokens = new Set();
+    /** The first secret of every IQ, handed out once per system user. */
+    this.firstSecret = "ABCDEFGHIJKLMNOP";
+    this.issuedFirstSecrets = issuedFirstSecrets;
+    /** @type {string[]} the IQs whose PIN was mailed to the system user */
+    this.pinMails = [];
   }
 
   async _requestToken() {
@@ -125,6 +134,31 @@ class FakeSaltoKsApiClient extends SaltoKsApiClient {
       return { ...this.me };
     }
 
+    if ((match = rest.match(/^\/iqs\/([^/]+)\/secret$/)) && method === "get") {
+      // Salto hands out the first secret once per system user and IQ.
+      const issued = `${this.username}:${match[1]}`;
+      if (this.issuedFirstSecrets.has(issued)) {
+        throw saltoHttpError(403, {
+          ErrorCode: 2203,
+          Message: "Cannot get first secret for an already activated Iq.",
+        });
+      }
+      this.issuedFirstSecrets.add(issued);
+      return { secret: this.firstSecret };
+    }
+
+    if (
+      (match = rest.match(/^\/iqs\/([^/]+)\/pin\?send_email=true$/)) &&
+      method === "get"
+    ) {
+      this.pinMails.push(match[1]);
+      return {};
+    }
+
+    if ((match = rest.match(/^\/iqs\/([^/]+)\/pin$/)) && method === "put") {
+      return {};
+    }
+
     if (
       (match = rest.match(/^\/locks\/([^/]+)\/locking$/)) &&
       method === "patch"
@@ -168,6 +202,7 @@ function brokenSaltoKsApiClient(
  */
 function fakeSaltoKsConnectApi({ locks, iqs, tokenLifetimeSeconds } = {}) {
   const tokenRequests = [];
+  const issuedFirstSecrets = new Set();
   const clients = [];
 
   return {
@@ -179,6 +214,7 @@ function fakeSaltoKsConnectApi({ locks, iqs, tokenLifetimeSeconds } = {}) {
         iqs,
         tokenLifetimeSeconds,
         tokenRequests,
+        issuedFirstSecrets,
         credentials: {
           clientId: app.clientId,
           clientSecret: app.clientSecret,
