@@ -82,8 +82,9 @@ class SaltoKsAccessProvider extends AccessProvider {
    */
   async _attemptOpen(tenant, lockId) {
     // A lock whose IQ is already known can be refused - backoff after
-    // otp_blocked, missing activation - without any Salto call (§4/§7 of the
-    // spec). When this passes, the attempt continues on live data.
+    // otp_blocked, missing activation - without any Salto call, so a refused
+    // attempt spends no OTP. When this passes, the attempt continues on live
+    // data.
     const knownIq = this._knownIqByLock.get(`${tenant}:${lockId}`);
     if (knownIq) {
       await SaltoKsIqActivationService.resolveOtpForOpen(tenant, knownIq);
@@ -115,7 +116,7 @@ class SaltoKsAccessProvider extends AccessProvider {
         (candidate) => String(candidate.id) === iq.id,
       );
       if (liveIq?.restore_required) {
-        // §7: the IQ was reset - the stored ingredients are dead. Book it so
+        // The IQ was reset - the stored ingredients are dead. Book it so
         // the capability is withdrawn and the admin sees why.
         await SaltoKsIqActivationService.markReactivationRequired(
           tenant,
@@ -148,7 +149,7 @@ class SaltoKsAccessProvider extends AccessProvider {
   /**
    * @private
    * Books a failed locking call on the IQ's activation and turns it into the
-   * failure class the guest sees (§7 of the spec): OTP rejections and an
+   * failure class the guest sees: OTP rejections and an
    * offline lock are temporary, a missing right of the system user - which
    * only ever shows itself here - is configurative.
    */
@@ -243,7 +244,7 @@ class SaltoKsAccessProvider extends AccessProvider {
 
   /**
    * The access points of the site, each with the modes its lock really
-   * supports right now (§6 of the spec). Remote open is the only mode, at
+   * supports right now. Remote open is the only mode, at
    * every lock type, keypad or not: it needs the lock's IQ to be locally
    * activated under the tenant's current identity (IQs without `otp_enabled`
    * need no activation) and not in `restore_required`. Deliberately no condition on `online` - an offline IQ

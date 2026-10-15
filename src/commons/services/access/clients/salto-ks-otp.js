@@ -4,8 +4,9 @@ const crypto = require("crypto");
  * The Salto-OTP ("ClayCode") a remote command at an IQ with `otp_enabled`
  * expects: the first 5 hex characters of
  * `MD5(UTC "YYYYmmDDHHMMSS" + secret + pin)`, stamped on the whole UTC second.
- * Valid for 3 minutes and reusable within that window; proven at the door on
- * 2026-08-25 (docs/research/salto-ks-remote-open-door-proof.md).
+ * Valid for 3 minutes and reusable within that window, as Salto's developer
+ * docs say (read 2026-08-19); the formula was proven at the door on
+ * 2026-08-25.
  *
  * @param {string} secret The 16-character first secret of the IQ activation
  * @param {string} pin The 4-digit IQ-PIN of the activation

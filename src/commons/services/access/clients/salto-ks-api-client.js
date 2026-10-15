@@ -80,10 +80,11 @@ function describeUpstreamError(err) {
 /**
  * What a failed Salto call means for the open path.
  *
- * Measured contract (docs/research/salto-ks-api-contract.md §9): a rejected
- * OTP answers 400 with `ErrorCode` 3102 and "otp_invalid"; the per-command
- * block after repeated rejections answers 403 with the same `ErrorCode` and
- * "otp_blocked". Any other 403 is a missing right of the system user.
+ * Measured on the accept environment on 2026-08-18 and 2026-08-19: a
+ * rejected OTP answers 400 with `ErrorCode` 3102 and "otp_invalid"; the
+ * per-command block after repeated rejections answers 403 with the same
+ * `ErrorCode` and "otp_blocked". Any other 403 is a missing right of the
+ * system user.
  *
  * @param {Error} err An axios error from the Connect API
  * @returns {"otp_invalid"|"otp_blocked"|"forbidden"|"other"}
