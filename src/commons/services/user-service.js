@@ -17,14 +17,18 @@ const InstanceManager = require("../data-managers/instance-manager");
 const TokenSessionService = require("./token-session-service");
 const { notify } = require("../mail-service");
 const { normalizeReturnTarget } = require("./user/return-target");
+const { normalizeClientPage } = require("./user/client-page");
 const { normalizeUserId, userIdsMatch } = require("../utilities/user-id-utils");
 
 class UserService {
   static async singUpUser(user, nextUrl, verifyUrl, invitation = null) {
-    const returnTarget = normalizeReturnTarget(nextUrl, { verifyUrl });
+    const ownVerifyUrl = normalizeClientPage(verifyUrl);
+    const returnTarget = normalizeReturnTarget(nextUrl, {
+      verifyUrl: ownVerifyUrl,
+    });
     const hook = user.addHook(USER_HOOK_TYPES.VERIFY, {
       nextUrl: returnTarget,
-      verifyUrl,
+      verifyUrl: ownVerifyUrl,
     });
     const createdUser = await UserManager.createUser(user);
 
@@ -39,7 +43,7 @@ class UserService {
     await notify("VERIFICATION_REQUEST", {
       to: createdUser.id,
       hookId: hook.id,
-      verifyUrl,
+      verifyUrl: ownVerifyUrl,
       nextUrl: returnTarget,
     });
     await notify("USER_CREATED", { userId: createdUser.id });
@@ -135,12 +139,13 @@ class UserService {
 
     userEntity.revokeActiveHooks(USER_HOOK_TYPES.FORGOT_PASSWORD);
 
-    const hook = userEntity.addForgotPasswordHook(resetUrl);
+    const ownResetUrl = normalizeClientPage(resetUrl);
+    const hook = userEntity.addForgotPasswordHook(ownResetUrl);
     await UserManager.updateUser(userEntity);
     await notify("FORGOT_PASSWORD_REQUEST", {
       to: userEntity.id,
       hookId: hook.id,
-      resetUrl,
+      resetUrl: ownResetUrl,
     });
 
     logger.info(`Forgot password request sent to user ${userEntity.id}`);

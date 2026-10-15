@@ -6,6 +6,7 @@ const RateLimiter = require("../rate-limit/rate-limiter");
 const limits = require("../rate-limit/limits");
 const { TooManyRequestsError } = require("../../../errors/BaseError");
 const { afterAnswer } = require("./after-answer");
+const { normalizeClientPage } = require("./client-page");
 
 /**
  * The public registration path (spec §6.3): signup and verification resend
@@ -142,15 +143,16 @@ class RegistrationService {
     try {
       const entity = user instanceof User ? user : new User(user);
       entity.revokeActiveHooks(USER_HOOK_TYPES.VERIFY);
+      const ownVerifyUrl = normalizeClientPage(verifyUrl);
       const hook = entity.addHook(USER_HOOK_TYPES.VERIFY, {
         nextUrl,
-        verifyUrl,
+        verifyUrl: ownVerifyUrl,
       });
       await UserManager.updateUser(entity);
       await notify("VERIFICATION_REQUEST", {
         to: entity.id,
         hookId: hook.id,
-        verifyUrl,
+        verifyUrl: ownVerifyUrl,
       });
       return true;
     } catch (error) {

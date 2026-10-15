@@ -69,6 +69,11 @@
       is validated against the three levels; a body that does not name it
       keeps the stored one. Changing it is never retroactive: no existing
       tenant changes its level, and nothing promotes a tenant automatically.
+      A font of the library in `branding.font` needs the tick
+      `license: { confirmed: true }` once per file; `confirmedAt` and
+      `confirmedBy` are set from the session, never from the body. Without
+      `license` the stored confirmation of the same file stays;
+      `license: { confirmed: false }` withdraws it.
     security:
       - bearerAuth: []
     requestBody:
@@ -98,7 +103,11 @@
           of only empty or blank ids; nothing is stored. `invalid_supervision_level` with `params: { field, level, allowed }`
           for a `tenantInitialSupervisionLevel` outside the initial levels
           (`allowed: [free, supervised, pending]`; `declined`, `null` and `""`
-          included); `validation_failed` for the other fields.
+          included); `validation_failed` for the other fields, among them
+          `required` at `branding.font.license` for a new font of the library
+          without the tick, or for any with `license: { confirmed: false }`. A branding medium that is unknown, intern or (for
+          the font) not of kind `font`: `media_reference_unknown`,
+          `media_reference_not_public`, `media_reference_wrong_kind`.
       "401":
         description: Not authenticated
       "403":

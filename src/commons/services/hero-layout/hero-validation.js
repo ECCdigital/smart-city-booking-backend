@@ -12,6 +12,10 @@ const { ValidationError } = require("../../../errors/ValidationError");
  * other.
  */
 
+// No alpha, no shorthand — the colour convention of the Shared contract, for
+// the Hero and the branding alike.
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
 /**
  * Whether a body names a key at all. The Hero reads `null` as "use the derived
  * default", so a key that carries null and a key that is not there mean
@@ -23,6 +27,14 @@ const { ValidationError } = require("../../../errors/ValidationError");
  */
 function carries(body, key) {
   return Object.prototype.hasOwnProperty.call(body, key);
+}
+
+/**
+ * @param {*} value - Anything.
+ * @returns {boolean} Whether it is a JSON object rather than an array or null.
+ */
+function isPlainObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -113,8 +125,10 @@ class HeroValidationErrors {
 }
 
 module.exports = {
+  HEX_COLOR,
   HeroValidationErrors,
   carries,
   childPath,
   elementPath,
+  isPlainObject,
 };

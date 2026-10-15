@@ -4,10 +4,13 @@ const { BadRequestError } = require("../../../errors/BaseError");
 const { collectMediaIds } = require("./media-reference");
 const { referenceable } = require("./media-rights");
 const {
+  instanceBrandingImageReferences,
   instanceBrandingReferences,
   instanceDocumentReferences,
 } = require("./instance-media");
+const { MEDIA_KIND } = require("../../schemas/mediaSchema");
 const { tenantDocumentReferences } = require("./tenant-media");
+const { fontReference } = require("../instance/branding-font");
 
 /**
  * Guards the way into the reference sites of an entity (§4.3 of the media
@@ -175,15 +178,18 @@ class MediaReferenceGuard {
    * @param {Array<Object|string>} params.references - Stored reference sites.
    * @param {boolean} params.requirePublic - Whether only public media may be
    *   referenced here.
+   * @param {string} [params.kind] - The kind (`MEDIA_KIND`) every referenced
+   *   medium must be, when the site takes only one.
    * @returns {Promise<void>}
-   * @throws {BadRequestError} Unknown medium, or an intern medium in a public
-   *   context.
+   * @throws {BadRequestError} Unknown medium, an intern medium in a public
+   *   context, or a medium of another kind (`media_reference_wrong_kind`).
    * @throws {ForbiddenError} The picker right does not cover the medium.
    */
   static async assertInstanceReferencesStorable({
     reaches,
     references,
     requirePublic,
+    kind,
   }) {
     for (const mediaId of collectMediaIds(references)) {
       const media = await MediaManager.getMedia(mediaId, null, DOMAIN);
@@ -197,13 +203,21 @@ class MediaReferenceGuard {
       if (requirePublic && !media.isPublic()) {
         throw new BadRequestError("media_reference_not_public", { mediaId });
       }
+
+      if (kind && media.kind !== kind) {
+        throw new BadRequestError("media_reference_wrong_kind", {
+          mediaId,
+          kind,
+        });
+      }
     }
   }
 
   /**
    * Checks the reference sites of the instance before it is stored: branding
    * is served to anonymous visitors and therefore takes public media only,
-   * legal documents may be internal.
+   * the sites that show an image (the dark logo, the footer logos) only
+   * public images; legal documents may be internal.
    *
    * @param {Object} instance - The instance being saved.
    * @param {Object} reaches - The bundle of the saver's route.
@@ -218,8 +232,24 @@ class MediaReferenceGuard {
 
     await MediaReferenceGuard.assertInstanceReferencesStorable({
       reaches,
+      references: instanceBrandingImageReferences(instance),
+      requirePublic: true,
+      kind: MEDIA_KIND.IMAGE,
+    });
+
+    await MediaReferenceGuard.assertInstanceReferencesStorable({
+      reaches,
       references: instanceDocumentReferences(instance),
       requirePublic: false,
+    });
+
+    // The font is served to anonymous visitors like the branding images, and
+    // only a font will do.
+    await MediaReferenceGuard.assertInstanceReferencesStorable({
+      reaches,
+      references: [fontReference(instance?.branding)],
+      requirePublic: true,
+      kind: MEDIA_KIND.FONT,
     });
   }
 }

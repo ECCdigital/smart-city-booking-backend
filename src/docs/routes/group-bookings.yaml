@@ -84,6 +84,53 @@
       "500":
         description: "`set_aggregated_booking_payed_failed` - the payment aborted"
 
+/api/{tenant}/group-bookings/{groupBookingId}:
+  put:
+    tags:
+      - Group bookings
+    summary: Save the internal comment of a group booking
+    description: |
+      Writes the internal comment of the group and nothing else. Any other
+      field in `updateData`, a missing or empty `updateData` and a comment
+      that is not a string are refused and nothing is written.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/GroupBookingTenantParam"
+      - $ref: "#/components/parameters/GroupBookingIdParam"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - updateData
+            properties:
+              updateData:
+                type: object
+                required:
+                  - internalComments
+                additionalProperties: false
+                properties:
+                  internalComments:
+                    type: string
+                    description: The internal comment of the group
+    responses:
+      "200":
+        description: The group booking with the saved comment
+      "400":
+        description: >-
+          `invalid_group_booking_update` - `updateData` is missing, empty,
+          carries another field than `internalComments`, or the comment is
+          not a string (params carry `allowed`)
+      "401":
+        description: Not authenticated
+      "403":
+        description: Missing booking management permission
+      "404":
+        description: Group booking not found
+
 components:
   parameters:
     GroupBookingTenantParam:
