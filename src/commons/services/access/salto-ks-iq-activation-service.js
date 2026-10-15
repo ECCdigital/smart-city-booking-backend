@@ -2,7 +2,7 @@ const bunyan = require("bunyan");
 const TenantManager = require("../../data-managers/tenant-manager");
 const TenantModel = require("../../data-managers/models/tenantModel");
 const SecurityUtils = require("../../utilities/security-utils");
-const clientRegistry = require("./clients/access-client-registry");
+const { saltoKsClientFor } = require("./clients/salto-ks-clients");
 const { computeSaltoOtp } = require("./clients/salto-ks-otp");
 const {
   classifySaltoError,
@@ -20,6 +20,12 @@ require("./clients");
 
 const APP_TYPE = "access";
 const PROVIDER_ID = "salto-ks";
+// The tenant's Salto application among its applications, for targeted
+// updates of `applications.$[app].iqActivations`.
+const APP_ARRAY_FILTER = Object.freeze({
+  "app.type": APP_TYPE,
+  "app.id": PROVIDER_ID,
+});
 
 /**
  * The local states of an IQ activation. An IQ without an entry is
@@ -70,22 +76,24 @@ class SaltoKsIqActivationService {
     const { app, client } = await this._getAppAndClient(tenantId);
     let activations = this._activationsOf(app);
     const iqs = extractSaltoList(await client.getIqs());
+    const working = [
+      IQ_ACTIVATION_STATES.ACTIVATED,
+      IQ_ACTIVATION_STATES.DEGRADED,
+    ];
 
     for (const iq of iqs) {
       const entry = activations.find((a) => a.iqId === String(iq.id));
-      if (
-        iq.restore_required &&
-        entry &&
-        [
-          IQ_ACTIVATION_STATES.ACTIVATED,
-          IQ_ACTIVATION_STATES.DEGRADED,
-        ].includes(entry.state)
-      ) {
-        activations = await this._patchEntry(
+      if (iq.restore_required && entry && working.includes(entry.state)) {
+        await this._updateEntry(
           tenantId,
-          activations,
-          entry.iqId,
-          { state: IQ_ACTIVATION_STATES.REACTIVATION_REQUIRED },
+          this._entryMatch(entry.iqId),
+          { set: { state: IQ_ACTIVATION_STATES.REACTIVATION_REQUIRED } },
+          { state: { $in: working } },
+        );
+        activations = activations.map((a) =>
+          a === entry
+            ? { ...a, state: IQ_ACTIVATION_STATES.REACTIVATION_REQUIRED }
+            : a,
         );
       }
     }
@@ -214,23 +222,23 @@ class SaltoKsIqActivationService {
       throw new BaseError("salto_iq_no_first_secret", 502, { iqId });
     }
 
-    const next = activations
-      .filter((a) => a.iqId !== iqId)
-      .concat([
-        {
-          iqId,
-          secret: SecurityUtils.encrypt(secret),
-          pin: null,
-          state: IQ_ACTIVATION_STATES.PENDING_PIN,
-          activatedAt: null,
-          failureCount: 0,
-          blockedUntil: null,
-          lastError: null,
-        },
-      ]);
+    const match = this._entryMatch(iqId);
+    const started = {
+      ...match,
+      secret: SecurityUtils.encrypt(secret),
+      pin: null,
+      state: IQ_ACTIVATION_STATES.PENDING_PIN,
+      activatedAt: null,
+      failureCount: 0,
+      blockedUntil: null,
+      lastError: null,
+    };
 
     // The first secret is single-shot: persist before anything else can fail.
-    await this._saveActivations(tenantId, next);
+    // A pending entry without a secret is replaced, otherwise one is added.
+    if (!(await this._insertEntry(tenantId, match, started))) {
+      await this._updateEntry(tenantId, match, { set: started });
+    }
 
     try {
       await client.sendIqPinEmail(iqId);
@@ -238,7 +246,9 @@ class SaltoKsIqActivationService {
       logger.error(
         `${tenantId} -- Salto KS PIN mail for IQ ${iqId} failed: ${err.message}`,
       );
-      await this._patchEntry(tenantId, next, iqId, { lastError: err.message });
+      await this._updateEntry(tenantId, match, {
+        set: { lastError: err.message },
+      });
       throw err;
     }
 
@@ -279,12 +289,13 @@ class SaltoKsIqActivationService {
 
     const secret = SecurityUtils.decrypt(entry.secret);
     const otp = computeSaltoOtp(secret, pin);
+    const match = this._entryMatch(iqId);
 
     try {
       await client.putIqPin(iqId, { otp, delta: "0000" });
     } catch (err) {
-      await this._patchEntry(tenantId, activations, iqId, {
-        lastError: err.message,
+      await this._updateEntry(tenantId, match, {
+        set: { lastError: err.message },
       });
 
       // Only an OTP rejection means the entered PIN (or the stored secret)
@@ -300,13 +311,15 @@ class SaltoKsIqActivationService {
       throw err;
     }
 
-    await this._patchEntry(tenantId, activations, iqId, {
-      pin: SecurityUtils.encrypt(pin),
-      state: IQ_ACTIVATION_STATES.ACTIVATED,
-      activatedAt: new Date(),
-      failureCount: 0,
-      blockedUntil: null,
-      lastError: null,
+    await this._updateEntry(tenantId, match, {
+      set: {
+        pin: SecurityUtils.encrypt(pin),
+        state: IQ_ACTIVATION_STATES.ACTIVATED,
+        activatedAt: new Date(),
+        failureCount: 0,
+        blockedUntil: null,
+        lastError: null,
+      },
     });
 
     return { iqId, state: IQ_ACTIVATION_STATES.ACTIVATED };
@@ -326,10 +339,7 @@ class SaltoKsIqActivationService {
     const activations = this._activationsOf(app);
 
     if (activations.some((a) => a.iqId === iqId)) {
-      await this._saveActivations(
-        tenantId,
-        activations.filter((a) => a.iqId !== iqId),
-      );
+      await this._removeEntry(tenantId, this._entryMatch(iqId));
     }
 
     return { iqId, state: "not_activated" };
@@ -379,9 +389,11 @@ class SaltoKsIqActivationService {
     }
 
     if (entry.blockedUntil && new Date(entry.blockedUntil) > new Date()) {
+      const blockedUntil = new Date(entry.blockedUntil);
       throw AccessOpenError.temporary(
-        `Salto KS IQ ${iq.id} is backing off until ${new Date(entry.blockedUntil).toISOString()} after otp_blocked`,
+        `Salto KS IQ ${iq.id} is backing off until ${blockedUntil.toISOString()} after otp_blocked`,
         { iqId: iq.id },
+        { retryAfter: blockedUntil },
       );
     }
 
@@ -399,18 +411,23 @@ class SaltoKsIqActivationService {
    * @param {string} message The Salto error, for the admin view
    */
   static async recordOtpInvalid(tenantId, iqId, message) {
-    await this._patchLoadedEntry(tenantId, iqId, (entry) => {
-      const failureCount = (entry.failureCount || 0) + 1;
-      return {
-        failureCount,
-        lastError: message || "otp_invalid",
-        state:
-          failureCount >= DEGRADE_AFTER_FAILURES &&
-          entry.state === IQ_ACTIVATION_STATES.ACTIVATED
-            ? IQ_ACTIVATION_STATES.DEGRADED
-            : entry.state,
-      };
+    const match = this._entryMatch(iqId);
+    const counted = await this._updateEntry(tenantId, match, {
+      set: { lastError: message || "otp_invalid" },
+      inc: { failureCount: 1 },
     });
+
+    if (counted) {
+      await this._updateEntry(
+        tenantId,
+        match,
+        { set: { state: IQ_ACTIVATION_STATES.DEGRADED } },
+        {
+          state: IQ_ACTIVATION_STATES.ACTIVATED,
+          failureCount: { $gte: DEGRADE_AFTER_FAILURES },
+        },
+      );
+    }
   }
 
   /**
@@ -420,12 +437,18 @@ class SaltoKsIqActivationService {
    * @param {string} tenantId
    * @param {string} iqId
    * @param {string} message The Salto error, for the admin view
+   * @returns {Promise<Date|null>} The end of the backoff, `null` when the IQ
+   *   has no activation to book it on
    */
   static async recordOtpBlocked(tenantId, iqId, message) {
-    await this._patchLoadedEntry(tenantId, iqId, () => ({
-      blockedUntil: new Date(Date.now() + OTP_BLOCK_BACKOFF_MS),
-      lastError: message || "otp_blocked",
-    }));
+    const blockedUntil = new Date(Date.now() + OTP_BLOCK_BACKOFF_MS);
+    const booked = await this._updateEntry(tenantId, this._entryMatch(iqId), {
+      set: {
+        blockedUntil,
+        lastError: message || "otp_blocked",
+      },
+    });
+    return booked ? blockedUntil : null;
   }
 
   /**
@@ -438,10 +461,12 @@ class SaltoKsIqActivationService {
    * @param {string} [message] What was seen, for the admin view
    */
   static async markReactivationRequired(tenantId, iqId, message) {
-    await this._patchLoadedEntry(tenantId, iqId, () => ({
-      state: IQ_ACTIVATION_STATES.REACTIVATION_REQUIRED,
-      lastError: message || "restore_required",
-    }));
+    await this._updateEntry(tenantId, this._entryMatch(iqId), {
+      set: {
+        state: IQ_ACTIVATION_STATES.REACTIVATION_REQUIRED,
+        lastError: message || "restore_required",
+      },
+    });
   }
 
   /**
@@ -476,15 +501,16 @@ class SaltoKsIqActivationService {
    * @param {string} iqId
    */
   static async recordOpenSuccess(tenantId, iqId) {
-    await this._patchLoadedEntry(tenantId, iqId, (entry) => ({
-      failureCount: 0,
-      blockedUntil: null,
-      lastError: null,
-      state:
-        entry.state === IQ_ACTIVATION_STATES.DEGRADED
-          ? IQ_ACTIVATION_STATES.ACTIVATED
-          : entry.state,
-    }));
+    const match = this._entryMatch(iqId);
+    await this._updateEntry(tenantId, match, {
+      set: { failureCount: 0, blockedUntil: null, lastError: null },
+    });
+    await this._updateEntry(
+      tenantId,
+      match,
+      { set: { state: IQ_ACTIVATION_STATES.ACTIVATED } },
+      { state: IQ_ACTIVATION_STATES.DEGRADED },
+    );
   }
 
   /**
@@ -493,7 +519,7 @@ class SaltoKsIqActivationService {
    */
   static async _getAppAndClient(tenantId) {
     const app = await this.getSaltoApp(tenantId);
-    return { app, client: clientRegistry.createClient(app) };
+    return { app, client: saltoKsClientFor(tenantId, app) };
   }
 
   /**
@@ -519,45 +545,114 @@ class SaltoKsIqActivationService {
 
   /**
    * @private
-   * Persists the activation list on the tenant's Salto application with a
-   * targeted update, so concurrent tenant edits are not clobbered and the
-   * entries (already encrypted) pass the tenant model's encryption hook
-   * untouched.
+   * The fields that tell an IQ's entry in `iqActivations` from the others.
+   * Every write below finds its entry by this match alone, so a change to
+   * one entry never touches another one.
+   *
+   * @param {string} iqId Salto IQ UUID
+   * @returns {Object} Field values of the entry
    */
-  static async _saveActivations(tenantId, activations) {
-    await TenantModel.updateOne(
-      {
-        id: tenantId,
-        applications: { $elemMatch: { type: APP_TYPE, id: PROVIDER_ID } },
-      },
-      { $set: { "applications.$.iqActivations": activations } },
-    );
-  }
-
-  static async _patchEntry(tenantId, activations, iqId, patch) {
-    const next = activations.map((a) =>
-      a.iqId === iqId ? { ...a, ...patch } : a,
-    );
-    await this._saveActivations(tenantId, next);
-    return next;
+  static _entryMatch(iqId) {
+    return { iqId };
   }
 
   /**
    * @private
-   * Loads the activation list fresh and patches one entry with the result of
-   * `buildPatch(entry)`. A missing entry is left alone - there is nothing to
-   * book failures or successes on.
+   * The tenant whose Salto application has an entry that satisfies
+   * `entryCondition` (a condition on the `iqActivations` array).
    */
-  static async _patchLoadedEntry(tenantId, iqId, buildPatch) {
-    const app = await this.getSaltoApp(tenantId);
-    const activations = this._activationsOf(app);
-    const entry = activations.find((a) => a.iqId === iqId);
+  static _tenantFilter(tenantId, entryCondition) {
+    return {
+      id: tenantId,
+      applications: {
+        $elemMatch: {
+          type: APP_TYPE,
+          id: PROVIDER_ID,
+          iqActivations: entryCondition,
+        },
+      },
+    };
+  }
 
-    if (!entry) {
-      return;
-    }
+  /**
+   * @private
+   * Adds the entry, in one atomic update, unless the application already has
+   * one with the same match. The entries (already encrypted) pass the tenant
+   * model's encryption hook untouched, and concurrent tenant edits are not
+   * clobbered.
+   *
+   * @param {string} tenantId
+   * @param {Object} match {@link _entryMatch} of the entry
+   * @param {Object} entry The new entry
+   * @returns {Promise<boolean>} Whether it was added
+   */
+  static async _insertEntry(tenantId, match, entry) {
+    const result = await TenantModel.updateOne(
+      this._tenantFilter(tenantId, { $not: { $elemMatch: match } }),
+      { $push: { "applications.$[app].iqActivations": entry } },
+      { arrayFilters: [APP_ARRAY_FILTER] },
+    );
+    return result?.matchedCount > 0;
+  }
 
-    await this._patchEntry(tenantId, activations, iqId, buildPatch(entry));
+  /**
+   * @private
+   * Changes fields of the one matching entry, in one atomic update; every
+   * other entry and every other field stays as stored. A missing entry is
+   * left alone - there is nothing to book failures or successes on.
+   *
+   * @param {string} tenantId
+   * @param {Object} match {@link _entryMatch} of the entry
+   * @param {{set?: Object, inc?: Object}} changes Fields to set, fields to
+   *   increment
+   * @param {Object} [condition] Further conditions on the entry, e.g. its
+   *   current state, for a change that only applies from there
+   * @returns {Promise<boolean>} Whether an entry matched
+   */
+  static async _updateEntry(
+    tenantId,
+    match,
+    { set = {}, inc = {} },
+    condition = {},
+  ) {
+    const entryCondition = { ...match, ...condition };
+    const prefixed = (prefix, fields) =>
+      Object.fromEntries(
+        Object.entries(fields).map(([field, value]) => [
+          `${prefix}${field}`,
+          value,
+        ]),
+      );
+
+    const path = "applications.$[app].iqActivations.$[entry].";
+    const update = {};
+    if (Object.keys(set).length > 0) update.$set = prefixed(path, set);
+    if (Object.keys(inc).length > 0) update.$inc = prefixed(path, inc);
+
+    const result = await TenantModel.updateOne(
+      this._tenantFilter(tenantId, { $elemMatch: entryCondition }),
+      update,
+      {
+        arrayFilters: [APP_ARRAY_FILTER, prefixed("entry.", entryCondition)],
+        // The entries sit inside the untyped `applications` array, so the
+        // schema cannot cast a filter on their fields; in strict mode
+        // mongoose refuses the `entry` filter instead of passing it on.
+        strict: false,
+      },
+    );
+    return result?.matchedCount > 0;
+  }
+
+  /**
+   * @private
+   * Removes the matching entry, in one atomic update.
+   */
+  static async _removeEntry(tenantId, match) {
+    await TenantModel.updateOne(
+      { id: tenantId },
+      { $pull: { "applications.$[app].iqActivations": match } },
+      { arrayFilters: [APP_ARRAY_FILTER] },
+    );
   }
 }
 

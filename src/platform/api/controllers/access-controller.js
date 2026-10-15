@@ -129,13 +129,19 @@ class AccessController {
 
       if (err instanceof AccessOpenError) {
         // The guest is told only the failure class - temporary ("try again in
-        // a few minutes") or configuration ("contact the administration").
-        // The provider detail is already in the audit log.
+        // a few minutes") or configuration ("contact the administration") -
+        // and, where the backend knows it, from when to try again. The
+        // provider detail is already in the audit log.
         logger.warn(
           `${tenant} -- ${action} of access-point ${accessPointId} (booking ${bookingId}) failed (${err.failureClass}): ${err.message}`,
         );
         return ApiResponse.softFail(response, {
-          data: { openFailure: err.failureClass },
+          data: {
+            openFailure: err.failureClass,
+            ...(err.retryAfter && {
+              retryAfter: err.retryAfter.toISOString(),
+            }),
+          },
         });
       }
 
