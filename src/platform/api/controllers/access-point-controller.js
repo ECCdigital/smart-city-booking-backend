@@ -481,6 +481,14 @@ class AccessPointController {
    * reports no `supportedModes` is taken at its word and lets the mode
    * through: an unknown capability is not a missing one.
    *
+   * An empty `supportedModes` says the lock can do nothing right now - a
+   * Salto lock whose IQ is not activated, or needs re-activation - not that
+   * it can never do the mode, and lets it through as well (tickets#570). The
+   * access point opens once the lock can; until then the open fails on its
+   * own. Only a mode the lock reports it cannot do is refused here; a mode a
+   * provider rules out for every lock is its `validateAccessPoint`'s to
+   * refuse.
+   *
    * @param {AccessPoint} accessPoint The access point as it would be stored
    * @param {Object|null} listedAccessPoint The provider's listed entry for
    *   it (see `_fetchListedAccessPoint`), `null` when the provider does not
@@ -491,7 +499,11 @@ class AccessPointController {
     const supportedModes =
       AccessInfoService.supportedModesOf(listedAccessPoint);
 
-    if (!supportedModes || supportedModes.includes(accessPoint.mode)) {
+    if (
+      !supportedModes ||
+      supportedModes.length === 0 ||
+      supportedModes.includes(accessPoint.mode)
+    ) {
       return;
     }
 
