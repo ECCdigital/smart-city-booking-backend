@@ -172,21 +172,20 @@ class BookingController {
       const user = request.user;
 
       // "My bookings" is the domain's read by the user (`self` reaches no
-      // record, ticket 22).
+      // record, ticket 22). Not populated: `_populated` names the workflow
+      // status, which is the administration's (ECCdigital/tickets#255).
       const bookings = await BookingService.getAssignedBookings(
         request.principal.userId,
-        {
-          tenantId: tenant ?? null,
-          populate: request.query.populate === "true",
-        },
+        { tenantId: tenant ?? null },
       );
 
       // The tenant snapshot and the event core data a customer's pages
       // render from (tenant supervision spec §5.2), whatever the level of
-      // the tenant - the booking is the customer's contract with it.
-      const view = await withCustomerView(bookings, (booking) => ({
-        ...booking,
-      }));
+      // the tenant - the booking is the customer's contract with it. Each
+      // booking only in its customer fields (ECCdigital/tickets#255).
+      const view = await withCustomerView(bookings, (booking) =>
+        booking.exportCustomer(),
+      );
 
       logger.info(
         `${tenant} -- sending ${bookings.length} assigned bookings to user ${user?.id}`,
