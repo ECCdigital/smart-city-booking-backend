@@ -18,6 +18,7 @@ const {
 require("../src/commons/services/access/clients");
 
 const IQ_ID = "5dfdc54e-8335-11f0-a2ed-6045bd92d38f";
+const OTHER_SYSTEM_USER = "other-system-user@example.test";
 
 const CONFIG = {
   clientId: "client-id",
@@ -72,7 +73,10 @@ describe("Salto KS connection test", () => {
       ],
     });
     salto = installFakeSaltoKsConnectApi(sinon, {
-      accounts: [ACCOUNT_OF_CONFIG],
+      accounts: [
+        ACCOUNT_OF_CONFIG,
+        { ...ACCOUNT_OF_CONFIG, username: OTHER_SYSTEM_USER },
+      ],
       locks: [
         { id: "lock-1", iq_id: IQ_ID },
         { id: "lock-2", iq_id: IQ_ID },
@@ -120,7 +124,7 @@ describe("Salto KS connection test", () => {
   it("reports the activation state of the identity under test", async () => {
     const result = await testProvider(
       "salto-ks",
-      { ...CONFIG, username: "other-system-user@example.test" },
+      { ...CONFIG, username: OTHER_SYSTEM_USER },
       { tenantId: "tenant-1" },
     );
 

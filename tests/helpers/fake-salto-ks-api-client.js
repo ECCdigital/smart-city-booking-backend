@@ -278,18 +278,22 @@ function installFakeSaltoKsConnectApi(sinon, { accounts, locks, iqs } = {}) {
       if (failures.token) {
         return Promise.reject(failures.token);
       }
-      const client = accounts.find(
+      // One client may sign in several system users.
+      const ofClient = accounts.filter(
         (account) =>
           account.environment === this.environment &&
           account.clientId === this.clientId &&
           account.clientSecret === this.clientSecret,
       );
-      if (!client) {
+      if (ofClient.length === 0) {
         return Promise.reject(identityError("invalid_client"));
       }
       if (
-        client.username !== this.username ||
-        client.password !== this.password
+        !ofClient.some(
+          (account) =>
+            account.username === this.username &&
+            account.password === this.password,
+        )
       ) {
         return Promise.reject(identityError("invalid_grant"));
       }
