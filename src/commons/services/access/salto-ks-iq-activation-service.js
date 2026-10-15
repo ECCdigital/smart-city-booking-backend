@@ -80,19 +80,25 @@ class SaltoKsIqActivationService {
     } = await this._getCurrent(tenantId);
     let activations = current;
     const iqs = extractSaltoList(await client.getIqs());
-    const working = [
+    // The states in which the stored ingredients open the IQ, the ones an
+    // IQ reset invalidates.
+    const statesThatOpen = [
       IQ_ACTIVATION_STATES.ACTIVATED,
       IQ_ACTIVATION_STATES.DEGRADED,
     ];
 
     for (const iq of iqs) {
       const entry = activations.find((a) => a.iqId === String(iq.id));
-      if (iq.restore_required && entry && working.includes(entry.state)) {
+      if (
+        iq.restore_required &&
+        entry &&
+        statesThatOpen.includes(entry.state)
+      ) {
         await this._updateEntry(
           tenantId,
           this._entryMatch(entry.iqId, identity),
           { set: { state: IQ_ACTIVATION_STATES.REACTIVATION_REQUIRED } },
-          { state: { $in: working } },
+          { state: { $in: statesThatOpen } },
         );
         activations = activations.map((a) =>
           a === entry
