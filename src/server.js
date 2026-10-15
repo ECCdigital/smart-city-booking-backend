@@ -18,7 +18,6 @@ const RuleEngine = require("./rule-engine/ruleEngine");
 const { requestLogger } = require("./middleware/logger.js");
 const lazyBrowser = require("./commons/pdf-service/LazyBrowser");
 const { errorHandler } = require("./middleware/error-handler");
-const GrantCleanupService = require("./commons/services/access/grant-cleanup-service");
 const { assertStorageConfig } = require("./commons/services/storage");
 const {
   uploadBackstopBytes,
@@ -180,12 +179,6 @@ dbm.connect().then(() => {
       if (process.env.RULE_ENGINE_ENABLED === "true") {
         await RuleEngine.initEngine();
       }
-      if (
-        (process.env.GRANT_CLEANUP_ENABLED ??
-          process.env.SALTO_KS_CLEANUP_ENABLED) !== "false"
-      ) {
-        GrantCleanupService.start();
-      }
     } catch (err) {
       logger.error("Error during application initialization steps", err);
       if (migrationState.get() !== MIGRATION_STATES.SUCCEEDED) {
@@ -216,7 +209,6 @@ async function gracefulShutdown(signal) {
     }
 
     logger.info("Closing browser instance...");
-    GrantCleanupService.stop();
     await lazyBrowser.cleanup();
     logger.info("Browser closed successfully");
 
