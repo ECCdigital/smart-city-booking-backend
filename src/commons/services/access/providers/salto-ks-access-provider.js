@@ -159,9 +159,15 @@ class SaltoKsAccessProvider extends AccessProvider {
     }
 
     if (kind === "otp_blocked" && iq) {
-      await SaltoKsIqActivationService.recordOtpBlocked(tenant, iq.id, detail);
+      const blockedUntil = await SaltoKsIqActivationService.recordOtpBlocked(
+        tenant,
+        iq.id,
+        detail,
+      );
       return AccessOpenError.temporary(
         `Salto KS blocked OTP submissions: ${detail}`,
+        {},
+        { retryAfter: blockedUntil },
       );
     }
 

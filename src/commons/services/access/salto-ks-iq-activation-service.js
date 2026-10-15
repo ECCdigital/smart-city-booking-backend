@@ -379,9 +379,11 @@ class SaltoKsIqActivationService {
     }
 
     if (entry.blockedUntil && new Date(entry.blockedUntil) > new Date()) {
+      const blockedUntil = new Date(entry.blockedUntil);
       throw AccessOpenError.temporary(
-        `Salto KS IQ ${iq.id} is backing off until ${new Date(entry.blockedUntil).toISOString()} after otp_blocked`,
+        `Salto KS IQ ${iq.id} is backing off until ${blockedUntil.toISOString()} after otp_blocked`,
         { iqId: iq.id },
+        { retryAfter: blockedUntil },
       );
     }
 
@@ -420,12 +422,15 @@ class SaltoKsIqActivationService {
    * @param {string} tenantId
    * @param {string} iqId
    * @param {string} message The Salto error, for the admin view
+   * @returns {Promise<Date|null>} The end of the backoff, `null` when the IQ
+   *   has no activation to book it on
    */
   static async recordOtpBlocked(tenantId, iqId, message) {
-    await this._patchLoadedEntry(tenantId, iqId, () => ({
+    const patch = await this._patchLoadedEntry(tenantId, iqId, () => ({
       blockedUntil: new Date(Date.now() + OTP_BLOCK_BACKOFF_MS),
       lastError: message || "otp_blocked",
     }));
+    return patch?.blockedUntil ?? null;
   }
 
   /**
@@ -547,6 +552,8 @@ class SaltoKsIqActivationService {
    * Loads the activation list fresh and patches one entry with the result of
    * `buildPatch(entry)`. A missing entry is left alone - there is nothing to
    * book failures or successes on.
+   *
+   * @returns {Promise<Object|null>} The patch applied, `null` without entry
    */
   static async _patchLoadedEntry(tenantId, iqId, buildPatch) {
     const app = await this.getSaltoApp(tenantId);
@@ -554,10 +561,12 @@ class SaltoKsIqActivationService {
     const entry = activations.find((a) => a.iqId === iqId);
 
     if (!entry) {
-      return;
+      return null;
     }
 
-    await this._patchEntry(tenantId, activations, iqId, buildPatch(entry));
+    const patch = buildPatch(entry);
+    await this._patchEntry(tenantId, activations, iqId, patch);
+    return patch;
   }
 }
 

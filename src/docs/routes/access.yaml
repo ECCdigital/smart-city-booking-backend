@@ -660,6 +660,15 @@ components:
                 - temporary
                 - configuration
               example: temporary
+            retryAfter:
+              type: string
+              format: date-time
+              description: |
+                Only with `temporary`, and only when the backend knows it: the
+                time from which another attempt can work, e.g. the end of the
+                backoff after Salto KS answered `otp_blocked`. Missing when
+                the time is unknown.
+              example: "2026-10-15T10:25:00.000Z"
 
     LockBusy:
       type: object
