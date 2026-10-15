@@ -20,6 +20,50 @@ const logger = bunyan.createLogger({
 const DERIVED_FLAGS = Object.freeze(["isCommitted", "isPayed", "isRejected"]);
 
 /**
+ * The fields the booker reads of their own booking (`exportCustomer`): what
+ * they entered, what they booked and paid, the state with its reasons, the
+ * documents and the access to the booked place. Not named, so internal:
+ * `assignedUserId`, `bookedVia`, `internalComments`, `_couponUsed` and
+ * `_populated`.
+ */
+const CUSTOMER_FIELDS = Object.freeze([
+  "id",
+  "tenantId",
+  "bookableItems",
+  "timeBegin",
+  "timeEnd",
+  "timeCreated",
+  "status",
+  "isCommitted",
+  "isPayed",
+  "isRejected",
+  "rejectionReason",
+  "priceEur",
+  "vatIncludedEur",
+  "timePaid",
+  "paymentProvider",
+  "paymentMethod",
+  "couponCode",
+  "name",
+  "company",
+  "mail",
+  "phone",
+  "street",
+  "zipCode",
+  "location",
+  "comment",
+  "customFieldValues",
+  "customFieldDefinitions",
+  "customFields",
+  "attachments",
+  "accessInfo",
+  "lockerInfo",
+  "hooks",
+  "cancellationPolicy",
+  "cancellationRefund",
+]);
+
+/**
  * A write to a derived flag is a bug: the state is the source, the flags
  * follow it. Tests fail on it; production logs it and keeps the state.
  */
@@ -282,6 +326,25 @@ class Booking {
       isRejected: this.isRejected,
       cancellationPolicy: this.cancellationPolicy,
     };
+  }
+
+  /**
+   * The booking as its booker reads it in the customer's booking list
+   * (ECCdigital/tickets#255): the fields of `CUSTOMER_FIELDS` alone, so a
+   * field the administration keeps for itself - `internalComments`, the
+   * coupon snapshot `_couponUsed`, `_populated` with the workflow status -
+   * never reaches the customer. A new stored field stays internal until it
+   * is named there.
+   * @returns {Object} Customer booking data
+   */
+  exportCustomer() {
+    const view = {};
+    for (const field of CUSTOMER_FIELDS) {
+      if (this[field] !== undefined) {
+        view[field] = this[field];
+      }
+    }
+    return view;
   }
 
   /**
