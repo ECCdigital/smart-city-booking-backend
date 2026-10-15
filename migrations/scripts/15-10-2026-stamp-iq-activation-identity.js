@@ -66,25 +66,30 @@ async function stampIqActivations(mongoose) {
     }
   }
 
-  for (const { tenant, identity } of stamps) {
-    await Tenant.collection.updateOne(
-      { _id: tenant._id },
-      {
-        $set: Object.fromEntries(
-          Object.entries(identity).map(([field, value]) => [
-            `applications.$[app].iqActivations.$[entry].${field}`,
-            value,
-          ]),
-        ),
-      },
-      {
+  if (stamps.length === 0) {
+    return;
+  }
+
+  // One batch for every tenant; the driver refuses an empty one.
+  await Tenant.collection.bulkWrite(
+    stamps.map(({ tenant, identity }) => ({
+      updateOne: {
+        filter: { _id: tenant._id },
+        update: {
+          $set: Object.fromEntries(
+            Object.entries(identity).map(([field, value]) => [
+              `applications.$[app].iqActivations.$[entry].${field}`,
+              value,
+            ]),
+          ),
+        },
         arrayFilters: [
           { "app.type": SALTO_APP.type, "app.id": SALTO_APP.id },
           { "entry.siteId": { $exists: false } },
         ],
       },
-    );
-  }
+    })),
+  );
 }
 
 module.exports = {

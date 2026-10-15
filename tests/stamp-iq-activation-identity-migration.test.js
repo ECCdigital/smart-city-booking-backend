@@ -194,6 +194,28 @@ describe("15-10-2026-stamp-iq-activation-identity migration", () => {
     });
   });
 
+  it("writes the stamps of every tenant in one batch", async () => {
+    const { mongoose } = world([
+      storedTenant(
+        "tenant-1",
+        storedSaltoApp({ iqActivations: [legacyEntry()] }),
+      ),
+      storedTenant(
+        "tenant-2",
+        storedSaltoApp({ iqActivations: [legacyEntry()] }),
+      ),
+    ]);
+    const { collection } = mongoose.model("Tenant");
+    sinon.spy(collection, "bulkWrite");
+    sinon.spy(collection, "updateOne");
+
+    await migration.up(mongoose);
+
+    expect(collection.bulkWrite.calledOnce).to.be.true;
+    expect(collection.bulkWrite.firstCall.args[0]).to.have.length(2);
+    expect(collection.updateOne.called).to.be.false;
+  });
+
   it("leaves stamped entries as they are and can run again", async () => {
     const resting = {
       ...legacyEntry(OTHER_IQ_ID),
