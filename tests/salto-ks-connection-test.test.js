@@ -11,6 +11,10 @@ const {
 const {
   testProvider,
 } = require("../src/commons/services/access/clients/access-test-registry");
+const {
+  installFakeSaltoKsConnectApi,
+  FAKE_SITE_ID,
+} = require("./helpers/fake-salto-ks-api-client");
 require("../src/commons/services/access/clients");
 
 const IQ_ID = "5dfdc54e-8335-11f0-a2ed-6045bd92d38f";
@@ -123,5 +127,192 @@ describe("Salto KS connection test", () => {
 
     expect(result.success).to.be.true;
     expect(result.details.remoteAccess).to.equal(null);
+  });
+});
+
+describe("Salto KS connection test with the stored secrets", () => {
+  const STORED = {
+    type: "access",
+    id: "salto-ks",
+    active: true,
+    clientId: "client-id",
+    clientSecret: "stored-client-secret",
+    siteId: FAKE_SITE_ID,
+    environment: "accept",
+    username: "system-user@example.test",
+    password: "stored-password",
+    iqActivations: [],
+  };
+
+  const ACCOUNT = {
+    environment: "accept",
+    clientId: "client-id",
+    clientSecret: "stored-client-secret",
+    username: "system-user@example.test",
+    password: "stored-password",
+  };
+
+  /** The form as the admin UI sends it: the identity, the secrets left empty. */
+  function form(overrides = {}) {
+    return {
+      clientId: STORED.clientId,
+      clientSecret: "",
+      siteId: STORED.siteId,
+      environment: STORED.environment,
+      username: STORED.username,
+      password: "",
+      ...overrides,
+    };
+  }
+
+  let salto;
+
+  function storeTenant(app = STORED) {
+    TenantManager.getTenant.resolves({
+      id: "tenant-1",
+      applications: app ? [app] : [],
+    });
+  }
+
+  beforeEach(() => {
+    sinon.stub(TenantManager, "getTenant");
+    storeTenant();
+    salto = installFakeSaltoKsConnectApi(sinon, {
+      accounts: [ACCOUNT],
+      locks: [{ id: "lock-1", iq_id: IQ_ID }],
+    });
+  });
+
+  afterEach(() => {
+    sinon.restore();
+  });
+
+  async function test(config) {
+    return testProvider("salto-ks", config, { tenantId: "tenant-1" });
+  }
+
+  it("tests with the stored secrets when the form leaves them empty", async () => {
+    const result = await test(form());
+
+    expect(result.success).to.be.true;
+  });
+
+  it("tests with the stored secrets when the form leaves them out", async () => {
+    const config = form();
+    delete config.clientSecret;
+    delete config.password;
+
+    const result = await test(config);
+
+    expect(result.success).to.be.true;
+  });
+
+  it("tests a stored application that is not switched on yet", async () => {
+    storeTenant({ ...STORED, active: false });
+
+    const result = await test(form());
+
+    expect(result.success).to.be.true;
+  });
+
+  it("needs no new secret when only the site changes", async () => {
+    storeTenant({ ...STORED, siteId: "an-old-site" });
+
+    const result = await test(form({ siteId: FAKE_SITE_ID }));
+
+    expect(result.success).to.be.true;
+  });
+
+  it("takes the secrets the form names over the stored ones", async () => {
+    const result = await test(
+      form({ clientSecret: "wrong-secret", password: "stored-password" }),
+    );
+
+    expect(result).to.deep.equal({ success: false, message: "invalid_client" });
+  });
+
+  it("does not take the stored client secret for a new client id", async () => {
+    const result = await test(form({ clientId: "other-client" }));
+
+    expect(result).to.deep.include({
+      success: false,
+      code: "missing_secret",
+      missing: [{ field: "clientSecret", reason: "client_id_changed" }],
+    });
+    expect(salto.logins).to.be.empty;
+  });
+
+  it("tests a new client id with the client secret from the form", async () => {
+    salto = null;
+    sinon.restore();
+    sinon.stub(TenantManager, "getTenant");
+    storeTenant();
+    salto = installFakeSaltoKsConnectApi(sinon, {
+      accounts: [
+        { ...ACCOUNT, clientId: "other-client", clientSecret: "new-secret" },
+      ],
+    });
+
+    const result = await test(
+      form({ clientId: "other-client", clientSecret: "new-secret" }),
+    );
+
+    expect(result.success).to.be.true;
+  });
+
+  it("does not take the stored password for a new system user", async () => {
+    const result = await test(form({ username: "other-user@example.test" }));
+
+    expect(result).to.deep.include({
+      success: false,
+      code: "missing_secret",
+      missing: [{ field: "password", reason: "username_changed" }],
+    });
+    expect(salto.logins).to.be.empty;
+  });
+
+  it("takes neither stored secret in another environment", async () => {
+    const result = await test(form({ environment: "production" }));
+
+    expect(result).to.deep.include({
+      success: false,
+      code: "missing_secret",
+      missing: [
+        { field: "clientSecret", reason: "environment_changed" },
+        { field: "password", reason: "environment_changed" },
+      ],
+    });
+    expect(salto.logins).to.be.empty;
+  });
+
+  it("reads a stored configuration without environment as accept", async () => {
+    const legacy = { ...STORED };
+    delete legacy.environment;
+    storeTenant(legacy);
+
+    const result = await test(form({ environment: "accept" }));
+
+    expect(result.success).to.be.true;
+  });
+
+  it("names a secret that was never stored", async () => {
+    storeTenant(null);
+
+    const result = await test(form({ clientSecret: "stored-client-secret" }));
+
+    expect(result).to.deep.include({
+      success: false,
+      code: "missing_secret",
+      missing: [{ field: "password", reason: "not_stored" }],
+    });
+  });
+
+  it("checks the other required fields as before", async () => {
+    const result = await test(form({ clientId: "" }));
+
+    expect(result).to.deep.equal({
+      success: false,
+      message: "Missing required fields: clientId",
+    });
   });
 });
