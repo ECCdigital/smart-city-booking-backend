@@ -78,8 +78,9 @@ describe("Salto KS connection test", () => {
 
     expect(result.success).to.be.true;
     expect(result.details.remoteAccess).to.equal(true);
-    // §9: the remote locking right cannot be asked for via the API - the test
-    // says so instead of pretending a check it cannot make.
+    // The remote locking right cannot be asked for via the API (measured
+    // 2026-08-18: the permission API answers 403) - the test says so instead
+    // of pretending a check it cannot make.
     expect(result.details.remoteLockingRight).to.equal("not_verifiable");
     expect(result.details.iqs).to.deep.equal([
       {

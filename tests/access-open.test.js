@@ -327,7 +327,7 @@ describe("AccessService.open", () => {
 
   it("never forwards a caller-supplied otp to the provider", async () => {
     // The former `otp` parameter is gone for good: a provider that needs an
-    // OTP computes it itself (docs/specs/salto-ks-remote-open.md §4).
+    // OTP computes it itself, so no OTP ever travels through the API.
     stubResolvedDoor(sandbox, createBooking());
 
     await AccessService.open("tenant-1", "booking-1", "door-1", "user-1", {
