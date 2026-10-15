@@ -181,7 +181,9 @@ class SaltoKsIqActivationService {
    *   locally beyond `pending_pin` (discard first);
    *   `salto_iq_already_activated_at_salto` when Salto refuses the first
    *   secret because the system user was activated at this IQ before (app
-   *   legacy) - not healable via API, see the setup guide.
+   *   legacy) - not healable via API: the admin creates a new system user in
+   *   Salto KS that was never activated, enters it at the tenant and
+   *   activates the IQs again.
    */
   static async startActivation(tenantId, iqId) {
     const { app, client } = await this._getAppAndClient(tenantId);
@@ -202,7 +204,7 @@ class SaltoKsIqActivationService {
       secret = await client.getIqFirstSecret(iqId);
     } catch (err) {
       // Only Salto's own "already activated" answer (ErrorCode 2203) means
-      // the app legacy of the setup guide - any other 403 (e.g. a missing
+      // the app legacy - any other 403 (e.g. a missing
       // permission) is not healed by discarding and must surface as itself.
       if (
         err?.response?.status === 403 &&
@@ -471,8 +473,8 @@ class SaltoKsIqActivationService {
 
   /**
    * Removes the activation entries from a tenant that is about to leave
-   * through the API: even encrypted, the OTP ingredients never travel
-   * (docs/specs/salto-ks-remote-open.md paragraph 2). Safe because a tenant
+   * through the API: even encrypted, the OTP ingredients never travel, since
+   * whoever holds them can open every door of the IQ. Safe because a tenant
    * update never writes them back - see {@link preserveActivations}.
    *
    * @param {Object|null} tenant The tenant answer to redact, mutated in place
@@ -491,11 +493,11 @@ class SaltoKsIqActivationService {
    * Books a successful open: the failure streak ends and a degraded
    * activation is proven healthy again.
    *
-   * This is the only implemented healing arc. The spec's state machine also
-   * allows an oracle success (`PUT …/pin` with `delta:"0000"`) to heal, but
-   * defines no trigger for it - and an unprompted oracle call spends an OTP
-   * submission, three of which block the command. So nothing runs the oracle
-   * on its own; a degraded activation heals at the door or is discarded.
+   * This is the only implemented healing arc. An oracle success (`PUT …/pin`
+   * with `delta:"0000"`) could heal too, but nothing would trigger it - and an
+   * unprompted oracle call spends an OTP submission, three of which blocked
+   * the command when measured on 2026-08-19. So nothing runs the oracle on
+   * its own; a degraded activation heals at the door or is discarded.
    *
    * @param {string} tenantId
    * @param {string} iqId
