@@ -43,6 +43,8 @@ class FakeSaltoKsApiClient extends SaltoKsApiClient {
     this.locks = new Map(locks.map((lock) => [String(lock.id), lock]));
     this.iqs = new Map(iqs.map((iq) => [String(iq.id), iq]));
     this.subscriptions = new Map();
+    /** What `/me` answers for the system user. */
+    this.me = { remote_access: true };
     /** @type {{ lockId: string, otp: string|undefined }[]} every open sent */
     this.openings = [];
     /** An error the next lock opening answers with, e.g. a 403 or an OTP rejection. */
@@ -72,6 +74,10 @@ class FakeSaltoKsApiClient extends SaltoKsApiClient {
 
     if (rest === "/iqs" && method === "get") {
       return { items: [...this.iqs.values()] };
+    }
+
+    if (rest === "/me" && method === "get") {
+      return { ...this.me };
     }
 
     if (
@@ -119,8 +125,74 @@ function brokenSaltoKsApiClient(
   return client;
 }
 
+/**
+ * An OAuth error the way the identity server answers a rejected token
+ * request.
+ */
+function identityError(error) {
+  return Object.assign(new Error("Request failed with status code 400"), {
+    isAxiosError: true,
+    response: { status: 400, data: { error } },
+  });
+}
+
+/**
+ * Puts the fake behind every `SaltoKsApiClient` the code under test builds -
+ * for code that constructs its own client, like the connection test. The
+ * identity server knows the given accounts: a client of another environment,
+ * client id or client secret is `invalid_client`, a wrong system user or
+ * password `invalid_grant`. The Connect API is the fake's site.
+ *
+ * Restore with `sinon.restore()`.
+ *
+ * @param {Object} sinon The sinon instance the test restores
+ * @param {Object} options
+ * @param {Object[]} options.accounts `{ environment, clientId, clientSecret,
+ *   username, password }` the identity server accepts
+ * @param {Object[]} [options.locks]
+ * @param {Object[]} [options.iqs]
+ * @returns {{ site: FakeSaltoKsApiClient, logins: Object[] }} The site, and
+ *   every token request as `{ environment, clientId, username }`
+ */
+function installFakeSaltoKsConnectApi(sinon, { accounts, locks, iqs } = {}) {
+  const site = new FakeSaltoKsApiClient({ locks, iqs });
+  const logins = [];
+
+  sinon.stub(SaltoKsApiClient.prototype, "_getToken").callsFake(function () {
+    logins.push({
+      environment: this.environment,
+      clientId: this.clientId,
+      username: this.username,
+    });
+    const client = accounts.find(
+      (account) =>
+        account.environment === this.environment &&
+        account.clientId === this.clientId &&
+        account.clientSecret === this.clientSecret,
+    );
+    if (!client) {
+      return Promise.reject(identityError("invalid_client"));
+    }
+    if (
+      client.username !== this.username ||
+      client.password !== this.password
+    ) {
+      return Promise.reject(identityError("invalid_grant"));
+    }
+    return Promise.resolve("fake-token");
+  });
+  sinon
+    .stub(SaltoKsApiClient.prototype, "_request")
+    .callsFake((method, path, data) =>
+      FakeSaltoKsApiClient.prototype._request.call(site, method, path, data),
+    );
+
+  return { site, logins };
+}
+
 module.exports = {
   FakeSaltoKsApiClient,
+  installFakeSaltoKsConnectApi,
   brokenSaltoKsApiClient,
   saltoHttpError,
   FAKE_SITE_ID,
