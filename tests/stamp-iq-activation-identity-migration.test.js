@@ -139,6 +139,23 @@ describe("15-10-2026-stamp-iq-activation-identity migration", () => {
     expect(logins).to.have.length(1);
   });
 
+  it("stamps a site named by its UUID in capitals as the UUID Salto lists", async () => {
+    const { mongoose, activationsOf } = world([
+      storedTenant(
+        "tenant-1",
+        storedSaltoApp({
+          siteId: FAKE_SITE_ID.toUpperCase(),
+          iqActivations: [legacyEntry()],
+        }),
+      ),
+    ]);
+
+    await migration.up(mongoose);
+
+    expect(activationsOf("tenant-1")[0].siteId).to.equal(FAKE_SITE_ID);
+    expect(logins).to.deep.equal([]);
+  });
+
   it("stamps a configuration without environment as accept, the environment it is read as", async () => {
     const app = storedSaltoApp({ iqActivations: [legacyEntry()] });
     delete app.environment;

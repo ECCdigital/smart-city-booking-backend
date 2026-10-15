@@ -1,6 +1,6 @@
 /**
  * Stamps every Salto KS IQ activation with the identity it was earned under
- * (ECCdigital/tickets#573): the site as its UUID, the system user
+ * (ECCdigital/tickets#573): the site as its UUID in lower case, the system user
  * (`username`) and the environment. From 4.4.0 on an activation counts only
  * under that identity, so without the stamp the activations stored before
  * would rest, and the IQs would need an activation Salto no longer gives

@@ -294,6 +294,7 @@ describe("Salto KS IQ activations belong to their identity", () => {
     for (const [spelling, siteId] of [
       ["site_uid", FAKE_SITE.site_uid],
       ["customer_reference", FAKE_SITE.customer_reference],
+      ["UUID in capitals", FAKE_SITE_ID.toUpperCase()],
     ]) {
       it(`keeps the activations good when the same site is named by its ${spelling}`, async () => {
         storeTenant(saltoApp({ iqActivations: [activatedEntry()] }));

@@ -309,7 +309,8 @@ class SaltoKsApiClient extends BaseAccessApiClient {
 
     const normalizedSiteId = String(siteId).trim();
     if (UUID_RE.test(normalizedSiteId)) {
-      return normalizedSiteId;
+      // Salto lists its UUIDs in lower case; one spelling, one identity.
+      return normalizedSiteId.toLowerCase();
     }
 
     const sites = this._extractList(await this.getSites());
