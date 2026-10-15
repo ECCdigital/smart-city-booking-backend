@@ -2397,6 +2397,38 @@ describe("access provider dialects: what AccessService makes of them", () => {
       });
     });
 
+    it("records a revoke that took the grant back but left its external principal", async () => {
+      registerAccessProvider(
+        IN_MEMORY_PROVIDER_ID,
+        class extends InMemoryAccessProvider {
+          constructor() {
+            super({
+              locks: [{ externalId: "lock-1" }],
+              principalRemovalFails: true,
+            });
+          }
+        },
+      );
+      const door = { ...IN_MEMORY_DOOR, mode: AccessPointMode.AUTHORIZATION };
+      stubBooking(createBooking(), [door]);
+      await AccessService.provisionForBooking(TENANT, "booking-1");
+
+      const [entry] = await AccessService.revokeForBooking(TENANT, "booking-1");
+
+      expect(entry).to.include({
+        isProvisioned: false,
+        principalRemovedAt: null,
+        principalCleanupError:
+          "The provider could not remove the external principal of the grant",
+      });
+      expect(AccessService.PRINCIPAL_NOT_REMOVED_ERROR).to.equal(
+        entry.principalCleanupError,
+      );
+      expect(loggedPayload("revoke").payload.revocation).to.deep.equal({
+        principalRemoved: false,
+      });
+    });
+
     it("records the revoke of a grant the provider no longer has", async () => {
       stubBooking(createBooking(), [NUKI_DOOR]);
       await AccessService.provisionForBooking(TENANT, "booking-1");
