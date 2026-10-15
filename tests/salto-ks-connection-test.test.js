@@ -533,12 +533,27 @@ describe("Salto KS connection test with the stored secrets", () => {
     });
   });
 
-  it("checks the other required fields as before", async () => {
+  it("names the other required fields that are missing, with a code", async () => {
     const result = await test(form({ clientId: "" }));
 
     expect(result).to.deep.equal({
       success: false,
+      code: "missing_fields",
       message: "Missing required fields: clientId",
+      missing: [{ field: "clientId" }],
+    });
+  });
+
+  // A secret neither sent nor stored is `missing_secret`'s, with its reason.
+  it("names every missing required field but the secrets, as the request names it", async () => {
+    storeTenant(null);
+
+    const result = await test({ siteId: "Labor", environment: "accept" });
+
+    expect(result).to.deep.include({
+      success: false,
+      code: "missing_fields",
+      missing: [{ field: "clientId" }, { field: "username" }],
     });
   });
 });

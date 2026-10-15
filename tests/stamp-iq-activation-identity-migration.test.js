@@ -139,6 +139,23 @@ describe("15-10-2026-stamp-iq-activation-identity migration", () => {
     expect(logins).to.have.length(1);
   });
 
+  it("stamps a site named by its UUID in capitals as the UUID Salto lists", async () => {
+    const { mongoose, activationsOf } = world([
+      storedTenant(
+        "tenant-1",
+        storedSaltoApp({
+          siteId: FAKE_SITE_ID.toUpperCase(),
+          iqActivations: [legacyEntry()],
+        }),
+      ),
+    ]);
+
+    await migration.up(mongoose);
+
+    expect(activationsOf("tenant-1")[0].siteId).to.equal(FAKE_SITE_ID);
+    expect(logins).to.deep.equal([]);
+  });
+
   it("stamps a configuration without environment as accept, the environment it is read as", async () => {
     const app = storedSaltoApp({ iqActivations: [legacyEntry()] });
     delete app.environment;
@@ -175,6 +192,28 @@ describe("15-10-2026-stamp-iq-activation-identity migration", () => {
       username: SYSTEM_USER,
       environment: "accept",
     });
+  });
+
+  it("writes the stamps of every tenant in one batch", async () => {
+    const { mongoose } = world([
+      storedTenant(
+        "tenant-1",
+        storedSaltoApp({ iqActivations: [legacyEntry()] }),
+      ),
+      storedTenant(
+        "tenant-2",
+        storedSaltoApp({ iqActivations: [legacyEntry()] }),
+      ),
+    ]);
+    const { collection } = mongoose.model("Tenant");
+    sinon.spy(collection, "bulkWrite");
+    sinon.spy(collection, "updateOne");
+
+    await migration.up(mongoose);
+
+    expect(collection.bulkWrite.calledOnce).to.be.true;
+    expect(collection.bulkWrite.firstCall.args[0]).to.have.length(2);
+    expect(collection.updateOne.called).to.be.false;
   });
 
   it("leaves stamped entries as they are and can run again", async () => {

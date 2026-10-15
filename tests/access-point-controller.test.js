@@ -546,7 +546,7 @@ describe("AccessPointController", () => {
         request.body = {
           provider: "salto-ks",
           externalId: "lock-9",
-          mode: "both",
+          mode: "remote",
         };
 
         await AccessPointController.storeAccessPoint(request, response, next);
@@ -556,7 +556,7 @@ describe("AccessPointController", () => {
         expect(accessPoint).to.include({
           provider: "salto-ks",
           externalId: "lock-9",
-          mode: "both",
+          mode: "remote",
         });
       });
 
@@ -647,7 +647,11 @@ describe("AccessPointController", () => {
         installSalto(saltoIq());
       });
 
-      /** Salto KS over the fake Connect API, with one lock on the given IQ. */
+      /**
+       * Salto KS over the fake Connect API, with one lock on the given IQ.
+       *
+       * @returns {FakeSaltoKsApiClient} The client the provider asks
+       */
       function installSalto(iq) {
         const saltoClient = new FakeSaltoKsApiClient({
           locks: [
@@ -663,6 +667,7 @@ describe("AccessPointController", () => {
             }
           },
         );
+        return saltoClient;
       }
 
       function saltoApp(active, iqActivations = []) {
@@ -712,6 +717,83 @@ describe("AccessPointController", () => {
             field: "mode",
             code: "unsupported_mode",
           });
+          expect(storeAccessPoint.called).to.be.false;
+        });
+      });
+
+      /**
+       * The rule needs no listing, so it holds when Salto cannot be asked
+       * (tickets#311, tickets#570): a 400 for the mode, not a 503 for Salto.
+       */
+      describe("Salto not reachable", () => {
+        beforeEach(() => {
+          const saltoClient = installSalto(saltoIq());
+          sandbox.stub(saltoClient, "_send").rejects(
+            Object.assign(new Error("connect ECONNREFUSED"), {
+              code: "ECONNREFUSED",
+            }),
+          );
+          sandbox.stub(TenantManager, "getTenant").resolves(saltoApp(true));
+        });
+
+        ["authorization", "both"].forEach((mode) => {
+          it(`refuses ${mode} at a new Salto door with 400 unsupported_mode`, async () => {
+            request.body = {
+              provider: "salto-ks",
+              externalId: SALTO_LOCK_ID,
+              mode,
+            };
+
+            await AccessPointController.storeAccessPoint(
+              request,
+              response,
+              next,
+            );
+
+            const error = next.firstCall.args[0];
+            expect(error).to.be.instanceOf(ValidationError);
+            expect(error.statusCode).to.equal(400);
+            expect(error.errors).to.deep.equal([
+              {
+                field: "mode",
+                code: "unsupported_mode",
+                params: { mode, supportedModes: ["remote"] },
+              },
+            ]);
+            expect(storeAccessPoint.called).to.be.false;
+          });
+        });
+
+        it("refuses a rename of a Salto door still stored with both with 400 unsupported_mode", async () => {
+          sandbox.stub(AccessPointManager, "getAccessPoint").resolves(
+            createAccessPoint({
+              provider: "salto-ks",
+              externalId: SALTO_LOCK_ID,
+              mode: "both",
+            }),
+          );
+          request.body = { id: "point-1", label: "Labortür" };
+
+          await AccessPointController.storeAccessPoint(request, response, next);
+
+          const error = next.firstCall.args[0];
+          expect(error).to.be.instanceOf(ValidationError);
+          expect(error.errors[0]).to.include({ code: "unsupported_mode" });
+          expect(storeAccessPoint.called).to.be.false;
+        });
+
+        it("answers 503 access_provider_unreachable for remote, storing nothing", async () => {
+          request.body = {
+            provider: "salto-ks",
+            externalId: SALTO_LOCK_ID,
+            mode: "remote",
+          };
+
+          await AccessPointController.storeAccessPoint(request, response, next);
+
+          const error = next.firstCall.args[0];
+          expect(error.statusCode).to.equal(503);
+          expect(error.code).to.equal("access_provider_unreachable");
           expect(storeAccessPoint.called).to.be.false;
         });
       });
@@ -1093,7 +1175,11 @@ describe("AccessPointController", () => {
         const failure = new Error("connect ECONNREFUSED");
         failure.code = "ECONNREFUSED";
         findListedAccessPoint.rejects(failure);
-        request.body = { provider: "salto-ks", externalId: "lock-9" };
+        request.body = {
+          provider: "salto-ks",
+          externalId: "lock-9",
+          mode: "remote",
+        };
 
         await AccessPointController.storeAccessPoint(request, response, next);
 

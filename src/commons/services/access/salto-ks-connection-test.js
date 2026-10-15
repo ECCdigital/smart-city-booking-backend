@@ -285,8 +285,13 @@ async function runChecks(client, siteId, tenantId) {
 /**
  * The connection test of Salto KS. Secrets the form leaves empty are taken
  * from the stored application (see `completeSecrets`); only then are the
- * required fields checked. A secret that is still missing stops the test
- * before Salto is asked:
+ * required fields checked. A required field that is missing stops the test
+ * before Salto is asked, naming the fields as the request does:
+ *
+ *     { success: false, code: "missing_fields", message,
+ *       missing: [{ field: "clientId" | "username" }] }
+ *
+ * So does a secret that is still missing:
  *
  *     { success: false, code: "missing_secret", message,
  *       missing: [{ field: "clientSecret" | "password",
@@ -328,7 +333,9 @@ async function testSaltoKsConnection(config, context = {}) {
   if (missingFields.length > 0) {
     return {
       success: false,
+      code: "missing_fields",
       message: `Missing required fields: ${missingFields.join(", ")}`,
+      missing: missingFields.map((field) => ({ field })),
     };
   }
 

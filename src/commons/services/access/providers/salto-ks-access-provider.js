@@ -292,18 +292,17 @@ class SaltoKsAccessProvider extends AccessProvider {
   /**
    * Refuse `authorization` and `both` at every Salto door, without asking
    * Salto: the rule of `_deriveOffer` holds for every lock, so it needs no
-   * listing. A save the listing cannot judge - the tenant's application is
-   * not active, Salto does not list the lock - still gets the mode Salto
-   * doors have, `remote`. `remote` itself passes here; whether the lock can
-   * do it right now is the listing's to say.
+   * listing and runs before it is fetched. A save the listing cannot judge -
+   * the tenant's application is not active, Salto does not list the lock or
+   * cannot be reached - still gets the mode Salto doors have, `remote`.
+   * `remote` itself passes here; whether the lock can do it right now is the
+   * listing's to say.
    *
    * @param {Object} accessPoint The access point as it would be stored
-   * @param {Object|null} _listedAccessPoint The lock as `listAccessPoints`
-   *   lists it, `null` when it is not listed; not read
    * @returns {void}
    * @throws {ValidationError} `unsupported_mode` for any mode but `remote`
    */
-  validateAccessPoint(accessPoint, _listedAccessPoint) {
+  validateAccessPointWithoutListing(accessPoint) {
     if (accessPoint.mode === AccessPointMode.REMOTE) {
       return;
     }
@@ -375,7 +374,7 @@ class SaltoKsAccessProvider extends AccessProvider {
       "getStatus",
       "listAccessPoints",
       "getSupportedModes",
-      "validateAccessPoint",
+      "validateAccessPointWithoutListing",
     ];
   }
 }

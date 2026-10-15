@@ -1,6 +1,6 @@
 /**
  * Stamps every Salto KS IQ activation with the identity it was earned under
- * (ECCdigital/tickets#573): the site as its UUID, the system user
+ * (ECCdigital/tickets#573): the site as its UUID in lower case, the system user
  * (`username`) and the environment. From 4.4.0 on an activation counts only
  * under that identity, so without the stamp the activations stored before
  * would rest, and the IQs would need an activation Salto no longer gives
@@ -66,25 +66,30 @@ async function stampIqActivations(mongoose) {
     }
   }
 
-  for (const { tenant, identity } of stamps) {
-    await Tenant.collection.updateOne(
-      { _id: tenant._id },
-      {
-        $set: Object.fromEntries(
-          Object.entries(identity).map(([field, value]) => [
-            `applications.$[app].iqActivations.$[entry].${field}`,
-            value,
-          ]),
-        ),
-      },
-      {
+  if (stamps.length === 0) {
+    return;
+  }
+
+  // One batch for every tenant; the driver refuses an empty one.
+  await Tenant.collection.bulkWrite(
+    stamps.map(({ tenant, identity }) => ({
+      updateOne: {
+        filter: { _id: tenant._id },
+        update: {
+          $set: Object.fromEntries(
+            Object.entries(identity).map(([field, value]) => [
+              `applications.$[app].iqActivations.$[entry].${field}`,
+              value,
+            ]),
+          ),
+        },
         arrayFilters: [
           { "app.type": SALTO_APP.type, "app.id": SALTO_APP.id },
           { "entry.siteId": { $exists: false } },
         ],
       },
-    );
-  }
+    })),
+  );
 }
 
 module.exports = {

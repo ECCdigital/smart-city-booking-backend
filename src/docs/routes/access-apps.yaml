@@ -381,20 +381,29 @@ components:
         code:
           type: string
           enum:
+            - missing_fields
             - missing_secret
           description: |
+            `missing_fields` (`salto-ks`): `clientId` or `username` is empty or
+            left out; Salto was not asked. Checked before `missing_secret`.
             `missing_secret` (`salto-ks`): a secret is neither in the body nor
             stored for the identity the body names; Salto was not asked.
         missing:
           type: array
-          description: With `missing_secret`, the secrets that are missing
+          description: |
+            With `missing_fields`, the required fields that are missing
+            (`clientId`, `username`), named as in the request, `field` only.
+            With `missing_secret`, the secrets that are missing (`clientSecret`,
+            `password`), with the `reason`.
           items:
             type: object
             properties:
               field:
                 type: string
                 enum:
+                  - clientId
                   - clientSecret
+                  - username
                   - password
               reason:
                 type: string

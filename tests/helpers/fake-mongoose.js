@@ -308,6 +308,29 @@ function createCollection(documents, indexes) {
       return updateFirst(documents, filter, update, options);
     },
 
+    /** `updateOne` operations only, with their `arrayFilters`. */
+    async bulkWrite(operations) {
+      // The driver refuses an empty batch.
+      if (operations.length === 0) {
+        throw new Error("Invalid BulkOperation, Batch cannot be empty");
+      }
+
+      let matchedCount = 0;
+      let modifiedCount = 0;
+      for (const operation of operations) {
+        const [kind] = Object.keys(operation);
+        if (kind !== "updateOne") {
+          throw new Error(`fake-mongoose: unsupported bulk operation ${kind}`);
+        }
+
+        const { filter, update, arrayFilters } = operation.updateOne;
+        const result = updateFirst(documents, filter, update, { arrayFilters });
+        matchedCount += result.matchedCount;
+        modifiedCount += result.modifiedCount;
+      }
+      return { matchedCount, modifiedCount };
+    },
+
     async updateMany(filter, update) {
       documents
         .filter((candidate) => matches(candidate, filter))

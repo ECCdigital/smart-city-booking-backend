@@ -13,6 +13,7 @@ require("./providers/register-access-providers");
 const APP_TYPE = "access";
 const LIST_ACCESS_POINTS_CAPABILITY = "listAccessPoints";
 const VALIDATE_ACCESS_POINT_CAPABILITY = "validateAccessPoint";
+const VALIDATE_WITHOUT_LISTING_CAPABILITY = "validateAccessPointWithoutListing";
 
 class AccessInfoService {
   /**
@@ -157,6 +158,28 @@ class AccessInfoService {
     getAccessProvider(accessPoint.provider).validateAccessPoint(
       accessPoint,
       listedAccessPoint,
+    );
+  }
+
+  /**
+   * Let the provider refuse an access point by a rule that needs no
+   * listing, before the listing is fetched: the rule holds when the
+   * provider cannot be asked. Optional capability, like
+   * {@link validateAccessPoint}.
+   *
+   * @param {Object} accessPoint The access point as it would be stored
+   * @returns {void}
+   * @throws {ValidationError} What the provider will not store
+   */
+  static validateAccessPointWithoutListing(accessPoint) {
+    const capabilities = getAccessProviderCapabilities(accessPoint.provider);
+
+    if (!capabilities.includes(VALIDATE_WITHOUT_LISTING_CAPABILITY)) {
+      return;
+    }
+
+    getAccessProvider(accessPoint.provider).validateAccessPointWithoutListing(
+      accessPoint,
     );
   }
 
