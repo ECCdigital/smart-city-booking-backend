@@ -378,56 +378,6 @@ class SaltoKsApiClient extends BaseAccessApiClient {
     return this._request("get", `/v1.2/sites/${resolvedSiteId}/me`);
   }
 
-  /**
-   * Checks credentials against the identity server and, if a site is
-   * configured, the site scope against the Connect API.
-   *
-   * A failure names what the upstream server objected to (e.g.
-   * `invalid_client`) rather than only the HTTP status, so a wrong client
-   * secret, a wrong environment and a wrong site can be told apart.
-   *
-   * @returns {Promise<{success: boolean, message: string}>}
-   */
-  static async testConnection(
-    clientId,
-    clientSecret,
-    siteId,
-    environment = DEFAULT_SALTO_ENVIRONMENT,
-    options = {},
-  ) {
-    let client;
-    try {
-      client = new SaltoKsApiClient(
-        clientId,
-        clientSecret,
-        siteId,
-        environment,
-        options,
-      );
-    } catch (err) {
-      return { success: false, message: err.message };
-    }
-
-    try {
-      // Token request validates the credentials; listing locks validates the
-      // site scope when a siteId is configured.
-      await client._getToken();
-      if (siteId) {
-        await client.getLocks(siteId);
-      }
-      return {
-        success: true,
-        message: `Connection successful (${client.environment})`,
-      };
-    } catch (err) {
-      const upstream = describeUpstreamError(err);
-      if (upstream) {
-        return { success: false, message: upstream };
-      }
-      return BaseAccessApiClient.handleConnectionError(err);
-    }
-  }
-
   async _request(method, path, data = null, options = {}) {
     const token = await this._getToken();
 
