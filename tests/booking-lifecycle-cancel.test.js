@@ -431,6 +431,23 @@ describe("booking lifecycle: cancel", function () {
       appliedRefundPercentage: 50,
       refundAmountEur: 20,
     });
+    // A request is not paid: its bank details are dropped.
+    expect(adapters.documents.calls[0].args[0].options.bankDetails).to.equal(
+      undefined,
+    );
+  });
+
+  it("hands the bank details of a paid booking to the document, sanitized", async function () {
+    const { adapters, lifecycle } = lifecycleOver({
+      bookings: [booking()],
+    });
+
+    await lifecycle.cancel(TENANT, "B-1", {
+      trigger: TRIGGER.CUSTOMER,
+      reason: "Krank",
+      bankDetails: { accountHolder: " Erika ", iban: "de12 3456", bic: "" },
+    });
+
     expect(
       adapters.documents.calls[0].args[0].options.bankDetails,
     ).to.deep.equal({
