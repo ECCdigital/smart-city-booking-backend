@@ -38,7 +38,7 @@ const {
 const {
   CancellationRefundService,
   CANCELLATION_ORIGINS,
-  sanitizeBankDetails,
+  refundBankDetails,
 } = require("../payment/cancellation-refund-service");
 const { BOOKING_HOOK_TYPES } = require("../../entities/booking/bookingHook");
 const { encryptBankDetails } = require("../../utilities/bank-details");
@@ -448,7 +448,8 @@ function createBookingLifecycle(adapters) {
    * due, the open refund state (glossary "Erstattungsstand"), and drops the
    * hook of a cancellation request; then the access is revoked, the cancellation
    * document issued for a priced booking unless the caller leaves it out,
-   * the workflow told and the customer mailed - the rejection of a request
+   * with the bank details of a paid one (`refundBankDetails`), the workflow
+   * told and the customer mailed - the rejection of a request
    * the administration or the system turned down, the cancellation
    * otherwise (a request the customer withdrew, directly or through a hook,
    * reads as a cancellation).
@@ -526,7 +527,7 @@ function createBookingLifecycle(adapters) {
             bookings: [booking],
             options: {
               alreadyPaid: from === STATUS.CONFIRMED,
-              bankDetails: sanitizeBankDetails(bankDetails) || undefined,
+              bankDetails: refundBankDetails(bankDetails, from) || undefined,
               cancellationReason: reason,
               refundCalculation: refund,
             },
@@ -558,7 +559,8 @@ function createBookingLifecycle(adapters) {
 
   /**
    * The cancellation request: the state stays, a hook `REJECT` with the
-   * reason and the bank details is written, and the customer is asked to
+   * reason and the bank details of a paid booking (`refundBankDetails`)
+   * is written, and the customer is asked to
    * verify, with the refund the customer's cancellation would bring. Only
    * where the booking's cancellation policy allows it: otherwise
    * `ForbiddenError booking_user_cancellation_disabled`, the answer of
@@ -587,7 +589,7 @@ function createBookingLifecycle(adapters) {
     nextState(status, transition, booking);
 
     const payload = { reason };
-    const sanitizedBankDetails = sanitizeBankDetails(bankDetails);
+    const sanitizedBankDetails = refundBankDetails(bankDetails, status);
     if (sanitizedBankDetails) {
       payload.bankDetails = encryptBankDetails(sanitizedBankDetails);
     }

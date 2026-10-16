@@ -791,9 +791,8 @@ class BookingController {
    * (400 `reason_required`); the booking, the user's own only, whoever
    * they are (404 `booking_not_found`); its cancellation policy (403
    * `booking_user_cancellation_disabled`); its state (the lifecycle's 409
-   * `invalid_transition`). The bank details go to the cancellation
-   * document of a paid booking and are dropped otherwise. Answers 200
-   * without a body.
+   * `invalid_transition`). The bank details go to the lifecycle, which
+   * keeps them for a paid booking only. Answers 200 without a body.
    */
   static async cancelBooking(request, response) {
     try {
@@ -830,7 +829,7 @@ class BookingController {
       await bookingLifecycle.cancel(tenant, id, {
         trigger: TRIGGER.CUSTOMER,
         reason: trimmedReason,
-        bankDetails: booking.isPayed === true ? bankDetails || null : null,
+        bankDetails: bankDetails || null,
         cancelledByUserId: userId,
       });
       return response.sendStatus(200);
