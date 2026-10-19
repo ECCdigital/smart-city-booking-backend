@@ -47,6 +47,8 @@ class CancellationRefundService {
     const { daysBeforeStart, appliedTierDays, suggestedRefundPercentage } =
       this.resolvePolicy({
         tiers: tenant?.cancellationRefundTiers || [],
+        withoutTimeSpanPercentage:
+          tenant?.cancellationRefundPercentageWithoutTimeSpan,
         timeBegin: booking.timeBegin,
         cancelledAt,
       });
@@ -132,14 +134,32 @@ class CancellationRefundService {
     }
   }
 
-  static resolvePolicy({ tiers, timeBegin, cancelledAt }) {
+  /**
+   * The tier that applies to the cancellation and its refund. A booking
+   * without a time span falls under no tier: it gets the tenant's
+   * `withoutTimeSpanPercentage`, 100 where the tenant names none.
+   */
+  static resolvePolicy({
+    tiers,
+    withoutTimeSpanPercentage,
+    timeBegin,
+    cancelledAt,
+  }) {
     const normalizedTiers = normalizeCancellationRefundTiers(tiers || []);
     const daysBeforeStart = this.calculateDaysBeforeStart(
       timeBegin,
       cancelledAt,
     );
 
-    if (normalizedTiers.length === 0 || daysBeforeStart === null) {
+    if (daysBeforeStart === null) {
+      return {
+        daysBeforeStart,
+        appliedTierDays: null,
+        suggestedRefundPercentage: withoutTimeSpanPercentage ?? 100,
+      };
+    }
+
+    if (normalizedTiers.length === 0) {
       return {
         daysBeforeStart,
         appliedTierDays: null,
