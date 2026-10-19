@@ -33,6 +33,8 @@ Each tenant carries `accessApps[]`: the customer-service contact of every active
 ]
 ```
 
+Each tenant also carries `usesDigitalKeys`: `true` when it has at least one active access application, lockers included, whether or not it has a customer-service contact. The public instance (`GET /api/instances/public`) carries the same field, `true` as soon as one public tenant has it.
+
 ### GET /api/tenants
 
 Returns tenants visible to the authenticated user. **Requires JWT.**
