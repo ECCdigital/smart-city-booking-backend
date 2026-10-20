@@ -17,7 +17,11 @@ const Handlebars = require("handlebars");
 const QRCode = require("qrcode");
 const MailerService = require("./mail-service");
 const { renderSnippet } = require("./templates/template-loader");
-const { bookingStatusUrl, cancellationUrl } = require("./mail-links");
+const {
+  bookingStatusUrl,
+  cancellationUrl,
+  withdrawalUrl,
+} = require("./mail-links");
 const {
   getSnippetOverride,
   getSubjectOverride,
@@ -89,6 +93,23 @@ function customerContactHtml(booking) {
   return lines.join("<br />");
 }
 
+/** The statutory withdrawal period of a private customer, from the booking. */
+const WITHDRAWAL_PERIOD_MS = 14 * 24 * 60 * 60 * 1000;
+
+/**
+ * Whether the notice offers the withdrawal: a private customer - a
+ * booking without a company - within 14 days of the booking, and a tenant
+ * address to write to. Whether the withdrawal is
+ * admissible is for the tenant's staff to check, not for the platform.
+ */
+function withdrawalOffered(tenant, booking, now = Date.now()) {
+  if (!tenant?.mail || !booking) return false;
+  if (String(booking.company ?? "").trim() !== "") return false;
+  const created = Number(booking.timeCreated);
+  if (!Number.isFinite(created) || created <= 0) return false;
+  return now - created <= WITHDRAWAL_PERIOD_MS;
+}
+
 /**
  * The variables a tenant's override may use (the variable catalog,
  * glossary "Mail-Variable"). The booking-bound ones follow the booking
@@ -113,6 +134,8 @@ function overrideVariables({
       single.cancellationPolicy?.userCancellable === true &&
       LIVE_STATUSES.includes(single.status),
   );
+  const bookingRef = aggregated ? groupBookingId : single?.id;
+  const withdrawal = Boolean(bookingRef && withdrawalOffered(tenant, booking));
   return {
     tenantName: tenant?.name ?? "",
     supportEmail: tenant?.mail ?? "",
@@ -126,6 +149,9 @@ function overrideVariables({
     bookingStatusUrl: statusView ? bookingStatusUrl(single, tenantId) : "",
     cancellationUrl: cancellable ? cancellationUrl(single, tenantId) : "",
     paymentUrl: paymentUrl ?? "",
+    withdrawalUrl: withdrawal
+      ? withdrawalUrl(tenant.mail, bookingRef, booking.name)
+      : "",
     ...extra,
   };
 }
@@ -402,6 +428,7 @@ async function render(
 
   const shell = {
     message,
+    withdrawalUrl: mailType.showsWithdrawalHint ? variables.withdrawalUrl : "",
     paymentUrl,
     cancelReason,
     rejectionReason,
@@ -508,4 +535,9 @@ async function renderShellNotice(
   }));
 }
 
-module.exports = { render, renderShellNotice, renderBookingDetails };
+module.exports = {
+  render,
+  renderShellNotice,
+  renderBookingDetails,
+  withdrawalOffered,
+};
