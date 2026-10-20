@@ -36,6 +36,10 @@ _Avoid_: maxAmount (so heißt die Grenze eines externen Anbieters und die des Co
 Wie eine Buchung angelegt wurde: _Angemeldet_ über ein Userkonto, als _Gast_ oder durch die Verwaltung als manuelle Buchung (_Admin_). Er wird einmal beim Anlegen festgelegt und ändert sich nie. Er hängt am Vorgang, nicht an der Person: Ein Admin, der selbst angemeldet über den Checkout bucht, bucht als _Angemeldet_. Alte Buchungen haben keinen Buchungsweg.
 _Avoid_: Herkunft, Origin, Kanal, Buchungsart
 
+**Geschäftliche Buchung**:
+Ob eine Buchung privat oder geschäftlich ist, wie der Buchende es im Checkout angibt (`isBusiness`). Die Angabe folgt zunächst der Firma — mit Firma geschäftlich, ohne Firma privat — und der Buchende kann sie umstellen. Eine Buchung ohne Angabe, von vorher oder aus einem Checkout, der sie nicht sendet, gilt nach der Firma. Nur eine private Buchung bekommt den Widerruf (einer Buchung) angeboten.
+_Avoid_: Firmenbuchung, B2B, Privatkunde (als gespeicherter Wert — das ist die Lesart der Angabe)
+
 ### Mediathek
 
 **Medium**:
@@ -246,7 +250,7 @@ Der Lebenszyklus-Übergang, der eine abgelehnte oder stornierte Buchung in den Z
 _Avoid_: Unreject, Reaktivierung, Rücknahme des Stornos (das ist die Handlung, nicht der Übergang)
 
 **Widerruf (einer Buchung)**:
-Ein Privatkunde (eine Buchung ohne Firma) widerruft seine Buchung innerhalb von 14 Tagen per Mail; die Verwaltung prüft, ob der Widerruf zulässig ist, und nimmt ihn mit dem Lebenszyklus-Übergang „Annahme des Widerrufs" an. Aus _angefragt_, _Zahlung offen_ oder _bestätigt_ wird die Buchung _widerrufen_, endgültig: keine Wiederherstellung. Ein Widerruf kostet nichts — eine offene Zahlung entfällt, eine geleistete wird voll erstattet (Erstattungsstand _offen_). Die Mail allein ändert an der Buchung nichts.
+Ein Privatkunde (eine private Buchung, siehe Geschäftliche Buchung) widerruft seine Buchung innerhalb von 14 Tagen per Mail; die Verwaltung prüft, ob der Widerruf zulässig ist, und nimmt ihn mit dem Lebenszyklus-Übergang „Annahme des Widerrufs" an. Aus _angefragt_, _Zahlung offen_ oder _bestätigt_ wird die Buchung _widerrufen_, endgültig: keine Wiederherstellung. Ein Widerruf kostet nichts — eine offene Zahlung entfällt, eine geleistete wird voll erstattet (Erstattungsstand _offen_). Die Mail allein ändert an der Buchung nichts.
 _Avoid_: Widerruf (unqualifiziert — das ist der Widerruf eines Grants), Storno, Rücktritt, withdraw (als Übergangsname; der heißt acceptWithdrawal)
 
 **Erstattungsstand**:

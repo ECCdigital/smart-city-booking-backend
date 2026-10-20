@@ -155,8 +155,9 @@
       the public tenant or catalog projection, which a non-public tenant
       does not have, so a customer's pages render from this answer alone.
       `withdrawalUrl` is the mail of a private customer's withdrawal - a
-      `mailto:` to the tenant, for a booking without a company within 14
-      days of the booking - and `null` otherwise.
+      `mailto:` to the tenant, for a live private booking (`isBusiness`
+      false, or without it no company) within 14 days of the booking - and
+      `null` otherwise.
       `?populate=true` adds `_populated` with the lead bookable and the
       workflow status, as before.
     security:

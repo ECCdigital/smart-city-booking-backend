@@ -136,6 +136,10 @@ const bookingSchemaDefinition = {
   internalComments: { type: String, default: "" },
   rejectionReason: { type: String, default: "" },
   company: { type: String, default: "" },
+  // Private or business booking, as the booker answers it at the checkout
+  // (business-booking.js). No default: a booking from before has none and
+  // reads off `company`.
+  isBusiness: { type: Boolean },
   couponCode: { type: String, default: "" },
   // The booking state, the one source of truth (booking-state.js). The
   // three flags below are derived from it by the entity on every write and

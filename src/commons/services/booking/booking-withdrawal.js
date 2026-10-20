@@ -9,25 +9,26 @@
 
 const { withdrawalUrl } = require("../../mail-service/mail-links");
 const { LIVE_STATUSES } = require("../booking-lifecycle/booking-state");
+const { isPrivateBooking } = require("../checkout/business-booking");
 
 /** The statutory withdrawal period of a private customer, from the booking. */
 const WITHDRAWAL_PERIOD_MS = 14 * 24 * 60 * 60 * 1000;
 
 /**
- * Whether the withdrawal is offered: a live booking of a private customer
- * - a booking without a company - within 14 days of the booking, and a
- * tenant address to write to. A rejected, cancelled or withdrawn booking
+ * Whether the withdrawal is offered: a live private booking - as the
+ * booker answered it, or without the answer a booking without a company -
+ * within 14 days of the booking, and a tenant address to write to. A rejected, cancelled or withdrawn booking
  * has nothing left to withdraw.
  *
  * @param {{ mail?: string }|null} tenant
- * @param {{ status?: string, company?: string, timeCreated?: number }|null} booking
+ * @param {{ status?: string, isBusiness?: boolean, company?: string, timeCreated?: number }|null} booking
  * @param {number} [now]
  * @returns {boolean}
  */
 function withdrawalOffered(tenant, booking, now = Date.now()) {
   if (!tenant?.mail || !booking) return false;
   if (booking.status && !LIVE_STATUSES.includes(booking.status)) return false;
-  if (String(booking.company ?? "").trim() !== "") return false;
+  if (!isPrivateBooking(booking)) return false;
   const created = Number(booking.timeCreated);
   if (!Number.isFinite(created) || created <= 0) return false;
   return now - created <= WITHDRAWAL_PERIOD_MS;
