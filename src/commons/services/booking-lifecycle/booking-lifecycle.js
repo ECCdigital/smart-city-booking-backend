@@ -41,6 +41,7 @@ const {
   sanitizeBankDetails,
 } = require("../payment/cancellation-refund-service");
 const { BOOKING_HOOK_TYPES } = require("../../entities/booking/bookingHook");
+const { isPrivateBooking } = require("../checkout/business-booking");
 const { encryptBankDetails } = require("../../utilities/bank-details");
 const { NotFoundError, ForbiddenError } = require("../../../errors/BaseError");
 
@@ -762,6 +763,9 @@ function createBookingLifecycle(adapters) {
    * "Erstattungsstand"). Then the access is revoked, the cancellation
    * document issued for a priced booking, the workflow told as of a
    * cancellation and the customer sent the confirmation of the withdrawal.
+   * Only a private booking has a withdrawal (glossary "Geschäftliche
+   * Buchung"): a business one is `ForbiddenError
+   * booking_withdrawal_not_private`, in front of the state guard.
    *
    * @param {string} tenantId
    * @param {string} bookingId
@@ -780,6 +784,11 @@ function createBookingLifecycle(adapters) {
       load(tenantId, bookingId),
       loadTenant(tenantId),
     ]);
+    if (!isPrivateBooking(booking)) {
+      throw new ForbiddenError("booking_withdrawal_not_private", {
+        bookingId,
+      });
+    }
     const from = booking.status;
     booking.status = nextState(from, transition, booking);
 

@@ -14,7 +14,7 @@ const {
 const {
   TRIGGER,
 } = require("../src/commons/services/booking-lifecycle/booking-state");
-const { ConflictError } = require("../src/errors/BaseError");
+const { ConflictError, ForbiddenError } = require("../src/errors/BaseError");
 const {
   inMemoryAdapters,
   effectTable,
@@ -175,6 +175,34 @@ describe("booking lifecycle: acceptWithdrawal", function () {
       expect(adapters.mail.calls).to.deep.equal([]);
     });
   }
+
+  for (const [name, overrides] of [
+    ["answered business", { isBusiness: true, company: "" }],
+    ["with a company and no answer", { company: "Musterfirma GmbH" }],
+  ]) {
+    it(`refuses a business booking (${name}) before the state guard: booking_withdrawal_not_private`, async function () {
+      const { adapters, lifecycle } = lifecycleOver({
+        bookings: [booking(overrides)],
+      });
+
+      const err = await failing(
+        lifecycle.acceptWithdrawal(TENANT, "B-1", { trigger: TRIGGER.ADMIN }),
+      );
+
+      expect(err).to.be.instanceOf(ForbiddenError);
+      expect(err.code).to.equal("booking_withdrawal_not_private");
+      expect(adapters.store.calls).to.deep.equal([]);
+      expect(adapters.mail.calls).to.deep.equal([]);
+    });
+  }
+
+  it("withdraws a booking answered private, whatever its company", async function () {
+    const { stored } = await accept(
+      booking({ isBusiness: false, company: "Musterfirma GmbH" }),
+    );
+
+    expect(stored.status).to.equal("withdrawn");
+  });
 
   it("cannot be taken back: reinstate refuses a withdrawn booking", async function () {
     const { adapters, lifecycle } = lifecycleOver({ bookings: [booking()] });
