@@ -1359,6 +1359,14 @@
     "instanceOwner": 409,
     "expiredToken": 401
   },
+  "POST /api/:tenant/bookings/:id/accept-withdrawal": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200,
+    "expiredToken": 401
+  },
   "PUT /api/:tenant/bookings/:id/refund-state": {
     "anonymous": 401,
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",

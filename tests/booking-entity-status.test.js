@@ -251,6 +251,13 @@ describe("Booking entity: status and the derived flags", function () {
         ],
         [booking({ status: "rejected" }), BOOKING_STATUS_I18N.REJECTED],
         [booking({ status: "cancelled" }), BOOKING_STATUS_I18N.REJECTED],
+        [
+          booking({
+            status: "withdrawn",
+            cancellationRefund: { cancelledFrom: "confirmed" },
+          }),
+          BOOKING_STATUS_I18N.WITHDRAWN,
+        ],
         // A plain object in flags is read the way the entity reads it.
         [
           { isCommitted: true, isPayed: false, priceEur: 40 },

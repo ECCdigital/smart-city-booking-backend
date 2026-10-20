@@ -516,6 +516,14 @@ describe("Mail-Variable: withdrawalUrl", function () {
     );
   });
 
+  for (const status of ["rejected", "cancelled", "withdrawn"]) {
+    it(`is empty for a ${status} booking: nothing left to withdraw`, async function () {
+      expect(await renderFor({ company: "", status })).to.include(
+        "withdrawalUrl=[]",
+      );
+    });
+  }
+
   it("is empty without a creation time", async function () {
     expect(await renderFor({ company: "", timeCreated: undefined })).to.include(
       "withdrawalUrl=[]",

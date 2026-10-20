@@ -267,6 +267,11 @@ router.post(
   authorize("booking", "update"),
   BookingController.reinstateBooking,
 );
+router.post(
+  "/bookings/:id/accept-withdrawal",
+  authorize("booking", "acceptWithdrawal"),
+  BookingController.acceptWithdrawal,
+);
 router.put(
   "/bookings/:id/refund-state",
   authorize("booking", "update"),

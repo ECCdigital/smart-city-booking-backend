@@ -50,13 +50,14 @@ function outcome(status, transition, booking) {
 }
 
 describe("booking-state", function () {
-  it("names the five states and the seven transitions", function () {
+  it("names the six states and the eight transitions", function () {
     expect(STATUSES).to.deep.equal([
       "requested",
       "payment_due",
       "confirmed",
       "rejected",
       "cancelled",
+      "withdrawn",
     ]);
     expect(TRANSITIONS).to.deep.equal([
       "admit",
@@ -66,6 +67,7 @@ describe("booking-state", function () {
       "reinstate",
       "amend",
       "requestCancel",
+      "acceptWithdrawal",
     ]);
   });
 
@@ -80,6 +82,7 @@ describe("booking-state", function () {
         INVALID,
         "requested",
         "requested",
+        "withdrawn",
       ],
       payment_due: [
         "payment_due",
@@ -89,6 +92,7 @@ describe("booking-state", function () {
         INVALID,
         "payment_due",
         "payment_due",
+        "withdrawn",
       ],
       confirmed: [
         "confirmed",
@@ -98,6 +102,7 @@ describe("booking-state", function () {
         INVALID,
         "confirmed",
         "confirmed",
+        "withdrawn",
       ],
       rejected: [
         INVALID,
@@ -107,6 +112,7 @@ describe("booking-state", function () {
         "requested",
         "rejected",
         INVALID,
+        INVALID,
       ],
       cancelled: [
         INVALID,
@@ -115,6 +121,18 @@ describe("booking-state", function () {
         INVALID,
         "confirmed",
         "cancelled",
+        INVALID,
+        INVALID,
+      ],
+      // Final: only the content can still change.
+      withdrawn: [
+        INVALID,
+        INVALID,
+        INVALID,
+        INVALID,
+        INVALID,
+        "withdrawn",
+        INVALID,
         INVALID,
       ],
     };
@@ -241,6 +259,10 @@ describe("booking-state", function () {
       ["cancelled", 40, "payment_due", [true, false, true]],
       ["cancelled", 40, undefined, [true, false, true]],
       ["cancelled", 0, "confirmed", [true, true, true]],
+      ["withdrawn", 40, "requested", [false, false, true]],
+      ["withdrawn", 40, "payment_due", [true, false, true]],
+      ["withdrawn", 40, "confirmed", [true, true, true]],
+      ["withdrawn", 0, "requested", [false, true, true]],
     ];
 
     for (const [
@@ -315,8 +337,10 @@ describe("booking-state", function () {
       expect(statusFromFlags({ isCommitted: 1 }, "40")).to.equal("payment_due");
     });
 
-    it("round-trips every state through its flags", function () {
-      for (const status of STATUSES) {
+    it("round-trips every state but withdrawn through its flags", function () {
+      // The flags have no word for withdrawn: it reads back as the
+      // rejection or cancellation it releases like.
+      for (const status of STATUSES.filter((s) => s !== "withdrawn")) {
         for (const priceEur of [0, 40]) {
           // A free booking is never payment_due: confirm lands it on confirmed.
           if (status === "payment_due" && priceEur === 0) continue;
@@ -329,6 +353,12 @@ describe("booking-state", function () {
       expect(
         statusFromFlags(flagsFromStatus("cancelled", 40, "payment_due"), 40),
       ).to.equal("cancelled");
+      expect(
+        statusFromFlags(flagsFromStatus("withdrawn", 40, "confirmed"), 40),
+      ).to.equal("cancelled");
+      expect(
+        statusFromFlags(flagsFromStatus("withdrawn", 40, "requested"), 40),
+      ).to.equal("rejected");
     });
   });
 });

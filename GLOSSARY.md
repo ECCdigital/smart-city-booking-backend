@@ -218,11 +218,11 @@ _Avoid_: Aktiver Grant, offener Zugang, Live-Zugriff
 ### Buchungslebenszyklus
 
 **Buchungszustand**:
-Der eine gespeicherte Wert, der sagt, wo eine Buchung in ihrem Leben steht: _angefragt_ (noch nicht bestätigt), _Zahlung offen_ (bestätigt, Preis größer null, unbezahlt), _bestätigt_ (bestätigt und bezahlt, oder bestätigt und kostenlos), _abgelehnt_ (aus „angefragt" heraus storniert) oder _storniert_ (aus „Zahlung offen" oder „bestätigt" heraus storniert). „Bezahlt, aber nicht bestätigt" gibt es nicht. Die drei Flags bestätigt/bezahlt/storniert sind Ableitungen des Zustands, nie seine Quelle.
+Der eine gespeicherte Wert, der sagt, wo eine Buchung in ihrem Leben steht: _angefragt_ (noch nicht bestätigt), _Zahlung offen_ (bestätigt, Preis größer null, unbezahlt), _bestätigt_ (bestätigt und bezahlt, oder bestätigt und kostenlos), _abgelehnt_ (aus „angefragt" heraus storniert), _storniert_ (aus „Zahlung offen" oder „bestätigt" heraus storniert) oder _widerrufen_ (ein angenommener Widerruf einer Buchung, endgültig). „Bezahlt, aber nicht bestätigt" gibt es nicht. Die drei Flags bestätigt/bezahlt/storniert sind Ableitungen des Zustands, nie seine Quelle.
 _Avoid_: isCommitted/isPayed/isRejected (als Sprechbegriffe — das sind die abgeleiteten Flags), Status-Key (das ist die Frontend-Übersetzung), Buchungsstatus (unqualifiziert)
 
 **Lebenszyklus-Übergang**:
-Ein benannter Wechsel des Buchungszustands mit seinen Effekten: Aufnahme, Bestätigung, Zahlung, Storno, Wiederherstellung, Änderung und Stornoanfrage. Welcher Übergang aus welchem Zustand erlaubt ist, steht in einer Tabelle; alles andere ist ein Fehler, keine stille Annahme. Ein Übergang gilt immer einer Buchung; eine Gruppenbuchung durchläuft ihre Übergänge als eigener Lebenszyklus über den Übergängen ihrer Mitglieder.
+Ein benannter Wechsel des Buchungszustands mit seinen Effekten: Aufnahme, Bestätigung, Zahlung, Storno, Wiederherstellung, Änderung, Stornoanfrage und Annahme des Widerrufs. Welcher Übergang aus welchem Zustand erlaubt ist, steht in einer Tabelle; alles andere ist ein Fehler, keine stille Annahme. Ein Übergang gilt immer einer Buchung; eine Gruppenbuchung durchläuft ihre Übergänge als eigener Lebenszyklus über den Übergängen ihrer Mitglieder.
 _Avoid_: Aktion, Statuswechsel, Flag setzen, Übergang (unqualifiziert)
 
 **Effekt (eines Übergangs)**:
@@ -245,8 +245,12 @@ _Avoid_: Reject-Hook (das ist die Speicherform), Kündigung, Stornierung (das is
 Der Lebenszyklus-Übergang, der eine abgelehnte oder stornierte Buchung in den Zustand zurückholt, den sie vor dem Storno hatte, mit Preis und Positionen von damals; die Erstattung fällt weg, der Zugang wird neu gewährt. Der Zustand vor dem Storno wird beim Storno festgehalten.
 _Avoid_: Unreject, Reaktivierung, Rücknahme des Stornos (das ist die Handlung, nicht der Übergang)
 
+**Widerruf (einer Buchung)**:
+Ein Privatkunde (eine Buchung ohne Firma) widerruft seine Buchung innerhalb von 14 Tagen per Mail; die Verwaltung prüft, ob der Widerruf zulässig ist, und nimmt ihn mit dem Lebenszyklus-Übergang „Annahme des Widerrufs" an. Aus _angefragt_, _Zahlung offen_ oder _bestätigt_ wird die Buchung _widerrufen_, endgültig: keine Wiederherstellung. Ein Widerruf kostet nichts — eine offene Zahlung entfällt, eine geleistete wird voll erstattet (Erstattungsstand _offen_). Die Mail allein ändert an der Buchung nichts.
+_Avoid_: Widerruf (unqualifiziert — das ist der Widerruf eines Grants), Storno, Rücktritt, withdraw (als Übergangsname; der heißt acceptWithdrawal)
+
 **Erstattungsstand**:
-Der Vermerk an einer stornierten Buchung, ob das Geld schon zurückgezahlt wurde: _offen_ oder _erfolgt_. Entsteht beim Storno, und nur, wenn eine Erstattung fällig ist: die Buchung war bestätigt, die Zahlung ist eingegangen, und der Erstattungsbetrag liegt über null. Die Verwaltung setzt ihn von Hand auf _erfolgt_ und kann das zurücknehmen; die Plattform zahlt nichts aus und erfährt von keiner Auszahlung. Kein Buchungszustand und kein Lebenszyklus-Übergang: mit der Wiederherstellung fällt er weg, ein neues Storno beginnt wieder bei _offen_. Der Buchende sieht ihn nicht.
+Der Vermerk an einer stornierten oder widerrufenen Buchung, ob das Geld schon zurückgezahlt wurde: _offen_ oder _erfolgt_. Entsteht beim Storno, und nur, wenn eine Erstattung fällig ist: die Buchung war bestätigt, die Zahlung ist eingegangen, und der Erstattungsbetrag liegt über null. Die Verwaltung setzt ihn von Hand auf _erfolgt_ und kann das zurücknehmen; die Plattform zahlt nichts aus und erfährt von keiner Auszahlung. Kein Buchungszustand und kein Lebenszyklus-Übergang: mit der Wiederherstellung fällt er weg, ein neues Storno beginnt wieder bei _offen_. Der Buchende sieht ihn nicht.
 _Avoid_: Rückerstattungsstatus, Refund-Status, erstattet (als Buchungszustand)
 
 **Änderung (einer Buchung)**:

@@ -4,6 +4,7 @@ const { mediaReferenceSchema } = require("./mediaSchema");
 const {
   STATUSES,
   CANCELLED_FROM_STATUSES,
+  WITHDRAWN_FROM_STATUSES,
 } = require("../services/booking-lifecycle/booking-state");
 const {
   REFUND_STATE,
@@ -60,11 +61,14 @@ const cancellationAuditSchema = new Schema(
     },
     adminOverride: { type: Boolean, required: true },
     cancelledByUserId: { type: String, default: null },
-    // The state the booking was cancelled from; `reinstate` returns to it
-    // and the entity derives `isPayed` of a cancelled booking from it.
+    // The state the booking was cancelled or withdrawn from; `reinstate`
+    // returns a cancelled one to it and the entity derives `isPayed` of
+    // either from it. A withdrawal can also come from `requested`.
     cancelledFrom: {
       type: String,
-      enum: CANCELLED_FROM_STATUSES,
+      enum: [
+        ...new Set([...CANCELLED_FROM_STATUSES, ...WITHDRAWN_FROM_STATUSES]),
+      ],
       default: undefined,
     },
     originalDocumentRef: {

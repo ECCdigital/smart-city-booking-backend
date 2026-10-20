@@ -360,6 +360,43 @@
           The reinstatement aborted and the booking stays as it was; the body
           is the plain text `Could not reinstate booking`
 
+/api/{tenant}/bookings/{bookingId}/accept-withdrawal:
+  post:
+    tags:
+      - Bookings
+    summary: Accept the withdrawal of a booking
+    description: |
+      A private customer withdrew the booking by mail and the staff found the
+      withdrawal admissible (ECCdigital/tickets#611). Moves a `requested`,
+      `payment_due` or `confirmed` booking to `withdrawn`; no transition
+      leaves `withdrawn`. A withdrawal costs nothing: an outstanding payment
+      lapses, a paid amount is refunded in full - the refund audit records
+      100 % and, for a paid booking, the refund state `open`. The access is
+      revoked, a priced booking gets the cancellation document, and the
+      customer the mail confirming the withdrawal.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/BookingTenantParam"
+      - $ref: "#/components/parameters/BookingIdParam"
+    responses:
+      "200":
+        description: "Withdrawal accepted (`success: true`, `data: null`, `errors: []`)"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Missing booking management permission
+      "404":
+        description: "`booking_not_found`"
+      "409":
+        description: >-
+          `invalid_transition` - the booking is already rejected, cancelled
+          or withdrawn (params carry `bookingId`, `status`, `transition`)
+      "500":
+        description: >-
+          The acceptance aborted and the booking stays as it was; the body is
+          the plain text `Could not accept the withdrawal of the booking`
+
 /api/{tenant}/bookings/{bookingId}/refund-state:
   put:
     tags:
@@ -547,7 +584,8 @@ components:
           type: integer
         status:
           type: string
-          enum: [requested, payment_due, confirmed, rejected, cancelled]
+          enum:
+            [requested, payment_due, confirmed, rejected, cancelled, withdrawn]
         isCommitted:
           type: boolean
         isPayed:
@@ -569,7 +607,8 @@ components:
           type: boolean
         status:
           type: string
-          enum: [requested, payment_due, confirmed, rejected, cancelled]
+          enum:
+            [requested, payment_due, confirmed, rejected, cancelled, withdrawn]
         statusKey:
           type: string
         paymentProvider:

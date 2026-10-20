@@ -604,6 +604,36 @@ class BookingController {
   }
 
   /**
+   * The acceptance of a private customer's withdrawal:
+   * the lifecycle transition `acceptWithdrawal` by the administration, for
+   * good. Answer and errors as `reinstate`.
+   */
+  static async acceptWithdrawal(request, response) {
+    try {
+      const { tenant, id } = request.params;
+      const { user } = request;
+
+      logger.info(
+        `${tenant} -- accepting the withdrawal of booking ${id} by user ${user?.id}`,
+      );
+      await bookingLifecycle.acceptWithdrawal(tenant, id, {
+        trigger: TRIGGER.ADMIN,
+        cancelledByUserId: user?.id || null,
+      });
+      return response.status(200).send({
+        success: true,
+        data: null,
+        errors: [],
+      });
+    } catch (err) {
+      answerTransitionError(err, response, {
+        code: "booking_withdrawal_failed",
+        fallback: "Could not accept the withdrawal of the booking",
+      });
+    }
+  }
+
+  /**
    * Sets the refund state of a cancelled booking (glossary
    * "Erstattungsstand"): the body names `refundState`, `completed` once
    * the refund is paid out, `open` to take that back. Answers the booking;
