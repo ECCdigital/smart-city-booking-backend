@@ -32,6 +32,7 @@ const {
   CustomFieldService,
 } = require("../services/custom-field/custom-field-service");
 const Formatters = require("../utilities/formatters");
+const { withdrawalOffered } = require("../services/booking/booking-withdrawal");
 const {
   LIVE_STATUSES,
 } = require("../services/booking-lifecycle/booking-state");
@@ -91,23 +92,6 @@ function customerContactHtml(booking) {
   }
 
   return lines.join("<br />");
-}
-
-/** The statutory withdrawal period of a private customer, from the booking. */
-const WITHDRAWAL_PERIOD_MS = 14 * 24 * 60 * 60 * 1000;
-
-/**
- * Whether the notice offers the withdrawal: a private customer - a
- * booking without a company - within 14 days of the booking, and a tenant
- * address to write to. Whether the withdrawal is
- * admissible is for the tenant's staff to check, not for the platform.
- */
-function withdrawalOffered(tenant, booking, now = Date.now()) {
-  if (!tenant?.mail || !booking) return false;
-  if (String(booking.company ?? "").trim() !== "") return false;
-  const created = Number(booking.timeCreated);
-  if (!Number.isFinite(created) || created <= 0) return false;
-  return now - created <= WITHDRAWAL_PERIOD_MS;
 }
 
 /**
@@ -539,5 +523,4 @@ module.exports = {
   render,
   renderShellNotice,
   renderBookingDetails,
-  withdrawalOffered,
 };
