@@ -184,9 +184,11 @@ class BookingController {
       // The tenant snapshot and the event core data a customer's pages
       // render from (tenant supervision spec §5.2), whatever the level of
       // the tenant - the booking is the customer's contract with it.
-      const view = await withCustomerView(bookings, (booking) => ({
-        ...booking,
-      }));
+      const view = await withCustomerView(
+        bookings,
+        (booking) => ({ ...booking }),
+        { withWithdrawalUrl: true },
+      );
 
       logger.info(
         `${tenant} -- sending ${bookings.length} assigned bookings to user ${user?.id}`,
