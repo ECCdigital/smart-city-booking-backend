@@ -29,7 +29,12 @@ const {
  * draw (`incrementDocumentCounter`) alone: a whole-tenant write never
  * carries them, so a stale copy of the tenant cannot roll a counter back.
  */
-const DOCUMENT_COUNTERS = ["receiptCount", "invoiceCount", "cancellationCount"];
+const DOCUMENT_COUNTERS = [
+  "receiptCount",
+  "invoiceCount",
+  "cancellationCount",
+  "withdrawalCount",
+];
 
 /**
  * The supervision fields (glossary "Aufsichtsstufe"). They belong to the

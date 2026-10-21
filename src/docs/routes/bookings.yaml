@@ -373,8 +373,10 @@
       leaves `withdrawn`. A withdrawal costs nothing: an outstanding payment
       lapses, a paid amount is refunded in full - the refund audit records
       100 % and, for a paid booking, the refund state `open`. The access is
-      revoked, a priced booking gets the cancellation document, and the
-      customer the mail confirming the withdrawal.
+      revoked, a priced booking gets the withdrawal receipt (Widerrufbeleg,
+      attachment type `withdrawal`, number `WB-<year>-<counter>-<revision>`,
+      downloaded at `GET /api/{tenant}/bookings/{id}/withdrawal-receipt/{name}`),
+      and the customer the mail confirming the withdrawal with it.
     security:
       - bearerAuth: []
     parameters:

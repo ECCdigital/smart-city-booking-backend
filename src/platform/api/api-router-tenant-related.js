@@ -347,6 +347,11 @@ router.get(
   authorize("booking", "document"),
   BookingController.getCancellationReceipt,
 );
+router.get(
+  "/bookings/:id/withdrawal-receipt/:withdrawalReceiptId",
+  authorize("booking", "document"),
+  BookingController.getWithdrawalReceipt,
+);
 
 // USERS
 // =====

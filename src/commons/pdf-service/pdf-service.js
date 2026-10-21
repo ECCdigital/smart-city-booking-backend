@@ -209,6 +209,7 @@ const DEFAULT_TEMPLATES = {
   receipt: "default-receipt-template.temp.html",
   invoice: "default-invoice-template.temp.html",
   cancellation: "default-cancellation-receipt.temp.html",
+  withdrawal: "default-withdrawal-receipt.temp.html",
 };
 
 // Keep in sync with MAX_PDF_TEMPLATE_SIZE_BYTES in the vue app
@@ -667,6 +668,103 @@ class PdfService {
     );
 
     return await PdfService.convertToPdf(renderedHtml, filename);
+  }
+
+  /**
+   * The withdrawal receipt (glossary "Widerrufbeleg"): the confirmation of a
+   * private customer's withdrawal the staff accepted. A withdrawal costs
+   * nothing, so the positions are credited in full - refunded where the
+   * booking was paid, the invoiced amount lapsing otherwise - with no fee
+   * and no tier calculation. Rendered from the default template only; a
+   * tenant's cancellation template does not apply.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {string} withdrawalNumber The full document number
+   * @param {string|null} originalInvoiceNumber The invoice or receipt the
+   *   withdrawal annuls, `null` where the booking had none
+   * @param {{ alreadyPaid?: boolean, originalInvoiceDate?: number, refundCalculation?: Object }} [options]
+   * @returns {Promise<{ buffer: Buffer, name: string }>}
+   */
+  static async generateWithdrawalReceipt(
+    tenantId,
+    bookingId,
+    withdrawalNumber,
+    originalInvoiceNumber,
+    options = {},
+  ) {
+    const {
+      alreadyPaid = false,
+      originalInvoiceDate,
+      refundCalculation,
+    } = options;
+
+    const [tenant, booking, allBookables] = await Promise.all([
+      TenantManager.getTenant(tenantId, DOMAIN),
+      BookingManager.getBooking(bookingId, tenantId, DOMAIN),
+      BookableManager.getBookables(tenantId, DOMAIN),
+    ]);
+
+    const withdrawnAt = refundCalculation?.cancelledAt ?? Date.now();
+    const amountEur = refundCalculation?.refundAmountEur ?? booking.priceEur;
+    const documentOptions = {
+      negative: true,
+      scale: 1,
+      targetBruttoEur: amountEur,
+      targetVatEur: booking.vatIncludedEur,
+    };
+    const items = PdfService._buildItems(
+      booking,
+      allBookables,
+      documentOptions,
+    );
+    const coupon = PdfService._buildCoupon(booking, documentOptions);
+    const totals = PdfService._buildTableTotals(booking, documentOptions);
+
+    const bookingContext = PdfService._buildBookingContext(
+      booking,
+      allBookables,
+      { includePayment: false },
+    );
+
+    const mainContent = PdfService._renderBookingItemsTable(tenant, {
+      tableClass: "booked-items",
+      items,
+      coupon,
+      totals,
+      booking: bookingContext,
+    });
+
+    const data = {
+      title: "Widerrufbeleg",
+      withdrawalNumber,
+      hasOriginalDocument: Boolean(originalInvoiceNumber),
+      originalInvoiceNumber,
+      originalInvoiceDate: originalInvoiceDate
+        ? formatters.formatDate(originalInvoiceDate)
+        : formatters.formatDate(new Date(booking.timeCreated)),
+      withdrawalDate: formatters.formatDateTime(withdrawnAt),
+      alreadyPaid,
+      refundAmount: formatters.formatCurrency(amountEur),
+      invoiceAddress: PdfService._buildAddressHtml(booking),
+      mainContent,
+      location: tenant.location,
+      totalAmount: formatters.formatNegativeCurrency(amountEur),
+      bookingId: booking.id,
+      items,
+      coupon,
+      totals,
+    };
+
+    const template = PdfService._loadTemplate(
+      null,
+      DEFAULT_TEMPLATES.withdrawal,
+    );
+
+    return await PdfService.convertToPdf(
+      template(data),
+      `Widerrufbeleg-${withdrawalNumber}.pdf`,
+    );
   }
 
   static async generateAggregatedCancellationReceipt(

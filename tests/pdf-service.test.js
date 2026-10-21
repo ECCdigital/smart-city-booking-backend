@@ -92,6 +92,7 @@ describe("PdfService.validateTemplate", () => {
       "default-receipt-template.temp.html",
       "default-invoice-template.temp.html",
       "default-cancellation-receipt.temp.html",
+      "default-withdrawal-receipt.temp.html",
     ]) {
       const errors = PdfService.validateTemplate(loadDefaultTemplate(name));
       assert.deepStrictEqual(errors, [], `${name}: ${errors.join("; ")}`);
@@ -272,6 +273,52 @@ describe("PdfService document generation (rendering only)", () => {
     assert.ok(html.includes("Stornorechnung"));
     assert.ok(html.includes("Absage"));
     assert.ok(html.includes("-119,00"));
+  });
+
+  it("renders a withdrawal receipt: no costs, a paid amount refunded in full", async () => {
+    sinon.stub(TenantManager, "getTenant").resolves({
+      id: "tenant-1",
+      cancellationTemplate: "<html>tenant cancellation</html>",
+      location: "Musterstadt",
+    });
+    sinon.stub(BookingManager, "getBooking").resolves(makeBooking());
+    sinon.stub(BookableManager, "getBookables").resolves(BOOKABLES);
+
+    const result = await PdfService.generateWithdrawalReceipt(
+      "tenant-1",
+      "booking-1",
+      "WB-2026-0001-1",
+      "2026-0007-1",
+      { alreadyPaid: true },
+    );
+
+    const html = result.buffer.toString();
+    assert.strictEqual(result.name, "Widerrufbeleg-WB-2026-0001-1.pdf");
+    assert.ok(html.includes("Widerrufbeleg"));
+    assert.ok(html.includes("keine Kosten"));
+    assert.ok(html.includes("vollständig erstattet"));
+    assert.ok(html.includes("2026-0007-1"));
+    assert.ok(html.includes("-119,00"));
+    assert.ok(!html.includes("tenant cancellation"));
+    assert.ok(!html.includes("Stornorechnung"));
+  });
+
+  it("renders a withdrawal receipt without an invoice: the invoiced amount lapses", async () => {
+    sinon.stub(TenantManager, "getTenant").resolves({ id: "tenant-1" });
+    sinon.stub(BookingManager, "getBooking").resolves(makeBooking());
+    sinon.stub(BookableManager, "getBookables").resolves(BOOKABLES);
+
+    const result = await PdfService.generateWithdrawalReceipt(
+      "tenant-1",
+      "booking-1",
+      "WB-2026-0002-1",
+      null,
+    );
+
+    const html = result.buffer.toString();
+    assert.ok(html.includes("Der eingetragene Rechnungsbetrag"));
+    assert.ok(!html.includes("Ursprüngliche Rechnungsnummer"));
+    assert.ok(!html.includes("vollständig erstattet"));
   });
 
   it("renders a partial cancellation with scaled amounts and audit details", async () => {

@@ -80,6 +80,7 @@ const AccessService = require("../../src/commons/services/access/access-service"
 const AccessLogService = require("../../src/commons/services/access/access-log-service");
 const ReceiptService = require("../../src/commons/services/payment/receipt-service");
 const CancellationService = require("../../src/commons/services/payment/cancellation-service");
+const WithdrawalService = require("../../src/commons/services/payment/withdrawal-service");
 const InvoiceService = require("../../src/commons/services/payment/invoice-service");
 const MediaService = require("../../src/commons/services/media/media-service");
 const IdGenerator = require("../../src/commons/utilities/id-generator");
@@ -484,7 +485,7 @@ async function installHarness({
   const effects = [];
   /** Effect names that throw when called, e.g. "access.provision". */
   const failing = new Set();
-  const counters = { receipt: 0, cancellation: 0, invoice: 0 };
+  const counters = { receipt: 0, cancellation: 0, invoice: 0, withdrawal: 0 };
   const catalogue = { ...defaultBookables(), ...(bookables || {}) };
   const tenantRecord = tenant(tenantOverrides);
   const tenantBRecord = tenant({
@@ -947,7 +948,12 @@ async function installHarness({
 
   const pdf = (name) => ({ name, buffer: Buffer.from(`%PDF-${name}`) });
   /** The number draw: `RE-1`, `RG-2`, `ST-1`, ... per type. */
-  const PREFIX = { receipt: "RE", invoice: "RG", cancellation: "ST" };
+  const PREFIX = {
+    receipt: "RE",
+    invoice: "RG",
+    cancellation: "ST",
+    withdrawal: "WB",
+  };
   sinon
     .stub(IdGenerator, "next")
     .callsFake(
@@ -972,6 +978,15 @@ async function installHarness({
     };
   sinon.stub(ReceiptService, "render").callsFake(renderer("Receipt"));
   sinon.stub(InvoiceService, "render").callsFake(renderer("Invoice"));
+  sinon.stub(WithdrawalService, "render").callsFake(async (input) => {
+    const rendered = await renderer("Withdrawal")(input);
+    const withdrawnAt = input.options?.refundCalculation?.cancelledAt;
+    return {
+      ...rendered,
+      attachmentFields:
+        withdrawnAt !== undefined ? { timeCreated: withdrawnAt } : {},
+    };
+  });
   sinon.stub(CancellationService, "render").callsFake(async (input) => {
     const rendered = await renderer("Cancellation")(input);
     const { options = {} } = input;

@@ -760,8 +760,9 @@ function createBookingLifecycle(adapters) {
    * what is still to pay lapses with `payment_due`, what was paid is
    * refunded in full - the refund audit records 100 % and the state left,
    * and the open refund state where the booking was paid (glossary
-   * "Erstattungsstand"). Then the access is revoked, the cancellation
-   * document issued for a priced booking, the workflow told as of a
+   * "Erstattungsstand"). Then the access is revoked, the withdrawal
+   * receipt (glossary "Widerrufbeleg") issued for a priced booking, the
+   * workflow told as of a
    * cancellation and the customer sent the confirmation of the withdrawal.
    * Only a private booking has a withdrawal (glossary "Geschäftliche
    * Buchung"): a business one is `ForbiddenError
@@ -823,7 +824,7 @@ function createBookingLifecycle(adapters) {
           const issued = await documents.issue({
             tenantId,
             bookingIds: [bookingId],
-            type: "cancellation",
+            type: "withdrawal",
             bookings: [booking],
             options: {
               alreadyPaid: from === STATUS.CONFIRMED,

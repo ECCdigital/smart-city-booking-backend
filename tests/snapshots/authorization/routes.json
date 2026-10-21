@@ -1487,6 +1487,14 @@
     "instanceOwner": 200,
     "expiredToken": 401
   },
+  "GET /api/:tenant/bookings/:id/withdrawal-receipt/:withdrawalReceiptId": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200,
+    "expiredToken": 401
+  },
   "GET /api/:tenant/users": {
     "anonymous": 401,
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",

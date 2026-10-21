@@ -70,6 +70,10 @@ _Avoid_: protected (das ist der Alt-Pfad im Storage), accessLevel (Alt-Feldname)
 Ein Dokument-Medium mit Verknüpfung zu einer oder mehreren Buchungen — allein diese Verknüpfung zeichnet es aus, es gibt keine eigene Dateiart. Ein aggregierter Beleg ist ein einziges Medium, das alle zugehörigen Buchungen verknüpft — nie eine Kopie je Buchung. Erscheint nicht im Mediathek-Picker; lesbar, wer mindestens eine der verknüpften Buchungen sehen darf (Berechtigte wie Eigentümer). Verliert eine gelöschte Buchung als Verknüpfung und verschwindet mit der letzten — ein Buchungsdokument ohne Buchung gibt es nicht.
 _Avoid_: Rechnung (als Oberbegriff — Rechnungen sind eine Sorte Buchungsdokument), Invoice-File, Sammelbeleg-Kopie (aggregierte Belege sind ein Medium, keine Kopien)
 
+**Widerrufbeleg**:
+Das Buchungsdokument zur Annahme des Widerrufs (einer Buchung): bestätigt den Widerruf, nennt keine Kosten und schreibt die Positionen voll gut — erstattet, wo bezahlt war, sonst entfällt der Rechnungsbetrag. Eigener Nummernkreis (`WB-…`), eigene Vorlage; ersetzt beim Widerruf die Stornorechnung.
+_Avoid_: Stornorechnung, Stornobeleg (das sind die Dokumente des Stornos), Widerrufsbeleg
+
 **Instanz-Medium**:
 Ein Medium ohne Tenant-Zuordnung — instanzweite Inhalte wie Branding und Rechts-Dokumente. Gleiches Datenmodell, keine eigene Entität; _intern_ bedeutet hier „jeder angemeldete Nutzer der Instanz" (es gibt keinen Tenant, dessen Mitgliedschaft zählen könnte). Strikt von Tenant-Kontexten getrennt: Instanz-Medien sind nur in Instanz-Kontexten referenzierbar und erscheinen nie in Tenant-Pickern — wer ein Instanz-Bild im Tenant nutzen will, lädt es dort neu hoch. Verwaltet allein vom Instance-Owner.
 _Avoid_: globale Datei, Instanz-Datei (das meint den Alt-Bestand der tenant-losen File-Endpoints)

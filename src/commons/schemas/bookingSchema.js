@@ -109,6 +109,7 @@ const attachmentSchemaDefinition = {
   invoiceId: { type: String },
   receiptId: { type: String },
   cancellationId: { type: String },
+  withdrawalId: { type: String },
   revision: { type: Number },
   timeCreated: { type: Double },
   mailAttach: { type: Boolean },

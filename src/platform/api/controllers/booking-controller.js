@@ -28,6 +28,7 @@ const BookingCheckout = require("../../../commons/services/checkout/booking-chec
 const {
   bookingLifecycle,
   bookingDeletion,
+  STATUS,
   TRANSITION,
   TRIGGER,
 } = require("../../../commons/services/booking-lifecycle");
@@ -45,6 +46,7 @@ const {
   resolveCheckoutId,
 } = require("../../../commons/utilities/checkout-utils");
 const CancellationReceiptService = require("../../../commons/services/payment/cancellation-service");
+const WithdrawalService = require("../../../commons/services/payment/withdrawal-service");
 const mailService = require("../../../commons/mail-service");
 const {
   withCustomerView,
@@ -1059,9 +1061,10 @@ class BookingController {
 
   /**
    * Reprints the cancellation document of a cancelled booking as a further
-   * revision, from the refund audit the cancellation left behind. Same
-   * right as the receipt reprint; a booking without a cancellation answers
-   * 409 `not_cancelled`. Nothing is mailed.
+   * revision, from the refund audit the cancellation left behind - for a
+   * withdrawn booking its withdrawal receipt (glossary "Widerrufbeleg")
+   * instead. Same right as the receipt reprint; a booking without a
+   * cancellation answers 409 `not_cancelled`. Nothing is mailed.
    */
   static async createCancellationReceipt(request, response) {
     try {
@@ -1082,15 +1085,22 @@ class BookingController {
         return response.status(error.statusCode).json(error.toJSON());
       }
 
+      const withdrawn = booking.status === STATUS.WITHDRAWN;
       await issueDocument({
         tenantId,
         bookingIds: [booking.id],
-        type: "cancellation",
-        options: {
-          alreadyPaid: booking.isPayed,
-          cancellationReason: booking.rejectionReason,
-          refundCalculation: booking.cancellationRefund,
-        },
+        type: withdrawn ? "withdrawal" : "cancellation",
+        options: withdrawn
+          ? {
+              alreadyPaid:
+                booking.cancellationRefund.cancelledFrom === STATUS.CONFIRMED,
+              refundCalculation: booking.cancellationRefund,
+            }
+          : {
+              alreadyPaid: booking.isPayed,
+              cancellationReason: booking.rejectionReason,
+              refundCalculation: booking.cancellationRefund,
+            },
       });
 
       const updatedBooking = await BookingManager.getBooking(
@@ -1267,6 +1277,50 @@ class BookingController {
     } catch (err) {
       logger.error(err);
       return response.status(500).send("Could not get cancellation receipt");
+    }
+  }
+  /** The withdrawal receipt (glossary "Widerrufbeleg") of a booking, by file name. */
+  static async getWithdrawalReceipt(request, response) {
+    const {
+      params: { tenant, id: bookingId, withdrawalReceiptId },
+      user,
+    } = request;
+
+    try {
+      if (!tenant || !bookingId || !withdrawalReceiptId) {
+        logger.warn(`${tenant} -- Missing required parameters.`);
+        return response.status(400).send("Missing required parameters.");
+      }
+
+      // The booking within the reach of the request; none there is a 404.
+      const booking = await BookingManager.getBooking(
+        bookingId,
+        tenant,
+        scopeOf(request),
+      );
+      if (!booking) {
+        return BookingController._notFound(response, bookingId);
+      }
+
+      const withdrawalReceipt = await WithdrawalService.getWithdrawal(
+        tenant,
+        withdrawalReceiptId,
+        bookingId,
+      );
+
+      logger.info(
+        `${tenant} -- sending withdrawal receipt ${withdrawalReceiptId} to user ${user?.id}`,
+      );
+      response.setHeader("Content-Type", "application/pdf");
+      response.setHeader(
+        "Content-Disposition",
+        `attachment; filename=${withdrawalReceiptId}`,
+      );
+
+      return response.status(200).send(withdrawalReceipt);
+    } catch (err) {
+      logger.error(err);
+      return response.status(500).send("Could not get withdrawal receipt");
     }
   }
 

@@ -68,7 +68,7 @@ async function accept(stored) {
 }
 
 describe("booking lifecycle: acceptWithdrawal", function () {
-  it("withdraws a paid booking: state write with a full refund, revoke, the cancellation document, workflow event, the withdrawal mail with the document", async function () {
+  it("withdraws a paid booking: state write with a full refund, revoke, the withdrawal receipt, workflow event, the withdrawal mail with the receipt", async function () {
     const { adapters, outcome, stored } = await accept(booking());
 
     expect(effectTable(outcome)).to.deep.equal([
@@ -106,7 +106,7 @@ describe("booking lifecycle: acceptWithdrawal", function () {
       { op: "revoke", args: [TENANT, "B-1"] },
     ]);
     const [issue] = adapters.documents.calls;
-    expect(issue.args[0]).to.include({ type: "cancellation" });
+    expect(issue.args[0]).to.include({ type: "withdrawal" });
     expect(issue.args[0].options).to.include({ alreadyPaid: true });
     expect(adapters.workflow.calls).to.deep.equal([
       { op: "emit", args: [TENANT, "B-1", "onReject"] },

@@ -8,6 +8,8 @@
       - Bookings
     summary: Reprint the cancellation document of a booking
     description: |
+      A withdrawn booking gets its withdrawal receipt (Widerrufbeleg)
+      instead, under its own number.
       Issues the cancellation document of a cancelled booking anew as a
       further revision under the same cancellation number, from the refund
       audit the cancellation left behind. Same right as the receipt reprint
@@ -91,7 +93,7 @@ components:
       properties:
         type:
           type: string
-          enum: [receipt, invoice, cancellation]
+          enum: [receipt, invoice, cancellation, withdrawal]
         name:
           type: string
           description: File name, the key of the download routes
@@ -107,6 +109,9 @@ components:
         cancellationId:
           type: string
           description: Document number (cancellations)
+        withdrawalId:
+          type: string
+          description: Document number (withdrawal receipts, Widerrufbeleg)
         revision:
           type: integer
           minimum: 1
