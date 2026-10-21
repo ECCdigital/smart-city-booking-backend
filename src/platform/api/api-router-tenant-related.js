@@ -267,6 +267,11 @@ router.post(
   authorize("booking", "update"),
   BookingController.reinstateBooking,
 );
+router.post(
+  "/bookings/:id/accept-withdrawal",
+  authorize("booking", "acceptWithdrawal"),
+  BookingController.acceptWithdrawal,
+);
 router.put(
   "/bookings/:id/refund-state",
   authorize("booking", "update"),
@@ -341,6 +346,11 @@ router.get(
   "/bookings/:id/cancellation-receipt/:cancellationReceiptId",
   authorize("booking", "document"),
   BookingController.getCancellationReceipt,
+);
+router.get(
+  "/bookings/:id/withdrawal-receipt/:withdrawalReceiptId",
+  authorize("booking", "document"),
+  BookingController.getWithdrawalReceipt,
 );
 
 // USERS

@@ -139,6 +139,7 @@ const BookingManager = require("../src/commons/data-managers/booking-manager");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const MediaService = require("../src/commons/services/media/media-service");
 const ReceiptService = require("../src/commons/services/payment/receipt-service");
+const WithdrawalService = require("../src/commons/services/payment/withdrawal-service");
 const {
   issue,
 } = require("../src/commons/services/documents/document-issuance");
@@ -235,6 +236,30 @@ describe("issue: revisions, aggregation and gaps", function () {
   afterEach(function () {
     sinon.restore();
   });
+
+  for (const [prefix, expected] of [
+    ["WR", `WR-${YEAR}-0001-1`],
+    ["", `WB-${YEAR}-0001-1`],
+  ]) {
+    it(`numbers a withdrawal receipt with the tenant's prefix, WB without one (${prefix || "none"})`, async function () {
+      const w = world({
+        bookings: [booking("B1")],
+        tenant: { withdrawalNumberPrefix: prefix },
+      });
+      const render = sinon
+        .stub(WithdrawalService, "render")
+        .resolves({ name: "w.pdf", buffer: Buffer.from("%PDF") });
+
+      await issue({ tenantId: TENANT, bookingIds: ["B1"], type: "withdrawal" });
+
+      assert.deepStrictEqual(w.draw.firstCall.args, [TENANT, 4, "withdrawal"]);
+      assert.strictEqual(render.firstCall.args[0].number, expected);
+      assert.strictEqual(w.pushed[0].attachment.withdrawalId, `${YEAR}-0001`);
+      assert.deepStrictEqual(w.createBookingDocument.firstCall.args[0].tags, [
+        "withdrawal",
+      ]);
+    });
+  }
 
   it("issues the second document of a type under the same number as the next revision", async function () {
     const w = world({

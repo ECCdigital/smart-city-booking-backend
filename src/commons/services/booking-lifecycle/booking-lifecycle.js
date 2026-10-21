@@ -41,6 +41,7 @@ const {
   sanitizeBankDetails,
 } = require("../payment/cancellation-refund-service");
 const { BOOKING_HOOK_TYPES } = require("../../entities/booking/bookingHook");
+const { isPrivateBooking } = require("../checkout/business-booking");
 const { encryptBankDetails } = require("../../utilities/bank-details");
 const { NotFoundError, ForbiddenError } = require("../../../errors/BaseError");
 
@@ -63,6 +64,9 @@ const REFUND_ORIGIN = Object.freeze({
   [TRIGGER.WORKFLOW]: CANCELLATION_ORIGINS.SYSTEM,
   [TRIGGER.SYSTEM]: CANCELLATION_ORIGINS.SYSTEM,
 });
+
+/** A withdrawal costs nothing: what was paid is refunded in full. */
+const FULL_REFUND_PERCENTAGE = 100;
 
 function isPriced(booking) {
   return (Number(booking.priceEur) || 0) > 0;
@@ -748,7 +752,111 @@ function createBookingLifecycle(adapters) {
     ]);
   }
 
-  return { admit, confirm, pay, cancel, requestCancel, reinstate, amend };
+  /**
+   * The acceptance of a withdrawal: a private
+   * customer withdrew the booking by mail, the tenant's staff found it
+   * admissible. `requested | payment_due | confirmed → withdrawn`, for
+   * good - no transition leaves `withdrawn`. A withdrawal costs nothing:
+   * what is still to pay lapses with `payment_due`, what was paid is
+   * refunded in full - the refund audit records 100 % and the state left,
+   * and the open refund state where the booking was paid (glossary
+   * "Erstattungsstand"). Then the access is revoked, the withdrawal
+   * receipt (glossary "Widerrufbeleg") issued for a priced booking, the
+   * workflow told as of a
+   * cancellation and the customer sent the confirmation of the withdrawal.
+   * Only a private booking has a withdrawal (glossary "Geschäftliche
+   * Buchung"): a business one is `ForbiddenError
+   * booking_withdrawal_not_private`, in front of the state guard.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {{ trigger: string, cancelledByUserId?: string|null }} options
+   * @returns {Promise<Object>} The outcome
+   */
+  async function acceptWithdrawal(
+    tenantId,
+    bookingId,
+    { trigger, cancelledByUserId = null } = {},
+  ) {
+    const transition = TRANSITION.ACCEPT_WITHDRAWAL;
+    assertTrigger(transition, trigger);
+
+    const [booking, tenant] = await Promise.all([
+      load(tenantId, bookingId),
+      loadTenant(tenantId),
+    ]);
+    if (!isPrivateBooking(booking)) {
+      throw new ForbiddenError("booking_withdrawal_not_private", {
+        bookingId,
+      });
+    }
+    const from = booking.status;
+    booking.status = nextState(from, transition, booking);
+
+    const refund = CancellationRefundService.calculate({
+      tenant,
+      booking,
+      cancelledAt: clock(),
+      origin: REFUND_ORIGIN[trigger],
+      refundPercentage: FULL_REFUND_PERCENTAGE,
+      cancelledByUserId,
+    });
+    booking.cancellationRefund = CancellationRefundService.toBookingAudit(
+      refund,
+      { status: booking.status, cancelledFrom: from },
+    );
+    const files = [];
+
+    const notice = noticeOf(tenantId, bookingId);
+
+    return runPipeline({ transition, tenantId, bookingId, booking, store }, [
+      step(PHASE.PERSIST, "store", "save", () =>
+        store.save(booking, { expectStatus: from, transition }),
+      ),
+      step(PHASE.PROVISION, "access", "revoke", () =>
+        access.revoke(tenantId, bookingId),
+      ),
+      step(
+        PHASE.DOCUMENT,
+        "documents",
+        "issue",
+        async () => {
+          const issued = await documents.issue({
+            tenantId,
+            bookingIds: [bookingId],
+            type: "withdrawal",
+            bookings: [booking],
+            options: {
+              alreadyPaid: from === STATUS.CONFIRMED,
+              refundCalculation: refund,
+            },
+          });
+          files.push(issued.file);
+          return issued;
+        },
+        { when: () => isPriced(booking) },
+      ),
+      step(
+        PHASE.NOTIFY,
+        "workflow",
+        "emit",
+        () => workflow.emit(tenantId, bookingId, WORKFLOW_EVENT.REJECT),
+        { when: () => trigger !== TRIGGER.WORKFLOW },
+      ),
+      notice("BOOKING_WITHDRAWAL", { attachments: files }),
+    ]);
+  }
+
+  return {
+    admit,
+    confirm,
+    pay,
+    cancel,
+    requestCancel,
+    reinstate,
+    amend,
+    acceptWithdrawal,
+  };
 }
 
 /** The lifecycle over the production adapters. */

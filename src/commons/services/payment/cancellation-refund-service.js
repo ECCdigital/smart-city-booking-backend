@@ -105,7 +105,7 @@ class CancellationRefundService {
    * The refund audit a booking carries from its cancellation on: the
    * calculation, the state it was cancelled from where it is cancelled
    * (glossary "Wiederherstellung" returns to it; a rejected request has
-   * none), and the open refund state where a refund is due.
+   * none) or withdrawn, and the open refund state where a refund is due.
    *
    * @param {Object} calculation What `calculate` answered
    * @param {{ status: string, cancelledFrom: string }} transition The state
@@ -115,7 +115,9 @@ class CancellationRefundService {
   static toBookingAudit(calculation, { status, cancelledFrom }) {
     return {
       ...calculation,
-      ...(status === STATUS.CANCELLED && { cancelledFrom }),
+      ...((status === STATUS.CANCELLED || status === STATUS.WITHDRAWN) && {
+        cancelledFrom,
+      }),
       ...(this.isRefundDue(calculation, cancelledFrom) && {
         refundState: REFUND_STATE.OPEN,
       }),
