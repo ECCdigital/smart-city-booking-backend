@@ -303,6 +303,27 @@ describe("PdfService document generation (rendering only)", () => {
     assert.ok(!html.includes("Stornorechnung"));
   });
 
+  it("renders a withdrawal receipt from the tenant's withdrawal template", async () => {
+    sinon.stub(TenantManager, "getTenant").resolves({
+      id: "tenant-1",
+      withdrawalTemplate:
+        "<html><body>Eigener Widerruf {{withdrawalNumber}}</body></html>",
+    });
+    sinon.stub(BookingManager, "getBooking").resolves(makeBooking());
+    sinon.stub(BookableManager, "getBookables").resolves(BOOKABLES);
+
+    const result = await PdfService.generateWithdrawalReceipt(
+      "tenant-1",
+      "booking-1",
+      "WR-2026-0001-1",
+      null,
+    );
+
+    assert.ok(
+      result.buffer.toString().includes("Eigener Widerruf WR-2026-0001-1"),
+    );
+  });
+
   it("renders a withdrawal receipt without an invoice: the invoiced amount lapses", async () => {
     sinon.stub(TenantManager, "getTenant").resolves({ id: "tenant-1" });
     sinon.stub(BookingManager, "getBooking").resolves(makeBooking());
@@ -555,9 +576,10 @@ describe("PdfService.generatePreview", () => {
       receiptTemplate: "",
       invoiceTemplate: "",
       cancellationTemplate: "",
+      withdrawalTemplate: "",
     });
 
-    for (const type of ["receipt", "invoice", "cancellation"]) {
+    for (const type of ["receipt", "invoice", "cancellation", "withdrawal"]) {
       const result = await PdfService.generatePreview("tenant-1", type, null);
       const html = result.buffer.toString();
       assert.ok(html.includes("Position 30"), `${type} preview has items`);

@@ -675,8 +675,9 @@ class PdfService {
    * private customer's withdrawal the staff accepted. A withdrawal costs
    * nothing, so the positions are credited in full - refunded where the
    * booking was paid, the invoiced amount lapsing otherwise - with no fee
-   * and no tier calculation. Rendered from the default template only; a
-   * tenant's cancellation template does not apply.
+   * and no tier calculation. Rendered from the tenant's withdrawal template
+   * where it has one, the default otherwise; its cancellation template does
+   * not apply.
    *
    * @param {string} tenantId
    * @param {string} bookingId
@@ -757,7 +758,7 @@ class PdfService {
     };
 
     const template = PdfService._loadTemplate(
-      null,
+      tenant.withdrawalTemplate,
       DEFAULT_TEMPLATES.withdrawal,
     );
 
@@ -901,6 +902,7 @@ class PdfService {
       receipt: tenant.receiptTemplate,
       invoice: tenant.invoiceTemplate,
       cancellation: tenant.cancellationTemplate,
+      withdrawal: tenant.withdrawalTemplate,
     };
 
     const template = PdfService._loadTemplate(

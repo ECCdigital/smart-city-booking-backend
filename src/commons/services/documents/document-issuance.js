@@ -35,7 +35,7 @@ const NUMBER_WIDTH = 4;
  * The number formats are the ones the documents have always carried: the
  * receipt always joins the prefix with a dash, invoice and cancellation only
  * where there is one. The withdrawal receipt (glossary "Widerrufbeleg")
- * carries the fixed prefix `WB`.
+ * carries the tenant's prefix, `WB` where it has none.
  */
 const DOCUMENT_TYPES = Object.freeze({
   receipt: {
@@ -64,7 +64,10 @@ const DOCUMENT_TYPES = Object.freeze({
   withdrawal: {
     idField: "withdrawalId",
     media: BOOKING_DOCUMENT.WITHDRAWAL,
-    number: (tenant, id, revision) => `WB-${id}-${revision}`,
+    number: (tenant, id, revision) => {
+      const prefix = (tenant.withdrawalNumberPrefix || "").trim() || "WB";
+      return `${prefix}-${id}-${revision}`;
+    },
     render: (input) => WithdrawalService.render(input),
   },
 });

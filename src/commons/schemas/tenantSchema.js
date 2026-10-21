@@ -81,6 +81,8 @@ const tenantSchemaDefinition = {
   cancellationTemplate: { type: String, default: "" },
   cancellationNumberPrefix: { type: String, default: "" },
   withdrawalCount: { type: Object, default: {} },
+  withdrawalTemplate: { type: String, default: "" },
+  withdrawalNumberPrefix: { type: String, default: "" },
   cancellationRefundTiers: {
     type: [cancellationRefundTierSchema],
     default: [],
