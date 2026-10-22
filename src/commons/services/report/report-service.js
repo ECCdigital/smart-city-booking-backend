@@ -10,6 +10,7 @@ const { NOTIFICATION_TYPES } = require("../supervision/supervision-constants");
 const { DOMAIN } = require("../authorization/reach");
 const { REPORT_STATUS } = require("../../schemas/reportSchema");
 const { normalizeUserId } = require("../../utilities/user-id-utils");
+const { parseEmails } = require("../../utilities/mail-utils");
 const Formatters = require("../../utilities/formatters");
 const {
   BadRequestError,
@@ -20,11 +21,24 @@ const {
 
 // Required on use: the suspension settles reports through this service.
 const SuspensionService = () => require("../user/suspension-service");
+// Required on use: a blacklist entry settles reports through this service.
+const BlacklistService = () => require("../blacklist/blacklist-service");
 
-/** The outcomes the instance owner settles open reports with. */
+/**
+ * The outcomes the instance owner settles open reports with: a user with
+ * a suspension, an address with a blacklist entry (ECCdigital/tickets#632),
+ * either with a rejection.
+ */
 const DECISIONS = Object.freeze({
   SUSPEND: "suspend",
+  BLACKLIST: "blacklist",
   REJECT: "reject",
+});
+
+/** The target of a report as stored: a user or an address, never both. */
+const targetKeyOf = ({ userId = null, address = null }) => ({
+  targetUserId: userId,
+  targetAddress: address,
 });
 
 /** A reason as stored: trimmed, required, with the error code to throw. */
@@ -49,11 +63,13 @@ async function tenantNamesOf(tenantIds) {
 /**
  * The reports (glossary „Meldung (eines Users oder einer Adresse)“,
  * ECCdigital/tickets#630): a tenant reports a member or the booker of one
- * of its bookings to the instance; the instance owner settles every open
- * report about the user at once, with a suspension or a rejection with a
- * reason. The reported user learns nothing; the instance owners learn of
- * a new report and the tenant owners of each reporting tenant of the
- * outcome, both over the supervision outbox.
+ * of its bookings to the instance, or an address from `mail` of one of its
+ * bookings (ECCdigital/tickets#632); the instance owner settles every open
+ * report about the user or the address at once, with a suspension or a
+ * blacklist entry, or a rejection with a reason. The reported user or
+ * guest learns nothing; the instance owners learn of a new report and the
+ * tenant owners of each reporting tenant of the outcome, both over the
+ * supervision outbox.
  */
 class ReportService {
   /**
@@ -114,11 +130,11 @@ class ReportService {
       throw new ConflictError("report_target_already_suspended");
     }
 
-    const result = await ReportService._store(tenantId, target, {
-      reason: trimmedReason,
-      bookingId,
-      by,
-    });
+    const result = await ReportService._store(
+      tenantId,
+      { userId: target.id, name: nameOf(target) },
+      { reason: trimmedReason, bookingId, by },
+    );
     // Who may report the target may end its membership: the same right,
     // the same protection of the tenant owners.
     if (endMembership && membership) {
@@ -128,14 +144,102 @@ class ReportService {
   }
 
   /**
-   * Stores a report about the target, or adds it to the open one of the
-   * tenant, and tells the instance owners of a new one.
+   * Reports addresses from `mail` of a booking of the tenant to the
+   * instance (ECCdigital/tickets#632): each address picked becomes a
+   * report of its own with the booking and the reason, or is added to the
+   * open one of the tenant. An address an entry of the blacklist hits
+   * already becomes none and is answered in `blacklisted`; where that is
+   * every address picked, nothing is reported (409). Free addresses
+   * without a booking and the addresses of accounts cannot be reported,
+   * and the guest learns nothing.
+   *
+   * @param {Object} params
+   * @param {string} params.tenantId The reporting tenant
+   * @param {string} params.bookingId The booking reported from
+   * @param {*} params.addresses The addresses picked, of its `mail`
+   * @param {*} params.reason Required
+   * @param {string} params.by Who reports
+   * @returns {Promise<{reports: Object[], created: boolean, blacklisted: string[]}>}
+   */
+  static async reportAddresses({ tenantId, bookingId, addresses, reason, by }) {
+    const trimmedReason = requiredText(reason, "report_reason_required");
+    if (!bookingId) throw new BadRequestError("report_booking_required");
+    const booking = await BookingManager.getBooking(
+      bookingId,
+      tenantId,
+      DOMAIN,
+    );
+    if (!booking) {
+      throw new NotFoundError("booking_not_found", { bookingId });
+    }
+    const picked = [
+      ...new Set(
+        (Array.isArray(addresses) ? addresses : [])
+          .map(normalizeUserId)
+          .filter(Boolean),
+      ),
+    ];
+    if (picked.length === 0) {
+      throw new BadRequestError("report_target_required");
+    }
+    const ofBooking = parseEmails(booking.mail);
+    const foreign = picked.filter((address) => !ofBooking.includes(address));
+    if (foreign.length > 0) {
+      throw new ForbiddenError("report_address_not_of_booking", {
+        addresses: foreign,
+      });
+    }
+    // The address of an account is a user, reported as such: with the
+    // protection of tenant and instance owners and of a suspension.
+    const ofAccounts = (await UserManager.getUsersById(picked)).map(
+      (user) => user.id,
+    );
+    if (ofAccounts.length > 0) {
+      throw new BadRequestError("report_address_of_account", {
+        addresses: ofAccounts,
+      });
+    }
+
+    const blacklisted = [];
+    const toReport = [];
+    for (const address of picked) {
+      if (await BlacklistService().match(address)) blacklisted.push(address);
+      else toReport.push(address);
+    }
+    if (toReport.length === 0) {
+      throw new ConflictError("report_target_already_blacklisted", {
+        addresses: blacklisted,
+      });
+    }
+
+    const results = [];
+    for (const address of toReport) {
+      results.push(
+        await ReportService._store(
+          tenantId,
+          { address },
+          { reason: trimmedReason, bookingId, by },
+        ),
+      );
+    }
+    return {
+      reports: results.map((result) => result.report),
+      created: results.some((result) => result.created),
+      blacklisted,
+    };
+  }
+
+  /**
+   * Stores a report about the target, a user or an address, or adds it to
+   * the open one of the tenant, and tells the instance owners of a new
+   * one.
    */
   static async _store(
     tenantId,
     target,
     { reason: trimmedReason, bookingId, by },
   ) {
+    const targetKey = targetKeyOf(target);
     const now = Date.now();
     const evidence = {
       reason: trimmedReason,
@@ -143,7 +247,7 @@ class ReportService {
       reportedBy: by,
       reportedAt: now,
     };
-    const open = await ReportManager.getOpenReport(tenantId, target.id);
+    const open = await ReportManager.getOpenReport(tenantId, targetKey);
     if (open) {
       const added = await ReportManager.addToOpenReport(open.id, evidence);
       if (added) return { report: added, created: false };
@@ -154,7 +258,7 @@ class ReportService {
       stored = await ReportManager.insertReport({
         id: uuidv4(),
         tenantId,
-        targetUserId: target.id,
+        ...targetKey,
         ...evidence,
         additions: [],
         status: REPORT_STATUS.OPEN,
@@ -165,7 +269,7 @@ class ReportService {
     } catch (error) {
       // Opened meanwhile by a report at the same moment: add to that one.
       if (error.code !== 11000) throw error;
-      const raced = await ReportManager.getOpenReport(tenantId, target.id);
+      const raced = await ReportManager.getOpenReport(tenantId, targetKey);
       const added =
         raced && (await ReportManager.addToOpenReport(raced.id, evidence));
       if (!added) throw error;
@@ -179,8 +283,8 @@ class ReportService {
       payload: {
         tenantName: tenantNames.get(tenantId),
         reportId: stored.id,
-        targetUserId: target.id,
-        targetName: nameOf(target),
+        ...targetKey,
+        targetName: target.name ?? "",
         reason: trimmedReason,
         bookingId: stored.bookingId,
         reportedBy: by,
@@ -240,21 +344,23 @@ class ReportService {
 
   /**
    * The reports, oldest first, each with the name of its tenant and of
-   * the reported user: every tenant's for the instance owner, one
-   * tenant's own for the tenant (ECCdigital/tickets#631), there also
-   * whether the target is a tenant owner, whose report only a tenant owner
-   * may change.
+   * the reported user (none for an address, ECCdigital/tickets#632):
+   * every tenant's for the instance owner, one tenant's own for the tenant
+   * (ECCdigital/tickets#631), there also whether the target is a tenant
+   * owner, whose report only a tenant owner may change.
    *
    * @param {Object} [filter]
    * @param {string} [filter.status] Default: every status
    * @param {string} [filter.targetUserId]
+   * @param {string} [filter.targetAddress]
    * @param {string} [filter.tenantId] Default: every tenant
    * @returns {Promise<Object[]>}
    */
-  static async list({ status, targetUserId, tenantId } = {}) {
+  static async list({ status, targetUserId, targetAddress, tenantId } = {}) {
     const reports = await ReportManager.getReports({
       status,
       targetUserId: targetUserId ? normalizeUserId(targetUserId) : undefined,
+      targetAddress: targetAddress ? normalizeUserId(targetAddress) : undefined,
       tenantId,
     });
     const tenantNames = await tenantNamesOf(
@@ -263,7 +369,9 @@ class ReportService {
     const targets = new Map(
       (
         await UserManager.getUsersById([
-          ...new Set(reports.map((report) => report.targetUserId)),
+          ...new Set(
+            reports.map((report) => report.targetUserId).filter(Boolean),
+          ),
         ])
       ).map((user) => [user.id, user]),
     );
@@ -287,67 +395,133 @@ class ReportService {
   }
 
   /**
-   * Settles every open report about a user. A suspension goes the way of
-   * every suspension, which settles the reports; a rejection needs a
-   * reason.
+   * Settles every open report about a user or, with `address`, about an
+   * address (ECCdigital/tickets#632). A suspension goes the way of every
+   * suspension and a blacklist entry the way of every entry, each of which
+   * settles the reports; a rejection needs a reason.
    *
    * @param {Object} params
-   * @param {string} params.userId The reported user
-   * @param {string} params.decision `suspend` or `reject`
-   * @param {*} params.reason The reason of the suspension or the rejection
+   * @param {string} [params.userId] The reported user
+   * @param {string} [params.address] The reported address
+   * @param {string} params.decision `suspend` for a user, `blacklist` for
+   *   an address, or `reject`
+   * @param {*} params.reason The reason of the suspension, the entry or
+   *   the rejection
+   * @param {boolean} [params.domain] With `blacklist`: the entry is the
+   *   domain of the address instead of the exact address
    * @param {string} params.by The instance owner
    * @returns {Promise<Object[]>} The reports settled
    */
-  static async resolve({ userId, decision, reason, by }) {
-    if (!Object.values(DECISIONS).includes(decision)) {
+  static async resolve({ userId, address, decision, reason, domain, by }) {
+    const byAddress = address != null;
+    const decisions = byAddress
+      ? [DECISIONS.BLACKLIST, DECISIONS.REJECT]
+      : [DECISIONS.SUSPEND, DECISIONS.REJECT];
+    if (!decisions.includes(decision)) {
       throw new BadRequestError("report_decision_invalid", { decision });
     }
-    const targetUserId = normalizeUserId(userId);
+    const target = byAddress
+      ? { address: normalizeUserId(address) }
+      : { userId: normalizeUserId(userId) };
+    const targetKey = targetKeyOf(target);
     const open = await ReportManager.getReports({
       status: REPORT_STATUS.OPEN,
-      targetUserId,
+      ...targetKey,
     });
     if (open.length === 0) {
-      throw new NotFoundError("report_none_open", { userId: targetUserId });
-    }
-
-    if (decision === DECISIONS.SUSPEND) {
-      const user = await SuspensionService().suspend(targetUserId, {
-        reason,
-        by,
-      });
-      const settledIds = user.suspension?.reportIds ?? [];
-      return (await ReportManager.getReports({ targetUserId })).filter(
-        (report) => settledIds.includes(report.id),
+      throw new NotFoundError(
+        "report_none_open",
+        byAddress ? { address: target.address } : { userId: target.userId },
       );
     }
 
-    const rejectionReason = requiredText(
-      reason,
-      "report_rejection_reason_required",
+    let settledIds;
+    if (decision === DECISIONS.SUSPEND) {
+      const user = await SuspensionService().suspend(target.userId, {
+        reason,
+        by,
+      });
+      settledIds = user.suspension?.reportIds ?? [];
+    } else if (decision === DECISIONS.BLACKLIST) {
+      const value = domain
+        ? BlacklistService().domainOf(target.address)
+        : target.address;
+      const entry = await BlacklistService().create({
+        value,
+        reason,
+        by,
+        fromReports: true,
+      });
+      // A domain settles the reports about its other addresses too.
+      return (await ReportManager.getReports({ addresses: true })).filter(
+        (report) => entry.reportIds?.includes(report.id),
+      );
+    } else {
+      const rejectionReason = requiredText(
+        reason,
+        "report_rejection_reason_required",
+      );
+      return ReportService._settle(target, {
+        status: REPORT_STATUS.REJECTED,
+        rejectionReason,
+        by,
+      });
+    }
+    return (await ReportManager.getReports(targetKey)).filter((report) =>
+      settledIds.includes(report.id),
     );
-    return ReportService._settle(targetUserId, {
-      status: REPORT_STATUS.REJECTED,
-      rejectionReason,
-      by,
-    });
   }
 
   /**
    * Settles the open reports about a user as `suspended`: every
-   * suspension of the user goes through here (ECCdigital/tickets#630).
+   * suspension of the user goes through here (ECCdigital/tickets#630),
+   * the one by a blacklist entry included (ECCdigital/tickets#632).
    *
    * @param {string} userId
    * @param {string} by The instance owner who suspends
    * @returns {Promise<string[]>} The ids of the reports settled
    */
   static async settleBySuspension(userId, by) {
-    const settled = await ReportService._settle(userId, {
-      status: REPORT_STATUS.SUSPENDED,
-      rejectionReason: null,
-      by,
-    });
+    const settled = await ReportService._settle(
+      { userId: normalizeUserId(userId) },
+      { status: REPORT_STATUS.SUSPENDED, rejectionReason: null, by },
+    );
     return settled.map((report) => report.id);
+  }
+
+  /**
+   * Settles the open reports about every address a new blacklist entry
+   * hits as `blacklisted` (ECCdigital/tickets#632): every entry goes
+   * through here, by hand, as a domain, from a suspension or from reports.
+   *
+   * @param {Object} entry The blacklist entry as stored
+   * @returns {Promise<string[]>} The ids of the reports settled
+   */
+  static async settleByBlacklistEntry(entry) {
+    const open = await ReportManager.getReports({
+      status: REPORT_STATUS.OPEN,
+      addresses: true,
+    });
+    const hit = [
+      ...new Set(
+        open
+          .map((report) => report.targetAddress)
+          .filter((address) => BlacklistService().hits(entry, address)),
+      ),
+    ];
+    const settledIds = [];
+    for (const address of hit) {
+      const settled = await ReportService._settle(
+        { address },
+        {
+          status: REPORT_STATUS.BLACKLISTED,
+          rejectionReason: null,
+          by: entry.createdBy,
+        },
+      );
+      settledIds.push(...settled.map((report) => report.id));
+    }
+    return settledIds;
   }
 
   /**
@@ -383,18 +557,23 @@ class ReportService {
   }
 
   /**
-   * Settles the open reports about a user and tells the owners of each
-   * reporting tenant, one mail per tenant.
+   * Settles the open reports about a target, a user or an address, and
+   * tells the owners of each reporting tenant, one mail per tenant.
    */
-  static async _settle(userId, { status, rejectionReason, by }) {
+  static async _settle(target, { status, rejectionReason, by }) {
     const now = Date.now();
-    const settled = await ReportManager.resolveOpenReports(
-      normalizeUserId(userId),
-      { status, rejectionReason, resolvedAt: now, resolvedBy: by },
-    );
+    const targetKey = targetKeyOf(target);
+    const settled = await ReportManager.resolveOpenReports(targetKey, {
+      status,
+      rejectionReason,
+      resolvedAt: now,
+      resolvedBy: by,
+    });
     if (settled.length === 0) return settled;
 
-    const target = await UserManager.getUser(settled[0].targetUserId);
+    const user = targetKey.targetUserId
+      ? await UserManager.getUser(targetKey.targetUserId)
+      : null;
     const tenantNames = await tenantNamesOf(
       settled.map((report) => report.tenantId),
     );
@@ -405,8 +584,8 @@ class ReportService {
         createdAt: new Date(now),
         payload: {
           tenantName: tenantNames.get(tenantId),
-          targetUserId: settled[0].targetUserId,
-          targetName: nameOf(target),
+          ...targetKey,
+          targetName: nameOf(user),
           outcome: status,
           reason: rejectionReason,
           reportIds: settled
@@ -432,10 +611,12 @@ class ReportService {
     if (report.status !== REPORT_STATUS.OPEN) {
       throw new ConflictError("report_not_open", { reportId });
     }
-    const membership = await MembershipManager.getMembershipByTenantAndUserID(
-      tenantId,
-      report.targetUserId,
-    );
+    const membership =
+      report.targetUserId &&
+      (await MembershipManager.getMembershipByTenantAndUserID(
+        tenantId,
+        report.targetUserId,
+      ));
     if (membership?.owner && !mayReportOwner) {
       throw new ForbiddenError("report_target_tenant_owner");
     }

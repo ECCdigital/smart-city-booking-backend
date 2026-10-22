@@ -111,23 +111,37 @@ class SuspensionService {
    * Suspends a user by a blacklist entry that matched their address when
    * it was added (ECCdigital/tickets#625): the entry's reason, time and
    * person, the origin `blacklist` and the entry as it is now. The caller
-   * leaves out instance owners and users already suspended.
+   * leaves out instance owners and users already suspended. As every
+   * suspension it settles the open reports about the user and points to
+   * them (ECCdigital/tickets#632).
    *
    * @param {string} userId The user to suspend
    * @param {Object} entry The blacklist entry
    */
   static async suspendByBlacklistEntry(userId, entry) {
+    const suspension = {
+      reason: entry.reason,
+      suspendedAt: entry.createdAt,
+      suspendedBy: entry.createdBy,
+      origin: SUSPENSION_ORIGINS.BLACKLIST,
+      blacklistEntry: { id: entry.id, value: entry.value },
+      reportIds: [],
+    };
     await UserManager.updateUser({
       id: userId,
       isSuspended: true,
-      suspension: {
-        reason: entry.reason,
-        suspendedAt: entry.createdAt,
-        suspendedBy: entry.createdBy,
-        origin: SUSPENSION_ORIGINS.BLACKLIST,
-        blacklistEntry: { id: entry.id, value: entry.value },
-      },
+      suspension,
     });
+    const reportIds = await ReportService().settleBySuspension(
+      userId,
+      entry.createdBy,
+    );
+    if (reportIds.length > 0) {
+      await UserManager.updateUser({
+        id: userId,
+        suspension: { ...suspension, reportIds },
+      });
+    }
   }
 
   /**

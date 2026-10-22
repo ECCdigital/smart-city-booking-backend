@@ -3,14 +3,18 @@
  * ECCdigital/tickets#630): a tenant tells the instance about a user it
  * wants suspended, with a reason and, where it reports from a booking, the
  * booking as evidence. The instance owner settles it with a suspension or
- * rejects it with a reason. A tenant has at most one open report per
- * target; a second report adds to it (`additions`). The tenant may withdraw
- * an open report of its own (ECCdigital/tickets#631).
+ * rejects it with a reason. The target is a user (`targetUserId`) or the
+ * normalized address of a guest (`targetAddress`, ECCdigital/tickets#632),
+ * never both; a report about an address is settled with a blacklist entry
+ * (`blacklisted`) instead of a suspension. A tenant has at most one open
+ * report per target; a second report adds to it (`additions`). The
+ * tenant may withdraw an open report of its own (ECCdigital/tickets#631).
  */
 
 const REPORT_STATUS = Object.freeze({
   OPEN: "open",
   SUSPENDED: "suspended",
+  BLACKLISTED: "blacklisted",
   REJECTED: "rejected",
   WITHDRAWN: "withdrawn",
 });
@@ -26,7 +30,8 @@ const additionSchemaDefinition = {
 const reportSchemaDefinition = {
   id: { type: String, required: true },
   tenantId: { type: String, required: true },
-  targetUserId: { type: String, required: true },
+  targetUserId: { type: String, default: null },
+  targetAddress: { type: String, default: null },
   reason: { type: String, required: true },
   bookingId: { type: String, default: null },
   reportedBy: { type: String, required: true },

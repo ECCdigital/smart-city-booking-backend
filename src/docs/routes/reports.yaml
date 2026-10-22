@@ -4,7 +4,7 @@
   post:
     tags:
       - Reports
-    summary: Report a user to the instance
+    summary: Report a user or guest addresses to the instance
     description: |
       A report (glossary "Meldung (eines Users oder einer Adresse)",
       ECCdigital/tickets#630): the tenant reports a member or the booker
@@ -21,8 +21,19 @@
       reported user learns nothing. With `endMembership` the membership of
       a member ends with the report, its open invitations included, as
       `POST /api/tenants/{tenant}/remove-user` does
-      (ECCdigital/tickets#631). Roles with `manageUsers.updateAny`
-      (`tenantUser.report`).
+      (ECCdigital/tickets#631).
+
+      With `addresses` the tenant reports addresses from `mail` of the
+      booking `bookingId` instead (ECCdigital/tickets#632): each one
+      picked, normalized as the user ids, becomes a report of its own
+      (`targetAddress`) with the booking and the reason, or is added to the
+      open one of the tenant. Free addresses without a booking cannot be
+      reported, nor the address of an account, which is reported as a user.
+      An address an entry of the blacklist already hits becomes
+      no report and is named in `blacklisted`; where that is every address
+      picked, the answer is `409`. The guest learns nothing.
+
+      Roles with `manageUsers.updateAny` (`tenantUser.report`).
     security:
       - bearerAuth: []
     parameters:
@@ -44,7 +55,14 @@
                 description: The member reported; without `bookingId`
               bookingId:
                 type: string
-                description: The booking whose booker is reported
+                description: |
+                  The booking whose booker is reported, or with `addresses`
+                  the booking whose `mail` they are of
+              addresses:
+                type: array
+                items:
+                  type: string
+                description: Addresses from `mail` of the booking to report
               reason:
                 type: string
               endMembership:
@@ -52,33 +70,47 @@
                 description: Ends the member's membership with the report
     responses:
       "201":
-        description: The new report
+        description: |
+          The new report; with `addresses` the reports, at least one of
+          them new
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Report"
+              oneOf:
+                - $ref: "#/components/schemas/Report"
+                - $ref: "#/components/schemas/AddressReports"
       "200":
-        description: The open report with the reason added
+        description: |
+          The open report with the reason added; with `addresses` the
+          reports, each with the reason added
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Report"
+              oneOf:
+                - $ref: "#/components/schemas/Report"
+                - $ref: "#/components/schemas/AddressReports"
       "400":
         description: |
           `report_reason_required`, `report_target_required`,
           `report_target_without_account` (a booker without an account),
-          `report_target_not_booker` (`userId` and `bookingId` disagree)
+          `report_target_not_booker` (`userId` and `bookingId` disagree),
+          `report_booking_required` (`addresses` without `bookingId`),
+          `report_address_of_account` (an address of an account: report the
+          user instead, `params.addresses`)
       "401":
         description: Not authenticated
       "403":
         description: |
           Not allowed to manage the tenant's users;
           `report_target_not_of_tenant`, `report_target_tenant_owner`,
-          `report_target_instance_owner`
+          `report_target_instance_owner`, `report_address_not_of_booking`
       "404":
         description: "`booking_not_found`"
       "409":
-        description: "`report_target_already_suspended`"
+        description: |
+          `report_target_already_suspended`,
+          `report_target_already_blacklisted` (an entry hits every address
+          picked, `params.addresses`)
 
   get:
     tags:
@@ -101,7 +133,7 @@
         in: query
         schema:
           type: string
-          enum: [open, suspended, rejected, withdrawn]
+          enum: [open, suspended, blacklisted, rejected, withdrawn]
     responses:
       "200":
         description: The reports
@@ -242,10 +274,15 @@
         in: query
         schema:
           type: string
-          enum: [open, suspended, rejected, withdrawn]
+          enum: [open, suspended, blacklisted, rejected, withdrawn]
       - name: userId
         in: query
         description: Only the reports about this user
+        schema:
+          type: string
+      - name: address
+        in: query
+        description: Only the reports about this address
         schema:
           type: string
     responses:
@@ -275,13 +312,21 @@
   post:
     tags:
       - Reports
-    summary: Settle every open report about a user
+    summary: Settle every open report about a user or an address
     description: |
       One decision for every open report about the user, of whatever
       tenant (ECCdigital/tickets#630). `suspend` suspends the user as
       `POST /api/users/{id}/suspension` does, with `reason` as the reason of
       the suspension, and the suspension points to the reports. `reject`
-      needs a reason, which the tenant owners read. Each reporting tenant's
+      needs a reason, which the tenant owners read.
+
+      With `address` instead of `userId` the decision is about the reports
+      of that address (ECCdigital/tickets#632): `blacklist` adds a
+      blacklist entry of origin `reports` with `reason`, of the exact
+      address or with `domain` of its domain, as
+      `POST /api/instances/blacklist` does; the entry settles every open
+      report about an address it hits as `blacklisted` and points to them
+      (`reportIds`). `reject` as above. Each reporting tenant's
       owners get one mail (`report.resolved`). The instance owner's alone
       (`report.resolve`).
     security:
@@ -292,13 +337,19 @@
         application/json:
           schema:
             type: object
-            required: [userId, decision, reason]
+            required: [decision, reason]
             properties:
               userId:
                 type: string
+              address:
+                type: string
               decision:
                 type: string
-                enum: [suspend, reject]
+                enum: [suspend, blacklist, reject]
+                description: "`suspend` for a user, `blacklist` for an address"
+              domain:
+                type: boolean
+                description: With `blacklist`, the entry is the address's domain
               reason:
                 type: string
     responses:
@@ -313,7 +364,7 @@
       "400":
         description: |
           `report_decision_invalid`, `suspension_reason_required`,
-          `report_rejection_reason_required`
+          `blacklist_reason_required`, `report_rejection_reason_required`
       "401":
         description: Not authenticated
       "403":
@@ -321,7 +372,8 @@
       "404":
         description: "`report_none_open`"
       "409":
-        description: "`instance_owner_not_suspendable`"
+        description: |
+          `instance_owner_not_suspendable`, `blacklist_entry_exists`
 
 components:
   schemas:
@@ -334,6 +386,12 @@ components:
           type: string
         targetUserId:
           type: string
+          nullable: true
+          description: The user reported; `null` for an address
+        targetAddress:
+          type: string
+          nullable: true
+          description: The address reported (ECCdigital/tickets#632); `null` for a user
         reason:
           type: string
         bookingId:
@@ -361,7 +419,7 @@ components:
                 type: number
         status:
           type: string
-          enum: [open, suspended, rejected, withdrawn]
+          enum: [open, suspended, blacklisted, rejected, withdrawn]
         rejectionReason:
           type: string
           nullable: true
@@ -371,3 +429,16 @@ components:
         resolvedBy:
           type: string
           nullable: true
+    AddressReports:
+      type: object
+      description: The answer to reporting addresses (ECCdigital/tickets#632)
+      properties:
+        reports:
+          type: array
+          items:
+            $ref: "#/components/schemas/Report"
+        blacklisted:
+          type: array
+          description: The addresses picked an entry already hits; no report
+          items:
+            type: string

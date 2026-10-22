@@ -21,6 +21,9 @@ class ReportController {
    * (ECCdigital/tickets#631).
    */
   static async createReport(request, response, next) {
+    if (request.body?.addresses !== undefined) {
+      return ReportController.reportAddresses(request, response, next);
+    }
     try {
       const tenantId = request.params.tenant;
       const { report, created } = await ReportService.report({
@@ -41,13 +44,42 @@ class ReportController {
     }
   }
 
-  /** The reports for the instance owner, by `?status=` and `?userId=`. */
+  /**
+   * Reports addresses of a booking's `mail` (ECCdigital/tickets#632): 201
+   * where a report is new, 200 where every one was added to an open one;
+   * `blacklisted` names the addresses an entry already hits.
+   */
+  static async reportAddresses(request, response, next) {
+    try {
+      const tenantId = request.params.tenant;
+      const { reports, created, blacklisted } =
+        await ReportService.reportAddresses({
+          tenantId,
+          bookingId: request.body?.bookingId,
+          addresses: request.body?.addresses,
+          reason: request.body?.reason,
+          by: request.user.id,
+        });
+      logger.info(
+        `${tenantId} -- reported ${reports.length} addresses of booking ${request.body?.bookingId} by user ${request.user.id}`,
+      );
+      response.status(created ? 201 : 200).send({ reports, blacklisted });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * The reports for the instance owner, by `?status=`, `?userId=` and
+   * `?address=`.
+   */
   static async getReports(request, response, next) {
     try {
       response.status(200).send(
         await ReportService.list({
           status: request.query.status,
           targetUserId: request.query.userId,
+          targetAddress: request.query.address,
         }),
       );
     } catch (error) {
@@ -108,17 +140,22 @@ class ReportController {
     }
   }
 
-  /** Settles every open report about `userId` with `decision` and `reason`. */
+  /**
+   * Settles every open report about `userId`, or about `address` with
+   * `domain` (ECCdigital/tickets#632), with `decision` and `reason`.
+   */
   static async resolveReports(request, response, next) {
     try {
       const settled = await ReportService.resolve({
         userId: request.body?.userId,
+        address: request.body?.address,
+        domain: request.body?.domain === true,
         decision: request.body?.decision,
         reason: request.body?.reason,
         by: request.user.id,
       });
       logger.info(
-        `Instance -- settled ${settled.length} reports about user ${request.body?.userId} (${request.body?.decision}) by user ${request.user.id}`,
+        `Instance -- settled ${settled.length} reports about ${request.body?.address ?? `user ${request.body?.userId}`} (${request.body?.decision}) by user ${request.user.id}`,
       );
       response.status(200).send(settled);
     } catch (error) {

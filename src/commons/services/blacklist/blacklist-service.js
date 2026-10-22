@@ -6,6 +6,8 @@ const InstanceManager = require("../../data-managers/instance-manager");
 const { CHECKOUT_REASONS } = require("../checkout/checkout-reasons");
 const { DOMAIN: DOMAIN_REACH } = require("../authorization/reach");
 const SuspensionService = require("../user/suspension-service");
+// Required on use: settling reports by an entry asks `hits` back here.
+const ReportService = () => require("../report/report-service");
 const {
   BlacklistEntryKind,
   BLACKLIST_ENTRY_ORIGINS,
@@ -100,6 +102,29 @@ class BlacklistService {
       if (entry) return entry;
     }
     return null;
+  }
+
+  /**
+   * The domain of an address as an entry stores it, with its leading `@`
+   * (ECCdigital/tickets#632).
+   *
+   * @param {*} address
+   * @returns {string|null} `null` for anything but an address
+   */
+  static domainOf(address) {
+    return candidatesOf(address)[1] ?? null;
+  }
+
+  /**
+   * Whether the entry hits the address: the exact address, or its domain
+   * (ECCdigital/tickets#632). The same rule as `match`, for one entry.
+   *
+   * @param {{value: string}} entry
+   * @param {*} address
+   * @returns {boolean}
+   */
+  static hits(entry, address) {
+    return candidatesOf(address).includes(entry.value);
   }
 
   /**
@@ -205,7 +230,10 @@ class BlacklistService {
   /**
    * Adds an entry and suspends the matching accounts at once, except
    * instance owners and accounts already suspended. Each suspension
-   * carries the entry's reason, time and person and points to the entry.
+   * carries the entry's reason, time and person and points to the entry,
+   * and settles the open reports about its user as `suspended`. The entry
+   * settles the open reports about every address it hits as `blacklisted`
+   * and points to them (`reportIds`, ECCdigital/tickets#632).
    *
    * @param {Object} params
    * @param {*} params.value An address or a domain
@@ -213,9 +241,17 @@ class BlacklistService {
    * @param {string} params.by The instance owner who adds it
    * @param {string} [params.suspensionUserId] The user whose suspension
    *   adds the entry; gives it the origin `suspension`
+   * @param {boolean} [params.fromReports] Whether the instance owner
+   *   settles reports with it; gives it the origin `reports`
    * @returns {Promise<Object>} The stored entry
    */
-  static async create({ value, reason, by, suspensionUserId = null }) {
+  static async create({
+    value,
+    reason,
+    by,
+    suspensionUserId = null,
+    fromReports = false,
+  }) {
     const trimmedReason = requiredReason(reason);
     const parsed = BlacklistService.parse(value);
     if (await BlacklistManager.getEntryByValue(parsed.value)) {
@@ -233,16 +269,21 @@ class BlacklistService {
       createdBy: by,
       origin: suspensionUserId
         ? BLACKLIST_ENTRY_ORIGINS.SUSPENSION
-        : BLACKLIST_ENTRY_ORIGINS.MANUAL,
+        : fromReports
+          ? BLACKLIST_ENTRY_ORIGINS.REPORTS
+          : BLACKLIST_ENTRY_ORIGINS.MANUAL,
       suspendedUserIds: suspend.map((user) => user.id),
       suspensionUserId,
+      reportIds: [],
     };
     const stored = await BlacklistManager.insertEntry(entry);
 
     for (const user of suspend) {
       await SuspensionService.suspendByBlacklistEntry(user.id, entry);
     }
-    return stored;
+    const reportIds = await ReportService().settleByBlacklistEntry(entry);
+    if (reportIds.length === 0) return stored;
+    return BlacklistManager.updateEntry(entry.id, { reportIds });
   }
 
   /**

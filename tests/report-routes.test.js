@@ -76,6 +76,19 @@ describe("reports (ECCdigital/tickets#630)", function () {
   const user = (id) => users.find((doc) => doc.id === id);
   const report = (body, by = ROLE_HOLDER) =>
     h.api().post(`/api/tenants/${TENANT}/reports`).set(h.as(by)).send(body);
+  /** A blacklist entry by hand, as stored. */
+  const blacklistEntry = (value) => ({
+    id: `E-${value}`,
+    value,
+    kind: value.startsWith("@") ? "domain" : "address",
+    reason: "Test",
+    createdAt: Date.now(),
+    createdBy: ADMIN,
+    origin: "manual",
+    suspendedUserIds: [],
+    suspensionUserId: null,
+    reportIds: [],
+  });
   /** The mails sent so far, as `<type> <to>`. */
   const mails = async () => {
     await SupervisionNotificationService.whenIdle();
@@ -636,6 +649,428 @@ describe("reports (ECCdigital/tickets#630)", function () {
       expect(res.status).to.equal(200);
       expect(await mails()).to.deep.equal([]);
       expect(reports[0].status).to.equal("suspended");
+    });
+  });
+
+  describe("reporting guest addresses (ECCdigital/tickets#632)", function () {
+    const GUEST = "gast@example.test";
+    const SECOND = "zweit@example.test";
+
+    it("reports an address from `mail` of a booking of the tenant, normalized, and mails the instance owners", async function () {
+      const booking = await h.manualBooking("room", {}, { mail: GUEST });
+      await mails();
+
+      const res = await report({
+        bookingId: booking.id,
+        addresses: [" Gast@Example.test "],
+        reason: "No-Show",
+      });
+
+      expect(res.status).to.equal(201);
+      expect(res.body.blacklisted).to.deep.equal([]);
+      expect(res.body.reports).to.have.length(1);
+      expect(res.body.reports[0]).to.include({
+        tenantId: TENANT,
+        targetUserId: null,
+        targetAddress: GUEST,
+        bookingId: booking.id,
+        reason: "No-Show",
+        status: "open",
+      });
+      expect(await mails()).to.deep.equal([
+        `SUPERVISION_REPORT_CREATED ${ADMIN}`,
+      ]);
+      expect(outbox.at(-1).payload).to.include({ targetAddress: GUEST });
+    });
+
+    it("makes each address picked a report of its own with the same booking and reason", async function () {
+      const booking = await h.manualBooking(
+        "room",
+        {},
+        { mail: `${GUEST}, ${SECOND}` },
+      );
+      await mails();
+
+      const res = await report({
+        bookingId: booking.id,
+        addresses: [GUEST, SECOND],
+        reason: "Randale",
+      });
+
+      expect(res.status).to.equal(201);
+      expect(
+        reports.map(({ targetAddress, bookingId, reason }) => ({
+          targetAddress,
+          bookingId,
+          reason,
+        })),
+      ).to.deep.equal([
+        { targetAddress: GUEST, bookingId: booking.id, reason: "Randale" },
+        { targetAddress: SECOND, bookingId: booking.id, reason: "Randale" },
+      ]);
+      expect(await mails()).to.deep.equal([
+        `SUPERVISION_REPORT_CREATED ${ADMIN}`,
+        `SUPERVISION_REPORT_CREATED ${ADMIN}`,
+      ]);
+    });
+
+    it("refuses a free address without a booking, or one not in the booking's mail", async function () {
+      const booking = await h.manualBooking("room", {}, { mail: GUEST });
+
+      const free = await report({ addresses: [GUEST], reason: "x" });
+      const foreign = await report({
+        bookingId: booking.id,
+        addresses: [GUEST, "fremd@example.test"],
+        reason: "x",
+      });
+
+      expect(free.status).to.equal(400);
+      expect(free.body.code).to.equal("report_booking_required");
+      expect(foreign.status).to.equal(403);
+      expect(foreign.body.code).to.equal("report_address_not_of_booking");
+      expect(reports).to.have.length(0);
+    });
+
+    it("refuses the address of an account: that is a user to report (ECCdigital/tickets#632)", async function () {
+      const booking = await h.manualBooking("room", {}, { mail: CUSTOMER });
+
+      const res = await report({
+        bookingId: booking.id,
+        addresses: [CUSTOMER],
+        reason: "x",
+      });
+
+      expect(res.status).to.equal(400);
+      expect(res.body.code).to.equal("report_address_of_account");
+      expect(reports).to.have.length(0);
+    });
+
+    it("refuses a booking of another tenant", async function () {
+      const booking = await h.manualBooking("room", {}, { mail: GUEST });
+
+      const res = await h
+        .api()
+        .post(`/api/tenants/${TENANT_B}/reports`)
+        .set(h.as(OWNER_B))
+        .send({ bookingId: booking.id, addresses: [GUEST], reason: "x" });
+
+      expect(res.status).to.equal(404);
+      expect(reports).to.have.length(0);
+    });
+
+    it("stores no report where an entry already hits the address, and says so", async function () {
+      h.blacklist.push(blacklistEntry("@example.test"));
+      const booking = await h.manualBooking("room", {}, { mail: GUEST });
+      await mails();
+
+      const res = await report({
+        bookingId: booking.id,
+        addresses: [GUEST],
+        reason: "x",
+      });
+
+      expect(res.status).to.equal(409);
+      expect(res.body.code).to.equal("report_target_already_blacklisted");
+      expect(reports).to.have.length(0);
+      expect(await mails()).to.deep.equal([]);
+    });
+
+    it("reports the other addresses and names the one already on the blacklist", async function () {
+      h.blacklist.push(blacklistEntry(SECOND));
+      const booking = await h.manualBooking(
+        "room",
+        {},
+        { mail: `${GUEST}, ${SECOND}` },
+      );
+
+      const res = await report({
+        bookingId: booking.id,
+        addresses: [GUEST, SECOND],
+        reason: "x",
+      });
+
+      expect(res.status).to.equal(201);
+      expect(res.body.blacklisted).to.deep.equal([SECOND]);
+      expect(reports.map((doc) => doc.targetAddress)).to.deep.equal([GUEST]);
+    });
+
+    it("adds a second report of the tenant about the address to the open one", async function () {
+      const booking = await h.manualBooking("room", {}, { mail: GUEST });
+      await report({ bookingId: booking.id, addresses: [GUEST], reason: "a" });
+
+      const res = await report(
+        { bookingId: booking.id, addresses: [GUEST], reason: "b" },
+        OWNER,
+      );
+
+      expect(res.status).to.equal(200);
+      expect(reports).to.have.length(1);
+      expect(reports[0].additions.map((doc) => doc.reason)).to.deep.equal([
+        "b",
+      ]);
+    });
+
+    it("refuses a role without manageUsers.updateAny", async function () {
+      const booking = await h.manualBooking("room", {}, { mail: GUEST });
+
+      const res = await report(
+        { bookingId: booking.id, addresses: [GUEST], reason: "x" },
+        READ_OWN_HOLDER,
+      );
+
+      expect(res.status).to.equal(403);
+      expect(reports).to.have.length(0);
+    });
+
+    describe("settling them", function () {
+      const resolve = (body, by = ADMIN) =>
+        h.api().post("/api/instances/reports/resolve").set(h.as(by)).send(body);
+      const addEntry = (body) =>
+        h.api().post("/api/instances/blacklist").set(h.as(ADMIN)).send(body);
+
+      beforeEach(async function () {
+        const booking = await h.manualBooking(
+          "room",
+          {},
+          { mail: `${GUEST}, ${SECOND}` },
+        );
+        await report({
+          bookingId: booking.id,
+          addresses: [GUEST, SECOND],
+          reason: "Randale",
+        });
+        // The second tenant reported the guest too.
+        reports.push({
+          id: "R-B",
+          tenantId: TENANT_B,
+          targetUserId: null,
+          targetAddress: GUEST,
+          reason: "Zahlt nicht",
+          bookingId: "B-B",
+          reportedBy: OWNER_B,
+          reportedAt: Date.now(),
+          additions: [],
+          status: "open",
+          rejectionReason: null,
+          resolvedAt: null,
+          resolvedBy: null,
+        });
+        await mails();
+      });
+
+      const about = (address) =>
+        reports.filter((doc) => doc.targetAddress === address);
+
+      it("lists the open reports about addresses for the instance owner", async function () {
+        const res = await h
+          .api()
+          .get(`/api/instances/reports?status=open&address=${GUEST}`)
+          .set(h.as(ADMIN));
+
+        expect(res.status).to.equal(200);
+        expect(res.body.map((row) => row.tenantName)).to.deep.equal([
+          "Stadt Musterhausen",
+          "Verein Nachbarort",
+        ]);
+        expect(res.body[0]).to.include({
+          targetUserId: null,
+          targetAddress: GUEST,
+          targetName: "",
+        });
+      });
+
+      it("settles every open report about the address with an exact entry of origin `reports` that points to them", async function () {
+        const res = await resolve({
+          address: GUEST,
+          decision: "blacklist",
+          reason: "Randale",
+        });
+
+        expect(res.status).to.equal(200);
+        expect(res.body).to.have.length(2);
+        for (const settled of about(GUEST)) {
+          expect(settled).to.include({
+            status: "blacklisted",
+            resolvedBy: ADMIN,
+          });
+        }
+        expect(about(SECOND)[0].status).to.equal("open");
+        expect(h.blacklist).to.have.length(1);
+        expect(h.blacklist[0]).to.include({
+          value: GUEST,
+          kind: "address",
+          reason: "Randale",
+          origin: "reports",
+          createdBy: ADMIN,
+        });
+        expect(h.blacklist[0].reportIds).to.have.members(
+          about(GUEST).map((doc) => doc.id),
+        );
+        expect(await mails()).to.have.members([
+          `SUPERVISION_REPORT_RESOLVED ${OWNER}`,
+          `SUPERVISION_REPORT_RESOLVED ${OWNER_B}`,
+        ]);
+        expect(outbox.at(-1).payload).to.include({
+          targetAddress: GUEST,
+          outcome: "blacklisted",
+        });
+      });
+
+      it("takes the domain instead, which settles the reports about every address of it", async function () {
+        const res = await resolve({
+          address: GUEST,
+          decision: "blacklist",
+          reason: "Wegwerf",
+          domain: true,
+        });
+
+        expect(res.status).to.equal(200);
+        expect(h.blacklist[0]).to.include({
+          value: "@example.test",
+          kind: "domain",
+          origin: "reports",
+        });
+        expect(reports.map((doc) => doc.status)).to.deep.equal([
+          "blacklisted",
+          "blacklisted",
+          "blacklisted",
+        ]);
+        expect(h.blacklist[0].reportIds).to.have.length(3);
+        expect(
+          res.body.map((settled) => settled.targetAddress),
+        ).to.have.members([GUEST, GUEST, SECOND]);
+      });
+
+      it("rejects the reports about the address only with a reason", async function () {
+        const without = await resolve({ address: GUEST, decision: "reject" });
+        const res = await resolve({
+          address: GUEST,
+          decision: "reject",
+          reason: "Kein Verstoß",
+        });
+
+        expect(without.status).to.equal(400);
+        expect(res.status).to.equal(200);
+        for (const settled of about(GUEST)) {
+          expect(settled).to.include({
+            status: "rejected",
+            rejectionReason: "Kein Verstoß",
+          });
+        }
+        expect(h.blacklist).to.have.length(0);
+        expect(await mails()).to.have.members([
+          `SUPERVISION_REPORT_RESOLVED ${OWNER}`,
+          `SUPERVISION_REPORT_RESOLVED ${OWNER_B}`,
+        ]);
+      });
+
+      it("knows no suspension of an address, and no entry for a user", async function () {
+        const suspend = await resolve({
+          address: GUEST,
+          decision: "suspend",
+          reason: "x",
+        });
+        const blacklist = await resolve({
+          userId: CUSTOMER,
+          decision: "blacklist",
+          reason: "x",
+        });
+
+        expect(suspend.status).to.equal(400);
+        expect(blacklist.status).to.equal(400);
+        expect(about(GUEST)[0].status).to.equal("open");
+      });
+
+      it("is settled as on the blacklist by an entry added by hand", async function () {
+        const res = await addEntry({ value: GUEST, reason: "von Hand" });
+
+        expect(res.status).to.equal(201);
+        expect(res.body.origin).to.equal("manual");
+        expect(res.body.reportIds).to.have.length(2);
+        expect(about(GUEST).map((doc) => doc.status)).to.deep.equal([
+          "blacklisted",
+          "blacklisted",
+        ]);
+        expect(about(SECOND)[0].status).to.equal("open");
+        expect(await mails()).to.have.members([
+          `SUPERVISION_REPORT_RESOLVED ${OWNER}`,
+          `SUPERVISION_REPORT_RESOLVED ${OWNER_B}`,
+        ]);
+      });
+
+      it("is settled as on the blacklist by a domain entry added by hand", async function () {
+        await addEntry({ value: "@example.test", reason: "Wegwerf" });
+
+        expect(reports.every((doc) => doc.status === "blacklisted")).to.equal(
+          true,
+        );
+      });
+
+      it("is settled as on the blacklist by the entry of a suspension", async function () {
+        users.push({ ...account(GUEST, "geheim-1234") });
+
+        const res = await h
+          .api()
+          .post(`/api/users/${GUEST}/suspension`)
+          .set(h.as(ADMIN))
+          .send({ reason: "Randale", blacklist: true });
+
+        expect(res.status).to.equal(200);
+        expect(h.blacklist[0]).to.include({
+          value: GUEST,
+          origin: "suspension",
+        });
+        expect(about(GUEST).map((doc) => doc.status)).to.deep.equal([
+          "blacklisted",
+          "blacklisted",
+        ]);
+      });
+
+      it("sends no mail when the entry is removed later, and the reports stay settled", async function () {
+        const { body: entry } = await addEntry({
+          value: GUEST,
+          reason: "von Hand",
+        });
+        await mails();
+
+        const res = await h
+          .api()
+          .delete(`/api/instances/blacklist/${entry.id}`)
+          .set(h.as(ADMIN));
+
+        expect(res.status).to.equal(200);
+        expect(await mails()).to.deep.equal([]);
+        expect(about(GUEST)[0].status).to.equal("blacklisted");
+      });
+
+      it("tells the guest nothing", async function () {
+        await resolve({ address: GUEST, decision: "blacklist", reason: "x" });
+
+        expect(
+          (await mails()).filter((mail) => mail.endsWith(GUEST)),
+        ).to.deep.equal([]);
+      });
+    });
+
+    it("settles the open reports about an account an entry suspends as suspended", async function () {
+      await report({ userId: CUSTOMER, reason: "Beleidigt" });
+      await mails();
+
+      const res = await h
+        .api()
+        .post("/api/instances/blacklist")
+        .set(h.as(ADMIN))
+        .send({ value: CUSTOMER, reason: "Beleidigt" });
+
+      expect(res.status).to.equal(201);
+      expect(reports[0].status).to.equal("suspended");
+      expect(user(CUSTOMER).suspension).to.deep.include({
+        origin: "blacklist",
+        reportIds: [reports[0].id],
+      });
+      expect(await mails()).to.deep.equal([
+        `SUPERVISION_REPORT_RESOLVED ${OWNER}`,
+      ]);
     });
   });
 });

@@ -1,6 +1,15 @@
 const ReportModel = require("./models/reportModel");
 const { REPORT_STATUS } = require("../schemas/reportSchema");
 
+/**
+ * The target of a report as a query: a user or an address
+ * (ECCdigital/tickets#632), the other one `null`.
+ */
+const targetQuery = ({ targetUserId = null, targetAddress = null }) => ({
+  targetUserId,
+  targetAddress,
+});
+
 /** A stored report as a plain object, without the keys of MongoDB. */
 const plain = (doc) => {
   if (!doc) return null;
@@ -17,15 +26,16 @@ const plain = (doc) => {
 class ReportManager {
   /**
    * @param {string} tenantId The reporting tenant
-   * @param {string} targetUserId The user reported
+   * @param {{targetUserId?: string, targetAddress?: string}} target The
+   *   user or the address reported
    * @returns {Promise<Object|null>} The open report of the tenant about
    *   the target, if there is one
    */
-  static async getOpenReport(tenantId, targetUserId) {
+  static async getOpenReport(tenantId, target) {
     return plain(
       await ReportModel.findOne({
         tenantId,
-        targetUserId,
+        ...targetQuery(target),
         status: REPORT_STATUS.OPEN,
       }),
     );
@@ -43,13 +53,23 @@ class ReportManager {
    * @param {Object} [filter]
    * @param {string} [filter.status]
    * @param {string} [filter.targetUserId]
+   * @param {string} [filter.targetAddress]
+   * @param {boolean} [filter.addresses] Only the reports about an address
    * @param {string} [filter.tenantId] The reporting tenant
    * @returns {Promise<Object[]>} The reports, oldest first
    */
-  static async getReports({ status, targetUserId, tenantId } = {}) {
+  static async getReports({
+    status,
+    targetUserId,
+    targetAddress,
+    addresses,
+    tenantId,
+  } = {}) {
     const query = {};
     if (status) query.status = status;
     if (targetUserId) query.targetUserId = targetUserId;
+    if (targetAddress) query.targetAddress = targetAddress;
+    else if (addresses) query.targetAddress = { $type: "string" };
     if (tenantId) query.tenantId = tenantId;
     const docs = await ReportModel.find(query).sort({ reportedAt: 1 });
     return docs.map(plain);
@@ -101,13 +121,14 @@ class ReportManager {
 
   /**
    * Settles every open report about a target with the given fields.
-   * @param {string} targetUserId The user reported
+   * @param {{targetUserId?: string, targetAddress?: string}} target The
+   *   user or the address reported
    * @param {{status: string, rejectionReason: string|null, resolvedAt: number, resolvedBy: string}} fields
    * @returns {Promise<Object[]>} The reports settled by this write
    */
-  static async resolveOpenReports(targetUserId, fields) {
+  static async resolveOpenReports(target, fields) {
     const open = await ReportModel.find({
-      targetUserId,
+      ...targetQuery(target),
       status: REPORT_STATUS.OPEN,
     });
     const ids = open.map((doc) => doc.id);

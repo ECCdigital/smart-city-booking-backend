@@ -61,11 +61,16 @@ const DECISION_LABELS = Object.freeze({
 /** The outcome of a report as the tenant owner reads it. */
 const REPORT_OUTCOME_LABELS = Object.freeze({
   [REPORT_STATUS.SUSPENDED]: "gesperrt",
+  [REPORT_STATUS.BLACKLISTED]: "auf die Blacklist gesetzt",
   [REPORT_STATUS.REJECTED]: "abgelehnt",
 });
 
-/** The reported user by name and address, or the address alone. */
+/**
+ * The reported user by name and address, the address alone, or the
+ * reported address of a guest (ECCdigital/tickets#632).
+ */
 const targetOf = ({ payload }) => {
+  if (payload.targetAddress) return payload.targetAddress;
   const name = payload.targetName?.trim();
   return name
     ? `${name} (${payload.targetUserId})`
@@ -187,6 +192,9 @@ const SupervisionMailType = Object.freeze({
     templateData: (ctx) => ({
       tenantName: tenantNameOf(ctx),
       target: targetOf(ctx),
+      targetKind: ctx.payload.targetAddress
+        ? "die Adresse eines Gasts"
+        : "einen User",
       reason: ctx.payload.reason || "",
       bookingId: ctx.payload.bookingId || null,
       reportedBy: ctx.payload.reportedBy || "",

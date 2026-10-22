@@ -12,17 +12,21 @@ function installReportCollection(documents = []) {
   const docs = documents.map((doc) => ({ ...doc }));
   const copy = (doc) => doc && JSON.parse(JSON.stringify(doc));
   const isOpen = (doc) => doc.status === "open";
+  // The target of a report, a user or an address (ECCdigital/tickets#632).
+  const sameTarget = (doc, { targetUserId = null, targetAddress = null }) =>
+    (doc.targetUserId ?? null) === targetUserId &&
+    (doc.targetAddress ?? null) === targetAddress;
 
   sinon
     .stub(ReportManager, "getOpenReport")
     .callsFake(
-      async (tenantId, targetUserId) =>
+      async (tenantId, target) =>
         copy(
           docs.find(
             (doc) =>
               isOpen(doc) &&
               doc.tenantId === tenantId &&
-              doc.targetUserId === targetUserId,
+              sameTarget(doc, target),
           ),
         ) ?? null,
     );
@@ -31,13 +35,24 @@ function installReportCollection(documents = []) {
     .callsFake(async (id) => copy(docs.find((doc) => doc.id === id)) ?? null);
   sinon
     .stub(ReportManager, "getReports")
-    .callsFake(async ({ status, targetUserId, tenantId } = {}) =>
-      docs
-        .filter((doc) => !status || doc.status === status)
-        .filter((doc) => !targetUserId || doc.targetUserId === targetUserId)
-        .filter((doc) => !tenantId || doc.tenantId === tenantId)
-        .sort((a, b) => a.reportedAt - b.reportedAt)
-        .map(copy),
+    .callsFake(
+      async ({
+        status,
+        targetUserId,
+        targetAddress,
+        addresses,
+        tenantId,
+      } = {}) =>
+        docs
+          .filter((doc) => !status || doc.status === status)
+          .filter((doc) => !targetUserId || doc.targetUserId === targetUserId)
+          .filter(
+            (doc) => !targetAddress || doc.targetAddress === targetAddress,
+          )
+          .filter((doc) => !addresses || typeof doc.targetAddress === "string")
+          .filter((doc) => !tenantId || doc.tenantId === tenantId)
+          .sort((a, b) => a.reportedAt - b.reportedAt)
+          .map(copy),
     );
   sinon.stub(ReportManager, "insertReport").callsFake(async (report) => {
     if (
@@ -46,7 +61,7 @@ function installReportCollection(documents = []) {
         (doc) =>
           isOpen(doc) &&
           doc.tenantId === report.tenantId &&
-          doc.targetUserId === report.targetUserId,
+          sameTarget(doc, report),
       )
     ) {
       const error = new Error("E11000 duplicate key error: open report");
@@ -72,9 +87,9 @@ function installReportCollection(documents = []) {
   });
   sinon
     .stub(ReportManager, "resolveOpenReports")
-    .callsFake(async (targetUserId, fields) => {
+    .callsFake(async (target, fields) => {
       const resolved = docs.filter(
-        (doc) => isOpen(doc) && doc.targetUserId === targetUserId,
+        (doc) => isOpen(doc) && sameTarget(doc, target),
       );
       for (const doc of resolved) Object.assign(doc, copy(fields));
       return resolved.map(copy);

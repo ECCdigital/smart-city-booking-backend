@@ -469,7 +469,7 @@ Der instanzweite Ausschluss eines Users. Er blockiert jede Anmeldung und wirkt s
 _Avoid_: suspended (am Mandanten, entfallen), Suspendierung, Blockieren, Blacklist-Sperre (es gibt keinen zweiten Zustand)
 
 **Meldung (eines Users oder einer Adresse)**:
-Der Hinweis eines Mandanten an die Instanz, dass er einen User gesperrt sehen will: ein Mitglied oder den Bucher einer seiner Buchungen, mit Grund (Pflicht) und gegebenenfalls der Buchung als Beleg. Je Mandant und Ziel ist höchstens eine offen; eine zweite ergänzt sie. Der Instanz-Owner erledigt alle offenen Meldungen zu einem User auf einmal, mit Sperre oder mit Ablehnung samt Begründung, und die Tenant-Owner des meldenden Mandanten erfahren das Ergebnis. Solange sie offen ist, kann der meldende Mandant sie ergänzen oder zurückziehen; danach ist eine neue Meldung zum selben Ziel möglich. Der gemeldete User erfährt nichts. Eine Meldung sperrt nie selbst.
+Der Hinweis eines Mandanten an die Instanz, dass er einen User gesperrt oder eine Adresse auf der Blacklist sehen will: ein Mitglied, den Bucher einer seiner Buchungen oder eine Adresse aus `mail` einer seiner Buchungen, mit Grund (Pflicht) und gegebenenfalls der Buchung als Beleg. Freie Adressen ohne Buchung lassen sich nicht melden, die Adresse eines Kontos nur als User, und eine Adresse, die schon ein Blacklist-Eintrag trifft, gar nicht. Je Mandant und Ziel ist höchstens eine offen; eine zweite ergänzt sie. Der Instanz-Owner erledigt alle offenen Meldungen zu einem User oder einer Adresse auf einmal, mit Sperre, mit Blacklist-Eintrag oder mit Ablehnung samt Begründung, und die Tenant-Owner des meldenden Mandanten erfahren das Ergebnis. Jede Sperre erledigt die offenen Meldungen zum User, jeder Blacklist-Eintrag die zu jeder Adresse, die er trifft. Solange sie offen ist, kann der meldende Mandant sie ergänzen oder zurückziehen; danach ist eine neue Meldung zum selben Ziel möglich. Der gemeldete User oder Gast erfährt nichts. Eine Meldung sperrt nie selbst.
 _Avoid_: Sperrantrag, Beschwerde, Report (als Sprechbegriff)
 
 **Blacklist**:
@@ -477,7 +477,7 @@ Die Liste der Instanz aus Mailadressen und Domains, die der Instanz-Owner für a
 _Avoid_: Sperrliste, Sperre einer Adresse, Blacklist-Sperre
 
 **Blacklist-Eintrag**:
-Eine exakte Adresse (`max@firma.de`) oder eine Domain mit führendem `@` (`@wegwerf.de`) auf der Blacklist, getrimmt und kleingeschrieben wie die User-Ids, mit Grund (Pflicht, änderbar), Zeitpunkt, eintragender Person und Herkunft. Eine Domain trifft nur sich selbst, keine Subdomains; eine Plus-Adresse ist eine eigene Adresse. Wert und Art stehen nach dem Anlegen fest. Beim Anlegen sperrt er die passenden Konten außer Instanz-Ownern und schon gesperrten; beim Entfernen hebt er auf Wunsch genau diese Sperren wieder auf. Er läuft nicht ab.
+Eine exakte Adresse (`max@firma.de`) oder eine Domain mit führendem `@` (`@wegwerf.de`) auf der Blacklist, getrimmt und kleingeschrieben wie die User-Ids, mit Grund (Pflicht, änderbar), Zeitpunkt, eintragender Person und Herkunft (von Hand, aus einer Sperre oder aus Meldungen). Eine Domain trifft nur sich selbst, keine Subdomains; eine Plus-Adresse ist eine eigene Adresse. Wert und Art stehen nach dem Anlegen fest. Beim Anlegen sperrt er die passenden Konten außer Instanz-Ownern und schon gesperrten; beim Anlegen erledigt er außerdem die offenen Meldungen zu jeder Adresse, die er trifft, und verweist auf sie; beim Entfernen hebt er auf Wunsch genau diese Sperren wieder auf. Er läuft nicht ab.
 _Avoid_: Sperre einer Adresse, Blacklist-Sperre
 
 ### Favoriten
