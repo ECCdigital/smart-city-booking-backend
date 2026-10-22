@@ -4,13 +4,15 @@
  * wants suspended, with a reason and, where it reports from a booking, the
  * booking as evidence. The instance owner settles it with a suspension or
  * rejects it with a reason. A tenant has at most one open report per
- * target; a second report adds to it (`additions`).
+ * target; a second report adds to it (`additions`). The tenant may withdraw
+ * an open report of its own (ECCdigital/tickets#631).
  */
 
 const REPORT_STATUS = Object.freeze({
   OPEN: "open",
   SUSPENDED: "suspended",
   REJECTED: "rejected",
+  WITHDRAWN: "withdrawn",
 });
 
 const additionSchemaDefinition = {

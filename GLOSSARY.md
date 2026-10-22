@@ -469,7 +469,7 @@ Der instanzweite Ausschluss eines Users. Er blockiert jede Anmeldung und wirkt s
 _Avoid_: suspended (am Mandanten, entfallen), Suspendierung, Blockieren, Blacklist-Sperre (es gibt keinen zweiten Zustand)
 
 **Meldung (eines Users oder einer Adresse)**:
-Der Hinweis eines Mandanten an die Instanz, dass er einen User gesperrt sehen will: ein Mitglied oder den Bucher einer seiner Buchungen, mit Grund (Pflicht) und gegebenenfalls der Buchung als Beleg. Je Mandant und Ziel ist höchstens eine offen; eine zweite ergänzt sie. Der Instanz-Owner erledigt alle offenen Meldungen zu einem User auf einmal, mit Sperre oder mit Ablehnung samt Begründung, und die Tenant-Owner des meldenden Mandanten erfahren das Ergebnis. Der gemeldete User erfährt nichts. Eine Meldung sperrt nie selbst.
+Der Hinweis eines Mandanten an die Instanz, dass er einen User gesperrt sehen will: ein Mitglied oder den Bucher einer seiner Buchungen, mit Grund (Pflicht) und gegebenenfalls der Buchung als Beleg. Je Mandant und Ziel ist höchstens eine offen; eine zweite ergänzt sie. Der Instanz-Owner erledigt alle offenen Meldungen zu einem User auf einmal, mit Sperre oder mit Ablehnung samt Begründung, und die Tenant-Owner des meldenden Mandanten erfahren das Ergebnis. Solange sie offen ist, kann der meldende Mandant sie ergänzen oder zurückziehen; danach ist eine neue Meldung zum selben Ziel möglich. Der gemeldete User erfährt nichts. Eine Meldung sperrt nie selbst.
 _Avoid_: Sperrantrag, Beschwerde, Report (als Sprechbegriff)
 
 **Blacklist**:

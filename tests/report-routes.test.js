@@ -29,6 +29,8 @@ const {
 } = require("./helpers/booking-lifecycle-harness");
 const UserManager = require("../src/commons/data-managers/user-manager");
 const BookingModel = require("../src/commons/data-managers/models/bookingModel");
+const MembershipManager = require("../src/commons/data-managers/membership-manager");
+const InvitationManager = require("../src/commons/data-managers/invitation-manager");
 const SupervisionNotificationService = require("../src/commons/services/supervision/supervision-notification-service");
 const {
   account,
@@ -345,6 +347,236 @@ describe("reports (ECCdigital/tickets#630)", function () {
           )
         ).status,
       ).to.equal(403);
+    });
+  });
+
+  describe("ending the membership with the report (ECCdigital/tickets#631)", function () {
+    let removed;
+    let deletedInvitations;
+
+    beforeEach(function () {
+      removed = sinon.stub(MembershipManager, "removeMembership").resolves();
+      sinon
+        .stub(InvitationManager, "getInvitationsByTenantIDAndUserID")
+        .callsFake(async (tenantId, userId) =>
+          userId === CUSTOMER ? [{ token: "T-1" }, { token: "T-2" }] : [],
+        );
+      deletedInvitations = sinon
+        .stub(InvitationManager, "deleteInvitation")
+        .resolves();
+    });
+
+    it("ends the membership and the open invitations of the member", async function () {
+      const res = await report({
+        userId: CUSTOMER,
+        reason: "Beleidigt",
+        endMembership: true,
+      });
+
+      expect(res.status).to.equal(201);
+      expect(removed.calledOnceWith(TENANT, CUSTOMER)).to.equal(true);
+      expect(deletedInvitations.args).to.deep.equal([
+        [TENANT, "T-1"],
+        [TENANT, "T-2"],
+      ]);
+    });
+
+    it("keeps the membership without the checkbox", async function () {
+      await report({ userId: CUSTOMER, reason: "Beleidigt" });
+
+      expect(removed.called).to.equal(false);
+      expect(deletedInvitations.called).to.equal(false);
+    });
+
+    it("ends nothing where the report is refused", async function () {
+      user(CUSTOMER).isSuspended = true;
+      const suspended = await report({
+        userId: CUSTOMER,
+        reason: "x",
+        endMembership: true,
+      });
+      const owner = await report({
+        userId: OWNER,
+        reason: "x",
+        endMembership: true,
+      });
+
+      expect(suspended.status).to.equal(409);
+      expect(owner.status).to.equal(403);
+      expect(removed.called).to.equal(false);
+    });
+
+    it("ends nothing for a booker who is no member", async function () {
+      const booking = await h.manualBooking("room", {}, { mail: OWNER_B });
+
+      const res = await report({
+        bookingId: booking.id,
+        reason: "No-Show",
+        endMembership: true,
+      });
+
+      expect(res.status).to.equal(201);
+      expect(removed.called).to.equal(false);
+    });
+  });
+
+  describe("the reports of the tenant (ECCdigital/tickets#631)", function () {
+    const list = (by = ROLE_HOLDER, tenant = TENANT) =>
+      h.api().get(`/api/tenants/${tenant}/reports`).set(h.as(by));
+
+    beforeEach(async function () {
+      await report({ userId: CUSTOMER, reason: "Beleidigt" });
+      // Another tenant's report about the same user.
+      reports.push({
+        id: "R-B",
+        tenantId: TENANT_B,
+        targetUserId: CUSTOMER,
+        reason: "Zahlt nicht",
+        bookingId: null,
+        reportedBy: OWNER_B,
+        reportedAt: Date.now(),
+        additions: [],
+        status: "open",
+        rejectionReason: null,
+        resolvedAt: null,
+        resolvedBy: null,
+      });
+      await mails();
+    });
+
+    it("lists the tenant's own reports alone, with the name of the user", async function () {
+      const res = await list();
+
+      expect(res.status).to.equal(200);
+      expect(res.body).to.have.length(1);
+      expect(res.body[0]).to.include({
+        tenantId: TENANT,
+        targetUserId: CUSTOMER,
+        targetName: "Erika Muster",
+        status: "open",
+      });
+    });
+
+    it("refuses a role without manageUsers.updateAny", async function () {
+      expect((await list(READ_OWN_HOLDER)).status).to.equal(403);
+    });
+
+    const own = () => reports.find((doc) => doc.tenantId === TENANT);
+    const addTo = (id, body, by = ROLE_HOLDER) =>
+      h
+        .api()
+        .post(`/api/tenants/${TENANT}/reports/${id}/additions`)
+        .set(h.as(by))
+        .send(body);
+    const withdraw = (id, by = ROLE_HOLDER) =>
+      h
+        .api()
+        .post(`/api/tenants/${TENANT}/reports/${id}/withdraw`)
+        .set(h.as(by));
+
+    it("adds a reason to an open report of the tenant, without a mail", async function () {
+      const res = await addTo(own().id, { reason: " Wieder laut " }, OWNER);
+
+      expect(res.status).to.equal(200);
+      expect(res.body.additions).to.have.length(1);
+      expect(res.body.additions[0]).to.include({
+        reason: "Wieder laut",
+        reportedBy: OWNER,
+        bookingId: null,
+      });
+      expect(await mails()).to.deep.equal([]);
+    });
+
+    it("adds nothing without a reason", async function () {
+      const res = await addTo(own().id, { reason: "  " });
+
+      expect(res.status).to.equal(400);
+      expect(res.body.code).to.equal("report_reason_required");
+      expect(own().additions).to.have.length(0);
+    });
+
+    it("withdraws an open report of the tenant, without a mail", async function () {
+      const before = Date.now();
+
+      const res = await withdraw(own().id);
+
+      expect(res.status).to.equal(200);
+      expect(res.body).to.include({
+        status: "withdrawn",
+        resolvedBy: ROLE_HOLDER,
+      });
+      expect(res.body.resolvedAt).to.be.within(before, Date.now());
+      expect(own().status).to.equal("withdrawn");
+      expect(await mails()).to.deep.equal([]);
+    });
+
+    it("lets a new report be made after the withdrawal", async function () {
+      await withdraw(own().id);
+
+      const res = await report({ userId: CUSTOMER, reason: "Erneut" });
+
+      expect(res.status).to.equal(201);
+      expect(
+        reports.filter(
+          (doc) => doc.tenantId === TENANT && doc.status === "open",
+        ),
+      ).to.have.length(1);
+    });
+
+    it("answers 409 for a report no longer open", async function () {
+      await withdraw(own().id);
+
+      const added = await addTo(own().id, { reason: "Noch was" });
+      const again = await withdraw(own().id);
+
+      expect(added.status).to.equal(409);
+      expect(added.body.code).to.equal("report_not_open");
+      expect(again.status).to.equal(409);
+    });
+
+    it("leaves a report about a tenant owner to the tenant owners, and says so in the list", async function () {
+      const { body: aboutOwner } = await report(
+        { userId: OWNER, reason: "Leitung" },
+        ADMIN,
+      );
+
+      const added = await addTo(aboutOwner.id, { reason: "x" });
+      const withdrawn = await withdraw(aboutOwner.id);
+      const byOwner = await addTo(aboutOwner.id, { reason: "Ja" }, OWNER);
+      const listed = (await list()).body;
+
+      expect(added.status).to.equal(403);
+      expect(withdrawn.status).to.equal(403);
+      expect(byOwner.status).to.equal(200);
+      expect(
+        listed.map(({ targetUserId, targetTenantOwner }) => ({
+          targetUserId,
+          targetTenantOwner,
+        })),
+      ).to.deep.equal([
+        { targetUserId: CUSTOMER, targetTenantOwner: false },
+        { targetUserId: OWNER, targetTenantOwner: true },
+      ]);
+    });
+
+    it("answers 404 for another tenant's report and leaves it alone", async function () {
+      const added = await addTo("R-B", { reason: "Fremd" });
+      const withdrawn = await withdraw("R-B");
+
+      expect(added.status).to.equal(404);
+      expect(withdrawn.status).to.equal(404);
+      const foreign = reports.find((doc) => doc.id === "R-B");
+      expect(foreign).to.include({ status: "open" });
+      expect(foreign.additions).to.have.length(0);
+    });
+
+    it("refuses a role without manageUsers.updateAny", async function () {
+      const added = await addTo(own().id, { reason: "x" }, READ_OWN_HOLDER);
+      const withdrawn = await withdraw(own().id, READ_OWN_HOLDER);
+
+      expect(added.status).to.equal(403);
+      expect(withdrawn.status).to.equal(403);
+      expect(own().status).to.equal("open");
     });
   });
 

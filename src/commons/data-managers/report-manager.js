@@ -32,15 +32,25 @@ class ReportManager {
   }
 
   /**
+   * @param {string} id
+   * @returns {Promise<Object|null>} The report, whoever it belongs to
+   */
+  static async getReport(id) {
+    return plain(await ReportModel.findOne({ id }));
+  }
+
+  /**
    * @param {Object} [filter]
    * @param {string} [filter.status]
    * @param {string} [filter.targetUserId]
+   * @param {string} [filter.tenantId] The reporting tenant
    * @returns {Promise<Object[]>} The reports, oldest first
    */
-  static async getReports({ status, targetUserId } = {}) {
+  static async getReports({ status, targetUserId, tenantId } = {}) {
     const query = {};
     if (status) query.status = status;
     if (targetUserId) query.targetUserId = targetUserId;
+    if (tenantId) query.tenantId = tenantId;
     const docs = await ReportModel.find(query).sort({ reportedAt: 1 });
     return docs.map(plain);
   }
@@ -67,6 +77,23 @@ class ReportManager {
       await ReportModel.findOneAndUpdate(
         { id, status: REPORT_STATUS.OPEN },
         { $push: { additions: addition } },
+        { new: true },
+      ),
+    );
+  }
+
+  /**
+   * Closes a report that is still open with the given fields.
+   * @param {string} id The report
+   * @param {{status: string, resolvedAt: number, resolvedBy: string}} fields
+   * @returns {Promise<Object|null>} The report after the write, `null`
+   *   where it is not open anymore
+   */
+  static async closeOpenReport(id, fields) {
+    return plain(
+      await ReportModel.findOneAndUpdate(
+        { id, status: REPORT_STATUS.OPEN },
+        { $set: fields },
         { new: true },
       ),
     );

@@ -793,9 +793,7 @@ class TenantController {
         return next(new ForbiddenError());
       }
 
-      await InvitationService.deleteUserInvitations(tenantId, userId);
-
-      await MembershipManager.removeMembership(tenantId, userId);
+      await MembershipService.endMembership(tenantId, userId);
 
       const updatedMemberships =
         await MembershipManager.getMembershipsByTenantID(tenantId);

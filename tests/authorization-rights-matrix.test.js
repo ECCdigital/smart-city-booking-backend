@@ -848,6 +848,36 @@ describe("authorization rights matrix: the core routes by principal, stage and t
       admin: 400,
       foreignOwner: 403,
     }),
+    // --- the tenant's own reports (ECCdigital/tickets#631): the same role
+    // reads them, adds to and withdraws one (an unknown one is not found,
+    // an empty addition fails at its reason) -----------------------------
+    row("get", `/api/tenants/${A}/reports`, {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: [],
+      owner: [],
+      admin: [],
+      foreignOwner: 403,
+    }),
+    row("post", `/api/tenants/${A}/reports/R-unknown/additions`, {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 400,
+      owner: 400,
+      admin: 400,
+      foreignOwner: 403,
+    }),
+    row("post", `/api/tenants/${A}/reports/R-unknown/withdraw`, {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 404,
+      owner: 404,
+      admin: 404,
+      foreignOwner: 403,
+    }),
     row("get", "/api/instances/reports", {
       anonymous: 401,
       customer: 403,

@@ -18,7 +18,10 @@
       report of the tenant about the user gets the reason added
       (`additions`, `200`) instead of a second report. A new report records
       the occasion `report.created`: a mail to every instance owner. The
-      reported user learns nothing. Roles with `manageUsers.updateAny`
+      reported user learns nothing. With `endMembership` the membership of
+      a member ends with the report, its open invitations included, as
+      `POST /api/tenants/{tenant}/remove-user` does
+      (ECCdigital/tickets#631). Roles with `manageUsers.updateAny`
       (`tenantUser.report`).
     security:
       - bearerAuth: []
@@ -44,6 +47,9 @@
                 description: The booking whose booker is reported
               reason:
                 type: string
+              endMembership:
+                type: boolean
+                description: Ends the member's membership with the report
     responses:
       "201":
         description: The new report
@@ -74,6 +80,151 @@
       "409":
         description: "`report_target_already_suspended`"
 
+  get:
+    tags:
+      - Reports
+    summary: The reports of the tenant
+    description: |
+      The tenant's own reports, of every status, oldest first, each with
+      the names of the tenant and of the reported user
+      (ECCdigital/tickets#631). Roles with `manageUsers.updateAny`
+      (`tenantUser.report`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: tenant
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum: [open, suspended, rejected, withdrawn]
+    responses:
+      "200":
+        description: The reports
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                allOf:
+                  - $ref: "#/components/schemas/Report"
+                  - type: object
+                    properties:
+                      tenantName:
+                        type: string
+                      targetName:
+                        type: string
+                      targetSuspended:
+                        type: boolean
+                      targetTenantOwner:
+                        type: boolean
+                        description: |
+                          Whether the target is a tenant owner: only a
+                          tenant owner adds to or withdraws such a report
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not allowed to manage the tenant's users
+
+/api/tenants/{tenant}/reports/{id}/additions:
+  post:
+    tags:
+      - Reports
+    summary: Add a reason to an open report of the tenant
+    description: |
+      Adds a reason to an open report of the tenant
+      (ECCdigital/tickets#631), without a mail. A report about a tenant
+      owner only a tenant owner adds to. Roles with
+      `manageUsers.updateAny` (`tenantUser.report`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: tenant
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [reason]
+            properties:
+              reason:
+                type: string
+    responses:
+      "200":
+        description: The report with the reason added
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Report"
+      "400":
+        description: "`report_reason_required`"
+      "401":
+        description: Not authenticated
+      "403":
+        description: |
+          Not allowed to manage the tenant's users;
+          `report_target_tenant_owner`
+      "404":
+        description: "`report_not_found` (also another tenant's report)"
+      "409":
+        description: "`report_not_open`"
+
+/api/tenants/{tenant}/reports/{id}/withdraw:
+  post:
+    tags:
+      - Reports
+    summary: Withdraw an open report of the tenant
+    description: |
+      Settles an open report of the tenant as `withdrawn`
+      (ECCdigital/tickets#631), without a mail. A new report about the
+      same target is possible afterwards. A report about a tenant owner
+      only a tenant owner withdraws. Roles with `manageUsers.updateAny`
+      (`tenantUser.report`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: tenant
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        description: The report withdrawn
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Report"
+      "401":
+        description: Not authenticated
+      "403":
+        description: |
+          Not allowed to manage the tenant's users;
+          `report_target_tenant_owner`
+      "404":
+        description: "`report_not_found` (also another tenant's report)"
+      "409":
+        description: "`report_not_open`"
+
 /api/instances/reports:
   get:
     tags:
@@ -91,7 +242,7 @@
         in: query
         schema:
           type: string
-          enum: [open, suspended, rejected]
+          enum: [open, suspended, rejected, withdrawn]
       - name: userId
         in: query
         description: Only the reports about this user
@@ -210,7 +361,7 @@ components:
                 type: number
         status:
           type: string
-          enum: [open, suspended, rejected]
+          enum: [open, suspended, rejected, withdrawn]
         rejectionReason:
           type: string
           nullable: true

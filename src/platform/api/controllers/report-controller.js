@@ -15,7 +15,11 @@ const logger = bunyan.createLogger({
  * (`tenantUser.owner`, as at `remove-user`).
  */
 class ReportController {
-  /** Reports a member or a booker: 201 for a new report, 200 for an addition. */
+  /**
+   * Reports a member or a booker: 201 for a new report, 200 for an
+   * addition. `endMembership` ends the member's membership with it
+   * (ECCdigital/tickets#631).
+   */
   static async createReport(request, response, next) {
     try {
       const tenantId = request.params.tenant;
@@ -26,6 +30,7 @@ class ReportController {
         reason: request.body?.reason,
         by: request.user.id,
         mayReportOwner: request.reaches?.owner === "any",
+        endMembership: request.body?.endMembership === true,
       });
       logger.info(
         `${tenantId} -- ${created ? "reported" : "added to the report about"} user ${report.targetUserId} by user ${request.user.id}`,
@@ -45,6 +50,59 @@ class ReportController {
           targetUserId: request.query.userId,
         }),
       );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** The reports of the tenant, its own alone (ECCdigital/tickets#631). */
+  static async getTenantReports(request, response, next) {
+    try {
+      response.status(200).send(
+        await ReportService.list({
+          tenantId: request.params.tenant,
+          status: request.query.status,
+        }),
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** Adds a reason to an open report of the tenant (ECCdigital/tickets#631). */
+  static async addReason(request, response, next) {
+    try {
+      const tenantId = request.params.tenant;
+      const report = await ReportService.addReason({
+        tenantId,
+        reportId: request.params.id,
+        reason: request.body?.reason,
+        by: request.user.id,
+        mayReportOwner: request.reaches?.owner === "any",
+      });
+      logger.info(
+        `${tenantId} -- added to report ${report.id} by user ${request.user.id}`,
+      );
+      response.status(200).send(report);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** Withdraws an open report of the tenant (ECCdigital/tickets#631). */
+  static async withdrawReport(request, response, next) {
+    try {
+      const tenantId = request.params.tenant;
+      const report = await ReportService.withdraw({
+        tenantId,
+        reportId: request.params.id,
+        by: request.user.id,
+        mayReportOwner: request.reaches?.owner === "any",
+      });
+      logger.info(
+        `${tenantId} -- withdrew report ${report.id} by user ${request.user.id}`,
+      );
+      response.status(200).send(report);
     } catch (error) {
       next(error);
     }

@@ -251,6 +251,23 @@ router.post(
   authorize("tenantUser", "report", { also: ["owner"] }),
   ReportController.createReport,
 );
+// The tenant's own reports, to read, add to and withdraw
+// (ECCdigital/tickets#631).
+router.get(
+  "/tenants/:tenant/reports",
+  authorize("tenantUser", "report"),
+  ReportController.getTenantReports,
+);
+router.post(
+  "/tenants/:tenant/reports/:id/additions",
+  authorize("tenantUser", "report", { also: ["owner"] }),
+  ReportController.addReason,
+);
+router.post(
+  "/tenants/:tenant/reports/:id/withdraw",
+  authorize("tenantUser", "report", { also: ["owner"] }),
+  ReportController.withdrawReport,
+);
 router.post(
   "/tenants/:tenant/add-user",
   authorize("tenantUser", "manage"),

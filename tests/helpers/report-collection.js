@@ -27,11 +27,15 @@ function installReportCollection(documents = []) {
         ) ?? null,
     );
   sinon
+    .stub(ReportManager, "getReport")
+    .callsFake(async (id) => copy(docs.find((doc) => doc.id === id)) ?? null);
+  sinon
     .stub(ReportManager, "getReports")
-    .callsFake(async ({ status, targetUserId } = {}) =>
+    .callsFake(async ({ status, targetUserId, tenantId } = {}) =>
       docs
         .filter((doc) => !status || doc.status === status)
         .filter((doc) => !targetUserId || doc.targetUserId === targetUserId)
+        .filter((doc) => !tenantId || doc.tenantId === tenantId)
         .sort((a, b) => a.reportedAt - b.reportedAt)
         .map(copy),
     );
@@ -60,6 +64,12 @@ function installReportCollection(documents = []) {
       doc.additions = [...(doc.additions ?? []), copy(addition)];
       return copy(doc);
     });
+  sinon.stub(ReportManager, "closeOpenReport").callsFake(async (id, fields) => {
+    const doc = docs.find((candidate) => candidate.id === id);
+    if (!doc || !isOpen(doc)) return null;
+    Object.assign(doc, copy(fields));
+    return copy(doc);
+  });
   sinon
     .stub(ReportManager, "resolveOpenReports")
     .callsFake(async (targetUserId, fields) => {

@@ -4,6 +4,7 @@ const UserManager = require("../../data-managers/user-manager");
 const MembershipManager = require("../../data-managers/membership-manager");
 const BookingManager = require("../../data-managers/booking-manager");
 const TenantManager = require("../../data-managers/tenant-manager");
+const MembershipService = require("../membership/membership-service");
 const SupervisionNotificationService = require("../supervision/supervision-notification-service");
 const { NOTIFICATION_TYPES } = require("../supervision/supervision-constants");
 const { DOMAIN } = require("../authorization/reach");
@@ -60,7 +61,9 @@ class ReportService {
    * or the booker of the booking named (`assignedUserId`, with an
    * account), seen or not; a tenant owner only by a tenant owner, an
    * instance owner by nobody. An open report of the tenant about the user
-   * gets the reason added instead of a second report.
+   * gets the reason added instead of a second report. With
+   * `endMembership` the membership of a member ends with the report, its
+   * open invitations included (ECCdigital/tickets#631).
    *
    * @param {Object} params
    * @param {string} params.tenantId The reporting tenant
@@ -71,6 +74,8 @@ class ReportService {
    * @param {string} params.by Who reports
    * @param {boolean} params.mayReportOwner Whether who reports is a
    *   tenant owner (or the instance owner)
+   * @param {boolean} [params.endMembership] Whether the membership of
+   *   the target ends with the report
    * @returns {Promise<{report: Object, created: boolean}>}
    */
   static async report({
@@ -80,6 +85,7 @@ class ReportService {
     reason,
     by,
     mayReportOwner,
+    endMembership = false,
   }) {
     const trimmedReason = requiredText(reason, "report_reason_required");
     const targetUserId = await ReportService._target(tenantId, {
@@ -108,6 +114,28 @@ class ReportService {
       throw new ConflictError("report_target_already_suspended");
     }
 
+    const result = await ReportService._store(tenantId, target, {
+      reason: trimmedReason,
+      bookingId,
+      by,
+    });
+    // Who may report the target may end its membership: the same right,
+    // the same protection of the tenant owners.
+    if (endMembership && membership) {
+      await MembershipService.endMembership(tenantId, target.id);
+    }
+    return result;
+  }
+
+  /**
+   * Stores a report about the target, or adds it to the open one of the
+   * tenant, and tells the instance owners of a new one.
+   */
+  static async _store(
+    tenantId,
+    target,
+    { reason: trimmedReason, bookingId, by },
+  ) {
     const now = Date.now();
     const evidence = {
       reason: trimmedReason,
@@ -162,18 +190,72 @@ class ReportService {
   }
 
   /**
-   * The reports for the instance owner, oldest first, each with the name
-   * of its tenant and of the reported user.
+   * Adds a reason to an open report of the tenant, from its list
+   * (ECCdigital/tickets#631). No mail: the instance owner reads the
+   * addition with the report.
+   *
+   * @param {Object} params
+   * @param {string} params.tenantId The tenant the report must be of
+   * @param {string} params.reportId
+   * @param {*} params.reason Required
+   * @param {string} params.by Who adds
+   * @param {boolean} params.mayReportOwner As at `report`
+   * @returns {Promise<Object>} The report after the addition
+   */
+  static async addReason({ tenantId, reportId, reason, by, mayReportOwner }) {
+    const trimmedReason = requiredText(reason, "report_reason_required");
+    await ReportService._ownOpenReport(tenantId, reportId, mayReportOwner);
+    const added = await ReportManager.addToOpenReport(reportId, {
+      reason: trimmedReason,
+      bookingId: null,
+      reportedBy: by,
+      reportedAt: Date.now(),
+    });
+    if (!added) throw new ConflictError("report_not_open", { reportId });
+    return added;
+  }
+
+  /**
+   * Withdraws an open report of the tenant (ECCdigital/tickets#631): it is
+   * settled as `withdrawn`, without a mail, and a new report about the
+   * target may follow.
+   *
+   * @param {Object} params
+   * @param {string} params.tenantId The tenant the report must be of
+   * @param {string} params.reportId
+   * @param {string} params.by Who withdraws
+   * @param {boolean} params.mayReportOwner As at `report`
+   * @returns {Promise<Object>} The report withdrawn
+   */
+  static async withdraw({ tenantId, reportId, by, mayReportOwner }) {
+    await ReportService._ownOpenReport(tenantId, reportId, mayReportOwner);
+    const withdrawn = await ReportManager.closeOpenReport(reportId, {
+      status: REPORT_STATUS.WITHDRAWN,
+      resolvedAt: Date.now(),
+      resolvedBy: by,
+    });
+    if (!withdrawn) throw new ConflictError("report_not_open", { reportId });
+    return withdrawn;
+  }
+
+  /**
+   * The reports, oldest first, each with the name of its tenant and of
+   * the reported user: every tenant's for the instance owner, one
+   * tenant's own for the tenant (ECCdigital/tickets#631), there also
+   * whether the target is a tenant owner, whose report only a tenant owner
+   * may change.
    *
    * @param {Object} [filter]
    * @param {string} [filter.status] Default: every status
    * @param {string} [filter.targetUserId]
+   * @param {string} [filter.tenantId] Default: every tenant
    * @returns {Promise<Object[]>}
    */
-  static async list({ status, targetUserId } = {}) {
+  static async list({ status, targetUserId, tenantId } = {}) {
     const reports = await ReportManager.getReports({
       status,
       targetUserId: targetUserId ? normalizeUserId(targetUserId) : undefined,
+      tenantId,
     });
     const tenantNames = await tenantNamesOf(
       reports.map((report) => report.tenantId),
@@ -185,6 +267,13 @@ class ReportService {
         ])
       ).map((user) => [user.id, user]),
     );
+    const owners = tenantId
+      ? new Set(
+          (await MembershipManager.getOwnerMembershipsByTenantID(tenantId)).map(
+            (membership) => membership.userId,
+          ),
+        )
+      : null;
     return reports.map((report) => {
       const target = targets.get(report.targetUserId);
       return {
@@ -192,6 +281,7 @@ class ReportService {
         tenantName: tenantNames.get(report.tenantId),
         targetName: nameOf(target),
         targetSuspended: target?.isSuspended === true,
+        ...(owners && { targetTenantOwner: owners.has(report.targetUserId) }),
       };
     });
   }
@@ -327,6 +417,29 @@ class ReportService {
       });
     }
     return settled;
+  }
+
+  /**
+   * An open report of the tenant, for its own changes: another tenant's
+   * is not found, one about a tenant owner is a tenant owner's alone, as
+   * reporting it was.
+   */
+  static async _ownOpenReport(tenantId, reportId, mayReportOwner) {
+    const report = await ReportManager.getReport(reportId);
+    if (!report || report.tenantId !== tenantId) {
+      throw new NotFoundError("report_not_found", { reportId });
+    }
+    if (report.status !== REPORT_STATUS.OPEN) {
+      throw new ConflictError("report_not_open", { reportId });
+    }
+    const membership = await MembershipManager.getMembershipByTenantAndUserID(
+      tenantId,
+      report.targetUserId,
+    );
+    if (membership?.owner && !mayReportOwner) {
+      throw new ForbiddenError("report_target_tenant_owner");
+    }
+    return report;
   }
 
   /**
