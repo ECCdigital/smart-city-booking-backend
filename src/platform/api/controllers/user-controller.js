@@ -2,6 +2,7 @@ const UserManager = require("../../../commons/data-managers/user-manager");
 const { User } = require("../../../commons/entities/user/user");
 const bunyan = require("bunyan");
 const UserService = require("../../../commons/services/user-service");
+const SuspensionService = require("../../../commons/services/user/suspension-service");
 const ApiResponse = require("../../../commons/utilities/api-response");
 const { ForbiddenError, NotFoundError } = require("../../../errors/BaseError");
 
@@ -40,7 +41,9 @@ class UserController {
     try {
       const user = request.user;
 
-      const userObjects = await UserManager.getUsers();
+      const userObjects = await UserManager.getUsers(false, {
+        suspended: request.query.suspended === "true",
+      });
 
       logger.info(
         `Instance -- sending ${userObjects.length} users to user ${user?.id}`,
@@ -119,6 +122,10 @@ class UserController {
     try {
       const user = request.user;
       const userObject = new User(request.body);
+      // Suspending is an action of its own (ECCdigital/tickets#624): a new
+      // user is never suspended, and no client writes the record.
+      userObject.isSuspended = false;
+      userObject.suspension = null;
       userObject.setPassword(userObject.secret);
       const newUser = await UserManager.createUser(userObject);
       logger.info(
@@ -157,7 +164,6 @@ class UserController {
         "zipCode",
         "city",
         "isVerified",
-        "isSuspended",
       ];
 
       fields.forEach((field) => {
@@ -241,6 +247,53 @@ class UserController {
       response
         .status(error.status || 500)
         .send(error.message || "could not change user id");
+    }
+  }
+
+  /**
+   * Suspends a user at once, with a reason (ECCdigital/tickets#624).
+   */
+  static async suspendUser(request, response, next) {
+    try {
+      const user = await SuspensionService.suspend(request.params.id, {
+        reason: request.body?.reason,
+        by: request.user.id,
+      });
+      logger.info(
+        `Instance -- suspended user ${user.id} by user ${request.user.id}`,
+      );
+      response.status(200).send(user);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * The consequences of a suspension for its dialog: the user's bookings
+   * and memberships (ECCdigital/tickets#624).
+   */
+  static async getSuspensionPreview(request, response, next) {
+    try {
+      response
+        .status(200)
+        .send(await SuspensionService.preview(request.params.id));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Lifts the suspension of a user (ECCdigital/tickets#624).
+   */
+  static async unsuspendUser(request, response, next) {
+    try {
+      const user = await SuspensionService.unsuspend(request.params.id);
+      logger.info(
+        `Instance -- lifted the suspension of user ${user.id} by user ${request.user.id}`,
+      );
+      response.status(200).send(user);
+    } catch (error) {
+      next(error);
     }
   }
 

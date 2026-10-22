@@ -34,6 +34,10 @@ const userSchemaDefinition = {
   // VAT identification number (Umsatzsteuer-ID) of the user or their company
   vatId: { type: String, default: "" },
   isSuspended: { type: Boolean, default: false },
+  // The record of a suspension (glossary „Sperre (eines Users)“,
+  // ECCdigital/tickets#624): `{ reason, suspendedAt, suspendedBy, origin }`,
+  // `null` without one. A suspension stored before the record has none.
+  suspension: { type: Object, default: null },
   authType: { type: String, default: "local" },
   keycloakId: { type: String, default: "" },
   // The identity provider's confirmed e-mail verification (the verification

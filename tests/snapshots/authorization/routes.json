@@ -543,6 +543,30 @@
     "instanceOwner": 200,
     "expiredToken": 401
   },
+  "GET /api/users/:id/suspension-preview": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": 200,
+    "expiredToken": 401
+  },
+  "POST /api/users/:id/suspension": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": 400,
+    "expiredToken": 401
+  },
+  "DELETE /api/users/:id/suspension": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": 200,
+    "expiredToken": 401
+  },
   "PUT /api/user": {
     "anonymous": 401,
     "signedIn": 200,

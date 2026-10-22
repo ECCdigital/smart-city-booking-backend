@@ -300,6 +300,9 @@ const TABLE = {
     update: { any: "instanceOwner" },
     delete: { any: "instanceOwner" },
     changeId: { any: "instanceOwner" },
+    // Suspend, lift and preview a suspension (glossary „Sperre (eines
+    // Users)“, ECCdigital/tickets#624).
+    suspend: { any: "instanceOwner" },
   },
 
   membership: {

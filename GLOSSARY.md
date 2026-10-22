@@ -462,6 +462,12 @@ _Avoid_: Policy (als Sprechbegriff), ACL, Permission-Matrix, Rollengruppe (das i
 Die Prüfung an einer Route, ob der Prinzipal die Handlung an der Sache ausführen darf, und mit welcher Reichweite. Steht am Router, vor dem Handler: **jede** Route unter `src/platform` trägt genau einen der drei Marker — geprüft, ausdrücklich öffentlich, oder über ein Geheimnis (Token, Hook) autorisiert; ein Test hält das. Nicht zu verwechseln mit der Zugangsentscheidung, die das Bedienen von AccessPoints betrifft und nur das Verwaltungs-Ja der Berechtigung als Eingabe erhält.
 _Avoid_: Authorization (als Sprechbegriff), Berechtigungsprüfung (bei der Zugangsentscheidung als Altname gemeint), Rechteprüfung, Auth (das ist die Anmeldung)
 
+### Konten
+
+**Sperre (eines Users)**:
+Der instanzweite Ausschluss eines Users. Er blockiert jede Anmeldung und wirkt sofort. Seine Herkunft ist genau eine: von Hand durch den Instanz-Owner (auch aus Meldungen), mit Grund, Zeitpunkt und sperrender Person, oder ein Blacklist-Eintrag, der beim Eintragen auf die Adresse des Kontos passte. Die einzige Sperre, die es gibt. Ein Mandant kann nur melden, und die Blacklist sperrt nur über diese Sperre.
+_Avoid_: suspended (am Mandanten, entfallen), Suspendierung, Blockieren, Blacklist-Sperre (es gibt keinen zweiten Zustand)
+
 ### Favoriten
 
 **Favorit (eines Nutzers)**:

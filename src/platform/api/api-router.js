@@ -254,6 +254,21 @@ router.put(
   authorize("user", "update", { also: ["create"] }),
   UserController.storeUser,
 );
+router.get(
+  "/users/:id/suspension-preview",
+  authorize("user", "suspend"),
+  UserController.getSuspensionPreview,
+);
+router.post(
+  "/users/:id/suspension",
+  authorize("user", "suspend"),
+  UserController.suspendUser,
+);
+router.delete(
+  "/users/:id/suspension",
+  authorize("user", "suspend"),
+  UserController.unsuspendUser,
+);
 router.put("/user", authorize("user", "updateSelf"), UserController.updateMe);
 router.delete(
   "/users/:id",

@@ -733,6 +733,35 @@ describe("authorization rights matrix: the core routes by principal, stage and t
       admin: 200,
       foreignOwner: 403,
     }),
+    // --- the suspension of a user: the instance owner's alone
+    // (ECCdigital/tickets#624); without a reason the admin gets 400 ------
+    row("post", `/api/users/${CUSTOMER}/suspension`, {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 403,
+      owner: 403,
+      admin: 400,
+      foreignOwner: 403,
+    }),
+    row("delete", `/api/users/${CUSTOMER}/suspension`, {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 403,
+      owner: 403,
+      admin: 200,
+      foreignOwner: 403,
+    }),
+    row("get", `/api/users/${CUSTOMER}/suspension-preview`, {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 403,
+      owner: 403,
+      admin: 200,
+      foreignOwner: 403,
+    }),
   ];
 
   /**

@@ -114,9 +114,17 @@ class UserManager {
     return userEntity.toEntity();
   }
 
-  static async getUsers(withSensitive = false) {
+  /**
+   * @param {boolean} [withSensitive=false]
+   * @param {Object} [filter]
+   * @param {boolean} [filter.suspended] Only the suspended users
+   *   (ECCdigital/tickets#624)
+   */
+  static async getUsers(withSensitive = false, { suspended = false } = {}) {
     try {
-      const rawUsers = await UserModel.find({});
+      const rawUsers = await UserModel.find(
+        suspended ? { isSuspended: true } : {},
+      );
       return rawUsers.map((doc) => {
         let user = doc.toEntity();
         if (!withSensitive) {
