@@ -139,9 +139,11 @@ class BlacklistService {
    * @param {*} params.value An address or a domain
    * @param {*} params.reason Required
    * @param {string} params.by The instance owner who adds it
+   * @param {string} [params.suspensionUserId] The user whose suspension
+   *   adds the entry; gives it the origin `suspension`
    * @returns {Promise<Object>} The stored entry
    */
-  static async create({ value, reason, by }) {
+  static async create({ value, reason, by, suspensionUserId = null }) {
     const trimmedReason = requiredReason(reason);
     const parsed = BlacklistService.parse(value);
     if (await BlacklistManager.getEntryByValue(parsed.value)) {
@@ -157,8 +159,11 @@ class BlacklistService {
       reason: trimmedReason,
       createdAt: Date.now(),
       createdBy: by,
-      origin: BLACKLIST_ENTRY_ORIGINS.MANUAL,
+      origin: suspensionUserId
+        ? BLACKLIST_ENTRY_ORIGINS.SUSPENSION
+        : BLACKLIST_ENTRY_ORIGINS.MANUAL,
       suspendedUserIds: suspend.map((user) => user.id),
+      suspensionUserId,
     };
     const stored = await BlacklistManager.insertEntry(entry);
 
@@ -205,6 +210,22 @@ class BlacklistService {
     }
     await BlacklistManager.removeEntry(entry.id);
     return { unsuspendedUserIds };
+  }
+
+  /**
+   * Removes the exact entry of an address, if there is one; an entry of
+   * its domain stays (ECCdigital/tickets#626). Lifts no suspension.
+   *
+   * @param {*} address
+   * @returns {Promise<boolean>} Whether an entry was removed
+   */
+  static async removeAddressEntry(address) {
+    const entry = await BlacklistManager.getEntryByValue(
+      normalizeUserId(address),
+    );
+    if (entry?.kind !== BlacklistEntryKind.ADDRESS) return false;
+    await BlacklistManager.removeEntry(entry.id);
+    return true;
   }
 
   /**

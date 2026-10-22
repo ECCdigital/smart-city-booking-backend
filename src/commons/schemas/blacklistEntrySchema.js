@@ -11,8 +11,14 @@ const BlacklistEntryKind = Object.freeze({
   DOMAIN: "domain",
 });
 
-/** Where an entry comes from; a suspension and reports follow. */
-const BLACKLIST_ENTRY_ORIGINS = Object.freeze({ MANUAL: "manual" });
+/**
+ * Where an entry comes from: by hand, or from the suspension of a user
+ * (ECCdigital/tickets#626) with `suspensionUserId`; reports follow.
+ */
+const BLACKLIST_ENTRY_ORIGINS = Object.freeze({
+  MANUAL: "manual",
+  SUSPENSION: "suspension",
+});
 
 const blacklistEntrySchemaDefinition = {
   id: { type: String, required: true },
@@ -31,6 +37,8 @@ const blacklistEntrySchemaDefinition = {
     enum: Object.values(BLACKLIST_ENTRY_ORIGINS),
   },
   suspendedUserIds: { type: [String], default: [] },
+  // The user whose suspension added the entry, with origin `suspension`.
+  suspensionUserId: { type: String, default: null },
 };
 
 module.exports = {

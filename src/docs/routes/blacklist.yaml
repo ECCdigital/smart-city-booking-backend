@@ -226,12 +226,19 @@ components:
           description: The instance owner who added it
         origin:
           type: string
-          enum: [manual]
+          enum: [manual, suspension]
+          description: |
+            By hand, or `suspension` when suspending a user put their
+            address on the blacklist (ECCdigital/tickets#626)
         suspendedUserIds:
           type: array
           description: The accounts the entry suspended when it was added
           items:
             type: string
+        suspensionUserId:
+          type: string
+          nullable: true
+          description: With origin `suspension`, the user whose suspension added the entry
     BlacklistAccounts:
       type: array
       items:

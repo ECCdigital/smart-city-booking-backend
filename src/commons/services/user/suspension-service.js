@@ -8,6 +8,9 @@ const {
   NotFoundError,
 } = require("../../../errors/BaseError");
 
+// Required on use: the blacklist suspends through this service in turn.
+const BlacklistService = () => require("../blacklist/blacklist-service");
+
 /**
  * The suspension of a user (glossary „Sperre (eines Users)“,
  * ECCdigital/tickets#624): the instance owner suspends and lifts it as
@@ -18,15 +21,19 @@ const {
 class SuspensionService {
   /**
    * Suspends a user. A suspension already in place gets the new record:
-   * reasons do not pile up.
+   * reasons do not pile up. With `blacklist` the user's address goes on the
+   * blacklist too (ECCdigital/tickets#626): an entry of origin `suspension`
+   * with the reason of the suspension, unless an entry already hits the
+   * address. The suspension itself stays `manual`.
    *
    * @param {string} userId The user to suspend
    * @param {Object} params
    * @param {string} params.reason Why; required, stored trimmed
    * @param {string} params.by The instance owner who suspends
+   * @param {boolean} [params.blacklist=false] Put the address on the blacklist
    * @returns {Promise<Object>} The user as `GET /users/:id` shows them
    */
-  static async suspend(userId, { reason, by }) {
+  static async suspend(userId, { reason, by, blacklist = false }) {
     const trimmedReason = typeof reason === "string" ? reason.trim() : "";
     if (!trimmedReason) {
       throw new BadRequestError("suspension_reason_required");
@@ -36,6 +43,8 @@ class SuspensionService {
     if (picture.instanceOwner) {
       throw new ConflictError("instance_owner_not_suspendable");
     }
+    // An id that is no address fails here, before anything is suspended.
+    if (blacklist) BlacklistService().parse(user.id);
 
     await UserManager.updateUser({
       id: user.id,
@@ -47,18 +56,39 @@ class SuspensionService {
         origin: SUSPENSION_ORIGINS.MANUAL,
       },
     });
+    if (blacklist && !(await BlacklistService().match(user.id))) {
+      try {
+        await BlacklistService().create({
+          value: user.id,
+          reason: trimmedReason,
+          by,
+          suspensionUserId: user.id,
+        });
+      } catch (error) {
+        // Added meanwhile by someone else: the address is on the blacklist.
+        if (error.code !== "blacklist_entry_exists") throw error;
+      }
+    }
     return await UserManager.getUser(user.id);
   }
 
   /**
-   * Lifts the suspension of a user, with or without a record.
+   * Lifts the suspension of a user, with or without a record. With
+   * `removeBlacklistEntry` an exact entry of their address goes too
+   * (ECCdigital/tickets#626); a domain entry stays and does not suspend
+   * the account anew.
    *
    * @param {string} userId The user
+   * @param {Object} [options]
+   * @param {boolean} [options.removeBlacklistEntry=false]
    * @returns {Promise<Object>} The user as `GET /users/:id` shows them
    */
-  static async unsuspend(userId) {
+  static async unsuspend(userId, { removeBlacklistEntry = false } = {}) {
     const user = await SuspensionService._existingUser(userId);
     await SuspensionService._lift(user.id);
+    if (removeBlacklistEntry) {
+      await BlacklistService().removeAddressEntry(user.id);
+    }
     return await UserManager.getUser(user.id);
   }
 
@@ -109,18 +139,23 @@ class SuspensionService {
 
   /**
    * The consequences of a suspension for its dialog: the bookings assigned
-   * to the user across every tenant and the tenants they are an active
-   * member of.
+   * to the user across every tenant, the tenants they are an active member
+   * of and the blacklist entry that hits their address, if any
+   * (ECCdigital/tickets#626) - for the checkboxes of both dialogs.
    *
    * @param {string} userId The user
-   * @returns {Promise<{bookings: number, memberships: number}>}
+   * @returns {Promise<{bookings: number, memberships: number, blacklistEntry: Object|null}>}
    */
   static async preview(userId) {
     const user = await SuspensionService._existingUser(userId);
     const picture = await UserManager.getMembershipPicture(user.id);
+    const entry = await BlacklistService().match(user.id);
     return {
       bookings: await BookingManager.countAssignedBookings(user.id, DOMAIN),
       memberships: picture.memberships.length,
+      blacklistEntry: entry
+        ? { id: entry.id, value: entry.value, kind: entry.kind }
+        : null,
     };
   }
 

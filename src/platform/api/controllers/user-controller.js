@@ -251,13 +251,15 @@ class UserController {
   }
 
   /**
-   * Suspends a user at once, with a reason (ECCdigital/tickets#624).
+   * Suspends a user at once, with a reason (ECCdigital/tickets#624) and on
+   * request their address on the blacklist (ECCdigital/tickets#626).
    */
   static async suspendUser(request, response, next) {
     try {
       const user = await SuspensionService.suspend(request.params.id, {
         reason: request.body?.reason,
         by: request.user.id,
+        blacklist: request.body?.blacklist === true,
       });
       logger.info(
         `Instance -- suspended user ${user.id} by user ${request.user.id}`,
@@ -283,11 +285,14 @@ class UserController {
   }
 
   /**
-   * Lifts the suspension of a user (ECCdigital/tickets#624).
+   * Lifts the suspension of a user (ECCdigital/tickets#624), on request
+   * with the exact blacklist entry of their address (ECCdigital/tickets#626).
    */
   static async unsuspendUser(request, response, next) {
     try {
-      const user = await SuspensionService.unsuspend(request.params.id);
+      const user = await SuspensionService.unsuspend(request.params.id, {
+        removeBlacklistEntry: request.query.removeBlacklistEntry === "true",
+      });
       logger.info(
         `Instance -- lifted the suspension of user ${user.id} by user ${request.user.id}`,
       );

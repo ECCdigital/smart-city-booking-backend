@@ -26,12 +26,16 @@ const {
   account,
   installUserCollection,
 } = require("./helpers/auth-user-collection");
+const {
+  installBlacklistCollection,
+} = require("./helpers/blacklist-collection");
 
 describe("user suspension (ECCdigital/tickets#624)", function () {
   this.timeout(20000);
 
   let h;
   let docs;
+  let entries;
 
   beforeEach(async function () {
     h = await installHarness();
@@ -42,6 +46,7 @@ describe("user suspension (ECCdigital/tickets#624)", function () {
       account(OWNER, "geheim-1234"),
       account(CUSTOMER, "geheim-1234", { firstName: "Erika" }),
     ]);
+    entries = installBlacklistCollection();
   });
 
   afterEach(async function () {
@@ -50,6 +55,17 @@ describe("user suspension (ECCdigital/tickets#624)", function () {
   });
 
   const stored = (id) => docs.find((doc) => doc.id === id);
+  /** A domain entry hitting every address of the harness (ECCdigital/tickets#626). */
+  const domainEntry = () => ({
+    id: "domain",
+    value: "@example.test",
+    kind: "domain",
+    reason: "Wegwerf",
+    createdAt: 1,
+    createdBy: ADMIN,
+    origin: "manual",
+    suspendedUserIds: [],
+  });
   const suspend = (id, body, by = ADMIN) =>
     h.api().post(`/api/users/${id}/suspension`).set(h.as(by)).send(body);
 
@@ -127,6 +143,51 @@ describe("user suspension (ECCdigital/tickets#624)", function () {
     });
   });
 
+  describe("suspending with the address on the blacklist (ECCdigital/tickets#626)", function () {
+    it("adds an entry of origin suspension with the reason, the suspension stays manual", async function () {
+      const res = await suspend(CUSTOMER, {
+        reason: "Beleidigt Personal",
+        blacklist: true,
+      });
+
+      expect(res.status).to.equal(200);
+      expect(res.body.suspension.origin).to.equal("manual");
+      expect(entries).to.have.lengthOf(1);
+      expect(entries[0]).to.include({
+        value: CUSTOMER,
+        kind: "address",
+        reason: "Beleidigt Personal",
+        createdBy: ADMIN,
+        origin: "suspension",
+        suspensionUserId: CUSTOMER,
+      });
+      expect(entries[0].suspendedUserIds).to.deep.equal([]);
+    });
+
+    it("adds no entry without the checkbox", async function () {
+      const res = await suspend(CUSTOMER, { reason: "Test" });
+
+      expect(res.status).to.equal(200);
+      expect(entries).to.have.lengthOf(0);
+    });
+
+    it("adds no second entry when one already hits the address", async function () {
+      entries.push(domainEntry());
+
+      const res = await suspend(CUSTOMER, { reason: "Test", blacklist: true });
+
+      expect(res.status).to.equal(200);
+      expect(entries.map((entry) => entry.id)).to.deep.equal(["domain"]);
+    });
+
+    it("adds no entry when the suspension is refused", async function () {
+      const res = await suspend(CUSTOMER, { reason: " ", blacklist: true });
+
+      expect(res.status).to.equal(400);
+      expect(entries).to.have.lengthOf(0);
+    });
+  });
+
   describe("lifting", function () {
     const lift = (id, by = ADMIN) =>
       h.api().delete(`/api/users/${id}/suspension`).set(h.as(by));
@@ -156,6 +217,42 @@ describe("user suspension (ECCdigital/tickets#624)", function () {
     it("answers 404 for an unknown user and is the instance owner's alone", async function () {
       expect((await lift("niemand@example.test")).status).to.equal(404);
       expect((await lift(CUSTOMER, OWNER)).status).to.equal(403);
+    });
+  });
+
+  describe("lifting with a blacklist entry (ECCdigital/tickets#626)", function () {
+    const lift = (id, query = "") =>
+      h.api().delete(`/api/users/${id}/suspension${query}`).set(h.as(ADMIN));
+    beforeEach(async function () {
+      await suspend(CUSTOMER, { reason: "Test", blacklist: true });
+    });
+
+    it("removes the exact entry with ?removeBlacklistEntry=true", async function () {
+      const res = await lift(CUSTOMER, "?removeBlacklistEntry=true");
+
+      expect(res.status).to.equal(200);
+      expect(res.body.isSuspended).to.equal(false);
+      expect(entries).to.have.lengthOf(0);
+    });
+
+    it("keeps the exact entry without the checkbox", async function () {
+      const res = await lift(CUSTOMER);
+
+      expect(res.status).to.equal(200);
+      expect(res.body.isSuspended).to.equal(false);
+      expect(entries.map((entry) => entry.value)).to.deep.equal([CUSTOMER]);
+    });
+
+    it("keeps a domain entry, which does not suspend the account anew", async function () {
+      entries.splice(0, entries.length, domainEntry());
+
+      const res = await lift(CUSTOMER, "?removeBlacklistEntry=true");
+
+      expect(res.status).to.equal(200);
+      expect(entries.map((entry) => entry.id)).to.deep.equal(["domain"]);
+      expect(stored(CUSTOMER).isSuspended).to.equal(false);
+      const me = await h.api().get("/auth/me").set(h.as(CUSTOMER));
+      expect(me.status).to.equal(200);
     });
   });
 
@@ -233,7 +330,24 @@ describe("user suspension (ECCdigital/tickets#624)", function () {
       const res = await preview(CUSTOMER);
 
       expect(res.status).to.equal(200);
-      expect(res.body).to.deep.equal({ bookings: 2, memberships: 1 });
+      expect(res.body).to.deep.equal({
+        bookings: 2,
+        memberships: 1,
+        blacklistEntry: null,
+      });
+    });
+
+    it("names the blacklist entry that hits the address (ECCdigital/tickets#626)", async function () {
+      sinon.stub(BookingModel, "countDocuments").resolves(0);
+      entries.push(domainEntry());
+
+      const res = await preview(CUSTOMER);
+
+      expect(res.body.blacklistEntry).to.deep.equal({
+        id: "domain",
+        value: "@example.test",
+        kind: "domain",
+      });
     });
 
     it("answers 404 for an unknown user and is the instance owner's alone", async function () {
