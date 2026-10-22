@@ -7,6 +7,7 @@ const limits = require("../rate-limit/limits");
 const { TooManyRequestsError } = require("../../../errors/BaseError");
 const { afterAnswer } = require("./after-answer");
 const { normalizeClientPage } = require("./client-page");
+const BlacklistService = require("../blacklist/blacklist-service");
 
 /**
  * The public registration path (spec §6.3): signup and verification resend
@@ -39,6 +40,9 @@ class RegistrationService {
     // Validated before the lookup, so a malformed body fails the same way
     // whether or not the address has an account.
     user.validate();
+    // The one answer that tells (ECCdigital/tickets#628, #616): an address
+    // on the blacklist gets no account and no mail.
+    await BlacklistService.assertMayRegister(user.id);
 
     afterAnswer(
       () =>

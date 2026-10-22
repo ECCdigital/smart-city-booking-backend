@@ -35,6 +35,9 @@ const {
 } = require("./helpers/in-memory-rate-limit-events");
 const { installMailStackStore } = require("./helpers/mail-stack-fixtures");
 const {
+  installBlacklistCollection,
+} = require("./helpers/blacklist-collection");
+const {
   installInMemoryMailTransport,
 } = require("./helpers/in-memory-mail-transport");
 const {
@@ -98,6 +101,8 @@ describe("auth: mail links lead to the instance's own pages (ECCdigital/tickets#
   beforeEach(function () {
     installInMemoryRateLimitEvents();
     installMailStackStore();
+    // An empty blacklist: the signup asks it (ECCdigital/tickets#628).
+    installBlacklistCollection();
     // The mail stack fixture answers `getUser` itself; the store below the
     // manager answers it here.
     UserManager.getUser.restore();

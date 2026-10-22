@@ -16,6 +16,9 @@ const UserManager = require("../src/commons/data-managers/user-manager");
 const {
   hasVerificationProof,
 } = require("../src/commons/services/user/verification-proof");
+const {
+  installBlacklistCollection,
+} = require("./helpers/blacklist-collection");
 
 const KEYCLOAK_APP = {
   id: "keycloak",
@@ -73,6 +76,8 @@ describe("SSO verification proof", function () {
 
   describe("signup", function () {
     beforeEach(function () {
+      // An empty blacklist: the signup asks it (ECCdigital/tickets#628).
+      installBlacklistCollection();
       sinon
         .stub(UserManager, "resolveKeycloakUser")
         .rejects({ message: "User not found", status: 404 });

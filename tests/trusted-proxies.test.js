@@ -31,6 +31,9 @@ const {
   installInMemoryMailTransport,
 } = require("./helpers/in-memory-mail-transport");
 const { installMailStackStore } = require("./helpers/mail-stack-fixtures");
+const {
+  installBlacklistCollection,
+} = require("./helpers/blacklist-collection");
 const authenticationRouter = require("../src/platform/authentication/authentication-router");
 
 const ENV_KEYS = ["TRUSTED_PROXIES", "RATE_LIMIT_SIGNUP_PER_IP"];
@@ -63,6 +66,8 @@ describe("trusted proxies: the client address the signup limit counts", function
 
     installInMemoryRateLimitEvents();
     installMailStackStore();
+    // An empty blacklist: the signup asks it (ECCdigital/tickets#628).
+    installBlacklistCollection();
     installInMemoryMailTransport();
     const users = new Map();
     UserManager.getUser.restore();

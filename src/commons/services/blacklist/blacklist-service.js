@@ -2,6 +2,8 @@ const { v4: uuidv4 } = require("uuid");
 const BlacklistManager = require("../../data-managers/blacklist-manager");
 const UserManager = require("../../data-managers/user-manager");
 const TenantManager = require("../../data-managers/tenant-manager");
+const InstanceManager = require("../../data-managers/instance-manager");
+const { CHECKOUT_REASONS } = require("../checkout/checkout-reasons");
 const { DOMAIN: DOMAIN_REACH } = require("../authorization/reach");
 const SuspensionService = require("../user/suspension-service");
 const {
@@ -97,6 +99,25 @@ class BlacklistService {
       if (entry) return entry;
     }
     return null;
+  }
+
+  /**
+   * Refuses the registration of an address on the blacklist
+   * (ECCdigital/tickets#628), before any account is created: with the
+   * checkout's reason and, as there, only the instance's `mailAddress` to
+   * write to with questions (empty where the instance has none) - never the
+   * entry or its reason.
+   *
+   * @param {*} address
+   * @returns {Promise<void>}
+   * @throws {ConflictError} `checkout.address_blacklisted`
+   */
+  static async assertMayRegister(address) {
+    if (!(await BlacklistService.match(address))) return;
+    const instance = await InstanceManager.getInstance();
+    throw new ConflictError(CHECKOUT_REASONS.ADDRESS_BLACKLISTED, {
+      mailAddress: instance?.mailAddress || "",
+    });
   }
 
   /**
