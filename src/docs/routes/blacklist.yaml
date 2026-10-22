@@ -243,3 +243,13 @@ components:
             type: string
           lastName:
             type: string
+          tenants:
+            type: array
+            description: The tenants the account is an active member of
+            items:
+              type: object
+              properties:
+                id:
+                  type: string
+                name:
+                  type: string

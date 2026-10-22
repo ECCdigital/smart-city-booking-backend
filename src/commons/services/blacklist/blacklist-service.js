@@ -1,6 +1,8 @@
 const { v4: uuidv4 } = require("uuid");
 const BlacklistManager = require("../../data-managers/blacklist-manager");
 const UserManager = require("../../data-managers/user-manager");
+const TenantManager = require("../../data-managers/tenant-manager");
+const { DOMAIN: DOMAIN_REACH } = require("../authorization/reach");
 const SuspensionService = require("../user/suspension-service");
 const {
   BlacklistEntryKind,
@@ -25,11 +27,18 @@ function requiredReason(reason) {
   return trimmed;
 }
 
-/** What the preview and the list name of an account. */
-const accountOf = (user) => ({
+/**
+ * What the preview names of an account: who it is and the tenants it is an
+ * active member of, by name.
+ */
+const accountOf = (user, tenantNames) => ({
   id: user.id,
   firstName: user.firstName ?? "",
   lastName: user.lastName ?? "",
+  tenants: user.tenantIds.map((id) => ({
+    id,
+    name: tenantNames.get(id) ?? id,
+  })),
 });
 
 /**
@@ -95,15 +104,28 @@ class BlacklistService {
    */
   static async preview(value) {
     const parsed = BlacklistService.parse(value);
-    const { suspend, instanceOwners, alreadySuspended } =
-      await BlacklistService._matchingAccounts(parsed);
+    const groups = await BlacklistService._matchingAccounts(parsed);
+    const tenantIds = [
+      ...new Set(
+        Object.values(groups).flatMap((users) =>
+          users.flatMap((user) => user.tenantIds),
+        ),
+      ),
+    ];
+    const tenantNames = new Map(
+      (await TenantManager.getTenantsByIds(tenantIds, DOMAIN_REACH)).map(
+        (tenant) => [tenant.id, tenant.name],
+      ),
+    );
+    const accountsOf = (users) =>
+      users.map((user) => accountOf(user, tenantNames));
     return {
       ...parsed,
       exists: !!(await BlacklistManager.getEntryByValue(parsed.value)),
       accounts: {
-        suspend: suspend.map(accountOf),
-        instanceOwners: instanceOwners.map(accountOf),
-        alreadySuspended: alreadySuspended.map(accountOf),
+        suspend: accountsOf(groups.suspend),
+        instanceOwners: accountsOf(groups.instanceOwners),
+        alreadySuspended: accountsOf(groups.alreadySuspended),
       },
     };
   }
@@ -185,7 +207,10 @@ class BlacklistService {
     return { unsuspendedUserIds };
   }
 
-  /** The accounts an entry hits, sorted into the three groups. */
+  /**
+   * The accounts an entry hits, sorted into the three groups, each with
+   * the ids of the tenants it is an active member of.
+   */
   static async _matchingAccounts({ value, kind }) {
     let users;
     if (kind === BlacklistEntryKind.DOMAIN) {
@@ -196,8 +221,12 @@ class BlacklistService {
     }
 
     const groups = { suspend: [], instanceOwners: [], alreadySuspended: [] };
-    for (const user of users) {
-      const picture = await UserManager.getMembershipPicture(user.id);
+    for (const found of users) {
+      const picture = await UserManager.getMembershipPicture(found.id);
+      const user = {
+        ...found,
+        tenantIds: picture.memberships.map((entry) => entry.tenantId),
+      };
       if (picture.instanceOwner) groups.instanceOwners.push(user);
       else if (user.isSuspended) groups.alreadySuspended.push(user);
       else groups.suspend.push(user);

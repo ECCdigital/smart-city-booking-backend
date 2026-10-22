@@ -18,6 +18,7 @@ const {
   ADMIN,
   OWNER,
   CUSTOMER,
+  TENANT,
 } = require("./helpers/booking-lifecycle-harness");
 const UserManager = require("../src/commons/data-managers/user-manager");
 const BlacklistService = require("../src/commons/services/blacklist/blacklist-service");
@@ -204,6 +205,19 @@ describe("blacklist (ECCdigital/tickets#625)", function () {
       expect(ids("alreadySuspended")).to.deep.equal([CUSTOMER]);
       expect(entries).to.have.lengthOf(0);
       expect(user(OWNER).isSuspended ?? false).to.equal(false);
+    });
+
+    it("names the tenants each account is an active member of", async function () {
+      const res = await preview(MAX);
+
+      expect(res.body.accounts.suspend).to.deep.equal([
+        {
+          id: MAX,
+          firstName: "Konto",
+          lastName: "max",
+          tenants: [{ id: TENANT, name: "Stadt Musterhausen" }],
+        },
+      ]);
     });
 
     it("tells an entry of the value exists", async function () {
