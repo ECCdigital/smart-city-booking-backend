@@ -39,6 +39,17 @@ const statusOf = (err) => {
   return 409;
 };
 
+/**
+ * The body of a refused checkout: the reason as text, as before - except an
+ * address on the blacklist (ECCdigital/tickets#627), whose answer is JSON
+ * with the instance's `mailAddress`, so the legacy checkout can name whom
+ * to write to.
+ */
+const bodyOf = (err) =>
+  err?.reason === CHECKOUT_REASONS.ADDRESS_BLACKLISTED
+    ? { error: err.reason, params: err.params }
+    : err.message;
+
 class CheckoutController {
   static async validateItem(request, response) {
     const tenantId = request.params.tenant;
@@ -157,7 +168,7 @@ class CheckoutController {
       );
     } catch (err) {
       logger.error(err);
-      response.status(statusOf(err)).send(err.message);
+      response.status(statusOf(err)).send(bodyOf(err));
     }
   }
 
@@ -246,7 +257,7 @@ class CheckoutController {
         `Error while creating group booking for tenant ${tenantId}:`,
         err,
       );
-      return res.status(statusOf(err)).send(err.message);
+      return res.status(statusOf(err)).send(bodyOf(err));
     }
   }
 

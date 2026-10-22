@@ -109,10 +109,16 @@ describe("checkout: an address on the blacklist", function () {
     expect(res.body.error.params).to.deep.equal({ mailAddress: OPERATOR });
   };
 
-  /** The v1 answer of a refusal: 409, as its other refusals, and the reason as text. */
+  /**
+   * The v1 answer of a refusal: 409, as its other refusals, and - unlike
+   * them - JSON, so the legacy checkout can name the instance's address.
+   */
   const refusedV1 = (res) => {
     expect(res.status).to.equal(409);
-    expect(res.text).to.equal(REASON);
+    expect(res.body).to.deep.equal({
+      error: REASON,
+      params: { mailAddress: OPERATOR },
+    });
   };
 
   const cases = [
