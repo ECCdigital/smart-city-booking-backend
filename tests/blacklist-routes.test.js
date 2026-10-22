@@ -383,4 +383,56 @@ describe("blacklist (ECCdigital/tickets#625)", function () {
       expect(await hit(undefined)).to.equal(null);
     });
   });
+
+  describe("the users name the entry that hits their address (ECCdigital/tickets#626)", function () {
+    beforeEach(async function () {
+      await create({ value: MAX, reason: "exakt" });
+      await create({ value: "@firma.test", reason: "Domain" });
+    });
+
+    const matchOf = (body, id) =>
+      body.find((candidate) => candidate.id === id).blacklistMatch;
+
+    it("in the list: the exact entry, the domain or none", async function () {
+      const res = await h.api().get("/api/users").set(h.as(ADMIN));
+
+      expect(res.status).to.equal(200);
+      expect(matchOf(res.body, MAX)).to.include({
+        value: MAX,
+        kind: "address",
+      });
+      expect(matchOf(res.body, ANNA)).to.include({
+        value: "@firma.test",
+        kind: "domain",
+      });
+      expect(matchOf(res.body, SUB)).to.equal(null);
+      expect(matchOf(res.body, CUSTOMER)).to.equal(null);
+    });
+
+    it("for a single user", async function () {
+      const res = await h.api().get(`/api/users/${ANNA}`).set(h.as(ADMIN));
+
+      expect(res.status).to.equal(200);
+      expect(res.body.blacklistMatch).to.deep.equal({
+        id: entries.find((entry) => entry.value === "@firma.test").id,
+        value: "@firma.test",
+        kind: "domain",
+      });
+    });
+
+    it("in the answers of suspending and lifting", async function () {
+      const suspended = await h
+        .api()
+        .post(`/api/users/${CUSTOMER}/suspension`)
+        .set(h.as(ADMIN))
+        .send({ reason: "Test", blacklist: true });
+      expect(suspended.body.blacklistMatch).to.include({ value: CUSTOMER });
+
+      const lifted = await h
+        .api()
+        .delete(`/api/users/${CUSTOMER}/suspension?removeBlacklistEntry=true`)
+        .set(h.as(ADMIN));
+      expect(lifted.body.blacklistMatch).to.equal(null);
+    });
+  });
 });

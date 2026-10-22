@@ -165,6 +165,21 @@ components:
           type: string
         isSuspended:
           type: boolean
+        blacklistMatch:
+          type: object
+          nullable: true
+          description: |
+            The blacklist entry that hits the user's address now, `null`
+            without one (ECCdigital/tickets#626). Also in `GET /api/users`
+            and `GET /api/users/{id}`.
+          properties:
+            id:
+              type: string
+            value:
+              type: string
+            kind:
+              type: string
+              enum: [address, domain]
         suspension:
           nullable: true
           description: |

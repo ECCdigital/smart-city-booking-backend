@@ -3,6 +3,7 @@ const { User } = require("../../../commons/entities/user/user");
 const bunyan = require("bunyan");
 const UserService = require("../../../commons/services/user-service");
 const SuspensionService = require("../../../commons/services/user/suspension-service");
+const BlacklistService = require("../../../commons/services/blacklist/blacklist-service");
 const ApiResponse = require("../../../commons/utilities/api-response");
 const { ForbiddenError, NotFoundError } = require("../../../errors/BaseError");
 
@@ -10,6 +11,13 @@ const logger = bunyan.createLogger({
   name: "user-controller.js",
   level: process.env.LOG_LEVEL,
 });
+
+/**
+ * A user as the instance owner's user routes answer them: with the
+ * blacklist entry that hits the address (ECCdigital/tickets#626).
+ */
+const withMatch = async (user) =>
+  (await BlacklistService.withMatches([user]))[0];
 
 /**
  * Web Controller for the users of the instance. The right is the router's
@@ -41,9 +49,11 @@ class UserController {
     try {
       const user = request.user;
 
-      const userObjects = await UserManager.getUsers(false, {
-        suspended: request.query.suspended === "true",
-      });
+      const userObjects = await BlacklistService.withMatches(
+        await UserManager.getUsers(false, {
+          suspended: request.query.suspended === "true",
+        }),
+      );
 
       logger.info(
         `Instance -- sending ${userObjects.length} users to user ${user?.id}`,
@@ -79,7 +89,7 @@ class UserController {
       logger.info(
         `Instance -- Sending user ${userObject.id} to user ${user?.id}`,
       );
-      response.status(200).send(userObject);
+      response.status(200).send(await withMatch(userObject));
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not get user");
@@ -264,7 +274,7 @@ class UserController {
       logger.info(
         `Instance -- suspended user ${user.id} by user ${request.user.id}`,
       );
-      response.status(200).send(user);
+      response.status(200).send(await withMatch(user));
     } catch (error) {
       next(error);
     }
@@ -296,7 +306,7 @@ class UserController {
       logger.info(
         `Instance -- lifted the suspension of user ${user.id} by user ${request.user.id}`,
       );
-      response.status(200).send(user);
+      response.status(200).send(await withMatch(user));
     } catch (error) {
       next(error);
     }

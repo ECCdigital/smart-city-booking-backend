@@ -28,6 +28,20 @@ function requiredReason(reason) {
 }
 
 /**
+ * The values an entry hitting this address would have, in order: the
+ * exact address, then its domain. None for anything but an address.
+ */
+function candidatesOf(address) {
+  const normalized = normalizeUserId(address);
+  if (!ADDRESS.test(normalized)) return [];
+  return [normalized, normalized.slice(normalized.indexOf("@"))];
+}
+
+/** An entry as a user answer names it, or `null`. */
+const matchOf = (entry) =>
+  entry ? { id: entry.id, value: entry.value, kind: entry.kind } : null;
+
+/**
  * What the preview names of an account: who it is and the tenants it is an
  * active member of, by name.
  */
@@ -78,14 +92,35 @@ class BlacklistService {
    * @returns {Promise<Object|null>} The entry, or `null`
    */
   static async match(address) {
-    const normalized = normalizeUserId(address);
-    if (!ADDRESS.test(normalized)) return null;
-    return (
-      (await BlacklistManager.getEntryByValue(normalized)) ??
-      (await BlacklistManager.getEntryByValue(
-        normalized.slice(normalized.indexOf("@")),
-      ))
+    for (const value of candidatesOf(address)) {
+      const entry = await BlacklistManager.getEntryByValue(value);
+      if (entry) return entry;
+    }
+    return null;
+  }
+
+  /**
+   * The users with `blacklistMatch`, the entry that hits their address
+   * now (`{ id, value, kind }`) or `null` (ECCdigital/tickets#626). Reads
+   * the blacklist once for all of them. For the answers of the instance
+   * owner's user routes only.
+   *
+   * @param {Object[]} users
+   * @returns {Promise<Object[]>}
+   */
+  static async withMatches(users) {
+    const byValue = new Map(
+      (await BlacklistManager.getEntries()).map((entry) => [
+        entry.value,
+        entry,
+      ]),
     );
+    return users.map((user) => {
+      const value = candidatesOf(user.id).find((candidate) =>
+        byValue.has(candidate),
+      );
+      return { ...user, blacklistMatch: matchOf(byValue.get(value)) };
+    });
   }
 
   /** @returns {Promise<Object[]>} Every entry, newest first */
