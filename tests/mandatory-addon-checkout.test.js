@@ -10,6 +10,9 @@ const {
 const {
   BundleCheckoutService,
 } = require("../src/commons/services/checkout/bundle-checkout-service");
+const {
+  installBlacklistCollection,
+} = require("./helpers/blacklist-collection");
 
 const TENANT_ID = "tenant-1";
 const CUSTOMER_ID = "kunde@example.com";
@@ -88,6 +91,8 @@ describe("BookingCheckout.createBooking — mandatory addons are never priced tw
       .resolves([]);
     // The checkout asks the tenant for its supervision level (offer gate).
     sinon.stub(TenantManager, "getTenant").resolves({ id: TENANT_ID });
+    // The blacklist, empty: the checkout asks it for the address (#627).
+    installBlacklistCollection();
     sinon.stub(EventManager, "getEvent").resolves(null);
     sinon.stub(OpeningHoursManager, "hasOpeningHoursConflict").resolves(false);
     sinon.stub(AccessService, "holdForBooking").resolves([]);

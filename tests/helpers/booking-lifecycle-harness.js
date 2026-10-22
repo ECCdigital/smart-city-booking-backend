@@ -104,6 +104,7 @@ const {
 const {
   reached,
 } = require("../../src/commons/services/supervision/public-projection");
+const { installBlacklistCollection } = require("./blacklist-collection");
 const {
   isTenantPubliclyVisible,
 } = require("../../src/commons/services/supervision/offer-gate");
@@ -864,6 +865,9 @@ async function installHarness({
   sinon.stub(OpeningHoursManager, "hasOpeningHoursConflict").resolves(false);
   sinon.stub(AccessPointManager, "getAccessPointsByIds").resolves([]);
   sinon.stub(MediaManager, "getBookingDocuments").resolves([]);
+  // The blacklist of the instance (ECCdigital/tickets#625), empty: the
+  // checkout asks it for every address (#627).
+  const blacklist = installBlacklistCollection();
   sinon.stub(MediaManager, "getMedia").resolves({
     id: "M1",
     tenantId: TENANT,
@@ -1083,6 +1087,8 @@ async function installHarness({
      * may change it (`h.instance.applications`, `h.instance.portalUrl`).
      */
     instance: storedInstance,
+    /** The entries of the blacklist; a test pushes what it needs. */
+    blacklist,
     bookables: catalogue,
     as,
     manualBooking,

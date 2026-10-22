@@ -26,9 +26,6 @@ const {
   account,
   installUserCollection,
 } = require("./helpers/auth-user-collection");
-const {
-  installBlacklistCollection,
-} = require("./helpers/blacklist-collection");
 
 const MAX = "max@firma.test";
 const MAX_PLUS = "max+news@firma.test";
@@ -55,7 +52,7 @@ describe("blacklist (ECCdigital/tickets#625)", function () {
       account(ANNA, "geheim-1234"),
       account(SUB, "geheim-1234"),
     ]);
-    entries = installBlacklistCollection();
+    entries = h.blacklist;
   });
 
   afterEach(async function () {

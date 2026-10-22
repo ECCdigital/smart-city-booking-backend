@@ -66,6 +66,9 @@ const ParevaCheckoutProvider = require("../src/commons/services/checkout/provide
 const checkoutProviderRegistry = require("../src/commons/services/checkout/providers/register");
 const { FakeIfbsApiClient } = require("./helpers/fake-ifbs-api-client");
 const { FakeParevaApiClient } = require("./helpers/fake-pareva-api-client");
+const {
+  installBlacklistCollection,
+} = require("./helpers/blacklist-collection");
 
 const TENANT = "tenant-1";
 const TENANT_MAIL = "stadt@example.test";
@@ -245,6 +248,8 @@ describe("locker booking outcomes: what the locker stack leaves at the booking a
    */
   function stubDataManagers() {
     const bookables = { bikebox: bikeBox(), "locker-s": lockerS() };
+    // The blacklist, empty: the checkout asks it for the address (#627).
+    installBlacklistCollection();
 
     sinon
       .stub(BookingManager, "getBooking")

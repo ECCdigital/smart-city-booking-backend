@@ -12,6 +12,9 @@ const CHECKOUT_REASONS = {
   PERMISSION_DENIED: "checkout.permission_denied",
   BAD_REQUEST: "checkout.bad_request",
   CUSTOM_FIELDS_INVALID: "checkout.custom_fields_invalid",
+  // An address of `mail` on the blacklist (ECCdigital/tickets#627); the
+  // answer carries the instance's `mailAddress` to write to with questions.
+  ADDRESS_BLACKLISTED: "checkout.address_blacklisted",
   UNKNOWN: "checkout.unknown",
 
   // bookable

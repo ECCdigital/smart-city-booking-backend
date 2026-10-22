@@ -26,9 +26,6 @@ const {
   account,
   installUserCollection,
 } = require("./helpers/auth-user-collection");
-const {
-  installBlacklistCollection,
-} = require("./helpers/blacklist-collection");
 
 describe("user suspension (ECCdigital/tickets#624)", function () {
   this.timeout(20000);
@@ -46,7 +43,7 @@ describe("user suspension (ECCdigital/tickets#624)", function () {
       account(OWNER, "geheim-1234"),
       account(CUSTOMER, "geheim-1234", { firstName: "Erika" }),
     ]);
-    entries = installBlacklistCollection();
+    entries = h.blacklist;
   });
 
   afterEach(async function () {
