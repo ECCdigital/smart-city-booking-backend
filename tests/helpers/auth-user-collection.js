@@ -147,6 +147,13 @@ function installUserCollection(documents) {
       }
       return asDocument(options.new ? after : before);
     });
+  // The write of the user id change, by the document key.
+  sinon.stub(UserModel, "updateOne").callsFake(async (filter, update) => {
+    const index = docs.findIndex((doc) => matches(doc, filter));
+    if (index === -1) return { matchedCount: 0, modifiedCount: 0 };
+    docs[index] = { ...docs[index], ...fieldsOf(update) };
+    return { matchedCount: 1, modifiedCount: 1 };
+  });
   sinon.stub(UserModel, "deleteOne").callsFake(async (filter) => {
     const index = docs.findIndex((doc) => matches(doc, filter));
     if (index === -1) return { deletedCount: 0 };

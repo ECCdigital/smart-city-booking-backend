@@ -223,6 +223,13 @@ router.get(
   authorize("tenantUser", "read"),
   TenantController.getUsers,
 );
+// The warning before adding or inviting an address on the blacklist
+// (ECCdigital/tickets#629).
+router.post(
+  "/tenants/:tenant/users/blacklist-match",
+  authorize("tenantUser", "manage"),
+  BlacklistController.match,
+);
 router.post(
   "/tenants/:tenant/add-user",
   authorize("tenantUser", "manage"),
@@ -271,6 +278,14 @@ router.post(
 router.get("/users", authorize("user", "read"), UserController.getUsers);
 router.get("/users/ids", authorize("user", "read"), UserController.getUserIds);
 router.get("/users/:id", authorize("user", "read"), UserController.getUser);
+// The warning before creating a user or changing a user id to an address
+// on the blacklist (ECCdigital/tickets#629); both ways are the instance
+// owner's, as `user.create` is.
+router.post(
+  "/users/blacklist-match",
+  authorize("user", "create"),
+  BlacklistController.match,
+);
 router.post(
   "/users/:id/change-id",
   authorize("user", "changeId"),

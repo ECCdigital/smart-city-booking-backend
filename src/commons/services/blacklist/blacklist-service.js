@@ -11,6 +11,7 @@ const {
   BLACKLIST_ENTRY_ORIGINS,
 } = require("../../schemas/blacklistEntrySchema");
 const { normalizeUserId } = require("../../utilities/user-id-utils");
+const { parseEmails } = require("../../utilities/mail-utils");
 const {
   BadRequestError,
   ConflictError,
@@ -99,6 +100,21 @@ class BlacklistService {
       if (entry) return entry;
     }
     return null;
+  }
+
+  /**
+   * Whether an entry hits any address of `mail`, each asked for itself
+   * (ECCdigital/tickets#629): the warning of the administration's ways,
+   * which tells no more than that - never the entry or its reason.
+   *
+   * @param {*} mail One address or a list, as `mail` of a booking
+   * @returns {Promise<boolean>}
+   */
+  static async isBlacklisted(mail) {
+    for (const address of parseEmails(mail)) {
+      if (await BlacklistService.match(address)) return true;
+    }
+    return false;
   }
 
   /**

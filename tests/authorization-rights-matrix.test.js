@@ -810,6 +810,32 @@ describe("authorization rights matrix: the core routes by principal, stage and t
       admin: 404,
       foreignOwner: 403,
     }),
+    // --- the warning of the administration's ways (ECCdigital/tickets#629):
+    // open to every role that may go the way, under the way's marker -----
+    ...[
+      `/api/${A}/bookings/blacklist-match`,
+      `/api/${A}/bookings/blacklist-match/mail`,
+      `/api/tenants/${A}/users/blacklist-match`,
+    ].map((path) =>
+      row("post", path, {
+        anonymous: 401,
+        customer: 403,
+        reader: 403,
+        staff: 200,
+        owner: 200,
+        admin: 200,
+        foreignOwner: 403,
+      }),
+    ),
+    row("post", "/api/users/blacklist-match", {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 403,
+      owner: 403,
+      admin: 200,
+      foreignOwner: 403,
+    }),
   ];
 
   /**

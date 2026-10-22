@@ -260,3 +260,176 @@ components:
                   type: string
                 name:
                   type: string
+
+# The warning of the administration's ways (ECCdigital/tickets#629): one
+# route per way, under the marker of the way, the same answer everywhere.
+/api/{tenant}/bookings/blacklist-match:
+  post:
+    tags:
+      - Instance
+    summary: Does the blacklist hit this address? (manual booking)
+    description: |
+      The warning before an address on the blacklist is saved
+      (ECCdigital/tickets#629). Tells only whether an entry hits the
+      address - never the entry or its reason. A list as in `mail` of a
+      booking is asked address by address; one hit is a hit. Saving
+      anyway is no refusal and suspends no account. Open to every role
+      that may go the way (`booking.create`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - in: path
+        name: tenant
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              address:
+                type: string
+                example: "max@firma.de"
+    responses:
+      "200":
+        description: Whether an entry hits the address
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                blacklisted:
+                  type: boolean
+      "401":
+        description: Not authenticated
+      "403":
+        description: May not go the way
+/api/{tenant}/bookings/blacklist-match/mail:
+  post:
+    tags:
+      - Instance
+    summary: Does the blacklist hit this address? (mail of a booking)
+    description: |
+      The warning before an address on the blacklist is saved
+      (ECCdigital/tickets#629). Tells only whether an entry hits the
+      address - never the entry or its reason. A list as in `mail` of a
+      booking is asked address by address; one hit is a hit. Saving
+      anyway is no refusal and suspends no account. Open to every role
+      that may go the way (`booking.update`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - in: path
+        name: tenant
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              address:
+                type: string
+                example: "max@firma.de"
+    responses:
+      "200":
+        description: Whether an entry hits the address
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                blacklisted:
+                  type: boolean
+      "401":
+        description: Not authenticated
+      "403":
+        description: May not go the way
+/api/tenants/{tenant}/users/blacklist-match:
+  post:
+    tags:
+      - Instance
+    summary: Does the blacklist hit this address? (add or invite into a tenant)
+    description: |
+      The warning before an address on the blacklist is saved
+      (ECCdigital/tickets#629). Tells only whether an entry hits the
+      address - never the entry or its reason. A list as in `mail` of a
+      booking is asked address by address; one hit is a hit. Saving
+      anyway is no refusal and suspends no account. Open to every role
+      that may go the way (`tenantUser.manage`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - in: path
+        name: tenant
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              address:
+                type: string
+                example: "max@firma.de"
+    responses:
+      "200":
+        description: Whether an entry hits the address
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                blacklisted:
+                  type: boolean
+      "401":
+        description: Not authenticated
+      "403":
+        description: May not go the way
+/api/users/blacklist-match:
+  post:
+    tags:
+      - Instance
+    summary: Does the blacklist hit this address? (create a user, change a user id)
+    description: |
+      The warning before an address on the blacklist is saved
+      (ECCdigital/tickets#629). Tells only whether an entry hits the
+      address - never the entry or its reason. A list as in `mail` of a
+      booking is asked address by address; one hit is a hit. Saving
+      anyway is no refusal and suspends no account. Open to every role
+      that may go the way (`user.create`).
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              address:
+                type: string
+                example: "max@firma.de"
+    responses:
+      "200":
+        description: Whether an entry hits the address
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                blacklisted:
+                  type: boolean
+      "401":
+        description: Not authenticated
+      "403":
+        description: May not go the way

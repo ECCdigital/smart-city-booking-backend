@@ -30,6 +30,23 @@ class BlacklistController {
     }
   }
 
+  /**
+   * The warning of the administration's ways (ECCdigital/tickets#629):
+   * whether an entry hits `address`, and nothing of the entry. Each way
+   * asks under its own marker, so every role that may go it may ask.
+   */
+  static async match(request, response, next) {
+    try {
+      response.status(200).send({
+        blacklisted: await BlacklistService.isBlacklisted(
+          request.body?.address,
+        ),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async createEntry(request, response, next) {
     try {
       const entry = await BlacklistService.create({
