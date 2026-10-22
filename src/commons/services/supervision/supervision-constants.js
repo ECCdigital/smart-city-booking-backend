@@ -99,6 +99,10 @@ const NOTIFICATION_TYPES = Object.freeze({
   TENANT_LEVEL_CHANGED: "tenant.levelChanged",
   REVIEW_QUEUE_ENTERED: "review.queueEntered",
   REVIEW_DECIDED: "review.decided",
+  // A report about a user to the instance, and its settlement for the
+  // reporting tenant (glossary „Meldung“, ECCdigital/tickets#630).
+  REPORT_CREATED: "report.created",
+  REPORT_RESOLVED: "report.resolved",
 });
 
 /** The delivery status of a notification outbox row. */

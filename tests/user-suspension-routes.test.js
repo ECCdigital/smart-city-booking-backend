@@ -331,6 +331,7 @@ describe("user suspension (ECCdigital/tickets#624)", function () {
         bookings: 2,
         memberships: 1,
         blacklistEntry: null,
+        openReports: [],
       });
     });
 

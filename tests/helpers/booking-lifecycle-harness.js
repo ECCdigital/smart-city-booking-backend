@@ -105,6 +105,7 @@ const {
   reached,
 } = require("../../src/commons/services/supervision/public-projection");
 const { installBlacklistCollection } = require("./blacklist-collection");
+const { installReportCollection } = require("./report-collection");
 const {
   isTenantPubliclyVisible,
 } = require("../../src/commons/services/supervision/offer-gate");
@@ -836,6 +837,14 @@ async function installHarness({
     .stub(RoleManager, "getRolesByIds")
     .callsFake(async (ids) => ids.map((id) => ROLES[id]?.()).filter(Boolean));
   sinon.stub(MembershipManager, "getMembershipsByTenantAndRoles").resolves([]);
+  // The owners of a tenant, the audience of a tenant owner notice.
+  sinon
+    .stub(MembershipManager, "getOwnerMembershipsByTenantID")
+    .callsFake(async (tenantId) =>
+      [OWNER, OWNER_B]
+        .map((userId) => membershipOf(userId, tenantId))
+        .filter((membership) => membership.owner),
+    );
   // The event of the ticket, with what the organizer's notice prints -
   // as the manager answers it: projected under `public`.
   const eventOfTicket = () => ({
@@ -868,6 +877,8 @@ async function installHarness({
   // The blacklist of the instance (ECCdigital/tickets#625), empty: the
   // checkout asks it for every address (#627).
   const blacklist = installBlacklistCollection();
+  // The reports to the instance (ECCdigital/tickets#630), none yet.
+  const reports = installReportCollection();
   sinon.stub(MediaManager, "getMedia").resolves({
     id: "M1",
     tenantId: TENANT,
@@ -1089,6 +1100,8 @@ async function installHarness({
     instance: storedInstance,
     /** The entries of the blacklist; a test pushes what it needs. */
     blacklist,
+    /** The reports to the instance, as stored. */
+    reports,
     bookables: catalogue,
     as,
     manualBooking,

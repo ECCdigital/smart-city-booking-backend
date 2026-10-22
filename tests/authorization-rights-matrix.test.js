@@ -836,6 +836,36 @@ describe("authorization rights matrix: the core routes by principal, stage and t
       admin: 200,
       foreignOwner: 403,
     }),
+    // --- the reports to the instance (ECCdigital/tickets#630): a role with
+    // `manageUsers.updateAny` reports (an empty report fails at its
+    // reason), the instance owner reads and settles ----------------------
+    row("post", `/api/tenants/${A}/reports`, {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 400,
+      owner: 400,
+      admin: 400,
+      foreignOwner: 403,
+    }),
+    row("get", "/api/instances/reports", {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 403,
+      owner: 403,
+      admin: [],
+      foreignOwner: 403,
+    }),
+    row("post", "/api/instances/reports/resolve", {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 403,
+      owner: 403,
+      admin: 400,
+      foreignOwner: 403,
+    }),
   ];
 
   /**

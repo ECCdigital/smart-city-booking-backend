@@ -13,6 +13,7 @@ const AccessController = require("./controllers/access-controller");
 const InstanceController = require("./controllers/instance-controller");
 const BlacklistController = require("./controllers/blacklist-controller");
 const SupervisionController = require("./controllers/supervision-controller");
+const ReportController = require("./controllers/report-controller");
 const {
   authorize,
   publicRoute,
@@ -101,6 +102,18 @@ router.delete(
   "/instances/blacklist/:id",
   authorize("blacklist", "write"),
   BlacklistController.removeEntry,
+);
+// The reports to the instance (glossary „Meldung“,
+// ECCdigital/tickets#630): read, and settle every open one about a user.
+router.get(
+  "/instances/reports",
+  authorize("report", "read"),
+  ReportController.getReports,
+);
+router.post(
+  "/instances/reports/resolve",
+  authorize("report", "resolve"),
+  ReportController.resolveReports,
 );
 
 // RULES
@@ -229,6 +242,14 @@ router.post(
   "/tenants/:tenant/users/blacklist-match",
   authorize("tenantUser", "manage"),
   BlacklistController.match,
+);
+// Reporting a member or a booker to the instance (glossary „Meldung“,
+// ECCdigital/tickets#630); a tenant owner only by a tenant owner, which
+// the marker decides too.
+router.post(
+  "/tenants/:tenant/reports",
+  authorize("tenantUser", "report", { also: ["owner"] }),
+  ReportController.createReport,
 );
 router.post(
   "/tenants/:tenant/add-user",

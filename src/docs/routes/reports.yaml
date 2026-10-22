@@ -1,0 +1,222 @@
+# swagger/routes/reports.yaml
+
+/api/tenants/{tenant}/reports:
+  post:
+    tags:
+      - Reports
+    summary: Report a user to the instance
+    description: |
+      A report (glossary "Meldung (eines Users oder einer Adresse)",
+      ECCdigital/tickets#630): the tenant reports a member or the booker
+      of one of its bookings (`assignedUserId`, with an account) to the
+      instance, with a required reason. With `bookingId` the booker is the
+      target and the booking hangs at the report as evidence; the booker's
+      user document need not be visible to who reports.
+
+      A tenant owner is reported only by a tenant owner, an instance owner
+      by nobody. A user already suspended gets no report (`409`). An open
+      report of the tenant about the user gets the reason added
+      (`additions`, `200`) instead of a second report. A new report records
+      the occasion `report.created`: a mail to every instance owner. The
+      reported user learns nothing. Roles with `manageUsers.updateAny`
+      (`tenantUser.report`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: tenant
+        in: path
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [reason]
+            properties:
+              userId:
+                type: string
+                description: The member reported; without `bookingId`
+              bookingId:
+                type: string
+                description: The booking whose booker is reported
+              reason:
+                type: string
+    responses:
+      "201":
+        description: The new report
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Report"
+      "200":
+        description: The open report with the reason added
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Report"
+      "400":
+        description: |
+          `report_reason_required`, `report_target_required`,
+          `report_target_without_account` (a booker without an account),
+          `report_target_not_booker` (`userId` and `bookingId` disagree)
+      "401":
+        description: Not authenticated
+      "403":
+        description: |
+          Not allowed to manage the tenant's users;
+          `report_target_not_of_tenant`, `report_target_tenant_owner`,
+          `report_target_instance_owner`
+      "404":
+        description: "`booking_not_found`"
+      "409":
+        description: "`report_target_already_suspended`"
+
+/api/instances/reports:
+  get:
+    tags:
+      - Reports
+    summary: The reports to the instance
+    description: |
+      The reports of every tenant, oldest first, each with the names of
+      its tenant and of the reported user and whether the user is
+      suspended. The admin UI groups the open ones by user
+      (ECCdigital/tickets#630). The instance owner's alone (`report.read`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum: [open, suspended, rejected]
+      - name: userId
+        in: query
+        description: Only the reports about this user
+        schema:
+          type: string
+    responses:
+      "200":
+        description: The reports
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                allOf:
+                  - $ref: "#/components/schemas/Report"
+                  - type: object
+                    properties:
+                      tenantName:
+                        type: string
+                      targetName:
+                        type: string
+                      targetSuspended:
+                        type: boolean
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+
+/api/instances/reports/resolve:
+  post:
+    tags:
+      - Reports
+    summary: Settle every open report about a user
+    description: |
+      One decision for every open report about the user, of whatever
+      tenant (ECCdigital/tickets#630). `suspend` suspends the user as
+      `POST /api/users/{id}/suspension` does, with `reason` as the reason of
+      the suspension, and the suspension points to the reports. `reject`
+      needs a reason, which the tenant owners read. Each reporting tenant's
+      owners get one mail (`report.resolved`). The instance owner's alone
+      (`report.resolve`).
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [userId, decision, reason]
+            properties:
+              userId:
+                type: string
+              decision:
+                type: string
+                enum: [suspend, reject]
+              reason:
+                type: string
+    responses:
+      "200":
+        description: The reports settled
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/Report"
+      "400":
+        description: |
+          `report_decision_invalid`, `suspension_reason_required`,
+          `report_rejection_reason_required`
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+      "404":
+        description: "`report_none_open`"
+      "409":
+        description: "`instance_owner_not_suspendable`"
+
+components:
+  schemas:
+    Report:
+      type: object
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        targetUserId:
+          type: string
+        reason:
+          type: string
+        bookingId:
+          type: string
+          nullable: true
+        reportedBy:
+          type: string
+        reportedAt:
+          type: number
+          description: Milliseconds since the epoch
+        additions:
+          type: array
+          description: Reasons added while the report was open
+          items:
+            type: object
+            properties:
+              reason:
+                type: string
+              bookingId:
+                type: string
+                nullable: true
+              reportedBy:
+                type: string
+              reportedAt:
+                type: number
+        status:
+          type: string
+          enum: [open, suspended, rejected]
+        rejectionReason:
+          type: string
+          nullable: true
+        resolvedAt:
+          type: number
+          nullable: true
+        resolvedBy:
+          type: string
+          nullable: true

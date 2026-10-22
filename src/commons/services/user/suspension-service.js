@@ -10,6 +10,8 @@ const {
 
 // Required on use: the blacklist suspends through this service in turn.
 const BlacklistService = () => require("../blacklist/blacklist-service");
+// Required on use: settling reports by a suspension calls back here.
+const ReportService = () => require("../report/report-service");
 
 /**
  * The suspension of a user (glossary „Sperre (eines Users)“,
@@ -24,7 +26,9 @@ class SuspensionService {
    * reasons do not pile up. With `blacklist` the user's address goes on the
    * blacklist too (ECCdigital/tickets#626): an entry of origin `suspension`
    * with the reason of the suspension, unless an entry already hits the
-   * address. The suspension itself stays `manual`.
+   * address. The suspension itself stays `manual`. It settles every open
+   * report about the user as `suspended` and points to them
+   * (`reportIds`, ECCdigital/tickets#630).
    *
    * @param {string} userId The user to suspend
    * @param {Object} params
@@ -46,16 +50,27 @@ class SuspensionService {
     // An id that is no address fails here, before anything is suspended.
     if (blacklist) BlacklistService().parse(user.id);
 
+    const suspension = {
+      reason: trimmedReason,
+      suspendedAt: Date.now(),
+      suspendedBy: by,
+      origin: SUSPENSION_ORIGINS.MANUAL,
+      reportIds: [],
+    };
     await UserManager.updateUser({
       id: user.id,
       isSuspended: true,
-      suspension: {
-        reason: trimmedReason,
-        suspendedAt: Date.now(),
-        suspendedBy: by,
-        origin: SUSPENSION_ORIGINS.MANUAL,
-      },
+      suspension,
     });
+    // Settled once the suspension holds, so no tenant owner hears of one
+    // that failed; the record then points to the reports.
+    const reportIds = await ReportService().settleBySuspension(user.id, by);
+    if (reportIds.length > 0) {
+      await UserManager.updateUser({
+        id: user.id,
+        suspension: { ...suspension, reportIds },
+      });
+    }
     if (blacklist && !(await BlacklistService().match(user.id))) {
       try {
         await BlacklistService().create({
@@ -141,10 +156,12 @@ class SuspensionService {
    * The consequences of a suspension for its dialog: the bookings assigned
    * to the user across every tenant, the tenants they are an active member
    * of and the blacklist entry that hits their address, if any
-   * (ECCdigital/tickets#626) - for the checkboxes of both dialogs.
+   * (ECCdigital/tickets#626) - for the checkboxes of both dialogs - and
+   * per tenant the open reports a suspension settles with the tenant
+   * owners it mails (ECCdigital/tickets#630).
    *
    * @param {string} userId The user
-   * @returns {Promise<{bookings: number, memberships: number, blacklistEntry: Object|null}>}
+   * @returns {Promise<{bookings: number, memberships: number, blacklistEntry: Object|null, openReports: Object[]}>}
    */
   static async preview(userId) {
     const user = await SuspensionService._existingUser(userId);
@@ -156,6 +173,7 @@ class SuspensionService {
       blacklistEntry: entry
         ? { id: entry.id, value: entry.value, kind: entry.kind }
         : null,
+      openReports: await ReportService().suspensionPreview(user.id),
     };
   }
 

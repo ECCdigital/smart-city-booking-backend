@@ -228,6 +228,9 @@ const TABLE = {
     read: { any: "manageUsers.readAny" },
     manage: { any: "manageUsers.updateAny" },
     owner: { any: "tenantOwner" },
+    // Reporting a member or a booker to the instance (glossary „Meldung“,
+    // ECCdigital/tickets#630); a tenant owner only with `owner`.
+    report: { any: "manageUsers.updateAny" },
   },
 
   tenant: {
@@ -291,6 +294,13 @@ const TABLE = {
   blacklist: {
     read: { any: "instanceOwner" },
     write: { any: "instanceOwner" },
+  },
+
+  // The reports to the instance (glossary „Meldung“,
+  // ECCdigital/tickets#630): the instance owner reads and settles them.
+  report: {
+    read: { any: "instanceOwner" },
+    resolve: { any: "instanceOwner" },
   },
 
   rule: {

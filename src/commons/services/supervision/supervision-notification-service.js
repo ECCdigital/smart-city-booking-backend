@@ -50,6 +50,10 @@ function noticesOf(row) {
       return [{ mailType: "SUPERVISION_TENANT_LEVEL_CHANGED", ctx }];
     case NOTIFICATION_TYPES.REVIEW_DECIDED:
       return [{ mailType: "SUPERVISION_REVIEW_DECIDED", ctx }];
+    case NOTIFICATION_TYPES.REPORT_CREATED:
+      return [{ mailType: "SUPERVISION_REPORT_CREATED", ctx }];
+    case NOTIFICATION_TYPES.REPORT_RESOLVED:
+      return [{ mailType: "SUPERVISION_REPORT_RESOLVED", ctx }];
     default:
       throw new Error(`unknown notification type ${row.type}`);
   }

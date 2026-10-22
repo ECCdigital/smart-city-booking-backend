@@ -468,6 +468,10 @@ _Avoid_: Authorization (als Sprechbegriff), Berechtigungsprüfung (bei der Zugan
 Der instanzweite Ausschluss eines Users. Er blockiert jede Anmeldung und wirkt sofort. Seine Herkunft ist genau eine: von Hand durch den Instanz-Owner (auch aus Meldungen), mit Grund, Zeitpunkt und sperrender Person, oder ein Blacklist-Eintrag, der beim Eintragen auf die Adresse des Kontos passte. Die einzige Sperre, die es gibt. Ein Mandant kann nur melden, und die Blacklist sperrt nur über diese Sperre.
 _Avoid_: suspended (am Mandanten, entfallen), Suspendierung, Blockieren, Blacklist-Sperre (es gibt keinen zweiten Zustand)
 
+**Meldung (eines Users oder einer Adresse)**:
+Der Hinweis eines Mandanten an die Instanz, dass er einen User gesperrt sehen will: ein Mitglied oder den Bucher einer seiner Buchungen, mit Grund (Pflicht) und gegebenenfalls der Buchung als Beleg. Je Mandant und Ziel ist höchstens eine offen; eine zweite ergänzt sie. Der Instanz-Owner erledigt alle offenen Meldungen zu einem User auf einmal, mit Sperre oder mit Ablehnung samt Begründung, und die Tenant-Owner des meldenden Mandanten erfahren das Ergebnis. Der gemeldete User erfährt nichts. Eine Meldung sperrt nie selbst.
+_Avoid_: Sperrantrag, Beschwerde, Report (als Sprechbegriff)
+
 **Blacklist**:
 Die Liste der Instanz aus Mailadressen und Domains, die der Instanz-Owner für alle Mandanten pflegt. Ihre eine Frage ist: Trifft ein Eintrag diese Adresse, und welcher? Sie sperrt Konten nur über die Sperre (eines Users). Tenant-Owner sehen sie nicht.
 _Avoid_: Sperrliste, Sperre einer Adresse, Blacklist-Sperre

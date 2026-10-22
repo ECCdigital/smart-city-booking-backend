@@ -1,0 +1,12 @@
+<p>
+  Eine Meldung Ihres Mandanten <strong>{{tenantName}}</strong> wurde von der
+  Plattform erledigt.
+</p>
+<br />
+<p><strong>Gemeldet:</strong> {{target}}</p>
+<p><strong>Ergebnis:</strong> {{outcome}}</p>
+{{#if reason}}
+  <p><strong>Begründung:</strong> {{reason}}</p>
+{{/if}}
+<br />
+<p><a href="{{adminUrl}}">Zur Verwaltung Ihres Mandanten</a></p>

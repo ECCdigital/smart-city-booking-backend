@@ -44,6 +44,8 @@ function installUserCollection(documents) {
 
   const matchesId = (stored, condition) => {
     if (typeof condition === "string") return stored === condition;
+    // The lookup of several accounts at once (`getUsersById`).
+    if (Array.isArray(condition?.$in)) return condition.$in.includes(stored);
     if (
       condition &&
       typeof condition === "object" &&

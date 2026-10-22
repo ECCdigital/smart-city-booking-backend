@@ -22,6 +22,11 @@
       (ECCdigital/tickets#626): an exact entry of origin `suspension` with
       the reason of the suspension, unless an entry already hits the
       address. The suspension itself stays `manual`.
+
+      It settles every open report about the user as `suspended`, the
+      record points to them (`reportIds`) and the owners of each reporting
+      tenant get a mail (ECCdigital/tickets#630). Lifting it later sends
+      none.
     security:
       - bearerAuth: []
     parameters:
@@ -107,7 +112,9 @@
       the bookings assigned to the user across every tenant and their
       active memberships. The bookings and memberships stay. It names the
       blacklist entry that hits the user's address, for the checkboxes of
-      both dialogs (ECCdigital/tickets#626). The instance owner's alone
+      both dialogs (ECCdigital/tickets#626), and per reporting tenant the
+      open reports the suspension settles with the tenant owners who then
+      get a mail (ECCdigital/tickets#630). The instance owner's alone
       (`user.suspend`).
     security:
       - bearerAuth: []
@@ -137,6 +144,26 @@
                     kind:
                       type: string
                       enum: [address, domain]
+                openReports:
+                  type: array
+                  description: |
+                    The open reports about the user per reporting tenant;
+                    suspending settles them as `suspended`
+                    (ECCdigital/tickets#630).
+                  items:
+                    type: object
+                    properties:
+                      tenantId:
+                        type: string
+                      tenantName:
+                        type: string
+                      reports:
+                        type: integer
+                      owners:
+                        type: array
+                        description: The tenant owners who get the outcome
+                        items:
+                          type: string
       "401":
         description: Not authenticated
       "403":
@@ -201,6 +228,13 @@ components:
             origin:
               type: string
               enum: [manual, blacklist]
+            reportIds:
+              type: array
+              description: |
+                With origin `manual`: the reports the suspension settled
+                (ECCdigital/tickets#630).
+              items:
+                type: string
             blacklistEntry:
               type: object
               description: |

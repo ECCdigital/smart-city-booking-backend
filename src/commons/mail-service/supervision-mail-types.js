@@ -15,7 +15,12 @@ const {
 const {
   REVIEW_ACTIONS,
 } = require("../services/supervision/review-transitions");
-const { adminDashboardUrl, adminInstanceTenantsUrl } = require("./mail-links");
+const { REPORT_STATUS } = require("../schemas/reportSchema");
+const {
+  adminDashboardUrl,
+  adminInstanceTenantsUrl,
+  adminInstanceReportsUrl,
+} = require("./mail-links");
 
 /** The level as the tenant owner reads it (glossary "Freigabestufe"). */
 const LEVEL_LABELS = Object.freeze({
@@ -52,6 +57,20 @@ const DECISION_LABELS = Object.freeze({
   [REVIEW_ACTIONS.REJECT]: "Ablehnung",
   [REVIEW_ACTIONS.WITHDRAW]: "Freigaberückzug",
 });
+
+/** The outcome of a report as the tenant owner reads it. */
+const REPORT_OUTCOME_LABELS = Object.freeze({
+  [REPORT_STATUS.SUSPENDED]: "gesperrt",
+  [REPORT_STATUS.REJECTED]: "abgelehnt",
+});
+
+/** The reported user by name and address, or the address alone. */
+const targetOf = ({ payload }) => {
+  const name = payload.targetName?.trim();
+  return name
+    ? `${name} (${payload.targetUserId})`
+    : String(payload.targetUserId ?? "");
+};
 
 const levelLabel = (level) => LEVEL_LABELS[level] ?? String(level ?? "–");
 const reviewStatusLabel = (status) =>
@@ -153,6 +172,40 @@ const SupervisionMailType = Object.freeze({
       decision: DECISION_LABELS[ctx.payload.action] ?? ctx.payload.action,
       fromStatus: reviewStatusLabel(ctx.payload.from),
       toStatus: reviewStatusLabel(ctx.payload.to),
+      reason: ctx.payload.reason || null,
+      adminUrl: adminDashboardUrl(),
+    }),
+  },
+
+  // A report about a user (glossary „Meldung“, ECCdigital/tickets#630):
+  // the instance owners decide; the reported user learns nothing.
+  SUPERVISION_REPORT_CREATED: {
+    family: "instance",
+    templateName: "supervision-report-created",
+    audience: "instanceOwners",
+    subject: (ctx) => `Neue Meldung: ${ctx.target}`,
+    templateData: (ctx) => ({
+      tenantName: tenantNameOf(ctx),
+      target: targetOf(ctx),
+      reason: ctx.payload.reason || "",
+      bookingId: ctx.payload.bookingId || null,
+      reportedBy: ctx.payload.reportedBy || "",
+      adminUrl: adminInstanceReportsUrl(),
+    }),
+  },
+
+  // The settlement of the reports of one tenant about one user: one mail
+  // to its owners, whatever number of reports it settled.
+  SUPERVISION_REPORT_RESOLVED: {
+    family: "instance",
+    templateName: "supervision-report-resolved",
+    audience: "tenantOwners",
+    subject: (ctx) => `Meldung erledigt: ${ctx.target} ${ctx.outcome}`,
+    templateData: (ctx) => ({
+      tenantName: tenantNameOf(ctx),
+      target: targetOf(ctx),
+      outcome:
+        REPORT_OUTCOME_LABELS[ctx.payload.outcome] ?? ctx.payload.outcome,
       reason: ctx.payload.reason || null,
       adminUrl: adminDashboardUrl(),
     }),
