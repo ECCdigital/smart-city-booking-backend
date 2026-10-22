@@ -11,6 +11,7 @@ const MailTemplateController = require("./controllers/mail-template-controller")
 const { BookingController } = require("./controllers/booking-controller");
 const AccessController = require("./controllers/access-controller");
 const InstanceController = require("./controllers/instance-controller");
+const BlacklistController = require("./controllers/blacklist-controller");
 const SupervisionController = require("./controllers/supervision-controller");
 const {
   authorize,
@@ -73,6 +74,33 @@ router.post(
   "/instances/supervision/notifications/:id/retry",
   authorize("instance", "supervisionNotificationRetry"),
   SupervisionController.retryNotification,
+);
+// The blacklist of the instance (glossary „Blacklist“,
+// ECCdigital/tickets#625).
+router.get(
+  "/instances/blacklist",
+  authorize("blacklist", "read"),
+  BlacklistController.getEntries,
+);
+router.get(
+  "/instances/blacklist/preview",
+  authorize("blacklist", "read"),
+  BlacklistController.getPreview,
+);
+router.post(
+  "/instances/blacklist",
+  authorize("blacklist", "write"),
+  BlacklistController.createEntry,
+);
+router.put(
+  "/instances/blacklist/:id",
+  authorize("blacklist", "write"),
+  BlacklistController.updateEntry,
+);
+router.delete(
+  "/instances/blacklist/:id",
+  authorize("blacklist", "write"),
+  BlacklistController.removeEntry,
 );
 
 // RULES

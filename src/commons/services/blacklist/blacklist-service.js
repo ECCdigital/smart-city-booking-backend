@@ -1,0 +1,217 @@
+const { v4: uuidv4 } = require("uuid");
+const BlacklistManager = require("../../data-managers/blacklist-manager");
+const UserManager = require("../../data-managers/user-manager");
+const SuspensionService = require("../user/suspension-service");
+const {
+  BlacklistEntryKind,
+  BLACKLIST_ENTRY_ORIGINS,
+} = require("../../schemas/blacklistEntrySchema");
+const { normalizeUserId } = require("../../utilities/user-id-utils");
+const {
+  BadRequestError,
+  ConflictError,
+  NotFoundError,
+} = require("../../../errors/BaseError");
+
+const ADDRESS = /^[^@\s]+@[^@\s]+$/;
+const DOMAIN = /^@[^@\s]+$/;
+
+/** A reason as stored: trimmed, required. */
+function requiredReason(reason) {
+  const trimmed = typeof reason === "string" ? reason.trim() : "";
+  if (!trimmed) {
+    throw new BadRequestError("blacklist_reason_required");
+  }
+  return trimmed;
+}
+
+/** What the preview and the list name of an account. */
+const accountOf = (user) => ({
+  id: user.id,
+  firstName: user.firstName ?? "",
+  lastName: user.lastName ?? "",
+});
+
+/**
+ * The blacklist of the instance (glossary „Blacklist“, „Blacklist-Eintrag“,
+ * ECCdigital/tickets#625): exact addresses and whole domains the instance
+ * owner keeps for every tenant. Its one question for everyone else is
+ * `match`: does an entry hit this address, and which one? A new entry
+ * suspends the matching accounts at once with the origin `blacklist`;
+ * removing it may lift exactly those suspensions.
+ */
+class BlacklistService {
+  /**
+   * An address or a domain as an entry stores it: trimmed and in lower
+   * case as the user ids are, a domain with its leading `@`. Plus
+   * addresses are addresses of their own.
+   *
+   * @param {*} value
+   * @returns {{value: string, kind: string}}
+   * @throws {BadRequestError} `blacklist_value_invalid` for anything else
+   */
+  static parse(value) {
+    const normalized = normalizeUserId(value);
+    if (DOMAIN.test(normalized)) {
+      return { value: normalized, kind: BlacklistEntryKind.DOMAIN };
+    }
+    if (ADDRESS.test(normalized)) {
+      return { value: normalized, kind: BlacklistEntryKind.ADDRESS };
+    }
+    throw new BadRequestError("blacklist_value_invalid", { value });
+  }
+
+  /**
+   * Does an entry hit this address, and which one? The exact address
+   * first, then its domain; a domain hits only itself, no subdomain.
+   *
+   * @param {*} address
+   * @returns {Promise<Object|null>} The entry, or `null`
+   */
+  static async match(address) {
+    const normalized = normalizeUserId(address);
+    if (!ADDRESS.test(normalized)) return null;
+    return (
+      (await BlacklistManager.getEntryByValue(normalized)) ??
+      (await BlacklistManager.getEntryByValue(
+        normalized.slice(normalized.indexOf("@")),
+      ))
+    );
+  }
+
+  /** @returns {Promise<Object[]>} Every entry, newest first */
+  static async list() {
+    return BlacklistManager.getEntries();
+  }
+
+  /**
+   * The accounts an entry of this value would hit, matched by the user
+   * id: those it would suspend, the instance owners it leaves out and the
+   * accounts already suspended, apart. `exists` tells an entry of this
+   * value is already stored.
+   *
+   * @param {*} value An address or a domain
+   * @returns {Promise<Object>}
+   */
+  static async preview(value) {
+    const parsed = BlacklistService.parse(value);
+    const { suspend, instanceOwners, alreadySuspended } =
+      await BlacklistService._matchingAccounts(parsed);
+    return {
+      ...parsed,
+      exists: !!(await BlacklistManager.getEntryByValue(parsed.value)),
+      accounts: {
+        suspend: suspend.map(accountOf),
+        instanceOwners: instanceOwners.map(accountOf),
+        alreadySuspended: alreadySuspended.map(accountOf),
+      },
+    };
+  }
+
+  /**
+   * Adds an entry and suspends the matching accounts at once, except
+   * instance owners and accounts already suspended. Each suspension
+   * carries the entry's reason, time and person and points to the entry.
+   *
+   * @param {Object} params
+   * @param {*} params.value An address or a domain
+   * @param {*} params.reason Required
+   * @param {string} params.by The instance owner who adds it
+   * @returns {Promise<Object>} The stored entry
+   */
+  static async create({ value, reason, by }) {
+    const trimmedReason = requiredReason(reason);
+    const parsed = BlacklistService.parse(value);
+    if (await BlacklistManager.getEntryByValue(parsed.value)) {
+      throw new ConflictError("blacklist_entry_exists", {
+        value: parsed.value,
+      });
+    }
+
+    const { suspend } = await BlacklistService._matchingAccounts(parsed);
+    const entry = {
+      id: uuidv4(),
+      ...parsed,
+      reason: trimmedReason,
+      createdAt: Date.now(),
+      createdBy: by,
+      origin: BLACKLIST_ENTRY_ORIGINS.MANUAL,
+      suspendedUserIds: suspend.map((user) => user.id),
+    };
+    const stored = await BlacklistManager.insertEntry(entry);
+
+    for (const user of suspend) {
+      await SuspensionService.suspendByBlacklistEntry(user.id, entry);
+    }
+    return stored;
+  }
+
+  /**
+   * Changes the reason of an entry; value and kind stay as they are.
+   *
+   * @param {string} id
+   * @param {*} reason Required
+   * @returns {Promise<Object>} The entry after the change
+   */
+  static async updateReason(id, reason) {
+    const trimmedReason = requiredReason(reason);
+    await BlacklistService._existingEntry(id);
+    return BlacklistManager.updateEntry(id, { reason: trimmedReason });
+  }
+
+  /**
+   * Removes an entry. With `unsuspend` it lifts the suspensions this entry
+   * made and still holds; a suspension by hand or by another entry, made
+   * since, stays.
+   *
+   * @param {string} id
+   * @param {Object} [options]
+   * @param {boolean} [options.unsuspend=false]
+   * @returns {Promise<{unsuspendedUserIds: string[]}>}
+   */
+  static async remove(id, { unsuspend = false } = {}) {
+    const entry = await BlacklistService._existingEntry(id);
+    const unsuspendedUserIds = [];
+    if (unsuspend) {
+      for (const userId of entry.suspendedUserIds ?? []) {
+        if (
+          await SuspensionService.unsuspendIfByBlacklistEntry(userId, entry.id)
+        ) {
+          unsuspendedUserIds.push(userId);
+        }
+      }
+    }
+    await BlacklistManager.removeEntry(entry.id);
+    return { unsuspendedUserIds };
+  }
+
+  /** The accounts an entry hits, sorted into the three groups. */
+  static async _matchingAccounts({ value, kind }) {
+    let users;
+    if (kind === BlacklistEntryKind.DOMAIN) {
+      users = await UserManager.getUsersOfDomain(value.slice(1));
+    } else {
+      const user = await UserManager.getUser(value);
+      users = user ? [user] : [];
+    }
+
+    const groups = { suspend: [], instanceOwners: [], alreadySuspended: [] };
+    for (const user of users) {
+      const picture = await UserManager.getMembershipPicture(user.id);
+      if (picture.instanceOwner) groups.instanceOwners.push(user);
+      else if (user.isSuspended) groups.alreadySuspended.push(user);
+      else groups.suspend.push(user);
+    }
+    return groups;
+  }
+
+  static async _existingEntry(id) {
+    const entry = await BlacklistManager.getEntry(id);
+    if (!entry) {
+      throw new NotFoundError("blacklist_entry_not_found", { id });
+    }
+    return entry;
+  }
+}
+
+module.exports = BlacklistService;

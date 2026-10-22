@@ -58,12 +58,53 @@ class SuspensionService {
    */
   static async unsuspend(userId) {
     const user = await SuspensionService._existingUser(userId);
-    await UserManager.updateUser({
-      id: user.id,
-      isSuspended: false,
-      suspension: null,
-    });
+    await SuspensionService._lift(user.id);
     return await UserManager.getUser(user.id);
+  }
+
+  /**
+   * Suspends a user by a blacklist entry that matched their address when
+   * it was added (ECCdigital/tickets#625): the entry's reason, time and
+   * person, the origin `blacklist` and the entry as it is now. The caller
+   * leaves out instance owners and users already suspended.
+   *
+   * @param {string} userId The user to suspend
+   * @param {Object} entry The blacklist entry
+   */
+  static async suspendByBlacklistEntry(userId, entry) {
+    await UserManager.updateUser({
+      id: userId,
+      isSuspended: true,
+      suspension: {
+        reason: entry.reason,
+        suspendedAt: entry.createdAt,
+        suspendedBy: entry.createdBy,
+        origin: SUSPENSION_ORIGINS.BLACKLIST,
+        blacklistEntry: { id: entry.id, value: entry.value },
+      },
+    });
+  }
+
+  /**
+   * Lifts the suspension of a user only if it still comes from this
+   * blacklist entry; a suspension by hand or by another entry stays.
+   *
+   * @param {string} userId The user
+   * @param {string} entryId The blacklist entry
+   * @returns {Promise<boolean>} Whether the suspension was lifted
+   */
+  static async unsuspendIfByBlacklistEntry(userId, entryId) {
+    const user = await UserManager.getUser(userId);
+    const { suspension } = user ?? {};
+    if (
+      !user?.isSuspended ||
+      suspension?.origin !== SUSPENSION_ORIGINS.BLACKLIST ||
+      suspension.blacklistEntry?.id !== entryId
+    ) {
+      return false;
+    }
+    await SuspensionService._lift(user.id);
+    return true;
   }
 
   /**
@@ -81,6 +122,14 @@ class SuspensionService {
       bookings: await BookingManager.countAssignedBookings(user.id, DOMAIN),
       memberships: picture.memberships.length,
     };
+  }
+
+  static async _lift(userId) {
+    await UserManager.updateUser({
+      id: userId,
+      isSuspended: false,
+      suspension: null,
+    });
   }
 
   static async _existingUser(userId) {

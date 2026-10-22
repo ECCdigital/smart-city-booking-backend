@@ -36,7 +36,9 @@ const userSchemaDefinition = {
   isSuspended: { type: Boolean, default: false },
   // The record of a suspension (glossary „Sperre (eines Users)“,
   // ECCdigital/tickets#624): `{ reason, suspendedAt, suspendedBy, origin }`,
-  // `null` without one. A suspension stored before the record has none.
+  // with origin `blacklist` also `blacklistEntry: { id, value }`
+  // (ECCdigital/tickets#625); `null` without one. A suspension stored before
+  // the record has none.
   suspension: { type: Object, default: null },
   authType: { type: String, default: "local" },
   keycloakId: { type: String, default: "" },

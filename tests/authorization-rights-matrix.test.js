@@ -762,6 +762,54 @@ describe("authorization rights matrix: the core routes by principal, stage and t
       admin: 200,
       foreignOwner: 403,
     }),
+    // --- the blacklist: the instance owner's alone, tenant owners do not
+    // see it (ECCdigital/tickets#625); an empty body or an unknown entry
+    // gets the admin 400 or 404, the list is empty ---------------------------
+    row("get", "/api/instances/blacklist", {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 403,
+      owner: 403,
+      admin: [],
+      foreignOwner: 403,
+    }),
+    row("get", "/api/instances/blacklist/preview?value=max%40firma.test", {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 403,
+      owner: 403,
+      admin: 200,
+      foreignOwner: 403,
+    }),
+    row("post", "/api/instances/blacklist", {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 403,
+      owner: 403,
+      admin: 400,
+      foreignOwner: 403,
+    }),
+    row("put", `/api/instances/blacklist/${FIXTURE_ID}`, {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 403,
+      owner: 403,
+      admin: 400,
+      foreignOwner: 403,
+    }),
+    row("delete", `/api/instances/blacklist/${FIXTURE_ID}`, {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 403,
+      owner: 403,
+      admin: 404,
+      foreignOwner: 403,
+    }),
   ];
 
   /**

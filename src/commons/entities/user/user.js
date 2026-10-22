@@ -3,8 +3,14 @@ const { userSchemaDefinition } = require("../../schemas/userSchema");
 const SchemaUtils = require("../../utilities/schemaUtils");
 const { UserHook, USER_HOOK_TYPES } = require("./userHook");
 
-/** The one origin of a suspension; a blacklist entry follows. */
-const SUSPENSION_ORIGINS = Object.freeze({ MANUAL: "manual" });
+/**
+ * The one origin of a suspension: by hand, or a blacklist entry that
+ * matched the account's address when it was added (ECCdigital/tickets#625).
+ */
+const SUSPENSION_ORIGINS = Object.freeze({
+  MANUAL: "manual",
+  BLACKLIST: "blacklist",
+});
 
 class User {
   constructor(params = {}) {

@@ -137,6 +137,24 @@ class UserManager {
     }
   }
 
+  /**
+   * The accounts whose id is an address of exactly this domain, without
+   * its subdomains (a blacklist entry of a domain, ECCdigital/tickets#625).
+   * Found as `_findRawById` finds an id: blanks around it and case aside.
+   *
+   * @param {string} domain The domain without `@`, normalized
+   * @returns {Promise<Object[]>} The users as `getUser` shows them
+   */
+  static async getUsersOfDomain(domain) {
+    const rawUsers = await UserModel.find({
+      id: {
+        $regex: `^\\s*[^@\\s]+@${escapeRegex(domain)}\\s*$`,
+        $options: "i",
+      },
+    });
+    return rawUsers.map((doc) => doc.toEntity().exportPublic());
+  }
+
   static async getUsersById(ids, withSensitive = false) {
     try {
       const rawUsers = await UserModel.find({ id: { $in: ids } });

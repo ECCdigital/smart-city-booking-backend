@@ -149,4 +149,14 @@ components:
               nullable: true
             origin:
               type: string
-              enum: [manual]
+              enum: [manual, blacklist]
+            blacklistEntry:
+              type: object
+              description: |
+                With origin `blacklist` only: the entry that suspended the
+                user as it was then (ECCdigital/tickets#625).
+              properties:
+                id:
+                  type: string
+                value:
+                  type: string

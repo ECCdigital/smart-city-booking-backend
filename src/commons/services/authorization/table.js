@@ -286,6 +286,13 @@ const TABLE = {
     checkRealm: { any: "instanceOwner" },
   },
 
+  // The blacklist of the instance (glossary „Blacklist“,
+  // ECCdigital/tickets#625): tenant owners neither see nor keep it.
+  blacklist: {
+    read: { any: "instanceOwner" },
+    write: { any: "instanceOwner" },
+  },
+
   rule: {
     read: { any: "instanceOwner" },
     write: { any: "instanceOwner" },
