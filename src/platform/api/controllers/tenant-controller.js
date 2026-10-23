@@ -35,9 +35,11 @@ const {
 const MediaReferenceGuard = require("../../../commons/services/media/media-reference-guard");
 const {
   BaseError,
+  BadRequestError,
   ForbiddenError,
   NotFoundError,
 } = require("../../../errors/BaseError");
+const membershipSchemaDefinition = require("../../../commons/schemas/membershipSchema");
 const {
   PUBLIC,
   tenantsOf,
@@ -979,11 +981,20 @@ class TenantController {
     }
   }
 
-  static async updateUserStatus(request, response) {
+  static async updateUserStatus(request, response, next) {
     try {
       const tenantId = request.params.tenant;
       const { userId, status } = request.body;
       const user = request.user;
+
+      // The update of the manager writes without the schema's validation;
+      // a status the membership does not know (`suspended` is gone,
+      // ECCdigital/tickets#633) is refused here.
+      if (!membershipSchemaDefinition.status.enum.includes(status)) {
+        return next(
+          new BadRequestError("membership_status_invalid", { status }),
+        );
+      }
 
       await MembershipManager.updateMembership(tenantId, userId, {
         status,

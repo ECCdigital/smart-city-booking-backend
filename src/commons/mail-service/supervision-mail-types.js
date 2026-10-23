@@ -20,6 +20,7 @@ const {
   adminDashboardUrl,
   adminInstanceTenantsUrl,
   adminInstanceReportsUrl,
+  adminTenantMembersUrl,
 } = require("./mail-links");
 
 /** The level as the tenant owner reads it (glossary "Freigabestufe"). */
@@ -91,6 +92,20 @@ const selfCreatedData = (ctx) => ({
   creatorUserId: ctx.payload.creatorUserId,
   level: levelLabel(ctx.payload.supervisionLevel),
   levelHint: LEVEL_HINTS[ctx.payload.supervisionLevel] ?? "",
+});
+
+/**
+ * The memberships the migration ended (ECCdigital/tickets#633), for the
+ * tenant's owners or, without one, the instance owners.
+ */
+const membershipsEndedData = (ctx) => ({
+  tenantName: tenantNameOf(ctx),
+  members: (ctx.payload.members ?? []).map((member) => ({
+    userId: member.userId,
+    name: member.name?.trim() || null,
+    instanceSuspended: member.instanceSuspended === true,
+  })),
+  membersUrl: adminTenantMembersUrl(ctx.tenantId),
 });
 
 const SupervisionMailType = Object.freeze({
@@ -217,6 +232,25 @@ const SupervisionMailType = Object.freeze({
       reason: ctx.payload.reason || null,
       adminUrl: adminDashboardUrl(),
     }),
+  },
+
+  // There is no suspension at the tenant any more: the migration ended
+  // every suspended membership, once, and tells the tenant's owners.
+  SUPERVISION_MEMBERSHIPS_ENDED: {
+    family: "instance",
+    templateName: "supervision-memberships-ended",
+    audience: "tenantOwners",
+    subject: (ctx) => `Mitgliedschaften beendet: ${ctx.tenantName}`,
+    templateData: (ctx) => ({ ...membershipsEndedData(ctx), noOwner: false }),
+  },
+
+  // The same for a tenant without an owner, to the instance owners.
+  SUPERVISION_MEMBERSHIPS_ENDED_NO_OWNER: {
+    family: "instance",
+    templateName: "supervision-memberships-ended",
+    audience: "instanceOwners",
+    subject: (ctx) => `Mitgliedschaften beendet: ${ctx.tenantName}`,
+    templateData: (ctx) => ({ ...membershipsEndedData(ctx), noOwner: true }),
   },
 });
 

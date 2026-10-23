@@ -103,6 +103,9 @@ const NOTIFICATION_TYPES = Object.freeze({
   // reporting tenant (glossary „Meldung“, ECCdigital/tickets#630).
   REPORT_CREATED: "report.created",
   REPORT_RESOLVED: "report.resolved",
+  // The one-time notice of the migration that ended the suspended
+  // memberships of a tenant (ECCdigital/tickets#633).
+  MEMBERSHIPS_ENDED: "memberships.ended",
 });
 
 /** The delivery status of a notification outbox row. */

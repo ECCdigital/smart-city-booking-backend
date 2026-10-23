@@ -106,10 +106,8 @@ class MembershipService {
     const memberships = await MembershipManager.getMembershipsByUserID(userId);
     if (!memberships?.length) return [];
 
-    const pending = memberships.filter(
-      (m) =>
-        m?.invitations?.some((i) => i?.status === "pending_approval") &&
-        m?.status !== "suspended",
+    const pending = memberships.filter((m) =>
+      m?.invitations?.some((i) => i?.status === "pending_approval"),
     );
     if (!pending.length) return [];
 
