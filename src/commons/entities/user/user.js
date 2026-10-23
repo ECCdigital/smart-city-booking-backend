@@ -3,6 +3,15 @@ const { userSchemaDefinition } = require("../../schemas/userSchema");
 const SchemaUtils = require("../../utilities/schemaUtils");
 const { UserHook, USER_HOOK_TYPES } = require("./userHook");
 
+/**
+ * The one origin of a suspension: by hand, or a blacklist entry that
+ * matched the account's address when it was added.
+ */
+const SUSPENSION_ORIGINS = Object.freeze({
+  MANUAL: "manual",
+  BLACKLIST: "blacklist",
+});
+
 class User {
   constructor(params = {}) {
     const defaults = SchemaUtils.createDefaults(userSchemaDefinition);
@@ -133,10 +142,29 @@ class User {
       created: this.created,
       isVerified: this.isVerified,
       isSuspended: this.isSuspended,
+      suspension: this.suspensionRecord(),
       authType: this.authType,
       idpEmailVerifiedAt: this.idpEmailVerifiedAt,
       idpEmailVerifiedProvider: this.idpEmailVerifiedProvider,
     };
+  }
+
+  /**
+   * The record of the suspension, `null` for a user not suspended. A
+   * suspension stored before the record reads as
+   * one by hand without reason, time and person.
+   * @returns {Object|null}
+   */
+  suspensionRecord() {
+    if (!this.isSuspended) return null;
+    return (
+      this.suspension ?? {
+        reason: null,
+        suspendedAt: null,
+        suspendedBy: null,
+        origin: SUSPENSION_ORIGINS.MANUAL,
+      }
+    );
   }
 
   /**
@@ -162,5 +190,6 @@ class User {
 
 module.exports = {
   User,
+  SUSPENSION_ORIGINS,
   USER_HOOK_TYPES,
 };

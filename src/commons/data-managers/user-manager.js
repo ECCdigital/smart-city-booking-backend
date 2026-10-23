@@ -114,9 +114,16 @@ class UserManager {
     return userEntity.toEntity();
   }
 
-  static async getUsers(withSensitive = false) {
+  /**
+   * @param {boolean} [withSensitive=false]
+   * @param {Object} [filter]
+   * @param {boolean} [filter.suspended] Only the suspended users
+   */
+  static async getUsers(withSensitive = false, { suspended = false } = {}) {
     try {
-      const rawUsers = await UserModel.find({});
+      const rawUsers = await UserModel.find(
+        suspended ? { isSuspended: true } : {},
+      );
       return rawUsers.map((doc) => {
         let user = doc.toEntity();
         if (!withSensitive) {
@@ -127,6 +134,24 @@ class UserManager {
     } catch (err) {
       throw err;
     }
+  }
+
+  /**
+   * The accounts whose id is an address of exactly this domain, without
+   * its subdomains (a blacklist entry of a domain).
+   * Found as `_findRawById` finds an id: blanks around it and case aside.
+   *
+   * @param {string} domain The domain without `@`, normalized
+   * @returns {Promise<Object[]>} The users as `getUser` shows them
+   */
+  static async getUsersOfDomain(domain) {
+    const rawUsers = await UserModel.find({
+      id: {
+        $regex: `^\\s*[^@\\s]+@${escapeRegex(domain)}\\s*$`,
+        $options: "i",
+      },
+    });
+    return rawUsers.map((doc) => doc.toEntity().exportPublic());
   }
 
   static async getUsersById(ids, withSensitive = false) {

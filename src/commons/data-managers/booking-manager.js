@@ -311,6 +311,21 @@ class BookingManager {
   }
 
   /**
+   * The number of bookings assigned to a user across every tenant (the
+   * preview of a suspension).
+   * @param {string} userId The assigned user
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002); the domain says `DOMAIN`
+   * @returns {Promise<number>}
+   */
+  static async countAssignedBookings(userId, scope) {
+    return BookingModel.countDocuments({
+      assignedUserId: userId,
+      ...condition(scope),
+    });
+  }
+
+  /**
    * Get a specific booking
    * @param {string} id Booking ID
    * @param {string} tenantId Tenant ID

@@ -1,0 +1,443 @@
+# swagger/routes/reports.yaml
+
+/api/tenants/{tenant}/reports:
+  post:
+    tags:
+      - Reports
+    summary: Report a user or guest addresses to the instance
+    description: |
+      A report (glossary "Meldung (eines Users oder einer Adresse)"):
+      the tenant reports a member or the booker
+      of one of its bookings (`assignedUserId`, with an account) to the
+      instance, with a required reason. With `bookingId` the booker is the
+      target and the booking hangs at the report as evidence; the booker's
+      user document need not be visible to who reports.
+
+      A tenant owner is reported only by a tenant owner, an instance owner
+      by nobody. A user already suspended gets no report (`409`). An open
+      report of the tenant about the user gets the reason added
+      (`additions`, `200`) instead of a second report. A new report records
+      the occasion `report.created`: a mail to every instance owner. The
+      reported user learns nothing. With `endMembership` the membership of
+      a member ends with the report, its open invitations included, as
+      `POST /api/tenants/{tenant}/remove-user` does.
+
+      With `addresses` the tenant reports addresses from `mail` of the
+      booking `bookingId` instead: each one
+      picked, normalized as the user ids, becomes a report of its own
+      (`targetAddress`) with the booking and the reason, or is added to the
+      open one of the tenant. Free addresses without a booking cannot be
+      reported, nor the address of an account, which is reported as a user.
+      An address an entry of the blacklist already hits becomes
+      no report and is named in `blacklisted`; where that is every address
+      picked, the answer is `409`. The guest learns nothing.
+
+      Roles with `manageUsers.updateAny` (`tenantUser.report`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: tenant
+        in: path
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [reason]
+            properties:
+              userId:
+                type: string
+                description: The member reported; without `bookingId`
+              bookingId:
+                type: string
+                description: |
+                  The booking whose booker is reported, or with `addresses`
+                  the booking whose `mail` they are of
+              addresses:
+                type: array
+                items:
+                  type: string
+                description: Addresses from `mail` of the booking to report
+              reason:
+                type: string
+              endMembership:
+                type: boolean
+                description: Ends the member's membership with the report
+    responses:
+      "201":
+        description: |
+          The new report; with `addresses` the reports, at least one of
+          them new
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/Report"
+                - $ref: "#/components/schemas/AddressReports"
+      "200":
+        description: |
+          The open report with the reason added; with `addresses` the
+          reports, each with the reason added
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/Report"
+                - $ref: "#/components/schemas/AddressReports"
+      "400":
+        description: |
+          `report_reason_required`, `report_target_required`,
+          `report_target_without_account` (a booker without an account),
+          `report_target_not_booker` (`userId` and `bookingId` disagree),
+          `report_booking_required` (`addresses` without `bookingId`),
+          `report_address_of_account` (an address of an account: report the
+          user instead, `params.addresses`)
+      "401":
+        description: Not authenticated
+      "403":
+        description: |
+          Not allowed to manage the tenant's users;
+          `report_target_not_of_tenant`, `report_target_tenant_owner`,
+          `report_target_instance_owner`, `report_address_not_of_booking`
+      "404":
+        description: "`booking_not_found`"
+      "409":
+        description: |
+          `report_target_already_suspended`,
+          `report_target_already_blacklisted` (an entry hits every address
+          picked, `params.addresses`)
+
+  get:
+    tags:
+      - Reports
+    summary: The reports of the tenant
+    description: |
+      The tenant's own reports, of every status, oldest first, each with
+      the names of the tenant and of the reported user.
+      Roles with `manageUsers.updateAny`
+      (`tenantUser.report`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: tenant
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum: [open, suspended, blacklisted, rejected, withdrawn]
+    responses:
+      "200":
+        description: The reports
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                allOf:
+                  - $ref: "#/components/schemas/Report"
+                  - type: object
+                    properties:
+                      tenantName:
+                        type: string
+                      targetName:
+                        type: string
+                      targetSuspended:
+                        type: boolean
+                      targetTenantOwner:
+                        type: boolean
+                        description: |
+                          Whether the target is a tenant owner: only a
+                          tenant owner adds to or withdraws such a report
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not allowed to manage the tenant's users
+
+/api/tenants/{tenant}/reports/{id}/additions:
+  post:
+    tags:
+      - Reports
+    summary: Add a reason to an open report of the tenant
+    description: |
+      Adds a reason to an open report of the tenant,
+      without a mail. A report about a tenant
+      owner only a tenant owner adds to. Roles with
+      `manageUsers.updateAny` (`tenantUser.report`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: tenant
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [reason]
+            properties:
+              reason:
+                type: string
+    responses:
+      "200":
+        description: The report with the reason added
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Report"
+      "400":
+        description: "`report_reason_required`"
+      "401":
+        description: Not authenticated
+      "403":
+        description: |
+          Not allowed to manage the tenant's users;
+          `report_target_tenant_owner`
+      "404":
+        description: "`report_not_found` (also another tenant's report)"
+      "409":
+        description: "`report_not_open`"
+
+/api/tenants/{tenant}/reports/{id}/withdraw:
+  post:
+    tags:
+      - Reports
+    summary: Withdraw an open report of the tenant
+    description: |
+      Settles an open report of the tenant as `withdrawn`,
+      without a mail. A new report about the
+      same target is possible afterwards. A report about a tenant owner
+      only a tenant owner withdraws. Roles with `manageUsers.updateAny`
+      (`tenantUser.report`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: tenant
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        description: The report withdrawn
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Report"
+      "401":
+        description: Not authenticated
+      "403":
+        description: |
+          Not allowed to manage the tenant's users;
+          `report_target_tenant_owner`
+      "404":
+        description: "`report_not_found` (also another tenant's report)"
+      "409":
+        description: "`report_not_open`"
+
+/api/instances/reports:
+  get:
+    tags:
+      - Reports
+    summary: The reports to the instance
+    description: |
+      The reports of every tenant, oldest first, each with the names of
+      its tenant and of the reported user and whether the user is
+      suspended. The admin UI groups the open ones by user.
+      The instance owner's alone (`report.read`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum: [open, suspended, blacklisted, rejected, withdrawn]
+      - name: userId
+        in: query
+        description: Only the reports about this user
+        schema:
+          type: string
+      - name: address
+        in: query
+        description: Only the reports about this address
+        schema:
+          type: string
+    responses:
+      "200":
+        description: The reports
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                allOf:
+                  - $ref: "#/components/schemas/Report"
+                  - type: object
+                    properties:
+                      tenantName:
+                        type: string
+                      targetName:
+                        type: string
+                      targetSuspended:
+                        type: boolean
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+
+/api/instances/reports/resolve:
+  post:
+    tags:
+      - Reports
+    summary: Settle every open report about a user or an address
+    description: |
+      One decision for every open report about the user, of whatever
+      tenant. `suspend` suspends the user as
+      `POST /api/users/{id}/suspension` does, with `reason` as the reason of
+      the suspension, and the suspension points to the reports. `reject`
+      needs a reason, which the tenant owners read.
+
+      With `address` instead of `userId` the decision is about the reports
+      of that address: `blacklist` adds a
+      blacklist entry of origin `reports` with `reason`, of the exact
+      address or with `domain` of its domain, as
+      `POST /api/instances/blacklist` does; the entry settles every open
+      report about an address it hits as `blacklisted` and points to them
+      (`reportIds`). `reject` as above. Each reporting tenant's
+      owners get one mail (`report.resolved`). The instance owner's alone
+      (`report.resolve`).
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [decision, reason]
+            properties:
+              userId:
+                type: string
+              address:
+                type: string
+              decision:
+                type: string
+                enum: [suspend, blacklist, reject]
+                description: "`suspend` for a user, `blacklist` for an address"
+              domain:
+                type: boolean
+                description: With `blacklist`, the entry is the address's domain
+              reason:
+                type: string
+    responses:
+      "200":
+        description: The reports settled
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/Report"
+      "400":
+        description: |
+          `report_decision_invalid`, `suspension_reason_required`,
+          `blacklist_reason_required`, `report_rejection_reason_required`
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+      "404":
+        description: "`report_none_open`"
+      "409":
+        description: |
+          `instance_owner_not_suspendable`, `blacklist_entry_exists`
+
+components:
+  schemas:
+    Report:
+      type: object
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        targetUserId:
+          type: string
+          nullable: true
+          description: The user reported; `null` for an address
+        targetAddress:
+          type: string
+          nullable: true
+          description: The address reported; `null` for a user
+        reason:
+          type: string
+        bookingId:
+          type: string
+          nullable: true
+        reportedBy:
+          type: string
+        reportedAt:
+          type: number
+          description: Milliseconds since the epoch
+        additions:
+          type: array
+          description: Reasons added while the report was open
+          items:
+            type: object
+            properties:
+              reason:
+                type: string
+              bookingId:
+                type: string
+                nullable: true
+              reportedBy:
+                type: string
+              reportedAt:
+                type: number
+        status:
+          type: string
+          enum: [open, suspended, blacklisted, rejected, withdrawn]
+        rejectionReason:
+          type: string
+          nullable: true
+        resolvedAt:
+          type: number
+          nullable: true
+        resolvedBy:
+          type: string
+          nullable: true
+    AddressReports:
+      type: object
+      description: The answer to reporting addresses
+      properties:
+        reports:
+          type: array
+          items:
+            $ref: "#/components/schemas/Report"
+        blacklisted:
+          type: array
+          description: The addresses picked an entry already hits; no report
+          items:
+            type: string

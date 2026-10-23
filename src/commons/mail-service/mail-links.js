@@ -31,6 +31,14 @@ function adminInstanceTenantsUrl() {
 }
 
 /**
+ * The open reports in the review queue of the instance (glossary
+ * „Meldung“), for the instance owner.
+ */
+function adminInstanceReportsUrl() {
+  return `${process.env.FRONTEND_URL}/instance/review-queue?tab=reports`;
+}
+
+/**
  * The members of a tenant in the Admin UI (`FRONTEND_URL`), the tenant
  * named by `?tenant=` so the owner lands in the right one.
  */
@@ -43,5 +51,6 @@ module.exports = {
   cancellationUrl,
   adminDashboardUrl,
   adminInstanceTenantsUrl,
+  adminInstanceReportsUrl,
   adminTenantMembersUrl,
 };
