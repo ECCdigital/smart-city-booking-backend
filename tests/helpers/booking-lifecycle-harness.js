@@ -874,10 +874,10 @@ async function installHarness({
   sinon.stub(OpeningHoursManager, "hasOpeningHoursConflict").resolves(false);
   sinon.stub(AccessPointManager, "getAccessPointsByIds").resolves([]);
   sinon.stub(MediaManager, "getBookingDocuments").resolves([]);
-  // The blacklist of the instance (ECCdigital/tickets#625), empty: the
-  // checkout asks it for every address (#627).
+  // The blacklist of the instance, empty: the
+  // checkout asks it for every address.
   const blacklist = installBlacklistCollection();
-  // The reports to the instance (ECCdigital/tickets#630), none yet.
+  // The reports to the instance, none yet.
   const reports = installReportCollection();
   sinon.stub(MediaManager, "getMedia").resolves({
     id: "M1",

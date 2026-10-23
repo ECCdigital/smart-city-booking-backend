@@ -112,7 +112,7 @@ describe("checkout on the access seam", function () {
       // The mails of the admission are not this test's business.
       sinon.stub(TenantManager, "getTenant").resolves({ id: TENANT });
       sinon.stub(lifecycleMail, "send").resolves([]);
-      // The blacklist, empty: the checkout asks it for the address (#627).
+      // The blacklist, empty: the checkout asks it for the address.
       installBlacklistCollection();
       sinon.stub(PaymentUtils, "getPaymentService").resolves(null);
       sinon.stub(lifecycleDocuments, "issue").resolves({

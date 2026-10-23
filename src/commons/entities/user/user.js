@@ -5,7 +5,7 @@ const { UserHook, USER_HOOK_TYPES } = require("./userHook");
 
 /**
  * The one origin of a suspension: by hand, or a blacklist entry that
- * matched the account's address when it was added (ECCdigital/tickets#625).
+ * matched the account's address when it was added.
  */
 const SUSPENSION_ORIGINS = Object.freeze({
   MANUAL: "manual",
@@ -151,7 +151,7 @@ class User {
 
   /**
    * The record of the suspension, `null` for a user not suspended. A
-   * suspension stored before the record (ECCdigital/tickets#624) reads as
+   * suspension stored before the record reads as
    * one by hand without reason, time and person.
    * @returns {Object|null}
    */

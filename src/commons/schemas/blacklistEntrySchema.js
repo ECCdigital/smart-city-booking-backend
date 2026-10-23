@@ -1,5 +1,5 @@
 /**
- * A blacklist entry (glossary „Blacklist-Eintrag“, ECCdigital/tickets#625):
+ * A blacklist entry (glossary „Blacklist-Eintrag“):
  * an exact address or a whole domain (with a leading `@`) the instance
  * owner keeps for every tenant of the instance. Value and kind are fixed
  * once the entry is stored; the reason may change. `suspendedUserIds` are
@@ -13,9 +13,8 @@ const BlacklistEntryKind = Object.freeze({
 
 /**
  * Where an entry comes from: by hand, from the suspension of a user
- * (ECCdigital/tickets#626) with `suspensionUserId`, or from the open
- * reports about an address the instance owner settles with it
- * (ECCdigital/tickets#632).
+ * with `suspensionUserId`, or from the open
+ * reports about an address the instance owner settles with it.
  */
 const BLACKLIST_ENTRY_ORIGINS = Object.freeze({
   MANUAL: "manual",
@@ -42,8 +41,7 @@ const blacklistEntrySchemaDefinition = {
   suspendedUserIds: { type: [String], default: [] },
   // The user whose suspension added the entry, with origin `suspension`.
   suspensionUserId: { type: String, default: null },
-  // The reports the entry settled when it was added, whatever its origin
-  // (ECCdigital/tickets#632).
+  // The reports the entry settled when it was added, whatever its origin.
   reportIds: { type: [String], default: [] },
 };
 

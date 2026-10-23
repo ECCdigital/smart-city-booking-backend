@@ -100,11 +100,11 @@ const NOTIFICATION_TYPES = Object.freeze({
   REVIEW_QUEUE_ENTERED: "review.queueEntered",
   REVIEW_DECIDED: "review.decided",
   // A report about a user to the instance, and its settlement for the
-  // reporting tenant (glossary „Meldung“, ECCdigital/tickets#630).
+  // reporting tenant (glossary „Meldung“).
   REPORT_CREATED: "report.created",
   REPORT_RESOLVED: "report.resolved",
   // The one-time notice of the migration that ended the suspended
-  // memberships of a tenant (ECCdigital/tickets#633).
+  // memberships of a tenant.
   MEMBERSHIPS_ENDED: "memberships.ended",
 });
 

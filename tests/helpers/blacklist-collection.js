@@ -4,7 +4,7 @@ const BlacklistManager = require("../../src/commons/data-managers/blacklist-mana
 
 /**
  * The blacklist in memory, behind `BlacklistManager` (glossary
- * „Blacklist“, ECCdigital/tickets#625): every method of the manager over an
+ * „Blacklist“): every method of the manager over an
  * array, a value unique as the index on `value` keeps it. Answers the
  * array, so a test reads back what is stored.
  */

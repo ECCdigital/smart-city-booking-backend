@@ -1,6 +1,6 @@
 /**
- * The migration that removes the status `suspended` of a membership
- * (ECCdigital/tickets#633): every suspended membership ends as
+ * The migration that removes the status `suspended` of a membership:
+ * every suspended membership ends as
  * „Mitgliedschaft beenden“ ends one - the membership and the user's open
  * invitations in the tenant go, the account stays - also for a user
  * already suspended at the instance, without a report and without a

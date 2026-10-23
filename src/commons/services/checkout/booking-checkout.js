@@ -196,7 +196,7 @@ async function assertSignedInWhereRequired({
 
 /**
  * A self-booking refuses an address on the blacklist (glossary
- * „Blacklist“, ECCdigital/tickets#627): each address of `mail` is asked
+ * „Blacklist“): each address of `mail` is asked
  * for itself, and one hit refuses the whole booking - before anything is
  * stored and before any payment. The answer names no entry and no reason,
  * only the instance's `mailAddress` to write to with questions (empty

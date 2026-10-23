@@ -312,7 +312,7 @@ class BookingManager {
 
   /**
    * The number of bookings assigned to a user across every tenant (the
-   * preview of a suspension, ECCdigital/tickets#624).
+   * preview of a suspension).
    * @param {string} userId The assigned user
    * @param {{reach: string, userId?: string|null}} scope The reach the
    *   caller reads under (ADR 0002); the domain says `DOMAIN`

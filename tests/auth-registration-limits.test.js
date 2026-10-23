@@ -120,7 +120,7 @@ describe("public registration: account-neutral answers and rate limits", functio
     for (const key of ENV_KEYS) delete process.env[key];
     installInMemoryRateLimitEvents();
     installMailStackStore();
-    // An empty blacklist: the signup asks it (ECCdigital/tickets#628).
+    // An empty blacklist: the signup asks it.
     installBlacklistCollection();
     installUserStore();
     sent = installInMemoryMailTransport();

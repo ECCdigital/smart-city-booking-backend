@@ -61,8 +61,8 @@ const accountOf = (user, tenantNames) => ({
 });
 
 /**
- * The blacklist of the instance (glossary „Blacklist“, „Blacklist-Eintrag“,
- * ECCdigital/tickets#625): exact addresses and whole domains the instance
+ * The blacklist of the instance (glossary „Blacklist“, „Blacklist-Eintrag“):
+ * exact addresses and whole domains the instance
  * owner keeps for every tenant. Its one question for everyone else is
  * `match`: does an entry hit this address, and which one? A new entry
  * suspends the matching accounts at once with the origin `blacklist`;
@@ -105,8 +105,7 @@ class BlacklistService {
   }
 
   /**
-   * The domain of an address as an entry stores it, with its leading `@`
-   * (ECCdigital/tickets#632).
+   * The domain of an address as an entry stores it, with its leading `@`.
    *
    * @param {*} address
    * @returns {string|null} `null` for anything but an address
@@ -116,8 +115,8 @@ class BlacklistService {
   }
 
   /**
-   * Whether the entry hits the address: the exact address, or its domain
-   * (ECCdigital/tickets#632). The same rule as `match`, for one entry.
+   * Whether the entry hits the address: the exact address, or its domain.
+   * The same rule as `match`, for one entry.
    *
    * @param {{value: string}} entry
    * @param {*} address
@@ -128,8 +127,8 @@ class BlacklistService {
   }
 
   /**
-   * Whether an entry hits any address of `mail`, each asked for itself
-   * (ECCdigital/tickets#629): the warning of the administration's ways,
+   * Whether an entry hits any address of `mail`, each asked for itself:
+   * the warning of the administration's ways,
    * which tells no more than that - never the entry or its reason.
    *
    * @param {*} mail One address or a list, as `mail` of a booking
@@ -143,8 +142,8 @@ class BlacklistService {
   }
 
   /**
-   * Refuses the registration of an address on the blacklist
-   * (ECCdigital/tickets#628), before any account is created: with the
+   * Refuses the registration of an address on the blacklist,
+   * before any account is created: with the
    * checkout's reason and, as there, only the instance's `mailAddress` to
    * write to with questions (empty where the instance has none) - never the
    * entry or its reason.
@@ -163,7 +162,7 @@ class BlacklistService {
 
   /**
    * The users with `blacklistMatch`, the entry that hits their address
-   * now (`{ id, value, kind }`) or `null` (ECCdigital/tickets#626). Reads
+   * now (`{ id, value, kind }`) or `null`. Reads
    * the blacklist once for all of them. For the answers of the instance
    * owner's user routes only.
    *
@@ -233,7 +232,7 @@ class BlacklistService {
    * carries the entry's reason, time and person and points to the entry,
    * and settles the open reports about its user as `suspended`. The entry
    * settles the open reports about every address it hits as `blacklisted`
-   * and points to them (`reportIds`, ECCdigital/tickets#632).
+   * and points to them (`reportIds`).
    *
    * @param {Object} params
    * @param {*} params.value An address or a domain
@@ -327,7 +326,7 @@ class BlacklistService {
 
   /**
    * Removes the exact entry of an address, if there is one; an entry of
-   * its domain stays (ECCdigital/tickets#626). Lifts no suspension.
+   * its domain stays. Lifts no suspension.
    *
    * @param {*} address
    * @returns {Promise<boolean>} Whether an entry was removed

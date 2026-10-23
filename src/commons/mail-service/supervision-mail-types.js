@@ -68,7 +68,7 @@ const REPORT_OUTCOME_LABELS = Object.freeze({
 
 /**
  * The reported user by name and address, the address alone, or the
- * reported address of a guest (ECCdigital/tickets#632).
+ * reported address of a guest.
  */
 const targetOf = ({ payload }) => {
   if (payload.targetAddress) return payload.targetAddress;
@@ -95,7 +95,7 @@ const selfCreatedData = (ctx) => ({
 });
 
 /**
- * The memberships the migration ended (ECCdigital/tickets#633), for the
+ * The memberships the migration ended, for the
  * tenant's owners or, without one, the instance owners.
  */
 const membershipsEndedData = (ctx) => ({
@@ -197,7 +197,7 @@ const SupervisionMailType = Object.freeze({
     }),
   },
 
-  // A report about a user (glossary „Meldung“, ECCdigital/tickets#630):
+  // A report about a user (glossary „Meldung“):
   // the instance owners decide; the reported user learns nothing.
   SUPERVISION_REPORT_CREATED: {
     family: "instance",

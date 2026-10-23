@@ -1,6 +1,6 @@
 /**
- * The suspension of a user (glossary „Sperre (eines Users)“,
- * ECCdigital/tickets#624): suspending and lifting it are actions of their
+ * The suspension of a user (glossary „Sperre (eines Users)“):
+ * suspending and lifting it are actions of their
  * own for the instance owner, no longer a field of the general update.
  * Suspending needs a reason and stores a record of reason, time, the person
  * who suspended and exactly one origin (`manual` here); it ends a running
@@ -27,7 +27,7 @@ const {
   installUserCollection,
 } = require("./helpers/auth-user-collection");
 
-describe("user suspension (ECCdigital/tickets#624)", function () {
+describe("user suspension", function () {
   this.timeout(20000);
 
   let h;
@@ -52,7 +52,7 @@ describe("user suspension (ECCdigital/tickets#624)", function () {
   });
 
   const stored = (id) => docs.find((doc) => doc.id === id);
-  /** A domain entry hitting every address of the harness (ECCdigital/tickets#626). */
+  /** A domain entry hitting every address of the harness. */
   const domainEntry = () => ({
     id: "domain",
     value: "@example.test",
@@ -140,7 +140,7 @@ describe("user suspension (ECCdigital/tickets#624)", function () {
     });
   });
 
-  describe("suspending with the address on the blacklist (ECCdigital/tickets#626)", function () {
+  describe("suspending with the address on the blacklist", function () {
     it("adds an entry of origin suspension with the reason, the suspension stays manual", async function () {
       const res = await suspend(CUSTOMER, {
         reason: "Beleidigt Personal",
@@ -217,7 +217,7 @@ describe("user suspension (ECCdigital/tickets#624)", function () {
     });
   });
 
-  describe("lifting with a blacklist entry (ECCdigital/tickets#626)", function () {
+  describe("lifting with a blacklist entry", function () {
     const lift = (id, query = "") =>
       h.api().delete(`/api/users/${id}/suspension${query}`).set(h.as(ADMIN));
     beforeEach(async function () {
@@ -335,7 +335,7 @@ describe("user suspension (ECCdigital/tickets#624)", function () {
       });
     });
 
-    it("names the blacklist entry that hits the address (ECCdigital/tickets#626)", async function () {
+    it("names the blacklist entry that hits the address", async function () {
       sinon.stub(BookingModel, "countDocuments").resolves(0);
       entries.push(domainEntry());
 

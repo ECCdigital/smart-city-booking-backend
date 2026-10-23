@@ -988,8 +988,8 @@ class TenantController {
       const user = request.user;
 
       // The update of the manager writes without the schema's validation;
-      // a status the membership does not know (`suspended` is gone,
-      // ECCdigital/tickets#633) is refused here.
+      // a status the membership does not know (`suspended` is gone)
+      // is refused here.
       if (!membershipSchemaDefinition.status.enum.includes(status)) {
         return next(
           new BadRequestError("membership_status_invalid", { status }),

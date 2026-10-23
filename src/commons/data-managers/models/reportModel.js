@@ -6,8 +6,8 @@ const { Schema } = mongoose;
 const ReportSchema = new Schema(reportSchemaDefinition);
 
 ReportSchema.index({ id: 1 }, { unique: true });
-// At most one open report per tenant and target, a user or an address
-// (ECCdigital/tickets#632): a second one fails here.
+// At most one open report per tenant and target, a user or an address:
+// a second one fails here.
 ReportSchema.index(
   { tenantId: 1, targetUserId: 1 },
   {

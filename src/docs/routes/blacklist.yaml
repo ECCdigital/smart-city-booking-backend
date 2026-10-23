@@ -6,8 +6,8 @@
       - Instance
     summary: The blacklist of the instance
     description: |
-      Every entry of the blacklist (glossary "Blacklist",
-      ECCdigital/tickets#625), newest first. It holds for every tenant of
+      Every entry of the blacklist (glossary "Blacklist"),
+      newest first. It holds for every tenant of
       the instance. The instance owner's alone (`blacklist.read`); tenant
       owners do not see it.
     security:
@@ -229,9 +229,9 @@ components:
           enum: [manual, suspension, reports]
           description: |
             By hand, `suspension` when suspending a user put their
-            address on the blacklist (ECCdigital/tickets#626), or `reports`
+            address on the blacklist, or `reports`
             when the instance owner settled reports about an address with
-            it (ECCdigital/tickets#632)
+            it
         suspendedUserIds:
           type: array
           description: The accounts the entry suspended when it was added
@@ -246,7 +246,6 @@ components:
           description: |
             The open reports about an address it hits that the entry settled
             as `blacklisted` when it was added, whatever its origin
-            (ECCdigital/tickets#632)
           items:
             type: string
     BlacklistAccounts:
@@ -271,7 +270,7 @@ components:
                 name:
                   type: string
 
-# The warning of the administration's ways (ECCdigital/tickets#629): one
+# The warning of the administration's ways: one
 # route per way, under the marker of the way, the same answer everywhere.
 /api/{tenant}/bookings/blacklist-match:
   post:
@@ -279,8 +278,8 @@ components:
       - Instance
     summary: Does the blacklist hit this address? (manual booking)
     description: |
-      The warning before an address on the blacklist is saved
-      (ECCdigital/tickets#629). Tells only whether an entry hits the
+      The warning before an address on the blacklist is saved.
+      Tells only whether an entry hits the
       address - never the entry or its reason. A list as in `mail` of a
       booking is asked address by address; one hit is a hit. Saving
       anyway is no refusal and suspends no account. Open to every role
@@ -323,8 +322,8 @@ components:
       - Instance
     summary: Does the blacklist hit this address? (mail of a booking)
     description: |
-      The warning before an address on the blacklist is saved
-      (ECCdigital/tickets#629). Tells only whether an entry hits the
+      The warning before an address on the blacklist is saved.
+      Tells only whether an entry hits the
       address - never the entry or its reason. A list as in `mail` of a
       booking is asked address by address; one hit is a hit. Saving
       anyway is no refusal and suspends no account. Open to every role
@@ -367,8 +366,8 @@ components:
       - Instance
     summary: Does the blacklist hit this address? (add or invite into a tenant)
     description: |
-      The warning before an address on the blacklist is saved
-      (ECCdigital/tickets#629). Tells only whether an entry hits the
+      The warning before an address on the blacklist is saved.
+      Tells only whether an entry hits the
       address - never the entry or its reason. A list as in `mail` of a
       booking is asked address by address; one hit is a hit. Saving
       anyway is no refusal and suspends no account. Open to every role
@@ -411,8 +410,8 @@ components:
       - Instance
     summary: Does the blacklist hit this address? (create a user, change a user id)
     description: |
-      The warning before an address on the blacklist is saved
-      (ECCdigital/tickets#629). Tells only whether an entry hits the
+      The warning before an address on the blacklist is saved.
+      Tells only whether an entry hits the
       address - never the entry or its reason. A list as in `mail` of a
       booking is asked address by address; one hit is a hit. Saving
       anyway is no refusal and suspends no account. Open to every role

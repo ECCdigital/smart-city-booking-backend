@@ -1,6 +1,6 @@
 /**
  * The status of a membership knows `pending`, `active` and `rejected`; there
- * is no `suspended` at the tenant any more (ECCdigital/tickets#633). The one
+ * is no `suspended` at the tenant any more. The one
  * action of a tenant against a user is „Mitgliedschaft beenden“ (the
  * tenant's `remove-user`), and a user whose membership ended can come back
  * by a multi-use invitation or a public link.
@@ -31,7 +31,7 @@ const {
 
 const NEWCOMER = "neu@example.test";
 
-describe("membership without suspended (ECCdigital/tickets#633)", function () {
+describe("membership without suspended", function () {
   this.timeout(20000);
 
   let h;

@@ -511,7 +511,7 @@ describe("supervision notification sender", function () {
   });
 
   // The one-time notice of the migration that ends the tenant's suspended
-  // memberships (ECCdigital/tickets#633).
+  // memberships.
   describe("memberships ended", function () {
     const membershipsEnded = (payload = {}) => ({
       type: "memberships.ended",

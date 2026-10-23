@@ -40,7 +40,7 @@ class RegistrationService {
     // Validated before the lookup, so a malformed body fails the same way
     // whether or not the address has an account.
     user.validate();
-    // The one answer that tells (ECCdigital/tickets#628, #616): an address
+    // The one answer that tells: an address
     // on the blacklist gets no account and no mail.
     await BlacklistService.assertMayRegister(user.id);
 

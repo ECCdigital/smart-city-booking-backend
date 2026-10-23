@@ -7,8 +7,8 @@ const logger = bunyan.createLogger({
 });
 
 /**
- * The blacklist of the instance (glossary „Blacklist“,
- * ECCdigital/tickets#625), the instance owner's alone.
+ * The blacklist of the instance (glossary „Blacklist“),
+ * the instance owner's alone.
  */
 class BlacklistController {
   static async getEntries(request, response, next) {
@@ -31,7 +31,7 @@ class BlacklistController {
   }
 
   /**
-   * The warning of the administration's ways (ECCdigital/tickets#629):
+   * The warning of the administration's ways:
    * whether an entry hits `address`, and nothing of the entry. Each way
    * asks under its own marker, so every role that may go it may ask.
    */

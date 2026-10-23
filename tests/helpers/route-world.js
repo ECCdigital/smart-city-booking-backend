@@ -549,7 +549,7 @@ function installRouteWorld({
       getMediaUsage: async () => [],
     },
   });
-  // The blacklist of the instance (ECCdigital/tickets#625): empty.
+  // The blacklist of the instance: empty.
   stubManager(BlacklistManager, { one: () => null, many: () => [] });
   // The favorites: an in-memory store with the semantics of the real
   // manager - one entry per user and target, a second store finds it, a

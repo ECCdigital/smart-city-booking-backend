@@ -3,8 +3,8 @@ const sinon = require("sinon");
 const ReportManager = require("../../src/commons/data-managers/report-manager");
 
 /**
- * The reports in memory, behind `ReportManager` (glossary „Meldung“,
- * ECCdigital/tickets#630): every method of the manager over an array, at
+ * The reports in memory, behind `ReportManager` (glossary „Meldung“):
+ * every method of the manager over an array, at
  * most one open report per tenant and target as the partial index keeps
  * it. Answers the array, so a test reads back what is stored.
  */
@@ -12,7 +12,7 @@ function installReportCollection(documents = []) {
   const docs = documents.map((doc) => ({ ...doc }));
   const copy = (doc) => doc && JSON.parse(JSON.stringify(doc));
   const isOpen = (doc) => doc.status === "open";
-  // The target of a report, a user or an address (ECCdigital/tickets#632).
+  // The target of a report, a user or an address.
   const sameTarget = (doc, { targetUserId = null, targetAddress = null }) =>
     (doc.targetUserId ?? null) === targetUserId &&
     (doc.targetAddress ?? null) === targetAddress;

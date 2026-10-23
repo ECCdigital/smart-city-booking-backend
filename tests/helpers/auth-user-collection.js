@@ -65,7 +65,7 @@ function installUserCollection(documents) {
     if (keys.length === 1 && keys[0] === "_id") {
       return doc._id === filter._id;
     }
-    // The list of the suspended (ECCdigital/tickets#624).
+    // The list of the suspended.
     if (keys.length === 1 && keys[0] === "isSuspended") {
       return (doc.isSuspended ?? false) === filter.isSuspended;
     }

@@ -14,7 +14,7 @@ const logger = bunyan.createLogger({
 
 /**
  * A user as the instance owner's user routes answer them: with the
- * blacklist entry that hits the address (ECCdigital/tickets#626).
+ * blacklist entry that hits the address.
  */
 const withMatch = async (user) =>
   (await BlacklistService.withMatches([user]))[0];
@@ -132,7 +132,7 @@ class UserController {
     try {
       const user = request.user;
       const userObject = new User(request.body);
-      // Suspending is an action of its own (ECCdigital/tickets#624): a new
+      // Suspending is an action of its own: a new
       // user is never suspended, and no client writes the record.
       userObject.isSuspended = false;
       userObject.suspension = null;
@@ -261,8 +261,8 @@ class UserController {
   }
 
   /**
-   * Suspends a user at once, with a reason (ECCdigital/tickets#624) and on
-   * request their address on the blacklist (ECCdigital/tickets#626).
+   * Suspends a user at once, with a reason and on
+   * request their address on the blacklist.
    */
   static async suspendUser(request, response, next) {
     try {
@@ -282,7 +282,7 @@ class UserController {
 
   /**
    * The consequences of a suspension for its dialog: the user's bookings
-   * and memberships (ECCdigital/tickets#624).
+   * and memberships.
    */
   static async getSuspensionPreview(request, response, next) {
     try {
@@ -295,8 +295,8 @@ class UserController {
   }
 
   /**
-   * Lifts the suspension of a user (ECCdigital/tickets#624), on request
-   * with the exact blacklist entry of their address (ECCdigital/tickets#626).
+   * Lifts the suspension of a user, on request
+   * with the exact blacklist entry of their address.
    */
   static async unsuspendUser(request, response, next) {
     try {

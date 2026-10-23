@@ -1,5 +1,5 @@
 /**
- * Removes the status `suspended` of a membership (ECCdigital/tickets#633):
+ * Removes the status `suspended` of a membership:
  * there is no suspension at the tenant any more, only the suspension of a
  * user at the instance. Every suspended membership ends as „Mitgliedschaft
  * beenden“ ends one - the membership and the user's open invitations in

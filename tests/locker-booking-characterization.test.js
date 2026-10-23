@@ -248,7 +248,7 @@ describe("locker booking outcomes: what the locker stack leaves at the booking a
    */
   function stubDataManagers() {
     const bookables = { bikebox: bikeBox(), "locker-s": lockerS() };
-    // The blacklist, empty: the checkout asks it for the address (#627).
+    // The blacklist, empty: the checkout asks it for the address.
     installBlacklistCollection();
 
     sinon

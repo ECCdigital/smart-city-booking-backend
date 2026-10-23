@@ -733,8 +733,8 @@ describe("authorization rights matrix: the core routes by principal, stage and t
       admin: 200,
       foreignOwner: 403,
     }),
-    // --- the suspension of a user: the instance owner's alone
-    // (ECCdigital/tickets#624); without a reason the admin gets 400 ------
+    // --- the suspension of a user: the instance owner's alone;
+    // without a reason the admin gets 400 ------
     row("post", `/api/users/${CUSTOMER}/suspension`, {
       anonymous: 401,
       customer: 403,
@@ -763,7 +763,7 @@ describe("authorization rights matrix: the core routes by principal, stage and t
       foreignOwner: 403,
     }),
     // --- the blacklist: the instance owner's alone, tenant owners do not
-    // see it (ECCdigital/tickets#625); an empty body or an unknown entry
+    // see it; an empty body or an unknown entry
     // gets the admin 400 or 404, the list is empty ---------------------------
     row("get", "/api/instances/blacklist", {
       anonymous: 401,
@@ -810,7 +810,7 @@ describe("authorization rights matrix: the core routes by principal, stage and t
       admin: 404,
       foreignOwner: 403,
     }),
-    // --- the warning of the administration's ways (ECCdigital/tickets#629):
+    // --- the warning of the administration's ways:
     // open to every role that may go the way, under the way's marker -----
     ...[
       `/api/${A}/bookings/blacklist-match`,
@@ -836,7 +836,7 @@ describe("authorization rights matrix: the core routes by principal, stage and t
       admin: 200,
       foreignOwner: 403,
     }),
-    // --- the reports to the instance (ECCdigital/tickets#630): a role with
+    // --- the reports to the instance: a role with
     // `manageUsers.updateAny` reports (an empty report fails at its
     // reason), the instance owner reads and settles ----------------------
     row("post", `/api/tenants/${A}/reports`, {
@@ -848,7 +848,7 @@ describe("authorization rights matrix: the core routes by principal, stage and t
       admin: 400,
       foreignOwner: 403,
     }),
-    // --- the tenant's own reports (ECCdigital/tickets#631): the same role
+    // --- the tenant's own reports: the same role
     // reads them, adds to and withdraws one (an unknown one is not found,
     // an empty addition fails at its reason) -----------------------------
     row("get", `/api/tenants/${A}/reports`, {

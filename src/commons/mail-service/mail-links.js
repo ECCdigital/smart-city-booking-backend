@@ -32,7 +32,7 @@ function adminInstanceTenantsUrl() {
 
 /**
  * The open reports in the review queue of the instance (glossary
- * „Meldung“, ECCdigital/tickets#630), for the instance owner.
+ * „Meldung“), for the instance owner.
  */
 function adminInstanceReportsUrl() {
   return `${process.env.FRONTEND_URL}/instance/review-queue?tab=reports`;

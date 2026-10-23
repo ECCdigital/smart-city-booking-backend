@@ -91,7 +91,7 @@ describe("BookingCheckout.createBooking — mandatory addons are never priced tw
       .resolves([]);
     // The checkout asks the tenant for its supervision level (offer gate).
     sinon.stub(TenantManager, "getTenant").resolves({ id: TENANT_ID });
-    // The blacklist, empty: the checkout asks it for the address (#627).
+    // The blacklist, empty: the checkout asks it for the address.
     installBlacklistCollection();
     sinon.stub(EventManager, "getEvent").resolves(null);
     sinon.stub(OpeningHoursManager, "hasOpeningHoursConflict").resolves(false);

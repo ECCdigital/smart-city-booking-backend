@@ -34,10 +34,10 @@ const userSchemaDefinition = {
   // VAT identification number (Umsatzsteuer-ID) of the user or their company
   vatId: { type: String, default: "" },
   isSuspended: { type: Boolean, default: false },
-  // The record of a suspension (glossary „Sperre (eines Users)“,
-  // ECCdigital/tickets#624): `{ reason, suspendedAt, suspendedBy, origin }`,
-  // with origin `blacklist` also `blacklistEntry: { id, value }`
-  // (ECCdigital/tickets#625); `null` without one. A suspension stored before
+  // The record of a suspension (glossary „Sperre (eines Users)“):
+  // `{ reason, suspendedAt, suspendedBy, origin }`,
+  // with origin `blacklist` also `blacklistEntry: { id, value }`;
+  // `null` without one. A suspension stored before
   // the record has none.
   suspension: { type: Object, default: null },
   authType: { type: String, default: "local" },

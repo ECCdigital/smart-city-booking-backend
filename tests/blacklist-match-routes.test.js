@@ -1,6 +1,6 @@
 /**
  * The administration's ways warn of an address on the blacklist (glossary
- * „Blacklist“, ECCdigital/tickets#629): the manual booking, changing the
+ * „Blacklist“): the manual booking, changing the
  * mail of a booking, creating a user, inviting into a tenant and changing
  * a user id ask before they save. The answer tells only whether an entry
  * hits the address - never the entry or its reason - and is open to every
@@ -54,7 +54,7 @@ const entry = (value, kind = "address") => ({
   suspendedUserIds: [],
 });
 
-describe("blacklist warnings of the administration (ECCdigital/tickets#629)", function () {
+describe("blacklist warnings of the administration", function () {
   this.timeout(20000);
 
   let h;

@@ -101,7 +101,7 @@ describe("auth: mail links lead to the instance's own pages (ECCdigital/tickets#
   beforeEach(function () {
     installInMemoryRateLimitEvents();
     installMailStackStore();
-    // An empty blacklist: the signup asks it (ECCdigital/tickets#628).
+    // An empty blacklist: the signup asks it.
     installBlacklistCollection();
     // The mail stack fixture answers `getUser` itself; the store below the
     // manager answers it here.

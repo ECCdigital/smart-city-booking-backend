@@ -118,7 +118,6 @@ class UserManager {
    * @param {boolean} [withSensitive=false]
    * @param {Object} [filter]
    * @param {boolean} [filter.suspended] Only the suspended users
-   *   (ECCdigital/tickets#624)
    */
   static async getUsers(withSensitive = false, { suspended = false } = {}) {
     try {
@@ -139,7 +138,7 @@ class UserManager {
 
   /**
    * The accounts whose id is an address of exactly this domain, without
-   * its subdomains (a blacklist entry of a domain, ECCdigital/tickets#625).
+   * its subdomains (a blacklist entry of a domain).
    * Found as `_findRawById` finds an id: blanks around it and case aside.
    *
    * @param {string} domain The domain without `@`, normalized

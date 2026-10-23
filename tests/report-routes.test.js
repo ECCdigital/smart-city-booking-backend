@@ -1,6 +1,6 @@
 /**
- * Reports (glossary „Meldung (eines Users oder einer Adresse)“,
- * ECCdigital/tickets#630): a role with `manageUsers.updateAny` reports a
+ * Reports (glossary „Meldung (eines Users oder einer Adresse)“):
+ * a role with `manageUsers.updateAny` reports a
  * member of its tenant or the booker of a booking of its tenant to the
  * instance, with a reason. The instance owners get a mail and settle every
  * open report of a user at once, with a suspension or a rejection with a
@@ -40,7 +40,7 @@ const {
   installSupervisionOutboxStore,
 } = require("./helpers/supervision-outbox-store");
 
-describe("reports (ECCdigital/tickets#630)", function () {
+describe("reports", function () {
   this.timeout(20000);
 
   let h;
@@ -363,7 +363,7 @@ describe("reports (ECCdigital/tickets#630)", function () {
     });
   });
 
-  describe("ending the membership with the report (ECCdigital/tickets#631)", function () {
+  describe("ending the membership with the report", function () {
     let removed;
     let deletedInvitations;
 
@@ -433,7 +433,7 @@ describe("reports (ECCdigital/tickets#630)", function () {
     });
   });
 
-  describe("the reports of the tenant (ECCdigital/tickets#631)", function () {
+  describe("the reports of the tenant", function () {
     const list = (by = ROLE_HOLDER, tenant = TENANT) =>
       h.api().get(`/api/tenants/${tenant}/reports`).set(h.as(by));
 
@@ -652,7 +652,7 @@ describe("reports (ECCdigital/tickets#630)", function () {
     });
   });
 
-  describe("reporting guest addresses (ECCdigital/tickets#632)", function () {
+  describe("reporting guest addresses", function () {
     const GUEST = "gast@example.test";
     const SECOND = "zweit@example.test";
 
@@ -731,7 +731,7 @@ describe("reports (ECCdigital/tickets#630)", function () {
       expect(reports).to.have.length(0);
     });
 
-    it("refuses the address of an account: that is a user to report (ECCdigital/tickets#632)", async function () {
+    it("refuses the address of an account: that is a user to report", async function () {
       const booking = await h.manualBooking("room", {}, { mail: CUSTOMER });
 
       const res = await report({

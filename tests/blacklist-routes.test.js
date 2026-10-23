@@ -1,6 +1,6 @@
 /**
- * The blacklist of the instance (glossary „Blacklist“, „Blacklist-Eintrag“,
- * ECCdigital/tickets#625): the instance owner keeps exact addresses and
+ * The blacklist of the instance (glossary „Blacklist“, „Blacklist-Eintrag“):
+ * the instance owner keeps exact addresses and
  * whole domains with a reason. A new entry suspends the matching accounts
  * at once - not instance owners, not accounts already suspended - with the
  * origin `blacklist`; removing it lifts only the suspensions it made.
@@ -32,7 +32,7 @@ const MAX_PLUS = "max+news@firma.test";
 const ANNA = "anna@firma.test";
 const SUB = "eva@sub.firma.test";
 
-describe("blacklist (ECCdigital/tickets#625)", function () {
+describe("blacklist", function () {
   this.timeout(20000);
 
   let h;
@@ -381,7 +381,7 @@ describe("blacklist (ECCdigital/tickets#625)", function () {
     });
   });
 
-  describe("the users name the entry that hits their address (ECCdigital/tickets#626)", function () {
+  describe("the users name the entry that hits their address", function () {
     beforeEach(async function () {
       await create({ value: MAX, reason: "exakt" });
       await create({ value: "@firma.test", reason: "Domain" });

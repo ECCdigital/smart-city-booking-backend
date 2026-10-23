@@ -76,7 +76,7 @@ describe("SSO verification proof", function () {
 
   describe("signup", function () {
     beforeEach(function () {
-      // An empty blacklist: the signup asks it (ECCdigital/tickets#628).
+      // An empty blacklist: the signup asks it.
       installBlacklistCollection();
       sinon
         .stub(UserManager, "resolveKeycloakUser")

@@ -229,7 +229,7 @@ router.put(
   BookingController.updateBooking,
 );
 // The warning before the manual booking or a changed mail of a booking
-// goes to an address on the blacklist (ECCdigital/tickets#629).
+// goes to an address on the blacklist.
 router.post(
   "/bookings/blacklist-match",
   authorize("booking", "create"),

@@ -1,11 +1,11 @@
 /**
  * The registration refuses an address on the blacklist (glossary
- * „Blacklist“, ECCdigital/tickets#628): signup by password, `sso/signup`
+ * „Blacklist“): signup by password, `sso/signup`
  * and `card/signup` ask the blacklist before an account is created. A hit
  * answers `409` with the checkout's reason and the instance's mail address
  * (empty without one), creates no account and sends no mail. Unlike the
- * neutral answers of the registration (#259), this answer tells - on
- * purpose (#616).
+ * neutral answers of the registration, this answer tells - on
+ * purpose.
  *
  * Runs the real authentication router on a bare express app over the
  * in-memory blacklist, rate-limit events and mail transport; the user
@@ -89,7 +89,7 @@ function entry(value) {
 }
 
 describe("registration: an address on the blacklist", function () {
-  // Each request waits for the work left for after its answer (#259).
+  // Each request waits for the work left for after its answer.
   this.timeout(10000);
 
   let app;

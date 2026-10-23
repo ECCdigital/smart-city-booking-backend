@@ -26,7 +26,7 @@ const BlacklistService = () => require("../blacklist/blacklist-service");
 
 /**
  * The outcomes the instance owner settles open reports with: a user with
- * a suspension, an address with a blacklist entry (ECCdigital/tickets#632),
+ * a suspension, an address with a blacklist entry,
  * either with a rejection.
  */
 const DECISIONS = Object.freeze({
@@ -61,10 +61,10 @@ async function tenantNamesOf(tenantIds) {
 }
 
 /**
- * The reports (glossary „Meldung (eines Users oder einer Adresse)“,
- * ECCdigital/tickets#630): a tenant reports a member or the booker of one
+ * The reports (glossary „Meldung (eines Users oder einer Adresse)“):
+ * a tenant reports a member or the booker of one
  * of its bookings to the instance, or an address from `mail` of one of its
- * bookings (ECCdigital/tickets#632); the instance owner settles every open
+ * bookings; the instance owner settles every open
  * report about the user or the address at once, with a suspension or a
  * blacklist entry, or a rejection with a reason. The reported user or
  * guest learns nothing; the instance owners learn of a new report and the
@@ -79,7 +79,7 @@ class ReportService {
    * instance owner by nobody. An open report of the tenant about the user
    * gets the reason added instead of a second report. With
    * `endMembership` the membership of a member ends with the report, its
-   * open invitations included (ECCdigital/tickets#631).
+   * open invitations included.
    *
    * @param {Object} params
    * @param {string} params.tenantId The reporting tenant
@@ -145,7 +145,7 @@ class ReportService {
 
   /**
    * Reports addresses from `mail` of a booking of the tenant to the
-   * instance (ECCdigital/tickets#632): each address picked becomes a
+   * instance: each address picked becomes a
    * report of its own with the booking and the reason, or is added to the
    * open one of the tenant. An address an entry of the blacklist hits
    * already becomes none and is answered in `blacklisted`; where that is
@@ -294,8 +294,8 @@ class ReportService {
   }
 
   /**
-   * Adds a reason to an open report of the tenant, from its list
-   * (ECCdigital/tickets#631). No mail: the instance owner reads the
+   * Adds a reason to an open report of the tenant, from its list.
+   * No mail: the instance owner reads the
    * addition with the report.
    *
    * @param {Object} params
@@ -320,7 +320,7 @@ class ReportService {
   }
 
   /**
-   * Withdraws an open report of the tenant (ECCdigital/tickets#631): it is
+   * Withdraws an open report of the tenant: it is
    * settled as `withdrawn`, without a mail, and a new report about the
    * target may follow.
    *
@@ -344,9 +344,9 @@ class ReportService {
 
   /**
    * The reports, oldest first, each with the name of its tenant and of
-   * the reported user (none for an address, ECCdigital/tickets#632):
-   * every tenant's for the instance owner, one tenant's own for the tenant
-   * (ECCdigital/tickets#631), there also whether the target is a tenant
+   * the reported user (none for an address):
+   * every tenant's for the instance owner, one tenant's own for the tenant,
+   * there also whether the target is a tenant
    * owner, whose report only a tenant owner may change.
    *
    * @param {Object} [filter]
@@ -396,7 +396,7 @@ class ReportService {
 
   /**
    * Settles every open report about a user or, with `address`, about an
-   * address (ECCdigital/tickets#632). A suspension goes the way of every
+   * address. A suspension goes the way of every
    * suspension and a blacklist entry the way of every entry, each of which
    * settles the reports; a rejection needs a reason.
    *
@@ -474,8 +474,8 @@ class ReportService {
 
   /**
    * Settles the open reports about a user as `suspended`: every
-   * suspension of the user goes through here (ECCdigital/tickets#630),
-   * the one by a blacklist entry included (ECCdigital/tickets#632).
+   * suspension of the user goes through here,
+   * the one by a blacklist entry included.
    *
    * @param {string} userId
    * @param {string} by The instance owner who suspends
@@ -491,7 +491,7 @@ class ReportService {
 
   /**
    * Settles the open reports about every address a new blacklist entry
-   * hits as `blacklisted` (ECCdigital/tickets#632): every entry goes
+   * hits as `blacklisted`: every entry goes
    * through here, by hand, as a domain, from a suspension or from reports.
    *
    * @param {Object} entry The blacklist entry as stored

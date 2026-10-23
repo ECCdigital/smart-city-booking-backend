@@ -228,8 +228,8 @@ const TABLE = {
     read: { any: "manageUsers.readAny" },
     manage: { any: "manageUsers.updateAny" },
     owner: { any: "tenantOwner" },
-    // Reporting a member or a booker to the instance (glossary „Meldung“,
-    // ECCdigital/tickets#630); a tenant owner only with `owner`.
+    // Reporting a member or a booker to the instance (glossary „Meldung“);
+    // a tenant owner only with `owner`.
     report: { any: "manageUsers.updateAny" },
   },
 
@@ -289,15 +289,15 @@ const TABLE = {
     checkRealm: { any: "instanceOwner" },
   },
 
-  // The blacklist of the instance (glossary „Blacklist“,
-  // ECCdigital/tickets#625): tenant owners neither see nor keep it.
+  // The blacklist of the instance (glossary „Blacklist“):
+  // tenant owners neither see nor keep it.
   blacklist: {
     read: { any: "instanceOwner" },
     write: { any: "instanceOwner" },
   },
 
-  // The reports to the instance (glossary „Meldung“,
-  // ECCdigital/tickets#630): the instance owner reads and settles them.
+  // The reports to the instance (glossary „Meldung“):
+  // the instance owner reads and settles them.
   report: {
     read: { any: "instanceOwner" },
     resolve: { any: "instanceOwner" },
@@ -318,7 +318,7 @@ const TABLE = {
     delete: { any: "instanceOwner" },
     changeId: { any: "instanceOwner" },
     // Suspend, lift and preview a suspension (glossary „Sperre (eines
-    // Users)“, ECCdigital/tickets#624).
+    // Users)“).
     suspend: { any: "instanceOwner" },
   },
 

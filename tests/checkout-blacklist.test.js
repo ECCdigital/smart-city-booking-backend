@@ -1,6 +1,6 @@
 /**
- * The checkout refuses an address on the blacklist (glossary „Blacklist“,
- * ECCdigital/tickets#627): every self-booking - v1 and v2, single, group
+ * The checkout refuses an address on the blacklist (glossary „Blacklist“):
+ * every self-booking - v1 and v2, single, group
  * and bundle, as a guest and signed in - asks the blacklist for each
  * address of `mail` before anything is stored and before any payment, and
  * refuses the whole booking on a hit with `checkout.address_blacklisted`

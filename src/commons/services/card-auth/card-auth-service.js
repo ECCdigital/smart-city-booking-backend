@@ -132,7 +132,7 @@ class CardAuthService {
       };
     }
 
-    // Neither a new account nor a link to a known one (ECCdigital/tickets#628).
+    // Neither a new account nor a link to a known one.
     await BlacklistService.assertMayRegister(email);
 
     const existingCardUser = await UserManager.getUserByCard(appId, publicId);

@@ -7,8 +7,8 @@ const logger = bunyan.createLogger({
 });
 
 /**
- * Web Controller of the reports (glossary „Meldung“,
- * ECCdigital/tickets#630). The rights are the router's: reporting is
+ * Web Controller of the reports (glossary „Meldung“).
+ * The rights are the router's: reporting is
  * `tenantUser.report` of the tenant, reading and settling `report.read` and
  * `report.resolve` of the instance owner. Whether a target is a tenant
  * owner is the one decision left here, by the marker's second entry
@@ -17,8 +17,7 @@ const logger = bunyan.createLogger({
 class ReportController {
   /**
    * Reports a member or a booker: 201 for a new report, 200 for an
-   * addition. `endMembership` ends the member's membership with it
-   * (ECCdigital/tickets#631).
+   * addition. `endMembership` ends the member's membership with it.
    */
   static async createReport(request, response, next) {
     if (request.body?.addresses !== undefined) {
@@ -45,7 +44,7 @@ class ReportController {
   }
 
   /**
-   * Reports addresses of a booking's `mail` (ECCdigital/tickets#632): 201
+   * Reports addresses of a booking's `mail`: 201
    * where a report is new, 200 where every one was added to an open one;
    * `blacklisted` names the addresses an entry already hits.
    */
@@ -87,7 +86,7 @@ class ReportController {
     }
   }
 
-  /** The reports of the tenant, its own alone (ECCdigital/tickets#631). */
+  /** The reports of the tenant, its own alone. */
   static async getTenantReports(request, response, next) {
     try {
       response.status(200).send(
@@ -101,7 +100,7 @@ class ReportController {
     }
   }
 
-  /** Adds a reason to an open report of the tenant (ECCdigital/tickets#631). */
+  /** Adds a reason to an open report of the tenant. */
   static async addReason(request, response, next) {
     try {
       const tenantId = request.params.tenant;
@@ -121,7 +120,7 @@ class ReportController {
     }
   }
 
-  /** Withdraws an open report of the tenant (ECCdigital/tickets#631). */
+  /** Withdraws an open report of the tenant. */
   static async withdrawReport(request, response, next) {
     try {
       const tenantId = request.params.tenant;
@@ -142,7 +141,7 @@ class ReportController {
 
   /**
    * Settles every open report about `userId`, or about `address` with
-   * `domain` (ECCdigital/tickets#632), with `decision` and `reason`.
+   * `domain`, with `decision` and `reason`.
    */
   static async resolveReports(request, response, next) {
     try {

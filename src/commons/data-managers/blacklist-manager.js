@@ -9,8 +9,8 @@ const plain = (doc) => {
 };
 
 /**
- * Data manager of the blacklist (glossary „Blacklist“,
- * ECCdigital/tickets#625): the entries of the instance in their own
+ * Data manager of the blacklist (glossary „Blacklist“):
+ * the entries of the instance in their own
  * collection. Instance-wide, so no read takes a tenant or a reach; the
  * routes are the instance owner's alone.
  */

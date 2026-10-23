@@ -41,7 +41,7 @@ const statusOf = (err) => {
 
 /**
  * The body of a refused checkout: the reason as text, as before - except an
- * address on the blacklist (ECCdigital/tickets#627), whose answer is JSON
+ * address on the blacklist, whose answer is JSON
  * with the instance's `mailAddress`, so the legacy checkout can name whom
  * to write to.
  */

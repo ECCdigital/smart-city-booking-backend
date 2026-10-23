@@ -66,7 +66,7 @@ describe("trusted proxies: the client address the signup limit counts", function
 
     installInMemoryRateLimitEvents();
     installMailStackStore();
-    // An empty blacklist: the signup asks it (ECCdigital/tickets#628).
+    // An empty blacklist: the signup asks it.
     installBlacklistCollection();
     installInMemoryMailTransport();
     const users = new Map();

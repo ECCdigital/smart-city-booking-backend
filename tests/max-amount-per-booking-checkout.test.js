@@ -243,7 +243,7 @@ describe("BookingCheckout.createBooking — maximum per booking", function () {
       .stub(MembershipManager, "getMembershipsByTenantAndRoles")
       .resolves([]);
     sinon.stub(TenantManager, "getTenant").resolves({ id: TENANT_ID });
-    // The blacklist, empty: the checkout asks it for the address (#627).
+    // The blacklist, empty: the checkout asks it for the address.
     installBlacklistCollection();
     sinon.stub(EventManager, "getEvent").resolves(null);
     sinon.stub(OpeningHoursManager, "hasOpeningHoursConflict").resolves(false);

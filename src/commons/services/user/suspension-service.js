@@ -14,8 +14,8 @@ const BlacklistService = () => require("../blacklist/blacklist-service");
 const ReportService = () => require("../report/report-service");
 
 /**
- * The suspension of a user (glossary „Sperre (eines Users)“,
- * ECCdigital/tickets#624): the instance owner suspends and lifts it as
+ * The suspension of a user (glossary „Sperre (eines Users)“):
+ * the instance owner suspends and lifts it as
  * actions of their own, never over the general update of the user. It
  * stays the check of `isSuspended` at the authentication and at every
  * sign-in, so it takes effect at once, running sessions included.
@@ -24,11 +24,11 @@ class SuspensionService {
   /**
    * Suspends a user. A suspension already in place gets the new record:
    * reasons do not pile up. With `blacklist` the user's address goes on the
-   * blacklist too (ECCdigital/tickets#626): an entry of origin `suspension`
+   * blacklist too: an entry of origin `suspension`
    * with the reason of the suspension, unless an entry already hits the
    * address. The suspension itself stays `manual`. It settles every open
    * report about the user as `suspended` and points to them
-   * (`reportIds`, ECCdigital/tickets#630).
+   * (`reportIds`).
    *
    * @param {string} userId The user to suspend
    * @param {Object} params
@@ -89,8 +89,8 @@ class SuspensionService {
 
   /**
    * Lifts the suspension of a user, with or without a record. With
-   * `removeBlacklistEntry` an exact entry of their address goes too
-   * (ECCdigital/tickets#626); a domain entry stays and does not suspend
+   * `removeBlacklistEntry` an exact entry of their address goes too;
+   * a domain entry stays and does not suspend
    * the account anew.
    *
    * @param {string} userId The user
@@ -109,11 +109,11 @@ class SuspensionService {
 
   /**
    * Suspends a user by a blacklist entry that matched their address when
-   * it was added (ECCdigital/tickets#625): the entry's reason, time and
+   * it was added: the entry's reason, time and
    * person, the origin `blacklist` and the entry as it is now. The caller
    * leaves out instance owners and users already suspended. As every
    * suspension it settles the open reports about the user and points to
-   * them (ECCdigital/tickets#632).
+   * them.
    *
    * @param {string} userId The user to suspend
    * @param {Object} entry The blacklist entry
@@ -170,9 +170,9 @@ class SuspensionService {
    * The consequences of a suspension for its dialog: the bookings assigned
    * to the user across every tenant, the tenants they are an active member
    * of and the blacklist entry that hits their address, if any
-   * (ECCdigital/tickets#626) - for the checkboxes of both dialogs - and
+   * - for the checkboxes of both dialogs - and
    * per tenant the open reports a suspension settles with the tenant
-   * owners it mails (ECCdigital/tickets#630).
+   * owners it mails.
    *
    * @param {string} userId The user
    * @returns {Promise<{bookings: number, memberships: number, blacklistEntry: Object|null, openReports: Object[]}>}

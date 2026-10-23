@@ -2,8 +2,8 @@ const ReportModel = require("./models/reportModel");
 const { REPORT_STATUS } = require("../schemas/reportSchema");
 
 /**
- * The target of a report as a query: a user or an address
- * (ECCdigital/tickets#632), the other one `null`.
+ * The target of a report as a query: a user or an address,
+ * the other one `null`.
  */
 const targetQuery = ({ targetUserId = null, targetAddress = null }) => ({
   targetUserId,
@@ -19,7 +19,7 @@ const plain = (doc) => {
 };
 
 /**
- * Data manager of the reports (glossary „Meldung“, ECCdigital/tickets#630)
+ * Data manager of the reports (glossary „Meldung“)
  * in their own collection. The service decides who reads which; no read
  * here takes a reach.
  */

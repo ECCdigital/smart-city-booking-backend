@@ -76,8 +76,7 @@ router.post(
   authorize("instance", "supervisionNotificationRetry"),
   SupervisionController.retryNotification,
 );
-// The blacklist of the instance (glossary „Blacklist“,
-// ECCdigital/tickets#625).
+// The blacklist of the instance (glossary „Blacklist“).
 router.get(
   "/instances/blacklist",
   authorize("blacklist", "read"),
@@ -103,8 +102,8 @@ router.delete(
   authorize("blacklist", "write"),
   BlacklistController.removeEntry,
 );
-// The reports to the instance (glossary „Meldung“,
-// ECCdigital/tickets#630): read, and settle every open one about a user.
+// The reports to the instance (glossary „Meldung“):
+// read, and settle every open one about a user.
 router.get(
   "/instances/reports",
   authorize("report", "read"),
@@ -236,23 +235,21 @@ router.get(
   authorize("tenantUser", "read"),
   TenantController.getUsers,
 );
-// The warning before adding or inviting an address on the blacklist
-// (ECCdigital/tickets#629).
+// The warning before adding or inviting an address on the blacklist.
 router.post(
   "/tenants/:tenant/users/blacklist-match",
   authorize("tenantUser", "manage"),
   BlacklistController.match,
 );
-// Reporting a member or a booker to the instance (glossary „Meldung“,
-// ECCdigital/tickets#630); a tenant owner only by a tenant owner, which
+// Reporting a member or a booker to the instance (glossary „Meldung“);
+// a tenant owner only by a tenant owner, which
 // the marker decides too.
 router.post(
   "/tenants/:tenant/reports",
   authorize("tenantUser", "report", { also: ["owner"] }),
   ReportController.createReport,
 );
-// The tenant's own reports, to read, add to and withdraw
-// (ECCdigital/tickets#631).
+// The tenant's own reports, to read, add to and withdraw.
 router.get(
   "/tenants/:tenant/reports",
   authorize("tenantUser", "report"),
@@ -317,7 +314,7 @@ router.get("/users", authorize("user", "read"), UserController.getUsers);
 router.get("/users/ids", authorize("user", "read"), UserController.getUserIds);
 router.get("/users/:id", authorize("user", "read"), UserController.getUser);
 // The warning before creating a user or changing a user id to an address
-// on the blacklist (ECCdigital/tickets#629); both ways are the instance
+// on the blacklist; both ways are the instance
 // owner's, as `user.create` is.
 router.post(
   "/users/blacklist-match",

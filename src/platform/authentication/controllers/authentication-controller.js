@@ -30,8 +30,8 @@ const VERIFICATION_MAIL_ANSWER = {
 };
 
 /**
- * Answers the refusal of an address on the blacklist (ECCdigital/tickets#628)
- * as the legacy checkout does (#627): `409` with `{ error, params }`, the
+ * Answers the refusal of an address on the blacklist
+ * as the legacy checkout does: `409` with `{ error, params }`, the
  * reason and the instance's `mailAddress`.
  *
  * @returns {boolean} Whether the error was that refusal and is answered

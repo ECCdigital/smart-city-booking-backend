@@ -6,8 +6,8 @@
       - Reports
     summary: Report a user or guest addresses to the instance
     description: |
-      A report (glossary "Meldung (eines Users oder einer Adresse)",
-      ECCdigital/tickets#630): the tenant reports a member or the booker
+      A report (glossary "Meldung (eines Users oder einer Adresse)"):
+      the tenant reports a member or the booker
       of one of its bookings (`assignedUserId`, with an account) to the
       instance, with a required reason. With `bookingId` the booker is the
       target and the booking hangs at the report as evidence; the booker's
@@ -20,11 +20,10 @@
       the occasion `report.created`: a mail to every instance owner. The
       reported user learns nothing. With `endMembership` the membership of
       a member ends with the report, its open invitations included, as
-      `POST /api/tenants/{tenant}/remove-user` does
-      (ECCdigital/tickets#631).
+      `POST /api/tenants/{tenant}/remove-user` does.
 
       With `addresses` the tenant reports addresses from `mail` of the
-      booking `bookingId` instead (ECCdigital/tickets#632): each one
+      booking `bookingId` instead: each one
       picked, normalized as the user ids, becomes a report of its own
       (`targetAddress`) with the booking and the reason, or is added to the
       open one of the tenant. Free addresses without a booking cannot be
@@ -118,8 +117,8 @@
     summary: The reports of the tenant
     description: |
       The tenant's own reports, of every status, oldest first, each with
-      the names of the tenant and of the reported user
-      (ECCdigital/tickets#631). Roles with `manageUsers.updateAny`
+      the names of the tenant and of the reported user.
+      Roles with `manageUsers.updateAny`
       (`tenantUser.report`).
     security:
       - bearerAuth: []
@@ -168,8 +167,8 @@
       - Reports
     summary: Add a reason to an open report of the tenant
     description: |
-      Adds a reason to an open report of the tenant
-      (ECCdigital/tickets#631), without a mail. A report about a tenant
+      Adds a reason to an open report of the tenant,
+      without a mail. A report about a tenant
       owner only a tenant owner adds to. Roles with
       `manageUsers.updateAny` (`tenantUser.report`).
     security:
@@ -221,8 +220,8 @@
       - Reports
     summary: Withdraw an open report of the tenant
     description: |
-      Settles an open report of the tenant as `withdrawn`
-      (ECCdigital/tickets#631), without a mail. A new report about the
+      Settles an open report of the tenant as `withdrawn`,
+      without a mail. A new report about the
       same target is possible afterwards. A report about a tenant owner
       only a tenant owner withdraws. Roles with `manageUsers.updateAny`
       (`tenantUser.report`).
@@ -265,8 +264,8 @@
     description: |
       The reports of every tenant, oldest first, each with the names of
       its tenant and of the reported user and whether the user is
-      suspended. The admin UI groups the open ones by user
-      (ECCdigital/tickets#630). The instance owner's alone (`report.read`).
+      suspended. The admin UI groups the open ones by user.
+      The instance owner's alone (`report.read`).
     security:
       - bearerAuth: []
     parameters:
@@ -315,13 +314,13 @@
     summary: Settle every open report about a user or an address
     description: |
       One decision for every open report about the user, of whatever
-      tenant (ECCdigital/tickets#630). `suspend` suspends the user as
+      tenant. `suspend` suspends the user as
       `POST /api/users/{id}/suspension` does, with `reason` as the reason of
       the suspension, and the suspension points to the reports. `reject`
       needs a reason, which the tenant owners read.
 
       With `address` instead of `userId` the decision is about the reports
-      of that address (ECCdigital/tickets#632): `blacklist` adds a
+      of that address: `blacklist` adds a
       blacklist entry of origin `reports` with `reason`, of the exact
       address or with `domain` of its domain, as
       `POST /api/instances/blacklist` does; the entry settles every open
@@ -391,7 +390,7 @@ components:
         targetAddress:
           type: string
           nullable: true
-          description: The address reported (ECCdigital/tickets#632); `null` for a user
+          description: The address reported; `null` for a user
         reason:
           type: string
         bookingId:
@@ -431,7 +430,7 @@ components:
           nullable: true
     AddressReports:
       type: object
-      description: The answer to reporting addresses (ECCdigital/tickets#632)
+      description: The answer to reporting addresses
       properties:
         reports:
           type: array

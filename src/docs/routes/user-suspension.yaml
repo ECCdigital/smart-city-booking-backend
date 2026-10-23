@@ -6,8 +6,8 @@
       - Users
     summary: Suspend a user for the whole instance
     description: |
-      The suspension of a user (glossary "Sperre (eines Users)",
-      ECCdigital/tickets#624), an action of its own: the general update
+      The suspension of a user (glossary "Sperre (eines Users)"),
+      an action of its own: the general update
       (`PUT /api/users`) no longer takes `isSuspended`. It takes effect at
       once: every sign-in (password, SSO, card, refresh) is refused and a
       running session ends with its next request (`403`).
@@ -18,14 +18,14 @@
       An instance owner cannot be suspended. The instance owner's alone
       (`user.suspend`).
 
-      With `blacklist: true` the user's address goes on the blacklist too
-      (ECCdigital/tickets#626): an exact entry of origin `suspension` with
+      With `blacklist: true` the user's address goes on the blacklist too:
+      an exact entry of origin `suspension` with
       the reason of the suspension, unless an entry already hits the
       address. The suspension itself stays `manual`.
 
       It settles every open report about the user as `suspended`, the
       record points to them (`reportIds`) and the owners of each reporting
-      tenant get a mail (ECCdigital/tickets#630). Lifting it later sends
+      tenant get a mail. Lifting it later sends
       none.
     security:
       - bearerAuth: []
@@ -75,7 +75,7 @@
       owner's alone (`user.suspend`).
 
       With `removeBlacklistEntry=true` an exact blacklist entry of the
-      user's address goes too (ECCdigital/tickets#626). A domain entry
+      user's address goes too. A domain entry
       stays: the checkout keeps refusing the address, but the entry does
       not suspend the account anew.
     security:
@@ -112,9 +112,9 @@
       the bookings assigned to the user across every tenant and their
       active memberships. The bookings and memberships stay. It names the
       blacklist entry that hits the user's address, for the checkboxes of
-      both dialogs (ECCdigital/tickets#626), and per reporting tenant the
+      both dialogs, and per reporting tenant the
       open reports the suspension settles with the tenant owners who then
-      get a mail (ECCdigital/tickets#630). The instance owner's alone
+      get a mail. The instance owner's alone
       (`user.suspend`).
     security:
       - bearerAuth: []
@@ -148,8 +148,7 @@
                   type: array
                   description: |
                     The open reports about the user per reporting tenant;
-                    suspending settles them as `suspended`
-                    (ECCdigital/tickets#630).
+                    suspending settles them as `suspended`.
                   items:
                     type: object
                     properties:
@@ -197,7 +196,7 @@ components:
           nullable: true
           description: |
             The blacklist entry that hits the user's address now, `null`
-            without one (ECCdigital/tickets#626). Also in `GET /api/users`
+            without one. Also in `GET /api/users`
             and `GET /api/users/{id}`.
           properties:
             id:
@@ -231,15 +230,14 @@ components:
             reportIds:
               type: array
               description: |
-                With origin `manual`: the reports the suspension settled
-                (ECCdigital/tickets#630).
+                With origin `manual`: the reports the suspension settled.
               items:
                 type: string
             blacklistEntry:
               type: object
               description: |
                 With origin `blacklist` only: the entry that suspended the
-                user as it was then (ECCdigital/tickets#625).
+                user as it was then.
               properties:
                 id:
                   type: string
