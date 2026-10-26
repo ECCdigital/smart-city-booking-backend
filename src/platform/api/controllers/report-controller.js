@@ -44,7 +44,7 @@ class ReportController {
   }
 
   /**
-   * Reports addresses of a booking's `mail`: 201
+   * Reports addresses of a booking's `mail`, or entered by hand: 201
    * where a report is new, 200 where every one was added to an open one;
    * `blacklisted` names the addresses an entry already hits.
    */
@@ -59,8 +59,11 @@ class ReportController {
           reason: request.body?.reason,
           by: request.user.id,
         });
+      const source = request.body?.bookingId
+        ? `of booking ${request.body.bookingId}`
+        : "by hand";
       logger.info(
-        `${tenantId} -- reported ${reports.length} addresses of booking ${request.body?.bookingId} by user ${request.user.id}`,
+        `${tenantId} -- reported ${reports.length} addresses ${source} by user ${request.user.id}`,
       );
       response.status(created ? 201 : 200).send({ reports, blacklisted });
     } catch (error) {

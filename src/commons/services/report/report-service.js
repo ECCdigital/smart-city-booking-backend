@@ -9,6 +9,7 @@ const SupervisionNotificationService = require("../supervision/supervision-notif
 const { NOTIFICATION_TYPES } = require("../supervision/supervision-constants");
 const { DOMAIN } = require("../authorization/reach");
 const { REPORT_STATUS } = require("../../schemas/reportSchema");
+const { BlacklistEntryKind } = require("../../schemas/blacklistEntrySchema");
 const { normalizeUserId } = require("../../utilities/user-id-utils");
 const { parseEmails } = require("../../utilities/mail-utils");
 const Formatters = require("../../utilities/formatters");
@@ -144,18 +145,21 @@ class ReportService {
   }
 
   /**
-   * Reports addresses from `mail` of a booking of the tenant to the
-   * instance: each address picked becomes a
-   * report of its own with the booking and the reason, or is added to the
-   * open one of the tenant. An address an entry of the blacklist hits
-   * already becomes none and is answered in `blacklisted`; where that is
-   * every address picked, nothing is reported (409). Free addresses
-   * without a booking and the addresses of accounts cannot be reported,
-   * and the guest learns nothing.
+   * Reports addresses to the instance: from `mail` of a booking of the
+   * tenant, or entered by hand without one. Each
+   * address picked becomes a report of its own with the booking, if any,
+   * and the reason, or is added to the open one of the tenant. An address
+   * an entry of the blacklist hits already becomes none and is answered in
+   * `blacklisted`; where that is every address picked, nothing is reported
+   * (409). From a booking the addresses of accounts cannot be reported; by
+   * hand any single address can, a member's too,
+   * and whether an address has an account is not told. The guest learns
+   * nothing.
    *
    * @param {Object} params
    * @param {string} params.tenantId The reporting tenant
-   * @param {string} params.bookingId The booking reported from
+   * @param {string} [params.bookingId] The booking reported from; without
+   *   one the addresses are entered by hand
    * @param {*} params.addresses The addresses picked, of its `mail`
    * @param {*} params.reason Required
    * @param {string} params.by Who reports
@@ -163,15 +167,6 @@ class ReportService {
    */
   static async reportAddresses({ tenantId, bookingId, addresses, reason, by }) {
     const trimmedReason = requiredText(reason, "report_reason_required");
-    if (!bookingId) throw new BadRequestError("report_booking_required");
-    const booking = await BookingManager.getBooking(
-      bookingId,
-      tenantId,
-      DOMAIN,
-    );
-    if (!booking) {
-      throw new NotFoundError("booking_not_found", { bookingId });
-    }
     const picked = [
       ...new Set(
         (Array.isArray(addresses) ? addresses : [])
@@ -182,22 +177,10 @@ class ReportService {
     if (picked.length === 0) {
       throw new BadRequestError("report_target_required");
     }
-    const ofBooking = parseEmails(booking.mail);
-    const foreign = picked.filter((address) => !ofBooking.includes(address));
-    if (foreign.length > 0) {
-      throw new ForbiddenError("report_address_not_of_booking", {
-        addresses: foreign,
-      });
-    }
-    // The address of an account is a user, reported as such: with the
-    // protection of tenant and instance owners and of a suspension.
-    const ofAccounts = (await UserManager.getUsersById(picked)).map(
-      (user) => user.id,
-    );
-    if (ofAccounts.length > 0) {
-      throw new BadRequestError("report_address_of_account", {
-        addresses: ofAccounts,
-      });
+    if (bookingId) {
+      await ReportService._checkAddressesOfBooking(tenantId, bookingId, picked);
+    } else {
+      ReportService._checkAddressesByHand(picked);
     }
 
     const blacklisted = [];
@@ -227,6 +210,53 @@ class ReportService {
       created: results.some((result) => result.created),
       blacklisted,
     };
+  }
+
+  /**
+   * The addresses picked from a booking: all of its `mail`, none of an
+   * account.
+   */
+  static async _checkAddressesOfBooking(tenantId, bookingId, picked) {
+    const booking = await BookingManager.getBooking(
+      bookingId,
+      tenantId,
+      DOMAIN,
+    );
+    if (!booking) {
+      throw new NotFoundError("booking_not_found", { bookingId });
+    }
+    const ofBooking = parseEmails(booking.mail);
+    const foreign = picked.filter((address) => !ofBooking.includes(address));
+    if (foreign.length > 0) {
+      throw new ForbiddenError("report_address_not_of_booking", {
+        addresses: foreign,
+      });
+    }
+    // The address of an account is a user, reported as such: with the
+    // protection of tenant and instance owners and of a suspension.
+    const ofAccounts = (await UserManager.getUsersById(picked)).map(
+      (user) => user.id,
+    );
+    if (ofAccounts.length > 0) {
+      throw new BadRequestError("report_address_of_account", {
+        addresses: ofAccounts,
+      });
+    }
+  }
+
+  /** The addresses entered by hand: each a single address, no domain. */
+  static _checkAddressesByHand(picked) {
+    for (const address of picked) {
+      let parsed = null;
+      try {
+        parsed = BlacklistService().parse(address);
+      } catch {
+        // Refused below, under the code of the reports.
+      }
+      if (parsed?.kind !== BlacklistEntryKind.ADDRESS) {
+        throw new BadRequestError("report_address_invalid", { address });
+      }
+    }
   }
 
   /**

@@ -26,8 +26,10 @@
       booking `bookingId` instead: each one
       picked, normalized as the user ids, becomes a report of its own
       (`targetAddress`) with the booking and the reason, or is added to the
-      open one of the tenant. Free addresses without a booking cannot be
-      reported, nor the address of an account, which is reported as a user.
+      open one of the tenant. The address of an account is reported as a
+      user. Without `bookingId` the addresses are entered by hand: each a
+      single address, a member's too; whether an address has an account is
+      not told.
       An address an entry of the blacklist already hits becomes
       no report and is named in `blacklisted`; where that is every address
       picked, the answer is `409`. The guest learns nothing.
@@ -56,12 +58,15 @@
                 type: string
                 description: |
                   The booking whose booker is reported, or with `addresses`
-                  the booking whose `mail` they are of
+                  the booking whose `mail` they are of; without it the
+                  addresses are entered by hand
               addresses:
                 type: array
                 items:
                   type: string
-                description: Addresses from `mail` of the booking to report
+                description: |
+                  Addresses from `mail` of the booking, or entered by hand,
+                  to report
               reason:
                 type: string
               endMembership:
@@ -93,9 +98,10 @@
           `report_reason_required`, `report_target_required`,
           `report_target_without_account` (a booker without an account),
           `report_target_not_booker` (`userId` and `bookingId` disagree),
-          `report_booking_required` (`addresses` without `bookingId`),
-          `report_address_of_account` (an address of an account: report the
-          user instead, `params.addresses`)
+          `report_address_of_account` (an address of an account from a
+          booking: report the user instead, `params.addresses`),
+          `report_address_invalid` (an address entered by hand that is no
+          single address, `params.address`)
       "401":
         description: Not authenticated
       "403":

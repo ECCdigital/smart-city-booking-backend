@@ -714,21 +714,65 @@ describe("reports", function () {
       ]);
     });
 
-    it("refuses a free address without a booking, or one not in the booking's mail", async function () {
+    it("refuses an address not in the booking's mail", async function () {
       const booking = await h.manualBooking("room", {}, { mail: GUEST });
 
-      const free = await report({ addresses: [GUEST], reason: "x" });
       const foreign = await report({
         bookingId: booking.id,
         addresses: [GUEST, "fremd@example.test"],
         reason: "x",
       });
 
-      expect(free.status).to.equal(400);
-      expect(free.body.code).to.equal("report_booking_required");
       expect(foreign.status).to.equal(403);
       expect(foreign.body.code).to.equal("report_address_not_of_booking");
       expect(reports).to.have.length(0);
+    });
+
+    describe("entered by hand", function () {
+      it("reports a free address without a booking, normalized, and mails the instance owners", async function () {
+        await mails();
+
+        const res = await report({
+          addresses: [" Gast@Example.test "],
+          reason: "Spam",
+        });
+
+        expect(res.status).to.equal(201);
+        expect(res.body.reports[0]).to.include({
+          tenantId: TENANT,
+          targetUserId: null,
+          targetAddress: GUEST,
+          bookingId: null,
+          reason: "Spam",
+          status: "open",
+        });
+        expect(await mails()).to.deep.equal([
+          `SUPERVISION_REPORT_CREATED ${ADMIN}`,
+        ]);
+      });
+
+      it("reports the address of a member of the tenant too, as an address", async function () {
+        const res = await report({ addresses: [CUSTOMER], reason: "x" });
+
+        expect(res.status).to.equal(201);
+        expect(reports.map((doc) => doc.targetAddress)).to.deep.equal([
+          CUSTOMER,
+        ]);
+      });
+
+      it("refuses a domain or what is no address", async function () {
+        const domain = await report({
+          addresses: ["@example.test"],
+          reason: "x",
+        });
+        const junk = await report({ addresses: ["kein-at"], reason: "x" });
+
+        expect(domain.status).to.equal(400);
+        expect(domain.body.code).to.equal("report_address_invalid");
+        expect(junk.status).to.equal(400);
+        expect(junk.body.code).to.equal("report_address_invalid");
+        expect(reports).to.have.length(0);
+      });
     });
 
     it("refuses the address of an account: that is a user to report", async function () {
