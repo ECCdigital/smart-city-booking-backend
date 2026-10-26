@@ -7,6 +7,10 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ## [Unreleased]
 
+### Fixed
+
+- Tests: the two tests of a lapsed iFBS hold in `tests/access-compartments.test.js` start the fake clock at the moment after the hold, not at the start of the test. Before, a runner slower than 1 ms between the two kept the hold alive, and the test failed now and then. No code change
+
 ## [4.3.1] — 2026-10-14
 
 ### Security
