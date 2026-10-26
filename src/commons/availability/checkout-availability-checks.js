@@ -117,7 +117,12 @@ async function getBookedAmountForBookableWindow(
     timeEnd,
     { useTimeOverlap: isTimeRelatedBookable(originBookable) },
   );
-  const bookings = filterExcludedBookings(rawBookings, excludeBookingIds);
+  // A rejected or cancelled booking counts nothing; without a period the
+  // bookings come unfiltered, and the summaries name only those that count.
+  const bookings = filterExcludedBookings(
+    rawBookings,
+    excludeBookingIds,
+  ).filter((booking) => !booking.isRejected);
 
   return {
     amountBooked: sumBookedAmount(bookings, bookable.id),
