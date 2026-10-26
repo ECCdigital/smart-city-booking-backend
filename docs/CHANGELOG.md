@@ -50,6 +50,7 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 - Editing an event without `ownerUserId` emptied its owner ([ECCdigital/tickets#300](https://github.com/ECCdigital/tickets/issues/300)): as for bookables (ECCdigital/tickets#263), a `PUT /api/:tenant/events` body without `ownerUserId`, or with `null`, `""` or a blank one, now keeps the stored owner; a body that names it is stored as before
 - A simulated group checkout (`?simulate=true`, the price preview of a group or series) no longer stores a group booking ([ECCdigital/tickets#488](https://github.com/ECCdigital/tickets/issues/488)): before, it left a group in the database whose members were never stored. It now answers the group it would book with the computed members in `bookings`, which were empty before
 - An admin edit of a booking (`PUT /api/:tenant/bookings`) keeps the owner `assignedUserId` the booking was created with ([ECCdigital/tickets#484](https://github.com/ECCdigital/tickets/issues/484)): before, the first mail of the form became the owner, so a guest booking fell silently to the account of that mail and a booking of an account left the customer's list when the mail changed. The first mail as owner applies only when a manual booking is created
+- Tests: the two tests of a lapsed iFBS hold in `tests/access-compartments.test.js` start the fake clock at the moment after the hold, not at the start of the test. Before, a runner slower than 1 ms between the two kept the hold alive, and the test failed now and then. No code change
 
 ## [4.3.1] — 2026-10-14
 
