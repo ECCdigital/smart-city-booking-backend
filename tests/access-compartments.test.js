@@ -522,7 +522,7 @@ describe("Compartments on the access seam", function () {
     it("takes a fresh box when the hold lapsed, and notes that box", async function () {
       storeBooking("bikebox");
       await AccessService.holdForBooking(TENANT, "booking-1");
-      const clock = sinon.useFakeTimers({ now: now, toFake: ["Date"] });
+      const clock = sinon.useFakeTimers({ now: Date.now(), toFake: ["Date"] });
       clock.tick(HOLD_TTL_MS + 1);
 
       await AccessService.provisionForBooking(TENANT, "booking-1");
@@ -623,7 +623,7 @@ describe("Compartments on the access seam", function () {
         price: "1.50",
       });
 
-      const clock = sinon.useFakeTimers({ now: now, toFake: ["Date"] });
+      const clock = sinon.useFakeTimers({ now: Date.now(), toFake: ["Date"] });
       clock.tick(HOLD_TTL_MS + 1);
       const booking = stored();
       booking.accessInfo[0].grant = null;
