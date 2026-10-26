@@ -19,8 +19,10 @@ const {
   ADMIN,
   OWNER,
   CUSTOMER,
+  TENANT,
 } = require("./helpers/booking-lifecycle-harness");
 const UserManager = require("../src/commons/data-managers/user-manager");
+const MembershipManager = require("../src/commons/data-managers/membership-manager");
 const BookingModel = require("../src/commons/data-managers/models/bookingModel");
 const {
   account,
@@ -272,6 +274,25 @@ describe("user suspension", function () {
 
       expect(res.body.isSuspended).to.equal(false);
       expect(res.body.suspension).to.equal(null);
+    });
+
+    it("keeps the record out of a tenant's answers: reason, person and entry are the instance's", async function () {
+      await suspend(CUSTOMER, { reason: "Beleidigt Personal" });
+      sinon.stub(MembershipManager, "updateMembership").resolves();
+      sinon
+        .stub(MembershipManager, "getMembershipsByTenantID")
+        .resolves([{ userId: CUSTOMER, tenantId: TENANT, status: "active" }]);
+
+      const res = await h
+        .api()
+        .post(`/api/tenants/${TENANT}/update-user-status`)
+        .set(h.as(OWNER))
+        .send({ userId: CUSTOMER, status: "active" });
+
+      expect(res.status).to.equal(200);
+      const [details] = res.body.userDetails;
+      expect(details).to.include({ id: CUSTOMER, isSuspended: true });
+      expect(details).to.not.have.property("suspension");
     });
   });
 

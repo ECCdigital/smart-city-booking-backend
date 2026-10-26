@@ -21,6 +21,7 @@ const {
   TENANT,
 } = require("./helpers/booking-lifecycle-harness");
 const UserManager = require("../src/commons/data-managers/user-manager");
+const BlacklistManager = require("../src/commons/data-managers/blacklist-manager");
 const BlacklistService = require("../src/commons/services/blacklist/blacklist-service");
 const {
   account,
@@ -163,6 +164,18 @@ describe("blacklist", function () {
       await create({ value: MAX, reason: "Test" });
 
       const res = await create({ value: " MAX@firma.test", reason: "nochmal" });
+
+      expect(res.status).to.equal(409);
+      expect(res.body.code).to.equal("blacklist_entry_exists");
+      expect(entries).to.have.lengthOf(1);
+    });
+
+    it("refuses with 409 too an entry of the same value added meanwhile", async function () {
+      await create({ value: MAX, reason: "Test" });
+      // The check before the insert misses the entry another request added.
+      BlacklistManager.getEntryByValue.resolves(null);
+
+      const res = await create({ value: MAX, reason: "zeitgleich" });
 
       expect(res.status).to.equal(409);
       expect(res.body.code).to.equal("blacklist_entry_exists");

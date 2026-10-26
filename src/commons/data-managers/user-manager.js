@@ -28,6 +28,18 @@ class UserManager {
   }
 
   /**
+   * The user as the instance owner's user routes show them: public, with
+   * the record of the suspension (`User.exportForInstance`).
+   *
+   * @param {string} id
+   * @returns {Promise<Object|null>}
+   */
+  static async getUserForInstance(id) {
+    const rawUser = await UserManager._findRawById(id);
+    return rawUser ? rawUser.toEntity().exportForInstance() : null;
+  }
+
+  /**
    * The account of an address (the account id), found exactly: without
    * blanks around it and without regard to case, never as a pattern
    * (ECCdigital/tickets#259) - `^own` or `.*` find nothing. Every lookup of an

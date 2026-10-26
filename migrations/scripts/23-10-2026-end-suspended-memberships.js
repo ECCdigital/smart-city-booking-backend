@@ -129,6 +129,9 @@ module.exports = {
   name: "23-10-2026-end-suspended-memberships",
 
   up: async function (mongoose) {
+    // The unique `dedupeKey` keeps a rerun from recording a notice twice;
+    // the connection does not wait for the indexes of the models.
+    await mongoose.model("SupervisionNotification").syncIndexes();
     const now = new Date();
 
     const suspended = await mongoose

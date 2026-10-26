@@ -84,7 +84,7 @@ class SuspensionService {
         if (error.code !== "blacklist_entry_exists") throw error;
       }
     }
-    return await UserManager.getUser(user.id);
+    return await UserManager.getUserForInstance(user.id);
   }
 
   /**
@@ -104,7 +104,7 @@ class SuspensionService {
     if (removeBlacklistEntry) {
       await BlacklistService().removeAddressEntry(user.id);
     }
-    return await UserManager.getUser(user.id);
+    return await UserManager.getUserForInstance(user.id);
   }
 
   /**
@@ -153,7 +153,7 @@ class SuspensionService {
    * @returns {Promise<boolean>} Whether the suspension was lifted
    */
   static async unsuspendIfByBlacklistEntry(userId, entryId) {
-    const user = await UserManager.getUser(userId);
+    const user = await UserManager.getUserForInstance(userId);
     const { suspension } = user ?? {};
     if (
       !user?.isSuspended ||

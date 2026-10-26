@@ -275,7 +275,16 @@ class BlacklistService {
       suspensionUserId,
       reportIds: [],
     };
-    const stored = await BlacklistManager.insertEntry(entry);
+    let stored;
+    try {
+      stored = await BlacklistManager.insertEntry(entry);
+    } catch (error) {
+      // Added meanwhile by someone else: the unique index refuses it.
+      if (error.code !== 11000) throw error;
+      throw new ConflictError("blacklist_entry_exists", {
+        value: parsed.value,
+      });
+    }
 
     for (const user of suspend) {
       await SuspensionService.suspendByBlacklistEntry(user.id, entry);
