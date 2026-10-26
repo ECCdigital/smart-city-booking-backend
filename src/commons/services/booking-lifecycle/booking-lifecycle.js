@@ -624,7 +624,8 @@ function createBookingLifecycle(adapters) {
    * The reinstatement: `rejected → requested`, `cancelled → ` the state
    * it was cancelled from. Price, positions and coupon are what the stored
    * booking still carries from before the cancellation; the reason is
-   * cleared and the refund audit removed. The access is granted again at
+   * cleared, the refund audit removed and an open cancellation request
+   * (hook `REJECT`) dropped. The access is granted again at
    * `confirmed`, held at `requested | payment_due` - a hold that fails
    * aborts, the booking is cancelled again. No document, no workflow
    * event, no mail.
@@ -643,6 +644,11 @@ function createBookingLifecycle(adapters) {
     booking.status = nextState(from, transition, booking);
     booking.rejectionReason = "";
     delete booking.cancellationRefund;
+    // An open cancellation request from before the cancellation goes: its
+    // old link must not cancel the reinstated booking again.
+    booking.hooks = booking.hooks.filter(
+      (hook) => hook.type !== BOOKING_HOOK_TYPES.REJECT,
+    );
     const confirmed = () => booking.status === STATUS.CONFIRMED;
 
     // A reinstatement tells the booker nothing; the failed grant is the
