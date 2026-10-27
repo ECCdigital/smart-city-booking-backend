@@ -22,7 +22,7 @@ const { GroupBooking } = require("../../entities/groupBooking/groupBooking");
 const { BundleCheckoutService } = require("./bundle-checkout-service");
 const checkoutPolicy = require("./checkout-policy");
 const { CheckoutPolicy } = checkoutPolicy;
-const { bookedViaOf } = require("./booked-via");
+const { BookedVia, bookedViaOf } = require("./booked-via");
 const { CustomFieldService } = require("../custom-field/custom-field-service");
 const { CheckoutError } = require("../../../errors/CheckoutError");
 const { CHECKOUT_REASONS } = require("./checkout-reasons");
@@ -33,6 +33,7 @@ const {
   NotFoundError,
 } = require("../../../errors/BaseError");
 const {
+  primaryEmailFromMail,
   resolveCheckoutId,
   resolveCheckoutItems,
 } = require("../../utilities/checkout-utils");
@@ -607,6 +608,26 @@ async function runUpdateTransition(tenantId, transition, { booking, userId }) {
 }
 
 /**
+ * Whom a booking belongs to after an admin edit. An edit keeps the owner the
+ * booking was created with, with one exception: a booking of the Buchungsweg
+ * Admin belongs to its first mail, so when the admin corrects that mail, the
+ * booking moves to the corrected address. A booking of an account, a guest
+ * booking and one without a Buchungsweg keep their owner.
+ *
+ * @param {Booking} oldBooking The booking as it is stored
+ * @param {string} [mail] The mail of the form
+ * @returns {string} The owner (`assignedUserId`)
+ */
+function ownerAfterEdit(oldBooking, mail) {
+  const primary = primaryEmailFromMail(mail);
+  const corrected =
+    oldBooking.bookedVia === BookedVia.ADMIN &&
+    primary &&
+    primary !== primaryEmailFromMail(oldBooking.mail);
+  return corrected ? primary : oldBooking.assignedUserId;
+}
+
+/**
  * The admin PUT as the plan of spec part 1, section 6: the checkout
  * prepares the booking as it is to be (a manual booking, see GLOSSARY.md),
  * `planUpdate` reads the three flags of the form against the state the
@@ -672,9 +693,7 @@ async function updateBooking(
   // booking is in, so the checkout prepares it without them.
   const bundleCheckoutService = new BundleCheckoutService(
     {
-      // The owner is the stored one, not the form's: an edit does not
-      // change whom the booking belongs to.
-      user: oldBooking.assignedUserId,
+      user: ownerAfterEdit(oldBooking, updatedBooking.mail),
       tenant: tenantId,
       timeBegin: updatedBooking.timeBegin,
       timeEnd: updatedBooking.timeEnd,
