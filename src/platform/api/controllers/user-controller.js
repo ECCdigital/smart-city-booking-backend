@@ -49,10 +49,11 @@ class UserController {
     try {
       const user = request.user;
 
+      const users = await UserManager.getUsers(true, {
+        suspended: request.query.suspended === "true",
+      });
       const userObjects = await BlacklistService.withMatches(
-        await UserManager.getUsers(false, {
-          suspended: request.query.suspended === "true",
-        }),
+        users.map((entity) => entity.exportForInstance()),
       );
 
       logger.info(
@@ -81,7 +82,7 @@ class UserController {
         return response.sendStatus(400);
       }
 
-      const userObject = await UserManager.getUser(id);
+      const userObject = await UserManager.getUserForInstance(id);
       if (!userObject) {
         return UserController._notFound(response, id);
       }

@@ -142,11 +142,21 @@ class User {
       created: this.created,
       isVerified: this.isVerified,
       isSuspended: this.isSuspended,
-      suspension: this.suspensionRecord(),
       authType: this.authType,
       idpEmailVerifiedAt: this.idpEmailVerifiedAt,
       idpEmailVerifiedProvider: this.idpEmailVerifiedProvider,
     };
+  }
+
+  /**
+   * The public user with the record of the suspension, for the answers of
+   * the instance owner's user routes only. Tenant routes answer
+   * `exportPublic()`: tenant owners do not see reason, person or
+   * blacklist entry.
+   * @returns {Object}
+   */
+  exportForInstance() {
+    return { ...this.exportPublic(), suspension: this.suspensionRecord() };
   }
 
   /**

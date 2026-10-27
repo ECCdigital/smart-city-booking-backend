@@ -341,6 +341,22 @@ describe("reports", function () {
       expect(res.body.code).to.equal("report_none_open");
     });
 
+    it("refuses a decision without a target with 400 and settles nothing", async function () {
+      for (const target of [{}, { address: "  " }]) {
+        const res = await resolve({
+          ...target,
+          decision: "reject",
+          reason: "x",
+        });
+
+        expect(res.status).to.equal(400);
+        expect(res.body.code).to.equal("report_target_required");
+      }
+      expect(reports.map((doc) => doc.status)).to.deep.equal(
+        reports.map(() => "open"),
+      );
+    });
+
     it("lets a new report be made after the settlement", async function () {
       await resolve({ userId: CUSTOMER, decision: "reject", reason: "Nein" });
 

@@ -453,6 +453,9 @@ class ReportService {
     const target = byAddress
       ? { address: normalizeUserId(address) }
       : { userId: normalizeUserId(userId) };
+    if (!(target.address || target.userId)) {
+      throw new BadRequestError("report_target_required");
+    }
     const targetKey = targetKeyOf(target);
     const open = await ReportManager.getReports({
       status: REPORT_STATUS.OPEN,

@@ -368,7 +368,8 @@
                 $ref: "#/components/schemas/Report"
       "400":
         description: |
-          `report_decision_invalid`, `suspension_reason_required`,
+          `report_decision_invalid`, `report_target_required` (no
+          `userId` or a blank `address`), `suspension_reason_required`,
           `blacklist_reason_required`, `report_rejection_reason_required`
       "401":
         description: Not authenticated
