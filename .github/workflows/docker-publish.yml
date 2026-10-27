@@ -101,6 +101,7 @@ jobs:
       # `gh run view` shows the tag to deploy without reading the log.
       - name: Report the image
         if: ${{ github.event_name != 'pull_request' }}
+        continue-on-error: true
         env:
           TAGS: ${{ steps.meta_release.outputs.tags || steps.meta_dispatch.outputs.tags }}
           DIGEST: ${{ steps.build-and-push.outputs.digest }}
