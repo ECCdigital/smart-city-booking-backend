@@ -240,6 +240,11 @@ async function runParentAvailabilityCheck({
 
     const isTicketChild = originBookable.type === "ticket";
     let childTicketAmountBooked = 0;
+    // The tickets of the parent count against it too, so a refusal names
+    // their bookings as well as the parent's own.
+    const countedBookings = new Map(
+      bookings.map((booking) => [booking.id, booking]),
+    );
 
     if (isTicketChild) {
       const childBookables = await resolve(
@@ -247,15 +252,19 @@ async function runParentAvailabilityCheck({
       );
 
       for (const childBookable of childBookables) {
-        const { amountBooked } = await getBookedAmountForBookableWindow(
-          provider,
-          originBookable,
-          childBookable,
-          timeBegin,
-          timeEnd,
-          excludeBookingIds,
-        );
+        const { amountBooked, bookings: childBookings } =
+          await getBookedAmountForBookableWindow(
+            provider,
+            originBookable,
+            childBookable,
+            timeBegin,
+            timeEnd,
+            excludeBookingIds,
+          );
         childTicketAmountBooked += amountBooked;
+        for (const booking of childBookings) {
+          countedBookings.set(booking.id, booking);
+        }
       }
     }
 
@@ -282,7 +291,7 @@ async function runParentAvailabilityCheck({
         available: false,
         message: `Übergeordnetes Objekt ${parentBookable.title} ist für den gewählten Zeitraum nicht verfügbar.`,
         parentAvailability: parentAmount,
-        concurrentBookings: summarizeBookings(bookings),
+        concurrentBookings: summarizeBookings([...countedBookings.values()]),
       };
     }
   }
@@ -342,6 +351,8 @@ async function runChildBookingsCheck({
         checkType: CHECK_TYPES.CHILD_BOOKINGS,
         available: false,
         message: `Abhängiges Objekt ${childBookable.title} ist für den gewählten Zeitraum nicht verfügbar.`,
+        bookableId: childBookable.id,
+        title: childBookable.title,
         totalCapacity: childBookable.amount,
         booked: amountBooked,
         remaining: childBookable.amount - amountBooked,

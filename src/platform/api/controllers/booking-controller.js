@@ -34,7 +34,7 @@ const {
 const { answerTransitionError } = require("./transition-error-answer");
 const {
   findReinstatementConflicts,
-} = require("../../../commons/availability/reinstatement-conflicts");
+} = require("../../../commons/services/checkout/reinstatement-conflicts");
 const {
   CheckoutPolicy,
 } = require("../../../commons/services/checkout/checkout-policy");

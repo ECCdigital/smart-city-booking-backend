@@ -368,7 +368,9 @@
           `booking_reinstatement_conflict` - the period is taken (params
           carry `bookingId` and `conflicts`, one entry per position in
           conflict: `bookableId`, `title` and `bookings`, each with `id`,
-          `timeBegin`, `timeEnd`)
+          `timeBegin`, `timeEnd` and, for a booking that holds the position
+          through a parent or a dependent without room, `parent` or `child`
+          with its `bookableId` and `title`)
       "500":
         description: >-
           The reinstatement aborted and the booking stays as it was; the body

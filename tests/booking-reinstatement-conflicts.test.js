@@ -11,11 +11,15 @@ const sinon = require("sinon");
 
 const {
   findReinstatementConflicts,
-} = require("../src/commons/availability/reinstatement-conflicts");
+} = require("../src/commons/services/checkout/reinstatement-conflicts");
 const {
   CheckoutDataProvider,
   InMemoryAvailabilityDataProvider,
 } = require("../src/commons/availability/providers");
+const {
+  BookableManager,
+} = require("../src/commons/data-managers/bookable-manager");
+const { Bookable } = require("../src/commons/entities/bookable/bookable");
 const {
   BookingController,
 } = require("../src/platform/api/controllers/booking-controller");
@@ -53,33 +57,64 @@ function room(overrides = {}) {
   };
 }
 
-/** A provider factory over one bookable and its bookings by bookable. */
-function providerOf({
+/** The in-memory data of the checkout: one bookable, its family and the bookings by bookable. */
+function memoryOf({
   bookable = room(),
   parentBookables = [],
   relatedBookables = [],
+  relatedBookablesByParentId = {},
   bookingsByBookableId = {},
 } = {}) {
-  return async () =>
-    new InMemoryAvailabilityDataProvider({
-      tenantId: TENANT,
-      bookable,
-      parentBookables,
-      relatedBookables,
-      bookingsByBookableId,
-    });
+  return new InMemoryAvailabilityDataProvider({
+    tenantId: TENANT,
+    bookable,
+    parentBookables,
+    relatedBookables,
+    relatedBookablesByParentId,
+    bookingsByBookableId,
+  });
+}
+
+/**
+ * Serves the checkout a reinstatement runs per position: the bookable as
+ * `BookableManager.getBookable` answers it (none for `bookable: null`), the
+ * counts over the in-memory data.
+ */
+function given(sandbox, data = {}) {
+  const bookable = data.bookable === undefined ? room() : data.bookable;
+  sandbox
+    .stub(BookableManager, "getBookable")
+    .resolves(bookable ? new Bookable(bookable) : null);
+  sandbox
+    .stub(CheckoutDataProvider, "fromCheckoutService")
+    .resolves(memoryOf({ ...data, bookable }));
 }
 
 const CANCELLED = booking("B-OLD", { isRejected: true, status: "cancelled" });
 
 describe("findReinstatementConflicts", function () {
+  let sandbox;
+
+  beforeEach(function () {
+    sandbox = sinon.createSandbox();
+  });
+
+  afterEach(function () {
+    sandbox.restore();
+  });
+
+  function conflictsOf(booking, data) {
+    // A spec may ask twice; each answer is over its own data.
+    sandbox.restore();
+    given(sandbox, data);
+    return findReinstatementConflicts(booking);
+  }
+
   it("names the position and the booking that took its period", async function () {
-    const conflicts = await findReinstatementConflicts(CANCELLED, {
-      createProvider: providerOf({
-        bookingsByBookableId: {
-          "room-a": [CANCELLED, booking("B-NEW")],
-        },
-      }),
+    const conflicts = await conflictsOf(CANCELLED, {
+      bookingsByBookableId: {
+        "room-a": [CANCELLED, booking("B-NEW")],
+      },
     });
 
     expect(conflicts).to.deep.equal([
@@ -92,24 +127,20 @@ describe("findReinstatementConflicts", function () {
   });
 
   it("finds none where the period is free or the capacity has room", async function () {
-    const free = await findReinstatementConflicts(CANCELLED, {
-      createProvider: providerOf({
-        bookingsByBookableId: {
-          "room-a": [
-            CANCELLED,
-            booking("B-LATER", {
-              timeBegin: TIME_END + 1000,
-              timeEnd: TIME_END + 2000,
-            }),
-          ],
-        },
-      }),
+    const free = await conflictsOf(CANCELLED, {
+      bookingsByBookableId: {
+        "room-a": [
+          CANCELLED,
+          booking("B-LATER", {
+            timeBegin: TIME_END + 1000,
+            timeEnd: TIME_END + 2000,
+          }),
+        ],
+      },
     });
-    const room2 = await findReinstatementConflicts(CANCELLED, {
-      createProvider: providerOf({
-        bookable: room({ amount: 2 }),
-        bookingsByBookableId: { "room-a": [CANCELLED, booking("B-NEW")] },
-      }),
+    const room2 = await conflictsOf(CANCELLED, {
+      bookable: room({ amount: 2 }),
+      bookingsByBookableId: { "room-a": [CANCELLED, booking("B-NEW")] },
     });
 
     expect(free).to.deep.equal([]);
@@ -117,12 +148,10 @@ describe("findReinstatementConflicts", function () {
   });
 
   it("ignores other cancelled or rejected bookings", async function () {
-    const conflicts = await findReinstatementConflicts(CANCELLED, {
-      createProvider: providerOf({
-        bookingsByBookableId: {
-          "room-a": [CANCELLED, booking("B-GONE", { isRejected: true })],
-        },
-      }),
+    const conflicts = await conflictsOf(CANCELLED, {
+      bookingsByBookableId: {
+        "room-a": [CANCELLED, booking("B-GONE", { isRejected: true })],
+      },
     });
 
     expect(conflicts).to.deep.equal([]);
@@ -130,30 +159,144 @@ describe("findReinstatementConflicts", function () {
 
   it("names the bookings of a parent without room under the position", async function () {
     const building = room({ id: "building", title: "Haus", amount: 1 });
-    const conflicts = await findReinstatementConflicts(CANCELLED, {
-      createProvider: providerOf({
-        bookable: room({ amount: 5 }),
-        parentBookables: [building],
-        bookingsByBookableId: {
-          "room-a": [CANCELLED],
-          building: [
-            booking("B-HOUSE", {
-              bookableItems: [{ bookableId: "building", amount: 1 }],
-            }),
-          ],
-        },
-      }),
+    const conflicts = await conflictsOf(CANCELLED, {
+      bookable: room({ amount: 5 }),
+      parentBookables: [building],
+      bookingsByBookableId: {
+        "room-a": [CANCELLED],
+        building: [
+          booking("B-HOUSE", {
+            bookableItems: [{ bookableId: "building", amount: 1 }],
+          }),
+        ],
+      },
     });
 
     expect(conflicts).to.have.length(1);
     expect(conflicts[0].title).to.equal("Raum A");
-    expect(conflicts[0].bookings.map((b) => b.id)).to.deep.equal(["B-HOUSE"]);
+    expect(conflicts[0].bookings).to.deep.equal([
+      {
+        id: "B-HOUSE",
+        timeBegin: TIME_BEGIN,
+        timeEnd: TIME_END,
+        parent: { bookableId: "building", title: "Haus" },
+      },
+    ]);
+  });
+
+  it("names the booking of another ticket that took the parent", async function () {
+    const forum = room({
+      id: "forum",
+      title: "Forum",
+      isScheduleRelated: false,
+    });
+    const quarter = room({
+      id: "forum-quarter",
+      title: "Forum 1/4 Tag",
+      type: "ticket",
+    });
+    const day = room({ id: "forum-day", title: "Forum 1 Tag", type: "ticket" });
+    const old = booking("B-OLD", {
+      isRejected: true,
+      status: "cancelled",
+      bookableItems: [{ bookableId: "forum-quarter", amount: 1 }],
+    });
+
+    const conflicts = await conflictsOf(old, {
+      bookable: quarter,
+      parentBookables: [forum],
+      relatedBookablesByParentId: { forum: [quarter, day] },
+      bookingsByBookableId: {
+        "forum-quarter": [old],
+        "forum-day": [
+          booking("B-DAY", {
+            bookableItems: [{ bookableId: "forum-day", amount: 1 }],
+          }),
+        ],
+      },
+    });
+
+    expect(conflicts).to.deep.equal([
+      {
+        bookableId: "forum-quarter",
+        title: "Forum 1/4 Tag",
+        bookings: [
+          {
+            id: "B-DAY",
+            timeBegin: TIME_BEGIN,
+            timeEnd: TIME_END,
+            parent: { bookableId: "forum", title: "Forum" },
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("names a dependent without room left under the parent", async function () {
+    const workshop = room({ id: "workshop", title: "Werkstatt", amount: 1 });
+    const table = room({ id: "table", title: "Tisch", amount: 1 });
+    const old = booking("B-OLD", {
+      isRejected: true,
+      status: "cancelled",
+      bookableItems: [{ bookableId: "workshop", amount: 1 }],
+    });
+
+    const conflicts = await conflictsOf(old, {
+      bookable: workshop,
+      relatedBookables: [table],
+      bookingsByBookableId: {
+        workshop: [old],
+        table: [
+          booking("B-TABLE", {
+            bookableItems: [{ bookableId: "table", amount: 1 }],
+          }),
+        ],
+      },
+    });
+
+    expect(conflicts).to.deep.equal([
+      {
+        bookableId: "workshop",
+        title: "Werkstatt",
+        bookings: [
+          {
+            id: "B-TABLE",
+            timeBegin: TIME_BEGIN,
+            timeEnd: TIME_END,
+            child: { bookableId: "table", title: "Tisch" },
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("finds none where a dependent still has room", async function () {
+    const workshop = room({ id: "workshop", title: "Werkstatt", amount: 1 });
+    const tools = room({ id: "tools", title: "Werkzeug", amount: 5 });
+    const old = booking("B-OLD", {
+      isRejected: true,
+      status: "cancelled",
+      bookableItems: [{ bookableId: "workshop", amount: 1 }],
+    });
+
+    const conflicts = await conflictsOf(old, {
+      bookable: workshop,
+      relatedBookables: [tools],
+      bookingsByBookableId: {
+        workshop: [old],
+        tools: [
+          booking("B-TOOLS", {
+            bookableItems: [{ bookableId: "tools", amount: 1 }],
+          }),
+        ],
+      },
+    });
+
+    expect(conflicts).to.deep.equal([]);
   });
 
   it("skips a bookable that no longer exists", async function () {
-    const conflicts = await findReinstatementConflicts(CANCELLED, {
-      createProvider: providerOf({ bookable: null }),
-    });
+    const conflicts = await conflictsOf(CANCELLED, { bookable: null });
 
     expect(conflicts).to.deep.equal([]);
   });
@@ -183,11 +326,9 @@ describe("BookingController.reinstateBooking: the conflict", function () {
   beforeEach(function () {
     sandbox = sinon.createSandbox();
     sandbox.stub(BookingManager, "getBooking").resolves(CANCELLED);
-    sandbox.stub(CheckoutDataProvider, "create").callsFake(
-      providerOf({
-        bookingsByBookableId: { "room-a": [CANCELLED, booking("B-NEW")] },
-      }),
-    );
+    given(sandbox, {
+      bookingsByBookableId: { "room-a": [CANCELLED, booking("B-NEW")] },
+    });
     reinstate = sandbox.stub(bookingLifecycle, "reinstate").resolves({});
   });
 
@@ -222,8 +363,8 @@ describe("BookingController.reinstateBooking: the conflict", function () {
   });
 
   it("reinstates when the period is free", async function () {
-    CheckoutDataProvider.create.callsFake(
-      providerOf({ bookingsByBookableId: { "room-a": [CANCELLED] } }),
+    CheckoutDataProvider.fromCheckoutService.resolves(
+      memoryOf({ bookingsByBookableId: { "room-a": [CANCELLED] } }),
     );
     const res = response();
 
