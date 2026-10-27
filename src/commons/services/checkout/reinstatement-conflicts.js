@@ -110,7 +110,10 @@ async function findReinstatementConflicts(booking) {
           throw err;
         }
         const through = heldThrough(err);
-        for (const concurrent of err.concurrentBookings || []) {
+        for (const concurrent of [
+          ...(err.concurrentBookings || []),
+          ...(err.ticketBookings || []),
+        ]) {
           // A booking of the position itself is named without the other.
           if (!bookings.has(concurrent.id)) {
             bookings.set(concurrent.id, { ...concurrent, ...through });

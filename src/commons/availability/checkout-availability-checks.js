@@ -240,11 +240,10 @@ async function runParentAvailabilityCheck({
 
     const isTicketChild = originBookable.type === "ticket";
     let childTicketAmountBooked = 0;
-    // The tickets of the parent count against it too, so a refusal names
-    // their bookings as well as the parent's own.
-    const countedBookings = new Map(
-      bookings.map((booking) => [booking.id, booking]),
-    );
+    // The tickets of the parent count against it too; a refusal names
+    // their bookings apart (`ticketBookings`), the calendar splits its
+    // windows over the parent's own (`concurrentBookings`) alone.
+    const ticketBookings = new Map();
 
     if (isTicketChild) {
       const childBookables = await resolve(
@@ -263,7 +262,7 @@ async function runParentAvailabilityCheck({
           );
         childTicketAmountBooked += amountBooked;
         for (const booking of childBookings) {
-          countedBookings.set(booking.id, booking);
+          ticketBookings.set(booking.id, booking);
         }
       }
     }
@@ -291,7 +290,8 @@ async function runParentAvailabilityCheck({
         available: false,
         message: `Übergeordnetes Objekt ${parentBookable.title} ist für den gewählten Zeitraum nicht verfügbar.`,
         parentAvailability: parentAmount,
-        concurrentBookings: summarizeBookings([...countedBookings.values()]),
+        concurrentBookings: summarizeBookings(bookings),
+        ticketBookings: summarizeBookings([...ticketBookings.values()]),
       };
     }
   }
