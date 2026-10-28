@@ -10,6 +10,7 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 ### Security
 
 - Bank details only encrypted ([ECCdigital/tickets#16](https://github.com/ECCdigital/tickets/issues/16)): the bank details of a cancellation request and the tenant's bank account in the invoice application are stored encrypted with `CRYPTO_SECRET`; the API answers those of a cancellation request masked (last four digits of the IBAN). Without a valid `CRYPTO_SECRET` nothing is written in plain text, the request fails. The migration `14-10-2026-encrypt-bank-details` encrypts the stored values and can run again; without the current `CRYPTO_SECRET` the bank details can no longer be read. OpenAPI documents `POST /api/:tenant/bookings/:id/request-reject` and the masked form (`MaskedBankDetails`). See the [upgrade notes](migrations/v4.4-upgrade.md#bank-details-only-encrypted)
+- The customer's booking list no longer hands out internal fields ([ECCdigital/tickets#255](https://github.com/ECCdigital/tickets/issues/255)): `GET /api/bookings/assigned` and `GET /api/:tenant/bookings/assigned` answer each booking in a list of allowed fields (`Booking#exportCustomer`), without `internalComments`, `assignedUserId`, `bookedVia` and `_couponUsed`. `?populate=true` is ignored, so `_populated` with the workflow status is gone; no frontend read it. OpenAPI updated
 
 ### Added
 
