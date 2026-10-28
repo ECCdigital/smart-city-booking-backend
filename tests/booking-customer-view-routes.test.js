@@ -263,6 +263,72 @@ describe("booking-bound customer routes: tenant snapshot and event core data", f
       const [item] = await assignedOf([roomBooking()]);
 
       expect(item.tenant).to.equal(null);
+      expect(item.withdrawalUrl).to.equal(null);
+    });
+
+    // The withdrawal of a private customer: the mail to the tenant, for a
+    // booking without a company within 14 days of the booking.
+    it("carries the withdrawal link of a private customer's booking within 14 days, else null", async function () {
+      installWorld();
+      const DAY = 24 * 60 * 60 * 1000;
+      const now = Date.now();
+
+      const [fresh, company, old] = await assignedOf([
+        roomBooking({
+          name: "Erika Musterfrau",
+          company: "",
+          timeCreated: now - DAY,
+        }),
+        roomBooking({
+          id: "B-5",
+          company: "Musterfirma GmbH",
+          timeCreated: now,
+        }),
+        roomBooking({ id: "B-6", company: "", timeCreated: now - 15 * DAY }),
+      ]);
+
+      expect(fresh.withdrawalUrl).to.match(
+        /^mailto:amt@stadt\.de\?subject=Widerruf%20der%20Buchung%20B-1&body=/,
+      );
+      expect(fresh.withdrawalUrl).to.include("Erika%20Musterfrau");
+      expect(company.withdrawalUrl).to.equal(null);
+      expect(old.withdrawalUrl).to.equal(null);
+    });
+
+    it("answers each booking without its internal fields (ECCdigital/tickets#255)", async function () {
+      installWorld();
+      const booking = roomBooking({
+        comment: "Bitte Beamer bereitstellen",
+        rejectionReason: "",
+        internalComments: "Kunde zahlt immer spät",
+        bookedVia: "user",
+        _couponUsed: { id: "C-1", discount: 10, maxAmount: 5 },
+        hooks: [{ id: "H-1", type: "REJECT", payload: { reason: "krank" } }],
+      });
+      booking._populated = { bookable: { id: "room" }, workflowStatus: "wf" };
+
+      const [item] = await assignedOf([booking], { populate: "true" });
+
+      expect(item).to.include({
+        id: "B-1",
+        tenantId: TENANT,
+        mail: "erika@example.test",
+        comment: "Bitte Beamer bereitstellen",
+        status: "confirmed",
+        priceEur: 40,
+      });
+      expect(item.hooks).to.have.length(1);
+      expect(item.cancellationPolicy).to.be.an("object");
+      expect(item).to.not.have.any.keys(
+        "internalComments",
+        "assignedUserId",
+        "bookedVia",
+        "_couponUsed",
+        "_populated",
+      );
+      expect(
+        BookingManager.getAssignedBookings.firstCall.args[3],
+      ).to.deep.equal({ populate: false });
     });
   });
 

@@ -97,7 +97,7 @@ describe("the Buchungsweg in the attendee list CSV", function () {
       rows.map((r) => [r.Buchungsnummer, r.Buchungsweg]),
     );
     expect(bookedVia).to.deep.equal({
-      "b-user": "Angemeldet",
+      "b-user": "Benutzer",
       "b-guest": "Gast",
       "b-admin": "Admin",
       "b-old": "Unbekannt",

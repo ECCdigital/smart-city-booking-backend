@@ -522,6 +522,8 @@ describe("Compartments on the access seam", function () {
     it("takes a fresh box when the hold lapsed, and notes that box", async function () {
       storeBooking("bikebox");
       await AccessService.holdForBooking(TENANT, "booking-1");
+      // From the moment after the hold, not `now`: the hold took the clock
+      // later than `beforeEach` did, by more than 1 ms on a slow runner.
       const clock = sinon.useFakeTimers({ now: Date.now(), toFake: ["Date"] });
       clock.tick(HOLD_TTL_MS + 1);
 
