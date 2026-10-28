@@ -172,21 +172,20 @@ class BookingController {
       const user = request.user;
 
       // "My bookings" is the domain's read by the user (`self` reaches no
-      // record, ticket 22).
+      // record, ticket 22). Not populated: `_populated` names the workflow
+      // status, which is the administration's (ECCdigital/tickets#255).
       const bookings = await BookingService.getAssignedBookings(
         request.principal.userId,
-        {
-          tenantId: tenant ?? null,
-          populate: request.query.populate === "true",
-        },
+        { tenantId: tenant ?? null },
       );
 
       // The tenant snapshot and the event core data a customer's pages
       // render from (tenant supervision spec §5.2), whatever the level of
-      // the tenant - the booking is the customer's contract with it.
-      const view = await withCustomerView(bookings, (booking) => ({
-        ...booking,
-      }));
+      // the tenant - the booking is the customer's contract with it. Each
+      // booking only in its customer fields (ECCdigital/tickets#255).
+      const view = await withCustomerView(bookings, (booking) =>
+        booking.exportCustomer(),
+      );
 
       logger.info(
         `${tenant} -- sending ${bookings.length} assigned bookings to user ${user?.id}`,
@@ -791,9 +790,8 @@ class BookingController {
    * (400 `reason_required`); the booking, the user's own only, whoever
    * they are (404 `booking_not_found`); its cancellation policy (403
    * `booking_user_cancellation_disabled`); its state (the lifecycle's 409
-   * `invalid_transition`). The bank details go to the cancellation
-   * document of a paid booking and are dropped otherwise. Answers 200
-   * without a body.
+   * `invalid_transition`). The bank details go to the lifecycle, which
+   * keeps them for a paid booking only. Answers 200 without a body.
    */
   static async cancelBooking(request, response) {
     try {
@@ -830,7 +828,7 @@ class BookingController {
       await bookingLifecycle.cancel(tenant, id, {
         trigger: TRIGGER.CUSTOMER,
         reason: trimmedReason,
-        bankDetails: booking.isPayed === true ? bankDetails || null : null,
+        bankDetails: bankDetails || null,
         cancelledByUserId: userId,
       });
       return response.sendStatus(200);
