@@ -254,6 +254,6 @@ Sliding windows counted in MongoDB (`rateLimitEvents`, rows expire after 7 days)
 | `RATE_LIMIT_FORGOT_PASSWORD_PER_IP`              | 30/h    | `POST /auth/forgot-password`, per IP     |
 | `RATE_LIMIT_TENANT_SELF_CREATION_PER_USER`       | 3/24h   | tenant self-creation per user            |
 
-Only the per-IP limits answer `429`; the per-account limits end silently with the usual answer, so they do not tell whether the address has an account.
+The per-IP limits and `RATE_LIMIT_TENANT_SELF_CREATION_PER_USER` answer `429`; the per-account limits of the verification and reset mails end silently with the usual answer, so they do not tell whether the address has an account.
 
 The client IP is `req.ip`. The server takes `X-Forwarded-For` only from the proxies `TRUSTED_PROXIES` names (addresses or CIDR networks); without the variable it counts the direct address of the connection. See [docs/migrations/v4.3.1-upgrade.md](../migrations/v4.3.1-upgrade.md).

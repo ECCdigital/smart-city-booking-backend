@@ -378,11 +378,13 @@ describe("public registration: account-neutral answers and rate limits", functio
     it("applies the per-IP limit visibly, for known and unknown addresses alike", async function () {
       process.env.RATE_LIMIT_FORGOT_PASSWORD_PER_IP = "2";
 
-      await forgot("x@example.test");
-      await forgot("y@example.test");
+      const first = await forgot("x@example.test");
+      const second = await forgot("y@example.test");
       const unknown = await forgot(UNKNOWN);
       const known = await forgot(KNOWN_VERIFIED);
 
+      assert.strictEqual(first.status, 200);
+      assert.strictEqual(second.status, 200);
       assert.strictEqual(unknown.status, 429);
       assert.strictEqual(known.status, 429);
       assert.strictEqual(unknown.body.code, "too_many_requests");
