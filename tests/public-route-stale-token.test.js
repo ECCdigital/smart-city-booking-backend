@@ -35,6 +35,9 @@ const KeycloakVerifier = require("../src/commons/utilities/keycloak-verifier");
 const JwtHelper = require("../src/commons/utilities/jwt-helper");
 const UserManager = require("../src/commons/data-managers/user-manager");
 const {
+  installInMemoryRateLimitEvents,
+} = require("./helpers/in-memory-rate-limit-events");
+const {
   CHECKOUT_REASONS,
 } = require("../src/commons/services/checkout/checkout-reasons");
 
@@ -80,6 +83,8 @@ describe("public routes: a stale token is refused, no token stays anonymous", fu
   let h;
 
   before(async function () {
+    // Forgot password counts per IP.
+    installInMemoryRateLimitEvents();
     h = await installHarness({
       bookables: {
         "login-room": bookable({

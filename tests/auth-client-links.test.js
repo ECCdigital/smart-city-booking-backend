@@ -84,8 +84,16 @@ describe("auth: mail links lead to the instance's own pages (ECCdigital/tickets#
       FRONTEND_URL: process.env.FRONTEND_URL,
       STORE_FRONT_URL: process.env.STORE_FRONT_URL,
       BACKEND_URL: process.env.BACKEND_URL,
+      RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_SHORT:
+        process.env.RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_SHORT,
     };
-    Object.assign(process.env, { FRONTEND_URL, STORE_FRONT_URL, BACKEND_URL });
+    Object.assign(process.env, {
+      FRONTEND_URL,
+      STORE_FRONT_URL,
+      BACKEND_URL,
+      // The tests ask for several reset mails of one account in a row.
+      RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_SHORT: "100",
+    });
   });
 
   after(function () {

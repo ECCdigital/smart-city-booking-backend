@@ -9,7 +9,6 @@ const { TooManyRequestsError } = require("../../../errors/BaseError");
 const CardAuthService = require("../../../commons/services/card-auth/card-auth-service");
 
 const JwtHelper = require("../../../commons/utilities/jwt-helper");
-const { afterAnswer } = require("../../../commons/services/user/after-answer");
 
 const logger = bunyan.createLogger({
   name: "authentication-controller.js",
@@ -352,7 +351,7 @@ class AuthenticationController {
   /**
    * Mails a reset link to a local account. Answers every address alike and
    * before the mail goes out (ECCdigital/tickets#259); a failure is only
-   * logged.
+   * logged. Only the per-IP limit answers 429 with `Retry-After`.
    */
   static async forgotPassword(request, response) {
     const { id, resetUrl } = request.body;
@@ -361,13 +360,22 @@ class AuthenticationController {
       return response.status(400).send("Email is required");
     }
 
-    afterAnswer(
-      () => UserService.requestForgotPassword(id, resetUrl),
-      `forgot password request for ${id}`,
-    );
-    return response
-      .status(200)
-      .send("If the email exists, a reset link has been sent");
+    try {
+      await RegistrationService.requestForgotPassword({
+        id,
+        resetUrl,
+        ip: request.ip,
+      });
+      return response
+        .status(200)
+        .send("If the email exists, a reset link has been sent");
+    } catch (error) {
+      if (error instanceof TooManyRequestsError) {
+        return ApiResponse.fail(response, error);
+      }
+      logger.error("Forgot password request failed:", error);
+      return response.status(500).send("Internal server error");
+    }
   }
 
   static async resetPasswordWithToken(request, response) {

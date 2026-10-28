@@ -128,31 +128,6 @@ class UserService {
     return { success: true, nextUrl: hook.payload?.nextUrl ?? null };
   }
 
-  static async requestForgotPassword(email, resetUrl) {
-    const user = await UserManager.getUser(email, true);
-
-    if (!user || user.authType !== "local" || user.isSuspended) {
-      return { success: true };
-    }
-
-    const userEntity = user instanceof User ? user : new User(user);
-
-    userEntity.revokeActiveHooks(USER_HOOK_TYPES.FORGOT_PASSWORD);
-
-    const ownResetUrl = normalizeClientPage(resetUrl);
-    const hook = userEntity.addForgotPasswordHook(ownResetUrl);
-    await UserManager.updateUser(userEntity);
-    await notify("FORGOT_PASSWORD_REQUEST", {
-      to: userEntity.id,
-      hookId: hook.id,
-      resetUrl: ownResetUrl,
-    });
-
-    logger.info(`Forgot password request sent to user ${userEntity.id}`);
-
-    return { success: true };
-  }
-
   /**
    * The password change of a signed-in user: the new password stands
    * behind a hook the user confirms from the password reset mail. Lived in

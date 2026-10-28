@@ -9,6 +9,7 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ### Security
 
+- Forgot password is rate-limited ([ECCdigital/tickets#302](https://github.com/ECCdigital/tickets/issues/302)): `POST /auth/forgot-password` answers `429 too_many_requests` with `Retry-After` past 30 requests per client IP and hour (`RATE_LIMIT_FORGOT_PASSWORD_PER_IP`); an account gets at most 1 reset mail per minute and 5 per hour (`RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_SHORT`, `_LONG`), silently, so the answer still does not tell whether the address has an account. Defaults in `.env-example`
 - Bank details only encrypted ([ECCdigital/tickets#16](https://github.com/ECCdigital/tickets/issues/16)): the bank details of a cancellation request and the tenant's bank account in the invoice application are stored encrypted with `CRYPTO_SECRET`; the API answers those of a cancellation request masked (last four digits of the IBAN). Without a valid `CRYPTO_SECRET` nothing is written in plain text, the request fails. The migration `14-10-2026-encrypt-bank-details` encrypts the stored values and can run again; without the current `CRYPTO_SECRET` the bank details can no longer be read. OpenAPI documents `POST /api/:tenant/bookings/:id/request-reject` and the masked form (`MaskedBankDetails`). See the [upgrade notes](migrations/v4.4-upgrade.md#bank-details-only-encrypted)
 
 ### Added
