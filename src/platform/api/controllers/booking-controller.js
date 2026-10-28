@@ -183,8 +183,10 @@ class BookingController {
       // render from (tenant supervision spec §5.2), whatever the level of
       // the tenant - the booking is the customer's contract with it. Each
       // booking only in its customer fields (ECCdigital/tickets#255).
-      const view = await withCustomerView(bookings, (booking) =>
-        booking.exportCustomer(),
+      const view = await withCustomerView(
+        bookings,
+        (booking) => booking.exportCustomer(),
+        { withWithdrawalUrl: true },
       );
 
       logger.info(

@@ -14,7 +14,9 @@
  * offer. The participation link of an online or hybrid event is the
  * booker's once the booking is confirmed, with registration too
  * (ECCdigital/tickets#180); before, and on the login-free status lookups,
- * it is `null`. One tenant query and
+ * it is `null`. On the customer's own bookings (`withWithdrawalUrl`) each
+ * booking also carries `withdrawalUrl`, the mail of a private customer's
+ * withdrawal within 14 days of the booking, else `null`. One tenant query and
  * one event query per answer, whatever the number of bookings; nothing is
  * written.
  */
@@ -27,6 +29,7 @@ const {
   formatOf,
   participationLinkForBooking,
 } = require("../../entities/event/event-format");
+const { withdrawalUrlOf } = require("./booking-withdrawal");
 
 const eventKey = (tenantId, id) => `${tenantId}\u0000${id}`;
 
@@ -81,10 +84,15 @@ function eventCoreData(event, booking, withParticipationLink) {
  * @param {boolean} [options.withParticipationLink] Whether the event core
  *   data names the participation link: not for the status lookups, which
  *   answer whoever knows a booking number
- * @returns {Promise<(booking: Object) => { tenant: Object|null, event?: Object|null }>}
+ * @param {boolean} [options.withWithdrawalUrl] Whether each booking names
+ *   its withdrawal link: the customer's own bookings alone
+ * @returns {Promise<(booking: Object) => { tenant: Object|null, event?: Object|null, withdrawalUrl?: string|null }>}
  *   `event` is present for a ticket booking only
  */
-async function customerViewOf(bookings, { withParticipationLink = true } = {}) {
+async function customerViewOf(
+  bookings,
+  { withParticipationLink = true, withWithdrawalUrl = false } = {},
+) {
   const tenantIds = [...new Set(bookings.map((b) => b.tenantId))];
   const eventRefs = bookings.map(eventRefOf).filter(Boolean);
 
@@ -93,15 +101,17 @@ async function customerViewOf(bookings, { withParticipationLink = true } = {}) {
     eventRefs.length ? EventManager.getEventsByIds(eventRefs, DOMAIN) : [],
   ]);
 
-  const snapshotByTenant = new Map(
-    tenants.map((t) => [t.id, t.exportBookingSnapshot()]),
-  );
+  const tenantById = new Map(tenants.map((t) => [t.id, t]));
   const eventByKey = new Map(
     events.map((e) => [eventKey(e.tenantId, e.id), e]),
   );
 
   return (booking) => {
-    const view = { tenant: snapshotByTenant.get(booking.tenantId) ?? null };
+    const tenant = tenantById.get(booking.tenantId);
+    const view = { tenant: tenant ? tenant.exportBookingSnapshot() : null };
+    if (withWithdrawalUrl) {
+      view.withdrawalUrl = withdrawalUrlOf(tenant, booking);
+    }
     const ref = eventRefOf(booking);
     if (ref) {
       const event = eventByKey.get(eventKey(ref.tenantId, ref.id));

@@ -156,6 +156,9 @@
       ticket booking `event`, the core data of the event. Neither depends on
       the public tenant or catalog projection, which a non-public tenant
       does not have, so a customer's pages render from this answer alone.
+      `withdrawalUrl` is the mail of a private customer's withdrawal - a
+      `mailto:` to the tenant, for a booking without a company within 14
+      days of the booking - and `null` otherwise.
     security:
       - bearerAuth: []
     responses:
@@ -519,6 +522,10 @@ components:
           $ref: "#/components/schemas/BookingTenantSnapshot"
         event:
           $ref: "#/components/schemas/BookingEventCoreData"
+        withdrawalUrl:
+          type: string
+          nullable: true
+          description: The mail of a private customer's withdrawal within 14 days of the booking, else null (the assigned bookings only)
     BookingStatusV1:
       type: object
       properties:
