@@ -322,12 +322,25 @@
       to the state it was cancelled from, with price and positions of before;
       the refund audit is removed and the reason cleared. The access is
       granted again at `confirmed`, held at `requested` or `payment_due`. No
-      document, no mail.
+      document, no mail. A booking whose period other bookings took in the
+      meantime - its bookable, a parent or a dependent without room left -
+      is answered 409 `booking_reinstatement_conflict` and stays as it was,
+      unless the body says `ignoreConflicts: true`.
     security:
       - bearerAuth: []
     parameters:
       - $ref: "#/components/parameters/BookingTenantParam"
       - $ref: "#/components/parameters/BookingIdParam"
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              ignoreConflicts:
+                type: boolean
+                description: Reinstate even where the period is taken
     responses:
       "200":
         description: "Booking reinstated (`success: true`, `data: null`, `errors: []`)"
@@ -341,7 +354,13 @@
         description: >-
           `invalid_transition` - the booking is not rejected or cancelled, or
           a cancelled one does not know what it was cancelled from (params
-          carry `bookingId`, `status`, `transition`)
+          carry `bookingId`, `status`, `transition`); or
+          `booking_reinstatement_conflict` - the period is taken (params
+          carry `bookingId` and `conflicts`, one entry per position in
+          conflict: `bookableId`, `title` and `bookings`, each with `id`,
+          `timeBegin`, `timeEnd` and, for a booking that holds the position
+          through a parent or a dependent without room, `parent` or `child`
+          with its `bookableId` and `title`)
       "500":
         description: >-
           The reinstatement aborted and the booking stays as it was; the body

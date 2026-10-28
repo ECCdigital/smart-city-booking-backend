@@ -120,4 +120,17 @@ describe("checkout reason codes come from the checks, not from their prose", fun
     assert.deepStrictEqual(normalized.params, { title: "Meeting Room A" });
     assert.strictEqual(normalized.debugMessage, "zu kurz");
   });
+
+  it("keeps the bookings a parent check counted out of the params", function () {
+    const normalized = normalizeCheckError({
+      checkType: CHECK_TYPES.PARENT_AVAILABILITY,
+      available: false,
+      message: "Übergeordnetes Objekt Forum ist nicht verfügbar.",
+      parentAvailability: [],
+      concurrentBookings: [{ id: "B-1", timeBegin: 1, timeEnd: 2 }],
+      ticketBookings: [{ id: "B-2", timeBegin: 1, timeEnd: 2 }],
+    });
+
+    assert.deepStrictEqual(normalized.params, { parentAvailability: [] });
+  });
 });

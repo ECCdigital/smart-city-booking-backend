@@ -33,6 +33,9 @@ const {
 } = require("../../../commons/services/booking-lifecycle");
 const { answerTransitionError } = require("./transition-error-answer");
 const {
+  findReinstatementConflicts,
+} = require("../../../commons/services/checkout/reinstatement-conflicts");
+const {
   CheckoutPolicy,
 } = require("../../../commons/services/checkout/checkout-policy");
 const WorkflowService = require("../../../commons/services/workflow/workflow-service");
@@ -576,12 +579,39 @@ class BookingController {
    * The reinstatement of a rejected or cancelled booking (glossary
    * "Wiederherstellung"): the lifecycle transition `reinstate` by the
    * administration, on a route of its own since the booking strand's
-   * ticket 1. Answer and errors as `pay`.
+   * ticket 1. Answer and errors as `pay`. A booking whose period other
+   * bookings took in the meantime is not reinstated but answered 409
+   * `booking_reinstatement_conflict`, its params naming the positions and
+   * the bookings in the way; the body's `ignoreConflicts: true`
+   * reinstates it anyway.
    */
   static async reinstateBooking(request, response) {
     try {
       const { tenant, id } = request.params;
       const { user } = request;
+
+      if (request.body?.ignoreConflicts !== true) {
+        const booking = await BookingManager.getBooking(
+          id,
+          tenant,
+          scopeOf(request),
+        );
+        // A booking that is not cancelled or rejected is the lifecycle's
+        // `invalid_transition`, one it does not find its 404.
+        if (booking?.isRejected) {
+          const conflicts = await findReinstatementConflicts(booking);
+          if (conflicts.length > 0) {
+            const error = new ConflictError("booking_reinstatement_conflict", {
+              bookingId: id,
+              conflicts,
+            });
+            logger.info(
+              `${tenant} -- booking ${id} not reinstated, its period is taken: ${JSON.stringify(conflicts)}`,
+            );
+            return response.status(error.statusCode).json(error.toJSON());
+          }
+        }
+      }
 
       logger.info(`${tenant} -- reinstating booking ${id} by user ${user?.id}`);
       // A booking the lifecycle does not find is its `NotFoundError`, the
