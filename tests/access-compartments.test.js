@@ -625,7 +625,7 @@ describe("Compartments on the access seam", function () {
         price: "1.50",
       });
 
-      const clock = sinon.useFakeTimers({ now: now, toFake: ["Date"] });
+      const clock = sinon.useFakeTimers({ now: Date.now(), toFake: ["Date"] });
       clock.tick(HOLD_TTL_MS + 1);
       const booking = stored();
       booking.accessInfo[0].grant = null;

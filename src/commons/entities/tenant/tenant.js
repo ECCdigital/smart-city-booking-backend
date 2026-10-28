@@ -39,7 +39,22 @@ class Tenant {
       return result;
     }, {});
     exported.accessApps = this._exportPublicAccessApps();
+    exported.usesDigitalKeys = this.usesDigitalKeys();
     return exported;
+  }
+
+  /**
+   * Whether the tenant uses digital keys: at least
+   * one active access application, lockers included. Unlike `accessApps`
+   * it does not ask for a customer service, and it says yes or no only,
+   * never which kind of system.
+   *
+   * @returns {boolean}
+   */
+  usesDigitalKeys() {
+    return (this.applications || []).some(
+      (app) => app?.type === "access" && app.active === true,
+    );
   }
 
   /**

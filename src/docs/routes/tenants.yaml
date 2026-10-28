@@ -157,8 +157,8 @@
       them, as to every member, in the public export only. With `publicTenants=true` the list switches to the public tenant
       export, which does not carry legal documents at all, but `accessApps`:
       the customer-service contact of every active access application that
-      has one, and nothing else of the application. The full export carries the
-      supervision level (`supervisionLevel`), `supervisionChangedAt` and
+      has one, and nothing else of the application, and `usesDigitalKeys`.
+      The full export carries the supervision level (`supervisionLevel`), `supervisionChangedAt` and
       `supervisionReason` (the reason of the latest level change, `null`
       without one), the public one none of them; `?supervisionLevel=` narrows
       the list to one level (a tenant without a stored level counts as `free`).
@@ -209,6 +209,12 @@
                               type: string
                             email:
                               type: string
+                  usesDigitalKeys:
+                    type: boolean
+                    description: |
+                      Public export only - `true` when the tenant has at least
+                      one active access application, lockers included, with or
+                      without a customer service (ECCdigital/tickets#459)
       "400":
         description: "`invalid_supervision_level`: a level outside the vocabulary"
 

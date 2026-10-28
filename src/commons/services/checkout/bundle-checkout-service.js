@@ -614,8 +614,8 @@ class BundleCheckoutService {
     if (checkoutPolicy.acceptsAdminOverrides(this.policy)) {
       // The admin books on behalf of the customer: the booking belongs to the
       // customer's mail address, not to the admin who entered it. Only when
-      // it is created: an admin edit keeps the owner the booking has, a
-      // changed mail does not hand it to another account.
+      // it is created: an admin edit hands in the owner itself
+      // (`ownerAfterEdit` in booking-checkout.js).
       if (!this.amendedBookingId) {
         booking.assignedUserId = primaryEmailFromMail(this.email);
       }
