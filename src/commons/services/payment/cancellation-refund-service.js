@@ -296,10 +296,25 @@ function sanitizeBankDetails(bankDetails) {
   return { accountHolder, bankName, iban, bic };
 }
 
+/**
+ * The bank details a cancellation keeps (glossary "Storno"): sanitized for
+ * a paid booking - one cancelled from, or asked to be cancelled in,
+ * `confirmed` - and `null` for an unpaid one, whatever was sent. The one
+ * rule of the direct cancellation, the cancellation request and the
+ * rejection, of a single booking and a group.
+ *
+ * @param {Object|null} [bankDetails]
+ * @param {string} status The state the booking is cancelled from
+ * @returns {{ accountHolder: string, bankName: string, iban: string, bic: string }|null}
+ */
+function refundBankDetails(bankDetails, status) {
+  return status === STATUS.CONFIRMED ? sanitizeBankDetails(bankDetails) : null;
+}
+
 module.exports = {
   CancellationRefundService,
   CANCELLATION_ORIGINS,
   CANCELLATION_TIME_ZONE,
   REFUND_STATE,
-  sanitizeBankDetails,
+  refundBankDetails,
 };
