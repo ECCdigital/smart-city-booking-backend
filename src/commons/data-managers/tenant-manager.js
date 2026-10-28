@@ -100,6 +100,22 @@ class TenantManager {
   }
 
   /**
+   * Whether any tenant within a reach uses digital keys, using the condition
+   * of `Tenant#usesDigitalKeys` as a query. Under `public`, only tenants
+   * visible in the storefront are considered.
+   *
+   * @param {{reach: string, userId?: string|null, tenantIds?: string[]}} scope
+   * @returns {Promise<boolean>}
+   */
+  static async hasTenantWithDigitalKeys(scope) {
+    const found = await TenantModel.exists({
+      ...TenantManager._condition(scope, {}),
+      applications: { $elemMatch: { type: "access", active: true } },
+    });
+    return Boolean(found);
+  }
+
+  /**
    * Sets the supervision level of a tenant, conditionally: the write
    * matches only while the tenant is still at `from`, so two level changes
    * at the same moment cannot both succeed (spec "Concurrency").

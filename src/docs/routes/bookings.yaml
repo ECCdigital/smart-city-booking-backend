@@ -147,7 +147,9 @@
     summary: The bookings of the signed-in customer, across all tenants
     description: |
       Every booking assigned to the signed-in user, of every tenant. Each
-      booking carries, beside its stored fields, the customer view of ticket
+      booking carries its customer fields (`CustomerBooking`, without
+      internal fields such as `internalComments`, ECCdigital/tickets#255)
+      and the customer view of ticket
       18 (tenant supervision spec §5.2): `tenant`, a snapshot of the tenant -
       name and support/emergency contact - whatever its supervision level,
       because the booking is the customer's contract with it; and for a
@@ -157,17 +159,8 @@
       `withdrawalUrl` is the mail of a private customer's withdrawal - a
       `mailto:` to the tenant, for a booking without a company within 14
       days of the booking - and `null` otherwise.
-      `?populate=true` adds `_populated` with the lead bookable and the
-      workflow status, as before.
     security:
       - bearerAuth: []
-    parameters:
-      - name: populate
-        in: query
-        required: false
-        schema:
-          type: string
-          enum: ["true"]
     responses:
       "200":
         description: The bookings, each with `tenant` and, for a ticket booking, `event`
@@ -193,12 +186,6 @@
       - bearerAuth: []
     parameters:
       - $ref: "#/components/parameters/BookingTenantParam"
-      - name: populate
-        in: query
-        required: false
-        schema:
-          type: string
-          enum: ["true"]
     responses:
       "200":
         description: The bookings, each with `tenant` and, for a ticket booking, `event`
@@ -509,7 +496,12 @@ components:
             on the status lookups by booking number.
     CustomerBooking:
       type: object
-      description: A booking as stored, with the customer view of ticket 18
+      description: >-
+        A booking in the fields its booker reads (ECCdigital/tickets#255),
+        with the customer view of ticket 18. Internal fields -
+        `assignedUserId`, `bookedVia`, `internalComments`, `_couponUsed`,
+        `_populated` -
+        are left out; `cancellationRefund` comes without the refund state
       additionalProperties: true
       properties:
         id:

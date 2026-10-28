@@ -19,6 +19,8 @@
       new tenant starts at before it is created, and
       `allowAllUsersToCreateTenant`, so a storefront can show its "offer
       spaces" entry to a visitor who is not signed in.
+      `usesDigitalKeys` tells it whether any tenant the public sees uses
+      digital keys.
     responses:
       "200":
         description: The public instance.
@@ -35,6 +37,12 @@
                     part of the public instance.
                 tenantInitialSupervisionLevel:
                   $ref: "#/components/schemas/TenantInitialSupervisionLevel"
+                usesDigitalKeys:
+                  type: boolean
+                  description: |
+                    `true` as soon as one tenant of the public tenant list
+                    has an active access application (ECCdigital/tickets#459).
+                    Derived on every read, never stored.
 
 /api/instances:
   get:

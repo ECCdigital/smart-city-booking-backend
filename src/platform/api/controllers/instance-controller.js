@@ -1,6 +1,10 @@
 const InstanceManger = require("../../../commons/data-managers/instance-manager");
+const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const MediaReferenceGuard = require("../../../commons/services/media/media-reference-guard");
-const { reachesOf } = require("../../../commons/services/authorization");
+const {
+  PUBLIC,
+  reachesOf,
+} = require("../../../commons/services/authorization");
 const KeycloakCheckService = require("../../../commons/services/keycloak-check/keycloak-check-service");
 const JwtHelper = require("../../../commons/utilities/jwt-helper");
 const { BaseError, BadRequestError } = require("../../../errors/BaseError");
@@ -23,7 +27,12 @@ class InstanceController {
     try {
       const instance = await InstanceManger.getInstance();
       instance.removePrivateData();
-      response.status(200).send(instance.exportWithMedia());
+
+      const usesDigitalKeys =
+        await TenantManager.hasTenantWithDigitalKeys(PUBLIC);
+      response
+        .status(200)
+        .send({ ...instance.exportWithMedia(), usesDigitalKeys });
     } catch (error) {
       response.status(500).send({ message: error.message });
     }
@@ -34,7 +43,7 @@ class InstanceController {
       const { body } = request;
 
       // The body is stored as the whole instance: one without owners would
-      // leave the instance without an instance owner (ECCdigital/tickets#105).
+      // leave the instance without an instance owner.
       // Empty or blank ids name nobody, so a list of only those counts as none.
       const namesAnOwner =
         Array.isArray(body?.ownerUserIds) &&

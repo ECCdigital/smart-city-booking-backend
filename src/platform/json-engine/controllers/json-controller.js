@@ -83,6 +83,16 @@ class JSONController {
     return pub;
   }
 
+  /**
+   * Related bookables are a list, so they follow the listed rule, not the
+   * reached one (ADR 0003, ECCdigital/tickets#556): an offer without
+   * `isPublic` is known only to whoever holds its checkout link, staff
+   * included.
+   */
+  static _isListedRelated(bookable) {
+    return bookable.isPublic === true;
+  }
+
   static async getBookables(req, res) {
     const { tenant: tenantId } = req.params;
     const { type, ids } = req.query;
@@ -165,7 +175,12 @@ class JSONController {
 
         pub.relatedBookables = (bookable.relatedBookableIds ?? [])
           .map((id) => relatedMap.get(id))
-          .filter((b) => b && JSONController.hasAccess(b, identity, userRoles));
+          .filter(
+            (b) =>
+              b &&
+              JSONController._isListedRelated(b) &&
+              JSONController.hasAccess(b, identity, userRoles),
+          );
         pub.relatedBookables = await Promise.all(
           pub.relatedBookables.map((b) =>
             JSONController._exportPublicBookable(
@@ -246,8 +261,10 @@ class JSONController {
               )
             : [];
 
-        pub.relatedBookables = relatedBookables.filter((b) =>
-          JSONController.hasAccess(b, identity, userRoles),
+        pub.relatedBookables = relatedBookables.filter(
+          (b) =>
+            JSONController._isListedRelated(b) &&
+            JSONController.hasAccess(b, identity, userRoles),
         );
         pub.relatedBookables = await Promise.all(
           pub.relatedBookables.map((b) =>
