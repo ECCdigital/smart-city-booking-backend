@@ -22,6 +22,9 @@
  * - `showsParticipationLink`: the booking details name the participation
  *   link of an online or hybrid event, for a confirmed booking
  *   (ECCdigital/tickets#180) - the confirmations alone.
+ * - `showsWithdrawalHint`: the withdrawal hint with `withdrawalUrl` stands
+ *   under the booking details, where that link is filled - the
+ *   confirmations, the receipt of a request and the invoices.
  * - `mergeMailAttach`: the `mailAttach` documents of the bookings go
  *   with it.
  * - `gate({ tenant })`: the audience only gets it where this holds.
@@ -71,6 +74,7 @@ const MailType = Object.freeze({
     includeQRCode: (ctx) => ctx.tenant.enablePublicStatusView,
     sendBCC: (ctx) => ctx.hasAttachments && ctx.tenant.receiptEnableBCC,
     addRejectionLink: true,
+    showsWithdrawalHint: true,
     attachICal: true,
     showsParticipationLink: true,
     mergeMailAttach: true,
@@ -84,6 +88,7 @@ const MailType = Object.freeze({
     includeQRCode: (ctx) => ctx.tenant.enablePublicStatusView,
     sendBCC: false,
     addRejectionLink: true,
+    showsWithdrawalHint: true,
     attachICal: true,
     showsParticipationLink: true,
     mergeMailAttach: true,
@@ -128,6 +133,7 @@ const MailType = Object.freeze({
     includeQRCode: (ctx) => ctx.tenant.enablePublicStatusView,
     sendBCC: false,
     addRejectionLink: true,
+    showsWithdrawalHint: true,
     mergeMailAttach: true,
   },
 
@@ -139,6 +145,7 @@ const MailType = Object.freeze({
     includeQRCode: (ctx) => ctx.tenant.enablePublicStatusView,
     sendBCC: false,
     addRejectionLink: true,
+    showsWithdrawalHint: true,
   },
 
   BOOKING_CONFIRMED_INVOICE_PENDING: {
@@ -149,6 +156,7 @@ const MailType = Object.freeze({
     includeQRCode: (ctx) => ctx.tenant.enablePublicStatusView,
     sendBCC: false,
     addRejectionLink: true,
+    showsWithdrawalHint: true,
     attachICal: true,
   },
 
@@ -161,6 +169,7 @@ const MailType = Object.freeze({
     includeQRCode: (ctx) => ctx.tenant.enablePublicStatusView,
     sendBCC: false,
     addRejectionLink: true,
+    showsWithdrawalHint: true,
     templateData: ({ paymentUrl }) => ({ paymentUrl }),
   },
 
@@ -173,6 +182,7 @@ const MailType = Object.freeze({
     includeQRCode: (ctx) => ctx.tenant.enablePublicStatusView,
     sendBCC: false,
     addRejectionLink: false,
+    showsWithdrawalHint: true,
   },
 
   INCOMING_BOOKING: {

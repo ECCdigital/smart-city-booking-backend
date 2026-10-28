@@ -2,6 +2,7 @@ const assert = require("assert");
 const { DateTime } = require("luxon");
 const {
   getCancellationRefundTiersError,
+  getRefundPercentageWithoutTimeSpanError,
   normalizeCancellationRefundTiers,
 } = require("../src/commons/utilities/cancellation-refund-tiers");
 const {
@@ -116,6 +117,59 @@ describe("CancellationRefundService", function () {
       assert.strictEqual(result.daysBeforeStart, null, String(timeBegin));
       assert.strictEqual(result.appliedTierDays, null, String(timeBegin));
       assert.strictEqual(result.suggestedRefundPercentage, 100);
+    }
+  });
+
+  it("refunds a booking without a time span by the tenant's own percentage", function () {
+    for (const cancellationRefundTiers of [tiers, []]) {
+      const result = CancellationRefundService.calculate({
+        tenant: {
+          cancellationRefundTiers,
+          cancellationRefundPercentageWithoutTimeSpan: 40,
+        },
+        booking: { priceEur: 100, timeBegin: null },
+        cancelledAt: berlinMillis("2026-08-02T00:01:00"),
+        origin: CANCELLATION_ORIGINS.USER,
+      });
+
+      assert.strictEqual(result.appliedTierDays, null);
+      assert.strictEqual(result.suggestedRefundPercentage, 40);
+      assert.strictEqual(result.appliedRefundPercentage, 40);
+      assert.strictEqual(result.refundAmountEur, 40);
+      assert.strictEqual(result.cancellationFeeEur, 60);
+    }
+  });
+
+  it("keeps the tiers for a booking with a time span when the tenant names a percentage without one", function () {
+    const result = CancellationRefundService.calculate({
+      tenant: {
+        cancellationRefundTiers: [],
+        cancellationRefundPercentageWithoutTimeSpan: 40,
+      },
+      booking: {
+        priceEur: 100,
+        timeBegin: berlinMillis("2026-08-22T10:00:00"),
+      },
+      cancelledAt: berlinMillis("2026-08-02T00:01:00"),
+      origin: CANCELLATION_ORIGINS.USER,
+    });
+
+    assert.strictEqual(result.suggestedRefundPercentage, 100);
+  });
+
+  it("rejects a percentage without a time span outside 0 to 100 or not whole", function () {
+    for (const percentage of [-1, 101, 12.5, "50", null]) {
+      assert.notStrictEqual(
+        getRefundPercentageWithoutTimeSpanError(percentage),
+        null,
+        String(percentage),
+      );
+    }
+    for (const percentage of [0, 40, 100]) {
+      assert.strictEqual(
+        getRefundPercentageWithoutTimeSpanError(percentage),
+        null,
+      );
     }
   });
 

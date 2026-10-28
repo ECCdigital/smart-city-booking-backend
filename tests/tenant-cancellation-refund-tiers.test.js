@@ -73,4 +73,51 @@ describe("TenantController cancellation refund tiers", function () {
     assert.strictEqual(res.status.calledWith(400), true);
     assert.strictEqual(storeTenant.called, false);
   });
+
+  it("updates the refund of a booking without a time span", async function () {
+    const tenant = { id: "tenant-1", name: "Tenant" };
+    sandbox.stub(TenantManager, "getTenant").resolves(tenant);
+    const storeTenant = sandbox
+      .stub(TenantManager, "storeTenant")
+      .callsFake(async (value) => value);
+    const res = response(sandbox);
+
+    await TenantController.updateTenant(
+      {
+        user: { id: "admin-1" },
+        body: {
+          id: "tenant-1",
+          cancellationRefundPercentageWithoutTimeSpan: 40,
+        },
+      },
+      res,
+    );
+
+    assert.strictEqual(storeTenant.calledOnce, true);
+    assert.strictEqual(tenant.cancellationRefundPercentageWithoutTimeSpan, 40);
+    assert.strictEqual(res.status.calledWith(200), true);
+  });
+
+  it("returns 400 for an invalid refund of a booking without a time span", async function () {
+    sandbox.stub(TenantManager, "getTenant").resolves({
+      id: "tenant-1",
+      name: "Tenant",
+    });
+    const storeTenant = sandbox.stub(TenantManager, "storeTenant");
+    const res = response(sandbox);
+
+    await TenantController.updateTenant(
+      {
+        user: { id: "admin-1" },
+        body: {
+          id: "tenant-1",
+          cancellationRefundPercentageWithoutTimeSpan: 101,
+        },
+      },
+      res,
+    );
+
+    assert.strictEqual(res.status.calledWith(400), true);
+    assert.strictEqual(storeTenant.called, false);
+  });
 });
