@@ -352,6 +352,21 @@ const MailType = Object.freeze({
     }),
   },
 
+  // The hint of a signup with an address that already has a verified
+  // account: it links the client's „Passwort vergessen“ page, the Admin
+  // UI's by default.
+  ACCOUNT_EXISTS: {
+    family: "instance",
+    templateName: "account-exists",
+    audience: "named",
+    subject: () => "Mit Ihrer E-Mail-Adresse besteht bereits ein Konto",
+    templateData: ({ firstName, forgotPasswordUrl }) => ({
+      firstName,
+      forgotPasswordUrl:
+        forgotPasswordUrl || `${process.env.FRONTEND_URL}/password/reset`,
+    }),
+  },
+
   USER_CREATED: {
     family: "instance",
     templateName: "user-created",

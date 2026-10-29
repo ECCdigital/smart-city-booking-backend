@@ -184,7 +184,8 @@ class AuthenticationController {
   /**
    * Public signup. Answers account-neutrally (spec §6.3): 201 whether or not
    * the address already has an account - an existing account is never
-   * duplicated and, if still unverified, gets its verification mail again.
+   * duplicated and, if still unverified, gets its verification mail again;
+   * a verified one gets a hint that links `forgotPasswordUrl`.
    * The answer does not wait for the account or its mail
    * (ECCdigital/tickets#259); a failing mail is only logged. The per-IP
    * signup limit answers 429 with `Retry-After`.
@@ -200,6 +201,7 @@ class AuthenticationController {
         vatId,
         nextUrl,
         verifyUrl,
+        forgotPasswordUrl,
         legalAcceptance,
         invitationToken,
         invitationTenantId,
@@ -229,6 +231,7 @@ class AuthenticationController {
         user,
         nextUrl,
         verifyUrl,
+        forgotPasswordUrl,
         invitation,
         ip: request.ip,
       });

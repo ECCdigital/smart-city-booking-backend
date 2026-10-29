@@ -426,6 +426,22 @@ describe("mail characterization: every notice as it goes out today", function ()
       );
     });
 
+    it("account exists: the client's forgot password page", async function () {
+      await pin("account-exists", () =>
+        notify("ACCOUNT_EXISTS", {
+          to: CUSTOMER,
+          firstName: "Erika",
+          forgotPasswordUrl: `${FRONTEND_URL}/password/forgot`,
+        }),
+      );
+    });
+
+    it("account exists without a page: the Admin UI's forgot password page", async function () {
+      await pin("account-exists.default-page", () =>
+        notify("ACCOUNT_EXISTS", { to: CUSTOMER }),
+      );
+    });
+
     it("password reset: the backend's confirmation route", async function () {
       await pin("password-reset", () =>
         notify("PASSWORD_RESET", { to: CUSTOMER, hookId: "hook-reset-1" }),
