@@ -270,7 +270,7 @@ describe("findReinstatementConflicts", function () {
     ]);
   });
 
-  it("finds none where a dependent still has room", async function () {
+  it("names a dependent that is only partly taken", async function () {
     const workshop = room({ id: "workshop", title: "Werkstatt", amount: 1 });
     const tools = room({ id: "tools", title: "Werkzeug", amount: 5 });
     const old = booking("B-OLD", {
@@ -292,7 +292,20 @@ describe("findReinstatementConflicts", function () {
       },
     });
 
-    expect(conflicts).to.deep.equal([]);
+    expect(conflicts).to.deep.equal([
+      {
+        bookableId: "workshop",
+        title: "Werkstatt",
+        bookings: [
+          {
+            id: "B-TOOLS",
+            timeBegin: TIME_BEGIN,
+            timeEnd: TIME_END,
+            child: { bookableId: "tools", title: "Werkzeug" },
+          },
+        ],
+      },
+    ]);
   });
 
   it("skips a bookable that no longer exists", async function () {

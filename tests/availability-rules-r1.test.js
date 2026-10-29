@@ -204,12 +204,40 @@ describe("availability rules R1 — parent-child-rules", () => {
     );
   });
 
-  it("evaluates child capacity additively", () => {
+  it("blocks the parent as soon as a child is partly booked", () => {
+    assert.strictEqual(
+      evaluateChildCapacity({
+        childAmountBooked: 0,
+        capacity: 5,
+        requestedAmount: 2,
+      }),
+      true,
+    );
+    assert.strictEqual(
+      evaluateChildCapacity({
+        childAmountBooked: 1,
+        capacity: 5,
+        requestedAmount: 1,
+      }),
+      false,
+    );
+    assert.strictEqual(
+      evaluateChildCapacity({
+        childAmountBooked: 1,
+        capacity: null,
+        requestedAmount: 1,
+      }),
+      false,
+    );
+  });
+
+  it("evaluates ticket child capacity additively", () => {
     assert.strictEqual(
       evaluateChildCapacity({
         childAmountBooked: 2,
         capacity: 5,
         requestedAmount: 2,
+        isTicketChild: true,
       }),
       true,
     );
@@ -218,6 +246,7 @@ describe("availability rules R1 — parent-child-rules", () => {
         childAmountBooked: 4,
         capacity: 5,
         requestedAmount: 2,
+        isTicketChild: true,
       }),
       false,
     );
@@ -226,6 +255,7 @@ describe("availability rules R1 — parent-child-rules", () => {
         childAmountBooked: 99,
         capacity: null,
         requestedAmount: 1,
+        isTicketChild: true,
       }),
       true,
     );

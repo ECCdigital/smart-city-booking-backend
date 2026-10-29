@@ -41,19 +41,27 @@ function evaluateParentCapacity({
 }
 
 /**
- * Child capacity: additive — requested amount counts against child capacity.
+ * Child capacity: exclusive for non-ticket children — any booking on the child
+ * blocks the parent; additive for ticket children — requested amount counts
+ * against child capacity.
  *
  * @param {Object} params
  * @param {number} params.childAmountBooked
  * @param {number|null|undefined} params.capacity
  * @param {number} params.requestedAmount
+ * @param {boolean} [params.isTicketChild]
  * @returns {boolean}
  */
 function evaluateChildCapacity({
   childAmountBooked,
   capacity,
   requestedAmount,
+  isTicketChild = false,
 }) {
+  if (!isTicketChild) {
+    return childAmountBooked === 0;
+  }
+
   if (!capacity) {
     return true;
   }
