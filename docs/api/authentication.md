@@ -128,7 +128,7 @@ Verify a user with the token and address from the verification mail's link.
 }
 ```
 
-`nextUrl` is the signup's return target, `null` when the signup named none. Failures answer their status with a plain text message (`400` bad token or id mismatch, `404` unknown, `410` already verified).
+`nextUrl` is the signup's return target, `null` when the signup named none. Failures answer their status with a plain text message: `400` „Invalid verification token“ for a wrong token, whatever account the id names (ECCdigital/tickets#301), `410` for a link already used or revoked.
 
 ### GET /auth/verify/:hookId
 

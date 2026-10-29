@@ -412,6 +412,29 @@ describe("auth: no account oracle (ECCdigital/tickets#259)", function () {
       assert.strictEqual(res.status, 400);
       assert.strictEqual(unverified().isVerified, false);
     });
+
+    it("answers a wrong token alike for a verified, an unverified and an unknown account (ECCdigital/tickets#301)", async function () {
+      const verified = await verify("hook-falsch", OWNER);
+      const answers = [
+        await verify("hook-falsch", UNVERIFIED),
+        await verify("hook-falsch", UNKNOWN),
+        await verify("hook-pending", OWNER),
+      ];
+
+      assert.strictEqual(verified.status, 400);
+      for (const res of answers) {
+        assert.strictEqual(res.status, verified.status);
+        assert.strictEqual(res.text, verified.text);
+      }
+      assert.strictEqual(unverified().isVerified, false);
+    });
+
+    it("still tells the holder of a used link that it is used", async function () {
+      await verify("hook-pending", UNVERIFIED);
+      const again = await verify("hook-pending", UNVERIFIED);
+
+      assert.strictEqual(again.status, 410);
+    });
   });
 
   describe("changing the id of an account", function () {

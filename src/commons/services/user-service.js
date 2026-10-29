@@ -97,28 +97,27 @@ class UserService {
   }
 
   static async verifyEmail(token, id) {
+    // A wrong token gets one answer, whatever account the id names: an
+    // unknown token, the token of another account and a token of another
+    // kind alike, so the answer tells nothing about the account
+    const invalidToken = { message: "Invalid verification token", status: 400 };
+
     const user = await UserManager.getUserByHookID(token);
 
     if (!user) {
-      const secondaryUser = await UserManager.getUser(id);
-      if (secondaryUser.isVerified) {
-        throw { message: "User already verified", status: 410 };
-      } else {
-        throw { message: "User not found", status: 404 };
-      }
+      throw invalidToken;
     }
 
     // The account id as given, compared exactly but trimmed and without
     // regard to case, as every lookup of an account by its id
-    // (ECCdigital/tickets#259).
     if (!userIdsMatch(user.id, id)) {
-      throw { message: "User ID does not match token", status: 400 };
+      throw invalidToken;
     }
 
     const hook = user.hooks.find((hook) => hook.id === token);
 
     if (!hook || hook.type !== USER_HOOK_TYPES.VERIFY) {
-      throw { message: "Invalid verification token", status: 400 };
+      throw invalidToken;
     }
 
     user.releaseHook(token);
@@ -261,7 +260,6 @@ class UserService {
     if (previousId !== normalizedNewId) {
       // The account the new id names, found as every account by its id:
       // an older one stored in another case is taken too
-      // (ECCdigital/tickets#259).
       const existingTargetUser = await UserManager.getRawUser(normalizedNewId);
       if (
         existingTargetUser &&
