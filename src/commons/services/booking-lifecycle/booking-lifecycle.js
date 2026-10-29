@@ -450,7 +450,8 @@ function createBookingLifecycle(adapters) {
    * document issued for a priced booking unless the caller leaves it out,
    * with the bank details of a paid one (`refundBankDetails`), the workflow
    * told and the customer mailed - the rejection of a request
-   * the administration or the system turned down, the cancellation
+   * the administration or the system turned down, free of charge (a full
+   * refund, whatever the tiers or an admin override say), the cancellation
    * otherwise (a request the customer withdrew, directly or through a hook,
    * reads as a cancellation).
    *
@@ -487,6 +488,11 @@ function createBookingLifecycle(adapters) {
       booking.removeHook(hookId);
     }
 
+    const rejection =
+      booking.status === STATUS.REJECTED &&
+      trigger !== TRIGGER.CUSTOMER &&
+      !hookId;
+
     const refund = CancellationRefundService.calculate({
       tenant,
       booking,
@@ -494,16 +500,12 @@ function createBookingLifecycle(adapters) {
       origin: REFUND_ORIGIN[trigger],
       refundPercentage,
       cancelledByUserId,
+      rejection,
     });
     booking.cancellationRefund = CancellationRefundService.toBookingAudit(
       refund,
       { status: booking.status, cancelledFrom: from },
     );
-
-    const rejection =
-      booking.status === STATUS.REJECTED &&
-      trigger !== TRIGGER.CUSTOMER &&
-      !hookId;
     const files = [];
 
     const notice = noticeOf(tenantId, bookingId);

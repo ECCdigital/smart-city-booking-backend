@@ -245,6 +245,29 @@ describe("CancellationRefundService", function () {
     assert.strictEqual(result.refundAmountEur, 100);
   });
 
+  it("refunds a rejection in full, outside the tiers and an admin override", function () {
+    const result = CancellationRefundService.calculate({
+      tenant: { cancellationRefundTiers: tiers },
+      booking: {
+        priceEur: 100,
+        timeBegin: berlinMillis("2026-08-10T10:00:00"),
+      },
+      cancelledAt: berlinMillis("2026-08-09T10:00:00"),
+      origin: CANCELLATION_ORIGINS.ADMIN,
+      refundPercentage: 25,
+      rejection: true,
+    });
+
+    assert.strictEqual(result.daysBeforeStart, 1);
+    assert.strictEqual(result.appliedTierDays, null);
+    assert.strictEqual(result.suggestedRefundPercentage, 100);
+    assert.strictEqual(result.appliedRefundPercentage, 100);
+    assert.strictEqual(result.refundAmountEur, 100);
+    assert.strictEqual(result.cancellationFeeEur, 0);
+    assert.strictEqual(result.adminOverride, false);
+    assert.strictEqual(result.rejection, true);
+  });
+
   it("rejects invalid admin refund percentages", function () {
     assert.doesNotThrow(() =>
       CancellationRefundService.validateRefundPercentage(0),

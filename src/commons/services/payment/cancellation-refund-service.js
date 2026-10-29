@@ -24,6 +24,11 @@ const REFUND_STATE = Object.freeze({
 });
 
 class CancellationRefundService {
+  /**
+   * The refund of a cancellation. A rejection - a request the
+   * administration or the system turns down - costs the customer nothing:
+   * it refunds in full, outside the tiers and any admin override.
+   */
   static calculate({
     tenant,
     booking,
@@ -31,6 +36,7 @@ class CancellationRefundService {
     origin,
     refundPercentage,
     cancelledByUserId = null,
+    rejection = false,
   }) {
     if (!Object.values(CANCELLATION_ORIGINS).includes(origin)) {
       throw new BadRequestError("invalid_cancellation_origin", { origin });
@@ -45,16 +51,25 @@ class CancellationRefundService {
     }
 
     const { daysBeforeStart, appliedTierDays, suggestedRefundPercentage } =
-      this.resolvePolicy({
-        tiers: tenant?.cancellationRefundTiers || [],
-        withoutTimeSpanPercentage:
-          tenant?.cancellationRefundPercentageWithoutTimeSpan,
-        timeBegin: booking.timeBegin,
-        cancelledAt,
-      });
+      rejection
+        ? {
+            daysBeforeStart: this.calculateDaysBeforeStart(
+              booking.timeBegin,
+              cancelledAt,
+            ),
+            appliedTierDays: null,
+            suggestedRefundPercentage: 100,
+          }
+        : this.resolvePolicy({
+            tiers: tenant?.cancellationRefundTiers || [],
+            withoutTimeSpanPercentage:
+              tenant?.cancellationRefundPercentageWithoutTimeSpan,
+            timeBegin: booking.timeBegin,
+            cancelledAt,
+          });
 
     let appliedRefundPercentage = suggestedRefundPercentage;
-    if (origin === CANCELLATION_ORIGINS.SYSTEM) {
+    if (rejection || origin === CANCELLATION_ORIGINS.SYSTEM) {
       appliedRefundPercentage = 100;
     } else if (
       origin === CANCELLATION_ORIGINS.ADMIN &&
@@ -80,6 +95,7 @@ class CancellationRefundService {
       cancellationFeeEur: cancellationFeeCents / 100,
       appliedTierDays,
       origin,
+      rejection,
       adminOverride:
         origin === CANCELLATION_ORIGINS.ADMIN &&
         appliedRefundPercentage !== suggestedRefundPercentage,

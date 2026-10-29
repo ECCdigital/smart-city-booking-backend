@@ -67,7 +67,10 @@
     tags:
       - Bookings
     summary: Preview a booking cancellation refund
-    description: Returns the current tenant-policy refund proposed to an administrator.
+    description: |
+      Returns the current tenant-policy refund proposed to an administrator.
+      For a request (status `requested`) it is the rejection: a full refund,
+      outside the tiers, with `rejection: true`.
     security:
       - bearerAuth: []
     parameters:
@@ -96,6 +99,9 @@
       Administrators may accept the current tenant-policy refund or override it
       with an integer percentage from 0 through 100. Omitting
       `refundPercentage` applies the current policy proposal.
+
+      Rejecting a request costs the customer nothing: it refunds in full,
+      `refundPercentage` is ignored.
 
       A request is rejected, a confirmed booking or one awaiting payment is
       cancelled. The cancellation document is issued after the state change;
@@ -259,6 +265,8 @@
     description: |
       Without an override, each booking uses its current policy proposal. An
       optional `refundPercentage` applies uniformly to every booking in the group.
+      A group of requests is rejected free of charge: every booking refunds in
+      full, `refundPercentage` is ignored.
       Consistency validation failures return HTTP 200 with `success: false`
       (same envelope as other group-booking mutation endpoints).
 
@@ -489,6 +497,11 @@ components:
             - system
         adminOverride:
           type: boolean
+        rejection:
+          type: boolean
+          description: |
+            A request the administration or the system turned down: refunded
+            in full, outside the tiers and any admin override.
         cancelledByUserId:
           type: string
           nullable: true

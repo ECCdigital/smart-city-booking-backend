@@ -790,6 +790,33 @@ describe("group booking lifecycle: cancel", function () {
     ]);
   });
 
+  it("rejects a group of requests free of charge, whatever the tiers or an admin override say", async function () {
+    const adapters = inMemoryAdapters({
+      bookings: [member("B-1"), member("B-2")],
+      groups: [group(["B-1", "B-2"])],
+      tenant: {
+        id: TENANT,
+        cancellationRefundTiers: [{ daysBeforeStart: 0, refundPercentage: 50 }],
+      },
+    });
+    const lifecycle = createGroupBookingLifecycle(adapters);
+
+    await lifecycle.cancel(TENANT, GROUP, {
+      trigger: TRIGGER.ADMIN,
+      reason: "Kein Platz",
+      refundPercentage: 25,
+    });
+
+    for (const id of ["B-1", "B-2"]) {
+      expect(adapters.store.rows.get(id).cancellationRefund, id).to.include({
+        rejection: true,
+        appliedRefundPercentage: 100,
+        refundAmountEur: 40,
+        cancellationFeeEur: 0,
+      });
+    }
+  });
+
   it("cancels a free group without a document", async function () {
     const { adapters, lifecycle } = groupOf("confirmed", {
       members: { priceEur: 0 },

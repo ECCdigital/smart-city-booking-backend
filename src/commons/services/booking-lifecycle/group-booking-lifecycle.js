@@ -436,7 +436,8 @@ function createGroupBookingLifecycle(adapters) {
    * "Erstattungsstand"), written one by one and revoked; one aggregated cancellation
    * document for a priced group unless the caller leaves it out; the
    * workflow told per member; one rejection mail for a group of requests,
-   * one cancel mail otherwise, with the document.
+   * one cancel mail otherwise, with the document. A group of requests is
+   * rejected free of charge: every member refunds in full.
    *
    * @param {string} tenantId
    * @param {string} groupBookingId
@@ -464,6 +465,7 @@ function createGroupBookingLifecycle(adapters) {
       loadTenant(tenantId),
     ]);
     const at = cancelledAt ?? clock();
+    const rejection = from === STATUS.REQUESTED;
     const refunds = bookings.map((booking) => {
       booking.status = nextStateOf(group, from, transition, booking);
       booking.rejectionReason = reason;
@@ -474,6 +476,7 @@ function createGroupBookingLifecycle(adapters) {
         origin: REFUND_ORIGIN[trigger],
         refundPercentage,
         cancelledByUserId,
+        rejection,
       });
       booking.cancellationRefund = CancellationRefundService.toBookingAudit(
         refund,
@@ -481,7 +484,6 @@ function createGroupBookingLifecycle(adapters) {
       );
       return { bookingId: booking.id, ...refund };
     });
-    const rejection = from === STATUS.REQUESTED;
     const files = [];
 
     const notice = noticeOf(tenantId, group);
