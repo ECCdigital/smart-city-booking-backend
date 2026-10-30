@@ -17,6 +17,28 @@ function cancellationUrl(booking, tenantId) {
 }
 
 /**
+ * The customer's withdrawal of a booking: a mail to the tenant's address,
+ * subject and body naming the booking and signed with the name of the
+ * booking, which the tenant's staff then checks. A withdrawal is not a
+ * cancellation: nothing changes on the booking by itself.
+ */
+function withdrawalUrl(tenantMail, bookingRef, customerName = "") {
+  const subject = `Widerruf der Buchung ${bookingRef}`;
+  const body = [
+    "Sehr geehrte Damen und Herren,",
+    "",
+    `hiermit widerrufe ich den von mir abgeschlossenen Vertrag für die Buchung ${bookingRef}.`,
+    "Bitte bestätigen Sie den erfolgreichen Widerruf.",
+    "",
+    "Mit freundlichen Grüßen",
+    customerName,
+  ]
+    .join("\r\n")
+    .trimEnd();
+  return `mailto:${tenantMail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+/**
  * The admin links of the supervision notices (glossary
  * "Aufsichtsmitteilung"): `FRONTEND_URL` is the Admin UI. The tenant owner
  * lands on the overview of their tenants, the instance owner on the
@@ -31,6 +53,14 @@ function adminInstanceTenantsUrl() {
 }
 
 /**
+ * The open reports in the review queue of the instance (glossary
+ * „Meldung“), for the instance owner.
+ */
+function adminInstanceReportsUrl() {
+  return `${process.env.FRONTEND_URL}/instance/review-queue?tab=reports`;
+}
+
+/**
  * The members of a tenant in the Admin UI (`FRONTEND_URL`), the tenant
  * named by `?tenant=` so the owner lands in the right one.
  */
@@ -41,7 +71,9 @@ function adminTenantMembersUrl(tenantId) {
 module.exports = {
   bookingStatusUrl,
   cancellationUrl,
+  withdrawalUrl,
   adminDashboardUrl,
   adminInstanceTenantsUrl,
+  adminInstanceReportsUrl,
   adminTenantMembersUrl,
 };

@@ -17,7 +17,11 @@ const Handlebars = require("handlebars");
 const QRCode = require("qrcode");
 const MailerService = require("./mail-service");
 const { renderSnippet } = require("./templates/template-loader");
-const { bookingStatusUrl, cancellationUrl } = require("./mail-links");
+const {
+  bookingStatusUrl,
+  cancellationUrl,
+  withdrawalUrl,
+} = require("./mail-links");
 const {
   getSnippetOverride,
   getSubjectOverride,
@@ -28,6 +32,7 @@ const {
   CustomFieldService,
 } = require("../services/custom-field/custom-field-service");
 const Formatters = require("../utilities/formatters");
+const { withdrawalOffered } = require("../services/booking/booking-withdrawal");
 const {
   LIVE_STATUSES,
 } = require("../services/booking-lifecycle/booking-state");
@@ -113,6 +118,8 @@ function overrideVariables({
       single.cancellationPolicy?.userCancellable === true &&
       LIVE_STATUSES.includes(single.status),
   );
+  const bookingRef = aggregated ? groupBookingId : single?.id;
+  const withdrawal = Boolean(bookingRef && withdrawalOffered(tenant, booking));
   return {
     tenantName: tenant?.name ?? "",
     supportEmail: tenant?.mail ?? "",
@@ -126,6 +133,9 @@ function overrideVariables({
     bookingStatusUrl: statusView ? bookingStatusUrl(single, tenantId) : "",
     cancellationUrl: cancellable ? cancellationUrl(single, tenantId) : "",
     paymentUrl: paymentUrl ?? "",
+    withdrawalUrl: withdrawal
+      ? withdrawalUrl(tenant.mail, bookingRef, booking.name)
+      : "",
     ...extra,
   };
 }
@@ -402,6 +412,7 @@ async function render(
 
   const shell = {
     message,
+    withdrawalUrl: mailType.showsWithdrawalHint ? variables.withdrawalUrl : "",
     paymentUrl,
     cancelReason,
     rejectionReason,
@@ -508,4 +519,8 @@ async function renderShellNotice(
   }));
 }
 
-module.exports = { render, renderShellNotice, renderBookingDetails };
+module.exports = {
+  render,
+  renderShellNotice,
+  renderBookingDetails,
+};

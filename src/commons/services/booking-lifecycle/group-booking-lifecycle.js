@@ -45,7 +45,7 @@ const {
 } = require("./booking-lifecycle");
 const {
   CancellationRefundService,
-  sanitizeBankDetails,
+  refundBankDetails,
 } = require("../payment/cancellation-refund-service");
 const { ConflictError, NotFoundError } = require("../../../errors/BaseError");
 
@@ -502,7 +502,7 @@ function createGroupBookingLifecycle(adapters) {
             bookings,
             options: {
               alreadyPaid: from === STATUS.CONFIRMED,
-              bankDetails: sanitizeBankDetails(bankDetails) || undefined,
+              bankDetails: refundBankDetails(bankDetails, from) || undefined,
               cancellationReason: reason,
               refundCalculations: refunds,
             },
