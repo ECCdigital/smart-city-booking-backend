@@ -27,9 +27,9 @@
       picked, normalized as the user ids, becomes a report of its own
       (`targetAddress`) with the booking and the reason, or is added to the
       open one of the tenant. The address of an account is reported as a
-      user. Without `bookingId` the addresses are entered by hand: each a
-      single address, a member's too; whether an address has an account is
-      not told.
+      user. Without `bookingId` the addresses are entered by hand, at most
+      20 at once: each a single address, a member's too; whether an address
+      has an account is not told.
       An address an entry of the blacklist already hits becomes
       no report and is named in `blacklisted`; where that is every address
       picked, the answer is `409`. The guest learns nothing.
@@ -101,7 +101,8 @@
           `report_address_of_account` (an address of an account from a
           booking: report the user instead, `params.addresses`),
           `report_address_invalid` (an address entered by hand that is no
-          single address, `params.address`)
+          single address, `params.address`), `report_addresses_too_many`
+          (more than 20 addresses entered by hand at once, `params.max`)
       "401":
         description: Not authenticated
       "403":

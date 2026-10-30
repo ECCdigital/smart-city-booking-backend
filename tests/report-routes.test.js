@@ -789,6 +789,25 @@ describe("reports", function () {
         expect(junk.body.code).to.equal("report_address_invalid");
         expect(reports).to.have.length(0);
       });
+
+      it("refuses more than 20 addresses at once, stores nothing and mails nobody", async function () {
+        await mails();
+        const addresses = (count) =>
+          Array.from({ length: count }, (_, i) => `gast${i}@example.test`);
+
+        const tooMany = await report({ addresses: addresses(21), reason: "x" });
+
+        expect(tooMany.status).to.equal(400);
+        expect(tooMany.body.code).to.equal("report_addresses_too_many");
+        expect(tooMany.body.params).to.deep.equal({ max: 20 });
+        expect(reports).to.have.length(0);
+        expect(await mails()).to.deep.equal([]);
+
+        const enough = await report({ addresses: addresses(20), reason: "x" });
+
+        expect(enough.status).to.equal(201);
+        expect(reports).to.have.length(20);
+      });
     });
 
     it("refuses the address of an account: that is a user to report", async function () {

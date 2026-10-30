@@ -36,6 +36,12 @@ const DECISIONS = Object.freeze({
   REJECT: "reject",
 });
 
+/**
+ * The most addresses entered by hand at once: each one becomes a report and
+ * a mail to every instance owner.
+ */
+const MAX_ADDRESSES_BY_HAND = 20;
+
 /** The target of a report as stored: a user or an address, never both. */
 const targetKeyOf = ({ userId = null, address = null }) => ({
   targetUserId: userId,
@@ -244,8 +250,16 @@ class ReportService {
     }
   }
 
-  /** The addresses entered by hand: each a single address, no domain. */
+  /**
+   * The addresses entered by hand: each a single address, no domain, and
+   * no more than `MAX_ADDRESSES_BY_HAND`.
+   */
   static _checkAddressesByHand(picked) {
+    if (picked.length > MAX_ADDRESSES_BY_HAND) {
+      throw new BadRequestError("report_addresses_too_many", {
+        max: MAX_ADDRESSES_BY_HAND,
+      });
+    }
     for (const address of picked) {
       let parsed = null;
       try {

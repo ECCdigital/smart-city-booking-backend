@@ -5,7 +5,9 @@
  * once built stays in the database: a report
  * about an address has no `targetUserId`, so the old index refuses the
  * second open one of a tenant as a duplicate. The old index goes; the named
- * ones of the model stay.
+ * ones of the model stay, and are built right after: while the old index
+ * stood, `open_report_per_tenant_and_user` with the same key could not be,
+ * and the start does not build it again before the next one.
  */
 const KEPT = "open_report_per_tenant_and_user";
 
@@ -32,6 +34,8 @@ module.exports = {
     for (const index of indexes.filter(isLegacy)) {
       await collection.dropIndex(index.name);
     }
+    // Builds what is missing, leaves an index there already as it is.
+    await connection.model("Report").createIndexes();
   },
 
   down: async function () {

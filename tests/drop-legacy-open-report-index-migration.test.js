@@ -1,8 +1,9 @@
 /**
  * The migration that drops the unique index of one open report per tenant
  * and user, which refused a second open report about an address of a
- * tenant: it drops that index alone, leaves the named indexes of the model,
- * and runs again or on a database without reports without harm.
+ * tenant: it drops that index alone, then builds the indexes of the model
+ * the old one kept from being built, and runs again or on a database
+ * without reports without harm.
  */
 
 const { expect } = require("chai");
@@ -29,7 +30,7 @@ const BY_STATUS = { name: "status_1_targetUserId_1", key: { status: 1 } };
 
 /** A `reports` collection with these indexes, or none at all. */
 function fakeConnection(indexes) {
-  const state = { indexes: indexes && [...indexes], dropped: [] };
+  const state = { indexes: indexes && [...indexes], dropped: [], log: [] };
   const collection = {
     async indexes() {
       if (!state.indexes) {
@@ -42,10 +43,22 @@ function fakeConnection(indexes) {
     },
     async dropIndex(name) {
       state.dropped.push(name);
+      state.log.push(`drop ${name}`);
       state.indexes = state.indexes.filter((index) => index.name !== name);
     },
   };
-  return { state, connection: { db: { collection: () => collection } } };
+  const Report = {
+    async createIndexes() {
+      state.log.push("build");
+    },
+  };
+  return {
+    state,
+    connection: {
+      db: { collection: () => collection },
+      model: (name) => (name === "Report" ? Report : undefined),
+    },
+  };
 }
 
 describe("migration 26-10-2026-drop-legacy-open-report-index", function () {
@@ -65,6 +78,14 @@ describe("migration 26-10-2026-drop-legacy-open-report-index", function () {
       NAMED_ADDRESS.name,
       BY_STATUS.name,
     ]);
+  });
+
+  it("builds the indexes of the model after the drop", async function () {
+    const { state, connection } = fakeConnection([LEGACY, NAMED_ADDRESS]);
+
+    await migration.up(connection);
+
+    expect(state.log).to.deep.equal([`drop ${LEGACY.name}`, "build"]);
   });
 
   it("drops nothing on a second run", async function () {
