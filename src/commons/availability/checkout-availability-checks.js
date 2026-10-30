@@ -117,7 +117,12 @@ async function getBookedAmountForBookableWindow(
     timeEnd,
     { useTimeOverlap: isTimeRelatedBookable(originBookable) },
   );
-  const bookings = filterExcludedBookings(rawBookings, excludeBookingIds);
+  // A rejected or cancelled booking counts nothing; without a period the
+  // bookings come unfiltered, and the summaries name only those that count.
+  const bookings = filterExcludedBookings(
+    rawBookings,
+    excludeBookingIds,
+  ).filter((booking) => !booking.isRejected);
 
   return {
     amountBooked: sumBookedAmount(bookings, bookable.id),
@@ -235,6 +240,10 @@ async function runParentAvailabilityCheck({
 
     const isTicketChild = originBookable.type === "ticket";
     let childTicketAmountBooked = 0;
+    // The tickets of the parent count against it too; a refusal names
+    // their bookings apart (`ticketBookings`), the calendar splits its
+    // windows over the parent's own (`concurrentBookings`) alone.
+    const ticketBookings = new Map();
 
     if (isTicketChild) {
       const childBookables = await resolve(
@@ -242,15 +251,19 @@ async function runParentAvailabilityCheck({
       );
 
       for (const childBookable of childBookables) {
-        const { amountBooked } = await getBookedAmountForBookableWindow(
-          provider,
-          originBookable,
-          childBookable,
-          timeBegin,
-          timeEnd,
-          excludeBookingIds,
-        );
+        const { amountBooked, bookings: childBookings } =
+          await getBookedAmountForBookableWindow(
+            provider,
+            originBookable,
+            childBookable,
+            timeBegin,
+            timeEnd,
+            excludeBookingIds,
+          );
         childTicketAmountBooked += amountBooked;
+        for (const booking of childBookings) {
+          ticketBookings.set(booking.id, booking);
+        }
       }
     }
 
@@ -278,6 +291,7 @@ async function runParentAvailabilityCheck({
         message: `Übergeordnetes Objekt ${parentBookable.title} ist für den gewählten Zeitraum nicht verfügbar.`,
         parentAvailability: parentAmount,
         concurrentBookings: summarizeBookings(bookings),
+        ticketBookings: summarizeBookings([...ticketBookings.values()]),
       };
     }
   }
@@ -337,6 +351,8 @@ async function runChildBookingsCheck({
         checkType: CHECK_TYPES.CHILD_BOOKINGS,
         available: false,
         message: `Abhängiges Objekt ${childBookable.title} ist für den gewählten Zeitraum nicht verfügbar.`,
+        bookableId: childBookable.id,
+        title: childBookable.title,
         totalCapacity: childBookable.amount,
         booked: amountBooked,
         remaining: childBookable.amount - amountBooked,

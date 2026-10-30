@@ -1183,7 +1183,8 @@ describe("booking lifecycle today: what each state change does at the seam", fun
     // first mail of the form as owner, like a manual booking: a guest
     // booking fell silently to the account of that mail, and a booking of
     // an account left the customer's list when the admin changed the mail.
-    describe("the owner stays the one the booking was created with", function () {
+    // Only a booking of the Buchungsweg Admin follows a corrected first mail.
+    describe("the owner stays the one the booking was created with, unless the admin corrects the first mail of a Buchungsweg-Admin booking", function () {
       const OTHER = "max@example.test";
 
       it("a guest booking stays without owner when the admin changes the mail", async function () {
@@ -1220,6 +1221,58 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         );
 
         expect(h.stored(booking.id).assignedUserId).to.equal(OTHER);
+      });
+
+      // A booking of the Buchungsweg Admin belongs to its first mail, so the
+      // admin correcting that mail moves the booking along: the account of
+      // the mistyped address no longer sees it, the corrected one does.
+      it("a Buchungsweg-Admin booking moves to the corrected first mail", async function () {
+        const booking = await h.manualBooking(
+          "room",
+          {},
+          { mail: "max@exmaple.test" },
+        );
+        expect(h.stored(booking.id).assignedUserId).to.equal(
+          "max@exmaple.test",
+        );
+
+        const put = await update(booking.id, {
+          mail: `Max@Example.test, ${CUSTOMER}`,
+        });
+
+        expect(put.status).to.equal(201);
+        expect(h.stored(booking.id).assignedUserId).to.equal(OTHER);
+      });
+
+      it("a Buchungsweg-Admin booking keeps its owner when only a further mail changes", async function () {
+        const booking = await h.manualBooking(
+          "room",
+          {},
+          { mail: `${OTHER}, ${CUSTOMER}` },
+        );
+
+        const put = await update(booking.id, {
+          mail: `${OTHER}, anna@example.test`,
+        });
+
+        expect(put.status).to.equal(201);
+        expect(h.stored(booking.id).assignedUserId).to.equal(OTHER);
+      });
+
+      it("a booking without Buchungsweg keeps its owner when the admin corrects the first mail", async function () {
+        const booking = await h.manualBooking(
+          "room",
+          {},
+          { mail: "max@exmaple.test" },
+        );
+        delete h.stored(booking.id).bookedVia;
+
+        const put = await update(booking.id, { mail: OTHER });
+
+        expect(put.status).to.equal(201);
+        expect(h.stored(booking.id).assignedUserId).to.equal(
+          "max@exmaple.test",
+        );
       });
     });
 

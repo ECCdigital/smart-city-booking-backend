@@ -162,5 +162,16 @@
     "sample": "https://buchung.example.test/payment/redirection?ids=BK-987654&tenant=tenant-1&aggregated=false",
     "sampleAggregated": "https://buchung.example.test/payment/redirection?ids=BK-987654,BK-987655&tenant=tenant-1&aggregated=true",
     "snippets": ["payment-link-after-approval"]
+  },
+  {
+    "name": "withdrawalUrl",
+    "label": "Widerrufs-Link",
+    "description": "E-Mail an den Mandanten, mit der ein Privatkunde seine Buchung widerruft; die Zulässigkeit prüft der Mandant. Leer bei einer Buchung mit Firmenangabe oder nach 14 Tagen seit der Buchung, darum in einem {{#if withdrawalUrl}}...{{/if}}-Block einsetzen",
+    "kind": "url",
+    "sample": "mailto:support@beispiel.de?subject=Widerruf%20der%20Buchung%20BK-987654&body=Sehr%20geehrte%20Damen%20und%20Herren%2C%0D%0A%0D%0Ahiermit%20widerrufe%20ich%20den%20von%20mir%20abgeschlossenen%20Vertrag%20f%C3%BCr%20die%20Buchung%20BK-987654.%0D%0ABitte%20best%C3%A4tigen%20Sie%20den%20erfolgreichen%20Widerruf.%0D%0A%0D%0AMit%20freundlichen%20Gr%C3%BC%C3%9Fen%0D%0AMax%20Mustermann",
+    "sampleAggregated": "mailto:support@beispiel.de?subject=Widerruf%20der%20Buchung%20GB-123456&body=Sehr%20geehrte%20Damen%20und%20Herren%2C%0D%0A%0D%0Ahiermit%20widerrufe%20ich%20den%20von%20mir%20abgeschlossenen%20Vertrag%20f%C3%BCr%20die%20Buchung%20GB-123456.%0D%0ABitte%20best%C3%A4tigen%20Sie%20den%20erfolgreichen%20Widerruf.%0D%0A%0D%0AMit%20freundlichen%20Gr%C3%BC%C3%9Fen%0D%0AMax%20Mustermann",
+    "requires": {
+      "text": "leer bei einer Buchung mit Firmenangabe oder wenn die Buchung länger als 14 Tage zurückliegt"
+    }
   }
 ]

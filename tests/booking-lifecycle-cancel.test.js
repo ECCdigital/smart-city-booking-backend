@@ -431,6 +431,23 @@ describe("booking lifecycle: cancel", function () {
       appliedRefundPercentage: 50,
       refundAmountEur: 20,
     });
+    // A request is not paid: its bank details are dropped.
+    expect(adapters.documents.calls[0].args[0].options.bankDetails).to.equal(
+      undefined,
+    );
+  });
+
+  it("hands the bank details of a paid booking to the document, sanitized", async function () {
+    const { adapters, lifecycle } = lifecycleOver({
+      bookings: [booking()],
+    });
+
+    await lifecycle.cancel(TENANT, "B-1", {
+      trigger: TRIGGER.CUSTOMER,
+      reason: "Krank",
+      bankDetails: { accountHolder: " Erika ", iban: "de12 3456", bic: "" },
+    });
+
     expect(
       adapters.documents.calls[0].args[0].options.bankDetails,
     ).to.deep.equal({
@@ -910,7 +927,31 @@ describe("booking lifecycle: reinstate", function () {
     });
   });
 
-  it("a hold that fails aborts: the booking is cancelled again, with its refund audit", async function () {
+  it("drops an open cancellation request: its old link no longer cancels the reinstated booking", async function () {
+    const { adapters, lifecycle } = lifecycleOver({ bookings: [booking()] });
+    await lifecycle.requestCancel(TENANT, "B-1", {
+      trigger: TRIGGER.CUSTOMER,
+      reason: "Krank",
+    });
+    const hookId = adapters.store.rows.get("B-1").hooks[0].id;
+    await lifecycle.cancel(TENANT, "B-1", {
+      trigger: TRIGGER.CUSTOMER,
+      reason: "Verhindert",
+    });
+    expect(adapters.store.rows.get("B-1").hooks).to.have.length(1);
+
+    await lifecycle.reinstate(TENANT, "B-1", { trigger: TRIGGER.ADMIN });
+
+    expect(adapters.store.rows.get("B-1")).to.include({ status: "confirmed" });
+    expect(adapters.store.rows.get("B-1").hooks).to.deep.equal([]);
+    const error = await failing(
+      lifecycle.cancel(TENANT, "B-1", { trigger: TRIGGER.CUSTOMER, hookId }),
+    );
+    expect(error.message).to.equal(`Hook with ID ${hookId} not found`);
+    expect(adapters.store.rows.get("B-1").status).to.equal("confirmed");
+  });
+
+  it("a hold that fails aborts: the booking is cancelled again, with its refund audit and its open cancellation request", async function () {
     const { adapters, lifecycle } = lifecycleOver({
       bookings: [
         cancelled({
@@ -918,6 +959,7 @@ describe("booking lifecycle: reinstate", function () {
             ...cancelled().cancellationRefund,
             cancelledFrom: "payment_due",
           },
+          hooks: [{ id: "H-1", type: "REJECT", payload: { reason: "Krank" } }],
         }),
       ],
       failOn: { access: ["hold"] },
@@ -939,6 +981,7 @@ describe("booking lifecycle: reinstate", function () {
     expect(stored.cancellationRefund).to.include({
       cancelledFrom: "payment_due",
     });
+    expect(stored.hooks.map((hook) => hook.id)).to.deep.equal(["H-1"]);
     expect(adapters.store.writes).to.deep.equal([
       { id: "B-1", status: "payment_due" },
       { id: "B-1", status: "cancelled", restored: true },

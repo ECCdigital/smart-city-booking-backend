@@ -28,6 +28,7 @@ const {
 } = require("../../../commons/pdf-service/pdf-booking-table-meta");
 const {
   getCancellationRefundTiersError,
+  getRefundPercentageWithoutTimeSpanError,
 } = require("../../../commons/utilities/cancellation-refund-tiers");
 const {
   getLegalDocumentsError,
@@ -117,6 +118,20 @@ function validateCancellationRefundTiersField(body) {
     return null;
   }
   return getCancellationRefundTiersError(body.cancellationRefundTiers);
+}
+
+function validateRefundPercentageWithoutTimeSpanField(body) {
+  if (
+    !Object.prototype.hasOwnProperty.call(
+      body,
+      "cancellationRefundPercentageWithoutTimeSpan",
+    )
+  ) {
+    return null;
+  }
+  return getRefundPercentageWithoutTimeSpanError(
+    body.cancellationRefundPercentageWithoutTimeSpan,
+  );
 }
 
 const TENANT_DESCRIPTION_MAX_LENGTH = 300;
@@ -348,6 +363,12 @@ class TenantController {
         return response.status(400).send(cancellationRefundTiersError);
       }
 
+      const refundPercentageWithoutTimeSpanError =
+        validateRefundPercentageWithoutTimeSpanField(request.body);
+      if (refundPercentageWithoutTimeSpanError) {
+        return response.status(400).send(refundPercentageWithoutTimeSpanError);
+      }
+
       const legalDocumentsError = validateLegalDocumentsField(request.body);
       if (legalDocumentsError) {
         return response.status(400).send(legalDocumentsError);
@@ -436,6 +457,7 @@ class TenantController {
         "cancellationTemplate",
         "cancellationNumberPrefix",
         "cancellationRefundTiers",
+        "cancellationRefundPercentageWithoutTimeSpan",
         "pdfBookingLayout",
         "pdfBookingTableMeta",
         "legalDocuments",
@@ -484,6 +506,12 @@ class TenantController {
       );
       if (cancellationRefundTiersError) {
         return response.status(400).send(cancellationRefundTiersError);
+      }
+
+      const refundPercentageWithoutTimeSpanError =
+        validateRefundPercentageWithoutTimeSpanField(request.body);
+      if (refundPercentageWithoutTimeSpanError) {
+        return response.status(400).send(refundPercentageWithoutTimeSpanError);
       }
 
       const legalDocumentsError = validateLegalDocumentsField(request.body);
