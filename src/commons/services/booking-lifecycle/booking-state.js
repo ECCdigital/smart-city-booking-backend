@@ -21,6 +21,7 @@ const STATUS = Object.freeze({
   CONFIRMED: "confirmed",
   REJECTED: "rejected",
   CANCELLED: "cancelled",
+  WITHDRAWN: "withdrawn",
 });
 
 const STATUSES = Object.freeze(Object.values(STATUS));
@@ -33,6 +34,7 @@ const TRANSITION = Object.freeze({
   REINSTATE: "reinstate",
   AMEND: "amend",
   REQUEST_CANCEL: "requestCancel",
+  ACCEPT_WITHDRAWAL: "acceptWithdrawal",
 });
 
 const TRANSITIONS = Object.freeze(Object.values(TRANSITION));
@@ -48,7 +50,7 @@ const TRIGGER = Object.freeze({
 
 const TRIGGERS = Object.freeze(Object.values(TRIGGER));
 
-/** The states a booking lives in: not rejected, not cancelled. */
+/** The states a booking lives in: not rejected, not cancelled, not withdrawn. */
 const LIVE_STATUSES = Object.freeze([
   STATUS.REQUESTED,
   STATUS.PAYMENT_DUE,
@@ -60,6 +62,13 @@ const CANCELLED_FROM_STATUSES = Object.freeze([
   STATUS.PAYMENT_DUE,
   STATUS.CONFIRMED,
 ]);
+
+/**
+ * The states a withdrawal can be accepted from:
+ * every live one, the 14 days of the withdrawal period can end before the
+ * request is decided. Kept as `cancellationRefund.cancelledFrom`.
+ */
+const WITHDRAWN_FROM_STATUSES = LIVE_STATUSES;
 
 function priceOf(priceEur) {
   return Number(priceEur) || 0;
@@ -124,6 +133,11 @@ const TRANSITION_TABLE = Object.freeze({
     from: LIVE_STATUSES,
     target: (status, booking) =>
       booking.cancellationPolicy?.userCancellable === true ? status : null,
+  },
+  // A withdrawal cannot be taken back: no transition leaves `withdrawn`.
+  [TRANSITION.ACCEPT_WITHDRAWAL]: {
+    from: WITHDRAWN_FROM_STATUSES,
+    target: () => STATUS.WITHDRAWN,
   },
 });
 
@@ -193,7 +207,8 @@ function normalizeFlags(flags = {}) {
  *
  * @param {string} status The booking state
  * @param {number} priceEur The booking's price
- * @param {string} [cancelledFrom] The state a cancelled booking was cancelled from
+ * @param {string} [cancelledFrom] The state a cancelled or withdrawn booking
+ *   left
  * @returns {{ isCommitted: boolean, isPayed: boolean, isRejected: boolean }}
  */
 function flagsFromStatus(status, priceEur, cancelledFrom) {
@@ -211,6 +226,14 @@ function flagsFromStatus(status, priceEur, cancelledFrom) {
     case STATUS.CANCELLED:
       return {
         isCommitted: true,
+        isPayed: free || cancelledFrom === STATUS.CONFIRMED,
+        isRejected: true,
+      };
+    // Read back from flags, a withdrawn booking is a rejected or cancelled
+    // one: the flags have no word for it.
+    case STATUS.WITHDRAWN:
+      return {
+        isCommitted: cancelledFrom !== STATUS.REQUESTED,
         isPayed: free || cancelledFrom === STATUS.CONFIRMED,
         isRejected: true,
       };
@@ -307,6 +330,7 @@ module.exports = {
   STATUSES,
   LIVE_STATUSES,
   CANCELLED_FROM_STATUSES,
+  WITHDRAWN_FROM_STATUSES,
   TRANSITION,
   TRANSITIONS,
   TRANSITION_TABLE,

@@ -133,8 +133,10 @@ class Booking {
     for (const key of ["status", ...DERIVED_FLAGS]) {
       delete defaults[key];
     }
-    // The Buchungsweg has no default: a booking without one stays without.
+    // The Buchungsweg and the private-or-business answer have no default: a
+    // booking without one stays without.
     delete defaults.bookedVia;
+    delete defaults.isBusiness;
     Object.assign(this, defaults, fields);
 
     defineStateAccessors(this);

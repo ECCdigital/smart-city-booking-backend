@@ -48,6 +48,7 @@
 
 const {
   CancellationRefundService,
+  REFUND_STATE,
 } = require("../services/payment/cancellation-refund-service");
 
 const { SupervisionMailType } = require("./supervision-mail-types");
@@ -121,6 +122,27 @@ const MailType = Object.freeze({
       ...CancellationRefundService.toMailTemplateData(
         bookings[0].cancellationRefund,
       ),
+    }),
+  },
+
+  // The confirmation of a withdrawal the staff accepted; not a
+  // tenant-editable text.
+  BOOKING_WITHDRAWAL: {
+    family: "booking",
+    templateName: "booking-withdrawal",
+    audience: "booker",
+    subject: (ctx) =>
+      `Widerruf: Ihr Widerruf der Buchung im ${ctx.tenant.name} ist bestätigt`,
+    includeQRCode: false,
+    sendBCC: true,
+    addRejectionLink: false,
+    // `refundDue`: the booking was paid, the amount goes back in full.
+    templateData: (ctx, { bookings }) => ({
+      ...CancellationRefundService.toMailTemplateData(
+        bookings[0].cancellationRefund,
+      ),
+      refundDue:
+        bookings[0].cancellationRefund?.refundState === REFUND_STATE.OPEN,
     }),
   },
 

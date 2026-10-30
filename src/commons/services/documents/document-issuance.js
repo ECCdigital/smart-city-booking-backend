@@ -6,6 +6,7 @@ const IdGenerator = require("../../utilities/id-generator");
 const ReceiptService = require("../payment/receipt-service");
 const InvoiceService = require("../payment/invoice-service");
 const CancellationService = require("../payment/cancellation-service");
+const WithdrawalService = require("../payment/withdrawal-service");
 const {
   BOOKING_DOCUMENT,
   deleteBookingDocuments,
@@ -28,12 +29,13 @@ const logger = bunyan.createLogger({
 const NUMBER_WIDTH = 4;
 
 /**
- * The three booking documents: how their number is written, which field of
- * the attachment carries the document id, and who renders them.
+ * The booking documents: how their number is written, which field of the
+ * attachment carries the document id, and who renders them.
  *
  * The number formats are the ones the documents have always carried: the
  * receipt always joins the prefix with a dash, invoice and cancellation only
- * where there is one.
+ * where there is one. The withdrawal receipt (glossary "Widerrufbeleg")
+ * carries the tenant's prefix, `WB` where it has none.
  */
 const DOCUMENT_TYPES = Object.freeze({
   receipt: {
@@ -58,6 +60,15 @@ const DOCUMENT_TYPES = Object.freeze({
       return `${prefix ? `${prefix}-` : ""}${id}-${revision}`;
     },
     render: (input) => CancellationService.render(input),
+  },
+  withdrawal: {
+    idField: "withdrawalId",
+    media: BOOKING_DOCUMENT.WITHDRAWAL,
+    number: (tenant, id, revision) => {
+      const prefix = (tenant.withdrawalNumberPrefix || "").trim() || "WB";
+      return `${prefix}-${id}-${revision}`;
+    },
+    render: (input) => WithdrawalService.render(input),
   },
 });
 
@@ -106,7 +117,7 @@ const DOCUMENT_TYPES = Object.freeze({
  * @param {Object} params
  * @param {string} params.tenantId
  * @param {string[]} params.bookingIds The bookings the document is about.
- * @param {"receipt"|"invoice"|"cancellation"} params.type
+ * @param {"receipt"|"invoice"|"cancellation"|"withdrawal"} params.type
  * @param {string|null} [params.groupBookingId] The group of an aggregated
  *   document: one medium, attached to every booking. Set exactly when the
  *   document is aggregated - never guessed from the number of bookings.

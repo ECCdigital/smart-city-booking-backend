@@ -1,0 +1,9 @@
+<p>Ihren Widerruf der nachfolgenden Buchung haben wir erhalten und bestätigt. Die Buchung ist widerrufen, Ihnen entstehen dadurch keine Kosten.</p>
+
+{{#if refundDue}}
+  <p>
+    <strong>Erstattung</strong>: Den gezahlten Betrag von {{priceFormatted refundAmountEur}} erstatten wir Ihnen vollständig.
+  </p>
+{{else if hasRefundPreview}}
+  <p>Eine noch offene Zahlung entfällt.</p>
+{{/if}}

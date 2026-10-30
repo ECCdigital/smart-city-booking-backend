@@ -23,6 +23,7 @@ const { BundleCheckoutService } = require("./bundle-checkout-service");
 const checkoutPolicy = require("./checkout-policy");
 const { CheckoutPolicy } = checkoutPolicy;
 const { BookedVia, bookedViaOf } = require("./booked-via");
+const { isBusinessOf } = require("./business-booking");
 const { CustomFieldService } = require("../custom-field/custom-field-service");
 const BlacklistService = require("../blacklist/blacklist-service");
 const InstanceManager = require("../../data-managers/instance-manager");
@@ -251,6 +252,7 @@ async function createBooking({
     couponCode,
     name,
     company,
+    isBusiness,
     street,
     zipCode,
     location,
@@ -345,6 +347,8 @@ async function createBooking({
   // The Buchungsweg is set here and nowhere else (GLOSSARY.md), from the
   // policy and the sign-in; a value the client sends is never read.
   booking.bookedVia = bookedViaOf(policy, user);
+  // Private or business: the booker's answer, else read off the company.
+  booking.isBusiness = isBusinessOf(isBusiness, company);
 
   booking.validate();
 
@@ -537,6 +541,7 @@ async function createGroupBooking({
     bookingAttempt.mail = contactData.mail;
     bookingAttempt.name = contactData.name;
     bookingAttempt.company = contactData.company;
+    bookingAttempt.isBusiness = contactData.isBusiness;
     bookingAttempt.street = contactData.street;
     bookingAttempt.zipCode = contactData.zipCode;
     bookingAttempt.location = contactData.location;
@@ -777,6 +782,13 @@ async function updateBooking(
   // without stays without; the form's value is never read.
   if (oldBooking.bookedVia) {
     booking.bookedVia = oldBooking.bookedVia;
+  }
+  // The private-or-business answer stays what the booker gave, unless the
+  // form names one; a booking without it stays without.
+  if (typeof updatedBooking.isBusiness === "boolean") {
+    booking.isBusiness = updatedBooking.isBusiness;
+  } else if (typeof oldBooking.isBusiness === "boolean") {
+    booking.isBusiness = oldBooking.isBusiness;
   }
 
   if (onUnreject) {

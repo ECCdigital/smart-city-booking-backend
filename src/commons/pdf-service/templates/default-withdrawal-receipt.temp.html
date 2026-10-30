@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <title>{{ title }}</title>
+    <style>
+      body {
+        margin: 0;
+      }
+      .invoice-box {
+        font-size: 12px;
+        line-height: 16px;
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        padding-bottom: 20px;
+      }
+      .invoice-box table {
+        width: 100%;
+        line-height: inherit;
+        text-align: left;
+        border-collapse: collapse;
+      }
+      .invoice-box table td,
+      .invoice-box table th {
+        padding: 5px;
+        vertical-align: top;
+      }
+      .invoice-box table tr.heading td {
+        background: #eee;
+        border-bottom: 1px solid #ddd;
+        font-weight: bold;
+      }
+      /* Position tables ({{{mainContent}}}) use table.pdf-items styling from PRINT_CSS */
+      .header {
+        font-weight: bold;
+        font-size: x-large;
+        padding-bottom: 20px;
+      }
+      .header-address {
+        text-align: left;
+        padding-bottom: 20px;
+      }
+      .details {
+        line-height: 14px;
+        font-size: 10px;
+        text-align: right;
+      }
+      .information {
+        padding-top: 10px;
+        padding-bottom: 10px;
+        line-height: 20px;
+        font-size: 12px;
+        text-align: left;
+      }
+      .cancellation-note {
+        margin-top: 10px;
+        padding: 10px;
+        border-left: 4px solid #c0392b;
+        background: #fdecea;
+        font-size: 12px;
+        line-height: 18px;
+      }
+      .refund-note {
+        margin-top: 10px;
+        padding: 10px;
+        border-left: 4px solid #2e7d32;
+        background: #eaf5ea;
+        font-size: 12px;
+        line-height: 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <template data-pdf-footer>
+      <div style="display: flex; justify-content: space-between; width: 100%">
+        <span>{{ title }} {{ withdrawalNumber }}</span>
+        <span>{{> pdfPageNumbers }}</span>
+      </div>
+    </template>
+
+    <div class="invoice-box">
+      <table>
+        <tr>
+          <td>
+            <div class="header">Smart City Booking</div>
+            <div class="header-address">{{{invoiceAddress}}}</div>
+          </td>
+          <td>
+            <div class="details">
+              Widerrufbelegnummer: {{withdrawalNumber}} <br />
+              Buchungsnummer: {{bookingId}} <br />
+              {{#if hasOriginalDocument}}
+              Ursprüngliche Rechnungsnummer: {{originalInvoiceNumber}} <br />
+              {{/if}}
+              <br />
+              {{location}}, {{withdrawalDate}}
+            </div>
+          </td>
+        </tr>
+      </table>
+      <div class="information">
+        <span style="font-size: larger; font-weight: bolder">{{ title }}</span>
+        <p>
+          Sehr geehrte Damen und Herren,<br /><br />
+          hiermit bestätigen wir Ihren Widerruf der Buchung
+          <strong>{{bookingId}}</strong>. Durch den Widerruf entstehen Ihnen
+          keine Kosten.
+        </p>
+        <div class="cancellation-note">
+          <strong>Widerruf angenommen am:</strong> {{withdrawalDate}}
+        </div>
+        {{#if alreadyPaid}}
+        <div class="refund-note">
+          Der bereits gezahlte Betrag in Höhe von
+          <strong>{{refundAmount}}</strong> wird Ihnen vollständig erstattet.
+        </div>
+        {{else}} {{#if hasOriginalDocument}}
+        <p>
+          Die Rechnung mit der Nummer
+          <strong>{{originalInvoiceNumber}}</strong> vom
+          {{originalInvoiceDate}} wird damit vollständig aufgehoben; der
+          Rechnungsbetrag in Höhe von <strong>{{refundAmount}}</strong>
+          entfällt.
+        </p>
+        {{else}}
+        <p>
+          Der eingetragene Rechnungsbetrag in Höhe von
+          <strong>{{refundAmount}}</strong> entfällt.
+        </p>
+        {{/if}} {{/if}}
+      </div>
+
+      {{{ mainContent }}}
+
+      <div class="information">
+        Bei Rückfragen zu diesem Widerrufbeleg wenden Sie sich bitte unter
+        Angabe der Widerrufbelegnummer <strong>{{withdrawalNumber}}</strong>
+        an uns.
+      </div>
+
+      <div class="information">
+        Dieses Schreiben wurde maschinell erstellt und ist ohne Unterschrift
+        gültig.
+      </div>
+    </div>
+  </body>
+</html>

@@ -61,6 +61,7 @@ const PDF_TEMPLATE_FIELDS = {
   receiptTemplate: "receipt",
   invoiceTemplate: "invoice",
   cancellationTemplate: "cancellation",
+  withdrawalTemplate: "withdrawal",
 };
 
 /**
@@ -456,6 +457,8 @@ class TenantController {
         "bookableCustomFields",
         "cancellationTemplate",
         "cancellationNumberPrefix",
+        "withdrawalTemplate",
+        "withdrawalNumberPrefix",
         "cancellationRefundTiers",
         "cancellationRefundPercentageWithoutTimeSpan",
         "pdfBookingLayout",
@@ -611,10 +614,16 @@ class TenantController {
         return response.status(400).send(tableMetaError);
       }
 
-      if (!["receipt", "invoice", "cancellation"].includes(templateType)) {
+      if (
+        !["receipt", "invoice", "cancellation", "withdrawal"].includes(
+          templateType,
+        )
+      ) {
         return response
           .status(400)
-          .send("templateType must be one of: receipt, invoice, cancellation");
+          .send(
+            "templateType must be one of: receipt, invoice, cancellation, withdrawal",
+          );
       }
 
       if (template) {

@@ -4,7 +4,7 @@ const { NextcloudManager } = require("../../data-managers/file-manager");
 const { DOMAIN } = require("../authorization/reach");
 
 /**
- * The three documents the platform writes for a booking. `tag` labels the
+ * The documents the platform writes for a booking. `tag` labels the
  * medium in the library, `legacyFolder` is where the pre-media-library file
  * still lies until the media import moves it.
  */
@@ -12,6 +12,7 @@ const BOOKING_DOCUMENT = Object.freeze({
   RECEIPT: { tag: "receipt", legacyFolder: "receipts" },
   INVOICE: { tag: "invoice", legacyFolder: "invoices" },
   CANCELLATION: { tag: "cancellation", legacyFolder: "cancellations" },
+  WITHDRAWAL: { tag: "withdrawal", legacyFolder: "withdrawals" },
 });
 
 /**
