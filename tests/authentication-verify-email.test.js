@@ -71,7 +71,7 @@ describe("POST /auth/verify-email", function () {
   it("keeps the failure answers as they were", async function () {
     sinon
       .stub(UserService, "verifyEmail")
-      .rejects({ message: "User already verified", status: 410 });
+      .rejects({ message: "Hook already used or expired", status: 410 });
     const res = response();
 
     await AuthenticationController.verifyEmail(
@@ -80,6 +80,6 @@ describe("POST /auth/verify-email", function () {
     );
 
     expect(res.statusCode).to.equal(410);
-    expect(res.body).to.equal("User already verified");
+    expect(res.body).to.equal("Hook already used or expired");
   });
 });
