@@ -17,7 +17,7 @@ Both frontends consume this API. Changes to endpoints, auth, or response shapes 
 - **Framework:** Express 4
 - **Database:** MongoDB 6+ via Mongoose 8
 - **Auth:** JWT (access + refresh tokens), Passport strategies
-- **Templates:** Handlebars (mail), HTML (PDF via microinvoice/playwright)
+- **Templates:** Handlebars (mail), HTML (PDF via playwright)
 
 ## Directory layout
 
