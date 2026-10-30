@@ -50,6 +50,21 @@ function noticesOf(row) {
       return [{ mailType: "SUPERVISION_TENANT_LEVEL_CHANGED", ctx }];
     case NOTIFICATION_TYPES.REVIEW_DECIDED:
       return [{ mailType: "SUPERVISION_REVIEW_DECIDED", ctx }];
+    case NOTIFICATION_TYPES.REPORT_CREATED:
+      return [{ mailType: "SUPERVISION_REPORT_CREATED", ctx }];
+    case NOTIFICATION_TYPES.REPORT_RESOLVED:
+      return [{ mailType: "SUPERVISION_REPORT_RESOLVED", ctx }];
+    // To the tenant's owners, or to the instance owners for a tenant
+    // without an owner, as the migration found it.
+    case NOTIFICATION_TYPES.MEMBERSHIPS_ENDED:
+      return [
+        {
+          mailType: ctx.payload.toInstanceOwners
+            ? "SUPERVISION_MEMBERSHIPS_ENDED_NO_OWNER"
+            : "SUPERVISION_MEMBERSHIPS_ENDED",
+          ctx,
+        },
+      ];
     default:
       throw new Error(`unknown notification type ${row.type}`);
   }

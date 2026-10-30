@@ -371,7 +371,7 @@ function installMailStackStore(options = {}) {
       options.membership === undefined ? membership() : options.membership,
     roleMemberships: options.roleMemberships ?? [
       { userId: SECRETARY, status: "active" },
-      { userId: "ehemalig@stadthalle.example.test", status: "suspended" },
+      { userId: "ehemalig@stadthalle.example.test", status: "rejected" },
     ],
   };
   const byId = (list, id) => list.find((entry) => entry.id === id) ?? null;

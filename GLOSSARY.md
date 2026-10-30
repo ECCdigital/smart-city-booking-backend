@@ -385,7 +385,7 @@ Die unveränderliche Folge der Startstufe, Stufenwechsel, erstmaligen und erneut
 _Avoid_: Audit-Log, Änderungsverlauf (unqualifiziert), Prüfstatus (das ist der aktuelle Stand)
 
 **Mitteilungsanlass**:
-Ein beim Eintreten eines Aufsichtsereignisses festgehaltener Grund für eine Aufsichtsmitteilung — Selbst-Anlage, tatsächlicher Stufenwechsel, tatsächlicher Eintritt in die aktive Prüfliste, Prüfentscheidung — mit den Angaben, die die Mitteilung braucht (alter und neuer Stand, Begründung). Wird zuerst nur aufgezeichnet (Outbox, Status _ausstehend_) und direkt danach getrennt versendet: ein fehlgeschlagener Versand rollt die Entscheidung nicht zurück und ist ohne erneutes Entscheiden wiederholbar. Ein Stufenwechsel mit mehreren neu wartenden Angeboten ist ein Anlass, nicht mehrere.
+Ein beim Eintreten eines Aufsichtsereignisses festgehaltener Grund für eine Aufsichtsmitteilung — Selbst-Anlage, tatsächlicher Stufenwechsel, tatsächlicher Eintritt in die aktive Prüfliste, Prüfentscheidung — mit den Angaben, die die Mitteilung braucht (alter und neuer Stand, Begründung). Wird zuerst nur aufgezeichnet (Outbox, Status _ausstehend_) und direkt danach getrennt versendet: ein fehlgeschlagener Versand rollt die Entscheidung nicht zurück und ist ohne erneutes Entscheiden wiederholbar. Ein Stufenwechsel mit mehreren neu wartenden Angeboten ist ein Anlass, nicht mehrere. Neben den Anlässen der Aufsicht laufen dieselben Wege für Meldungen (neue Meldung, Meldung erledigt) und, einmalig aus der Migration, „Mitgliedschaften beendet“: je Mandant an die Tenant-Owner, ohne Tenant-Owner an die Instanz-Owner mit Vermerk des Mandanten.
 _Avoid_: Mail (das ist der Versand), Notification (als Sprechbegriff), Event (das ist die Veranstaltung), Benachrichtigungs-Job
 
 **Aufsichtsmitteilung**:
@@ -461,6 +461,28 @@ _Avoid_: Policy (als Sprechbegriff), ACL, Permission-Matrix, Rollengruppe (das i
 **Berechtigung**:
 Die Prüfung an einer Route, ob der Prinzipal die Handlung an der Sache ausführen darf, und mit welcher Reichweite. Steht am Router, vor dem Handler: **jede** Route unter `src/platform` trägt genau einen der drei Marker — geprüft, ausdrücklich öffentlich, oder über ein Geheimnis (Token, Hook) autorisiert; ein Test hält das. Nicht zu verwechseln mit der Zugangsentscheidung, die das Bedienen von AccessPoints betrifft und nur das Verwaltungs-Ja der Berechtigung als Eingabe erhält.
 _Avoid_: Authorization (als Sprechbegriff), Berechtigungsprüfung (bei der Zugangsentscheidung als Altname gemeint), Rechteprüfung, Auth (das ist die Anmeldung)
+
+### Konten
+
+**Sperre (eines Users)**:
+Der instanzweite Ausschluss eines Users. Er blockiert jede Anmeldung und wirkt sofort. Seine Herkunft ist genau eine: von Hand durch den Instanz-Owner (auch aus Meldungen), mit Grund, Zeitpunkt und sperrender Person, oder ein Blacklist-Eintrag, der beim Eintragen auf die Adresse des Kontos passte. Die einzige Sperre, die es gibt. Ein Mandant kann nur melden, und die Blacklist sperrt nur über diese Sperre.
+_Avoid_: suspended (am Mandanten, entfallen), Suspendierung, Blockieren, Blacklist-Sperre (es gibt keinen zweiten Zustand)
+
+**Mitgliedschaft beenden**:
+Die eine Handlung eines Mandanten gegen einen User: Sie entfernt seine Mitgliedschaft im Mandanten samt seiner offenen Einladungen dort, und er verliert alle Rechte im Mandanten. Das Konto bleibt; Anmelden und Bestellen gehen weiter, und über eine Einladung für mehrere Personen oder einen öffentlichen Link kann er wieder eintreten. Sie schickt keine Mail. Dürfen Rollen mit `manageUsers.updateAny`, die Mitgliedschaft eines Tenant-Owners nur Tenant-Owner. Soll ein User dauerhaft draußen bleiben, meldet ihn der Mandant an die Instanz. Den Status `suspended` der Mitgliedschaft gibt es nicht mehr; die Mitgliedschaft ist _ausstehend_, _aktiv_ oder _abgelehnt_.
+_Avoid_: suspended (am Mandanten), Sperren (am Mandanten), Mitglied sperren, Mitglied entfernen (unqualifiziert)
+
+**Meldung (eines Users oder einer Adresse)**:
+Der Hinweis eines Mandanten an die Instanz, dass er einen User gesperrt oder eine Adresse auf der Blacklist sehen will: ein Mitglied, den Bucher einer seiner Buchungen, eine Adresse aus `mail` einer seiner Buchungen oder eine von Hand eingegebene Adresse, mit Grund (Pflicht) und gegebenenfalls der Buchung als Beleg. Die Adresse eines Kontos aus einer Buchung nur als User, von Hand jede einzelne Adresse, auch die eines Mitglieds, und eine Adresse, die schon ein Blacklist-Eintrag trifft, gar nicht. Je Mandant und Ziel ist höchstens eine offen; eine zweite ergänzt sie. Der Instanz-Owner erledigt alle offenen Meldungen zu einem User oder einer Adresse auf einmal, mit Sperre, mit Blacklist-Eintrag oder mit Ablehnung samt Begründung, und die Tenant-Owner des meldenden Mandanten erfahren das Ergebnis. Jede Sperre erledigt die offenen Meldungen zum User, jeder Blacklist-Eintrag die zu jeder Adresse, die er trifft. Solange sie offen ist, kann der meldende Mandant sie ergänzen oder zurückziehen; danach ist eine neue Meldung zum selben Ziel möglich. Der gemeldete User oder Gast erfährt nichts. Eine Meldung sperrt nie selbst.
+_Avoid_: Sperrantrag, Beschwerde, Report (als Sprechbegriff)
+
+**Blacklist**:
+Die Liste der Instanz aus Mailadressen und Domains, die der Instanz-Owner für alle Mandanten pflegt. Ihre eine Frage ist: Trifft ein Eintrag diese Adresse, und welcher? Sie sperrt Konten nur über die Sperre (eines Users). Tenant-Owner sehen sie nicht.
+_Avoid_: Sperrliste, Sperre einer Adresse, Blacklist-Sperre
+
+**Blacklist-Eintrag**:
+Eine exakte Adresse (`max@firma.de`) oder eine Domain mit führendem `@` (`@wegwerf.de`) auf der Blacklist, getrimmt und kleingeschrieben wie die User-Ids, mit Grund (Pflicht, änderbar), Zeitpunkt, eintragender Person und Herkunft (von Hand, aus einer Sperre oder aus Meldungen). Eine Domain trifft nur sich selbst, keine Subdomains; eine Plus-Adresse ist eine eigene Adresse. Wert und Art stehen nach dem Anlegen fest. Beim Anlegen sperrt er die passenden Konten außer Instanz-Ownern und schon gesperrten; beim Anlegen erledigt er außerdem die offenen Meldungen zu jeder Adresse, die er trifft, und verweist auf sie; beim Entfernen hebt er auf Wunsch genau diese Sperren wieder auf. Er läuft nicht ab.
+_Avoid_: Sperre einer Adresse, Blacklist-Sperre
 
 ### Favoriten
 

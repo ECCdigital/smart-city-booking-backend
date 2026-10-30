@@ -99,6 +99,13 @@ const NOTIFICATION_TYPES = Object.freeze({
   TENANT_LEVEL_CHANGED: "tenant.levelChanged",
   REVIEW_QUEUE_ENTERED: "review.queueEntered",
   REVIEW_DECIDED: "review.decided",
+  // A report about a user to the instance, and its settlement for the
+  // reporting tenant (glossary „Meldung“).
+  REPORT_CREATED: "report.created",
+  REPORT_RESOLVED: "report.resolved",
+  // The one-time notice of the migration that ended the suspended
+  // memberships of a tenant.
+  MEMBERSHIPS_ENDED: "memberships.ended",
 });
 
 /** The delivery status of a notification outbox row. */

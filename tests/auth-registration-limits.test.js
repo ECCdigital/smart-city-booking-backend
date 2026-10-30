@@ -32,6 +32,9 @@ const {
   installMailStackStore,
   instance,
 } = require("./helpers/mail-stack-fixtures");
+const {
+  installBlacklistCollection,
+} = require("./helpers/blacklist-collection");
 
 const KNOWN_UNVERIFIED = "pending@example.test";
 const KNOWN_VERIFIED = "erika@example.test";
@@ -117,6 +120,8 @@ describe("public registration: account-neutral answers and rate limits", functio
     for (const key of ENV_KEYS) delete process.env[key];
     installInMemoryRateLimitEvents();
     installMailStackStore();
+    // An empty blacklist: the signup asks it.
+    installBlacklistCollection();
     installUserStore();
     sent = installInMemoryMailTransport();
   });
@@ -224,6 +229,7 @@ describe("public registration: account-neutral answers and rate limits", functio
       sinon.restore();
       installInMemoryRateLimitEvents();
       installMailStackStore({ instance: instance({ noreplyHost: "broken" }) });
+      installBlacklistCollection();
       installUserStore();
       sent = installInMemoryMailTransport();
 
