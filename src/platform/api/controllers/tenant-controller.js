@@ -28,6 +28,7 @@ const {
 } = require("../../../commons/pdf-service/pdf-booking-table-meta");
 const {
   getCancellationRefundTiersError,
+  getRefundPercentageWithoutTimeSpanError,
 } = require("../../../commons/utilities/cancellation-refund-tiers");
 const {
   getLegalDocumentsError,
@@ -35,9 +36,11 @@ const {
 const MediaReferenceGuard = require("../../../commons/services/media/media-reference-guard");
 const {
   BaseError,
+  BadRequestError,
   ForbiddenError,
   NotFoundError,
 } = require("../../../errors/BaseError");
+const membershipSchemaDefinition = require("../../../commons/schemas/membershipSchema");
 const {
   PUBLIC,
   tenantsOf,
@@ -116,6 +119,20 @@ function validateCancellationRefundTiersField(body) {
     return null;
   }
   return getCancellationRefundTiersError(body.cancellationRefundTiers);
+}
+
+function validateRefundPercentageWithoutTimeSpanField(body) {
+  if (
+    !Object.prototype.hasOwnProperty.call(
+      body,
+      "cancellationRefundPercentageWithoutTimeSpan",
+    )
+  ) {
+    return null;
+  }
+  return getRefundPercentageWithoutTimeSpanError(
+    body.cancellationRefundPercentageWithoutTimeSpan,
+  );
 }
 
 const TENANT_DESCRIPTION_MAX_LENGTH = 300;
@@ -347,6 +364,12 @@ class TenantController {
         return response.status(400).send(cancellationRefundTiersError);
       }
 
+      const refundPercentageWithoutTimeSpanError =
+        validateRefundPercentageWithoutTimeSpanField(request.body);
+      if (refundPercentageWithoutTimeSpanError) {
+        return response.status(400).send(refundPercentageWithoutTimeSpanError);
+      }
+
       const legalDocumentsError = validateLegalDocumentsField(request.body);
       if (legalDocumentsError) {
         return response.status(400).send(legalDocumentsError);
@@ -437,6 +460,7 @@ class TenantController {
         "withdrawalTemplate",
         "withdrawalNumberPrefix",
         "cancellationRefundTiers",
+        "cancellationRefundPercentageWithoutTimeSpan",
         "pdfBookingLayout",
         "pdfBookingTableMeta",
         "legalDocuments",
@@ -485,6 +509,12 @@ class TenantController {
       );
       if (cancellationRefundTiersError) {
         return response.status(400).send(cancellationRefundTiersError);
+      }
+
+      const refundPercentageWithoutTimeSpanError =
+        validateRefundPercentageWithoutTimeSpanField(request.body);
+      if (refundPercentageWithoutTimeSpanError) {
+        return response.status(400).send(refundPercentageWithoutTimeSpanError);
       }
 
       const legalDocumentsError = validateLegalDocumentsField(request.body);
@@ -802,9 +832,7 @@ class TenantController {
         return next(new ForbiddenError());
       }
 
-      await InvitationService.deleteUserInvitations(tenantId, userId);
-
-      await MembershipManager.removeMembership(tenantId, userId);
+      await MembershipService.endMembership(tenantId, userId);
 
       const updatedMemberships =
         await MembershipManager.getMembershipsByTenantID(tenantId);
@@ -990,11 +1018,20 @@ class TenantController {
     }
   }
 
-  static async updateUserStatus(request, response) {
+  static async updateUserStatus(request, response, next) {
     try {
       const tenantId = request.params.tenant;
       const { userId, status } = request.body;
       const user = request.user;
+
+      // The update of the manager writes without the schema's validation;
+      // a status the membership does not know (`suspended` is gone)
+      // is refused here.
+      if (!membershipSchemaDefinition.status.enum.includes(status)) {
+        return next(
+          new BadRequestError("membership_status_invalid", { status }),
+        );
+      }
 
       await MembershipManager.updateMembership(tenantId, userId, {
         status,

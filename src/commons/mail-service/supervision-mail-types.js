@@ -15,7 +15,13 @@ const {
 const {
   REVIEW_ACTIONS,
 } = require("../services/supervision/review-transitions");
-const { adminDashboardUrl, adminInstanceTenantsUrl } = require("./mail-links");
+const { REPORT_STATUS } = require("../schemas/reportSchema");
+const {
+  adminDashboardUrl,
+  adminInstanceTenantsUrl,
+  adminInstanceReportsUrl,
+  adminTenantMembersUrl,
+} = require("./mail-links");
 
 /** The level as the tenant owner reads it (glossary "Freigabestufe"). */
 const LEVEL_LABELS = Object.freeze({
@@ -53,6 +59,25 @@ const DECISION_LABELS = Object.freeze({
   [REVIEW_ACTIONS.WITHDRAW]: "Freigaberückzug",
 });
 
+/** The outcome of a report as the tenant owner reads it. */
+const REPORT_OUTCOME_LABELS = Object.freeze({
+  [REPORT_STATUS.SUSPENDED]: "gesperrt",
+  [REPORT_STATUS.BLACKLISTED]: "auf die Blacklist gesetzt",
+  [REPORT_STATUS.REJECTED]: "abgelehnt",
+});
+
+/**
+ * The reported user by name and address, the address alone, or the
+ * reported address of a guest.
+ */
+const targetOf = ({ payload }) => {
+  if (payload.targetAddress) return payload.targetAddress;
+  const name = payload.targetName?.trim();
+  return name
+    ? `${name} (${payload.targetUserId})`
+    : String(payload.targetUserId ?? "");
+};
+
 const levelLabel = (level) => LEVEL_LABELS[level] ?? String(level ?? "–");
 const reviewStatusLabel = (status) =>
   status == null ? "nicht eingereicht" : REVIEW_STATUS_LABELS[status] ?? status;
@@ -67,6 +92,20 @@ const selfCreatedData = (ctx) => ({
   creatorUserId: ctx.payload.creatorUserId,
   level: levelLabel(ctx.payload.supervisionLevel),
   levelHint: LEVEL_HINTS[ctx.payload.supervisionLevel] ?? "",
+});
+
+/**
+ * The memberships the migration ended, for the
+ * tenant's owners or, without one, the instance owners.
+ */
+const membershipsEndedData = (ctx) => ({
+  tenantName: tenantNameOf(ctx),
+  members: (ctx.payload.members ?? []).map((member) => ({
+    userId: member.userId,
+    name: member.name?.trim() || null,
+    instanceSuspended: member.instanceSuspended === true,
+  })),
+  membersUrl: adminTenantMembersUrl(ctx.tenantId),
 });
 
 const SupervisionMailType = Object.freeze({
@@ -156,6 +195,62 @@ const SupervisionMailType = Object.freeze({
       reason: ctx.payload.reason || null,
       adminUrl: adminDashboardUrl(),
     }),
+  },
+
+  // A report about a user (glossary „Meldung“):
+  // the instance owners decide; the reported user learns nothing.
+  SUPERVISION_REPORT_CREATED: {
+    family: "instance",
+    templateName: "supervision-report-created",
+    audience: "instanceOwners",
+    subject: (ctx) => `Neue Meldung: ${ctx.target}`,
+    templateData: (ctx) => ({
+      tenantName: tenantNameOf(ctx),
+      target: targetOf(ctx),
+      targetKind: ctx.payload.targetAddress
+        ? "die Adresse eines Gasts"
+        : "einen User",
+      reason: ctx.payload.reason || "",
+      bookingId: ctx.payload.bookingId || null,
+      reportedBy: ctx.payload.reportedBy || "",
+      adminUrl: adminInstanceReportsUrl(),
+    }),
+  },
+
+  // The settlement of the reports of one tenant about one user: one mail
+  // to its owners, whatever number of reports it settled.
+  SUPERVISION_REPORT_RESOLVED: {
+    family: "instance",
+    templateName: "supervision-report-resolved",
+    audience: "tenantOwners",
+    subject: (ctx) => `Meldung erledigt: ${ctx.target} ${ctx.outcome}`,
+    templateData: (ctx) => ({
+      tenantName: tenantNameOf(ctx),
+      target: targetOf(ctx),
+      outcome:
+        REPORT_OUTCOME_LABELS[ctx.payload.outcome] ?? ctx.payload.outcome,
+      reason: ctx.payload.reason || null,
+      adminUrl: adminDashboardUrl(),
+    }),
+  },
+
+  // There is no suspension at the tenant any more: the migration ended
+  // every suspended membership, once, and tells the tenant's owners.
+  SUPERVISION_MEMBERSHIPS_ENDED: {
+    family: "instance",
+    templateName: "supervision-memberships-ended",
+    audience: "tenantOwners",
+    subject: (ctx) => `Mitgliedschaften beendet: ${ctx.tenantName}`,
+    templateData: (ctx) => ({ ...membershipsEndedData(ctx), noOwner: false }),
+  },
+
+  // The same for a tenant without an owner, to the instance owners.
+  SUPERVISION_MEMBERSHIPS_ENDED_NO_OWNER: {
+    family: "instance",
+    templateName: "supervision-memberships-ended",
+    audience: "instanceOwners",
+    subject: (ctx) => `Mitgliedschaften beendet: ${ctx.tenantName}`,
+    templateData: (ctx) => ({ ...membershipsEndedData(ctx), noOwner: true }),
   },
 });
 

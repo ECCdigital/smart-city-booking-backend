@@ -21,6 +21,7 @@ const WorkflowController = require("./controllers/workflow-controller");
 const InvitationController = require("./controllers/invitation-controller");
 const RoleController = require("./controllers/role-controller");
 const { TenantController } = require("./controllers/tenant-controller");
+const BlacklistController = require("./controllers/blacklist-controller");
 const {
   GroupBookingController,
 } = require("./controllers/group-booking-controller");
@@ -227,6 +228,18 @@ router.put(
   authorize("booking", "update"),
   BookingController.updateBooking,
 );
+// The warning before the manual booking or a changed mail of a booking
+// goes to an address on the blacklist.
+router.post(
+  "/bookings/blacklist-match",
+  authorize("booking", "create"),
+  BlacklistController.match,
+);
+router.post(
+  "/bookings/blacklist-match/mail",
+  authorize("booking", "update"),
+  BlacklistController.match,
+);
 router.get(
   "/bookings/assigned",
   authorize("booking", "readMine"),
@@ -398,6 +411,12 @@ router.post(
   "/group-bookings/:id/reject",
   authorize("groupBooking", "reject"),
   GroupBookingController.rejectGroupBooking,
+);
+// The reinstatement takes the right of the cancellation it undoes.
+router.post(
+  "/group-bookings/:id/reinstate",
+  authorize("groupBooking", "reject"),
+  GroupBookingController.reinstateGroupBooking,
 );
 router.get(
   "/group-bookings/booking/:bookingId",

@@ -76,7 +76,7 @@ class CsvExportController {
           id: "Buchungsnummer",
           ticket: "Ticket",
           amount: "Anzahl",
-          assignedUserId: "Angemeldeter Benutzer",
+          assignedUserId: "Zugewiesener Benutzer",
           bookedVia: "Buchungsweg",
           mail: "E-Mail Adresse",
           company: "Firma",

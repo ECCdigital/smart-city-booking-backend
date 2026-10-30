@@ -38,7 +38,7 @@ const {
 const {
   CancellationRefundService,
   CANCELLATION_ORIGINS,
-  sanitizeBankDetails,
+  refundBankDetails,
 } = require("../payment/cancellation-refund-service");
 const { BOOKING_HOOK_TYPES } = require("../../entities/booking/bookingHook");
 const { isPrivateBooking } = require("../checkout/business-booking");
@@ -452,7 +452,8 @@ function createBookingLifecycle(adapters) {
    * due, the open refund state (glossary "Erstattungsstand"), and drops the
    * hook of a cancellation request; then the access is revoked, the cancellation
    * document issued for a priced booking unless the caller leaves it out,
-   * the workflow told and the customer mailed - the rejection of a request
+   * with the bank details of a paid one (`refundBankDetails`), the workflow
+   * told and the customer mailed - the rejection of a request
    * the administration or the system turned down, the cancellation
    * otherwise (a request the customer withdrew, directly or through a hook,
    * reads as a cancellation).
@@ -530,7 +531,7 @@ function createBookingLifecycle(adapters) {
             bookings: [booking],
             options: {
               alreadyPaid: from === STATUS.CONFIRMED,
-              bankDetails: sanitizeBankDetails(bankDetails) || undefined,
+              bankDetails: refundBankDetails(bankDetails, from) || undefined,
               cancellationReason: reason,
               refundCalculation: refund,
             },
@@ -562,7 +563,8 @@ function createBookingLifecycle(adapters) {
 
   /**
    * The cancellation request: the state stays, a hook `REJECT` with the
-   * reason and the bank details is written, and the customer is asked to
+   * reason and the bank details of a paid booking (`refundBankDetails`)
+   * is written, and the customer is asked to
    * verify, with the refund the customer's cancellation would bring. Only
    * where the booking's cancellation policy allows it: otherwise
    * `ForbiddenError booking_user_cancellation_disabled`, the answer of
@@ -591,7 +593,7 @@ function createBookingLifecycle(adapters) {
     nextState(status, transition, booking);
 
     const payload = { reason };
-    const sanitizedBankDetails = sanitizeBankDetails(bankDetails);
+    const sanitizedBankDetails = refundBankDetails(bankDetails, status);
     if (sanitizedBankDetails) {
       payload.bankDetails = encryptBankDetails(sanitizedBankDetails);
     }
@@ -628,7 +630,8 @@ function createBookingLifecycle(adapters) {
    * The reinstatement: `rejected → requested`, `cancelled → ` the state
    * it was cancelled from. Price, positions and coupon are what the stored
    * booking still carries from before the cancellation; the reason is
-   * cleared and the refund audit removed. The access is granted again at
+   * cleared, the refund audit removed and an open cancellation request
+   * (hook `REJECT`) dropped. The access is granted again at
    * `confirmed`, held at `requested | payment_due` - a hold that fails
    * aborts, the booking is cancelled again. No document, no workflow
    * event, no mail.
@@ -647,6 +650,11 @@ function createBookingLifecycle(adapters) {
     booking.status = nextState(from, transition, booking);
     booking.rejectionReason = "";
     delete booking.cancellationRefund;
+    // An open cancellation request from before the cancellation goes: its
+    // old link must not cancel the reinstated booking again.
+    booking.hooks = booking.hooks.filter(
+      (hook) => hook.type !== BOOKING_HOOK_TYPES.REJECT,
+    );
     const confirmed = () => booking.status === STATUS.CONFIRMED;
 
     // A reinstatement tells the booker nothing; the failed grant is the

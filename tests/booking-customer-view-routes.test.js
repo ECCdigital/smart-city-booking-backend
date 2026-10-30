@@ -294,6 +294,42 @@ describe("booking-bound customer routes: tenant snapshot and event core data", f
       expect(company.withdrawalUrl).to.equal(null);
       expect(old.withdrawalUrl).to.equal(null);
     });
+
+    it("answers each booking without its internal fields (ECCdigital/tickets#255)", async function () {
+      installWorld();
+      const booking = roomBooking({
+        comment: "Bitte Beamer bereitstellen",
+        rejectionReason: "",
+        internalComments: "Kunde zahlt immer spät",
+        bookedVia: "user",
+        _couponUsed: { id: "C-1", discount: 10, maxAmount: 5 },
+        hooks: [{ id: "H-1", type: "REJECT", payload: { reason: "krank" } }],
+      });
+      booking._populated = { bookable: { id: "room" }, workflowStatus: "wf" };
+
+      const [item] = await assignedOf([booking], { populate: "true" });
+
+      expect(item).to.include({
+        id: "B-1",
+        tenantId: TENANT,
+        mail: "erika@example.test",
+        comment: "Bitte Beamer bereitstellen",
+        status: "confirmed",
+        priceEur: 40,
+      });
+      expect(item.hooks).to.have.length(1);
+      expect(item.cancellationPolicy).to.be.an("object");
+      expect(item).to.not.have.any.keys(
+        "internalComments",
+        "assignedUserId",
+        "bookedVia",
+        "_couponUsed",
+        "_populated",
+      );
+      expect(
+        BookingManager.getAssignedBookings.firstCall.args[3],
+      ).to.deep.equal({ populate: false });
+    });
   });
 
   describe("GET /api/access/bookings", function () {

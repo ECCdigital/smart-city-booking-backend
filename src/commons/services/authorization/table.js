@@ -229,6 +229,9 @@ const TABLE = {
     read: { any: "manageUsers.readAny" },
     manage: { any: "manageUsers.updateAny" },
     owner: { any: "tenantOwner" },
+    // Reporting a member or a booker to the instance (glossary „Meldung“);
+    // a tenant owner only with `owner`.
+    report: { any: "manageUsers.updateAny" },
   },
 
   tenant: {
@@ -287,6 +290,20 @@ const TABLE = {
     checkRealm: { any: "instanceOwner" },
   },
 
+  // The blacklist of the instance (glossary „Blacklist“):
+  // tenant owners neither see nor keep it.
+  blacklist: {
+    read: { any: "instanceOwner" },
+    write: { any: "instanceOwner" },
+  },
+
+  // The reports to the instance (glossary „Meldung“):
+  // the instance owner reads and settles them.
+  report: {
+    read: { any: "instanceOwner" },
+    resolve: { any: "instanceOwner" },
+  },
+
   rule: {
     read: { any: "instanceOwner" },
     write: { any: "instanceOwner" },
@@ -301,6 +318,9 @@ const TABLE = {
     update: { any: "instanceOwner" },
     delete: { any: "instanceOwner" },
     changeId: { any: "instanceOwner" },
+    // Suspend, lift and preview a suspension (glossary „Sperre (eines
+    // Users)“).
+    suspend: { any: "instanceOwner" },
   },
 
   membership: {

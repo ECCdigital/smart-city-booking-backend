@@ -455,6 +455,12 @@ function createModel(name, documents, indexes, uniqueFields = []) {
       if (index >= 0) documents.splice(index, 1);
     },
 
+    async deleteMany(filter = {}) {
+      const kept = documents.filter((candidate) => !matches(candidate, filter));
+      documents.length = 0;
+      documents.push(...kept);
+    },
+
     /**
      * Unordered insert: every row that breaks no unique field is stored, the
      * others are reported in one duplicate-key error, as the driver does.

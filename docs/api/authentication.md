@@ -49,9 +49,11 @@ Sign out the currently authenticated user (revokes the active token; optional re
 
 ### POST /auth/signup
 
-Register a new user. The answer is account-neutral: `201` whether or not the address already has an account. An existing account is never duplicated; if it is still unverified, it receives its verification mail again (within the verification mail limits below), a verified one receives nothing. `400` when `id` or `password` is missing, `429` with `Retry-After` (seconds) past the per-IP limit — no account is created then.
+Register a new user. The answer is account-neutral: `201` whether or not the address already has an account. An existing account is never duplicated; if it is still unverified, it receives its verification mail again (within the verification mail limits below), a verified local one receives a mail that an account already exists with this address, with a button to the client's „Passwort vergessen“ page (`forgotPasswordUrl`, ECCdigital/tickets#600), within the same limits. `400` when `id` or `password` is missing, `429` with `Retry-After` (seconds) past the per-IP limit — no account is created then.
 
 The answer does not wait: the lookup, the account and the verification mail follow after it, so neither its time nor a failing mail server tells whether the address has an account. A failing mail is only logged; the mail can be requested again with `POST /auth/resend-verification`. The address is stored trimmed and in lower case.
+
+The one answer that tells: an address on the blacklist of the instance - the exact address or its domain - is refused before anything happens with `409` and `{ "error": "checkout.address_blacklisted", "params": { "mailAddress": "<instance mail address, empty without one>" } }`, the checkout's refusal (ECCdigital/tickets#628). No account is created and no mail is sent. `POST /auth/sso/signup` (the token's e-mail) and `POST /auth/card/signup` (`email`, after the card is verified, also for a link to a known account) answer the same.
 
 **Response `201`** (the same body as `POST /auth/resend-verification`):
 
@@ -73,6 +75,7 @@ The answer does not wait: the lookup, the account and the verification mail foll
   "company": "Example Company",
   "vatId": "DE123456789",
   "verifyUrl": "https://store.example.com/auth/verify",
+  "forgotPasswordUrl": "https://store.example.com/password/forgot",
   "nextUrl": "/tenants/new"
 }
 ```
@@ -101,7 +104,7 @@ Sends the verification mail of an unverified account again. Answers `202` with t
 }
 ```
 
-`verifyUrl` (optional) is the client's own verify page; the verification mail links it with `?token=<hookId>&id=<email>`. It is kept only as an absolute `http(s)` address on the origin of `FRONTEND_URL`, `STORE_FRONT_URL` or `BACKEND_URL`, path and language prefix as given (ECCdigital/tickets#320). Without it, or for any other address, the mail links `GET /auth/verify/:hookId`; the answer is the same. The same rule holds for `resetUrl` of `POST /auth/forgot-password`, the client's reset page; without an own one the reset mail links `<FRONTEND_URL>/password/reset`. It holds for `linkUrl` of `POST /auth/card/signup` too, the client's page to link a card to an existing account (ECCdigital/tickets#480); without an own one the card link mail links `GET /auth/card/link`.
+`verifyUrl` (optional) is the client's own verify page; the verification mail links it with `?token=<hookId>&id=<email>`. It is kept only as an absolute `http(s)` address on the origin of `FRONTEND_URL`, `STORE_FRONT_URL` or `BACKEND_URL`, path and language prefix as given (ECCdigital/tickets#320). Without it, or for any other address, the mail links `GET /auth/verify/:hookId`; the answer is the same. The same rule holds for `resetUrl` of `POST /auth/forgot-password`, the client's reset page; without an own one the reset mail links `<FRONTEND_URL>/password/reset`. It holds for `linkUrl` of `POST /auth/card/signup` too, the client's page to link a card to an existing account (ECCdigital/tickets#480); without an own one the card link mail links `GET /auth/card/link`. And it holds for `forgotPasswordUrl` of `POST /auth/signup`, the client's „Passwort vergessen“ page; without an own one the hint of an existing account links `<FRONTEND_URL>/password/reset`.
 
 `nextUrl` (optional) is the return target (Rückkehrziel): where the client sends the user once the account is verified and signed in, e.g. the tenant self-creation the user came from. It is kept on the verification hook and travels with the flow: the mail link gains `&next=<encoded nextUrl>`, `POST /auth/verify-email` answers it, and `GET /auth/verify/:hookId` redirects to `<FRONTEND_URL>/email/verify?next=<encoded nextUrl>`. Only a relative path (`/…`, not `//…`) or an absolute `http(s)` address on the origin of `verifyUrl` or of `FRONTEND_URL` is kept; anything else is dropped silently. The client carries the target from its verify page to the login and on.
 
@@ -128,7 +131,7 @@ Verify a user with the token and address from the verification mail's link.
 }
 ```
 
-`nextUrl` is the signup's return target, `null` when the signup named none. Failures answer their status with a plain text message (`400` bad token or id mismatch, `404` unknown, `410` already verified).
+`nextUrl` is the signup's return target, `null` when the signup named none. Failures answer their status with a plain text message: `400` „Invalid verification token“ for a wrong token, whatever account the id names (ECCdigital/tickets#301), `410` for a link already used or revoked.
 
 ### GET /auth/verify/:hookId
 
@@ -249,6 +252,11 @@ Sliding windows counted in MongoDB (`rateLimitEvents`, rows expire after 7 days)
 | `RATE_LIMIT_VERIFICATION_MAIL_PER_ACCOUNT_SHORT` | 1/min   | verification mails per account           |
 | `RATE_LIMIT_VERIFICATION_MAIL_PER_ACCOUNT_LONG`  | 5/h     | verification mails per account           |
 | `RATE_LIMIT_VERIFICATION_MAIL_PER_IP`            | 30/h    | `POST /auth/resend-verification`, per IP |
+| `RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_SHORT`   | 1/min   | reset mails per account                  |
+| `RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_LONG`    | 5/h     | reset mails per account                  |
+| `RATE_LIMIT_FORGOT_PASSWORD_PER_IP`              | 30/h    | `POST /auth/forgot-password`, per IP     |
 | `RATE_LIMIT_TENANT_SELF_CREATION_PER_USER`       | 3/24h   | tenant self-creation per user            |
+
+The per-IP limits and `RATE_LIMIT_TENANT_SELF_CREATION_PER_USER` answer `429`; the per-account limits of the verification and reset mails end silently with the usual answer, so they do not tell whether the address has an account.
 
 The client IP is `req.ip`. The server takes `X-Forwarded-For` only from the proxies `TRUSTED_PROXIES` names (addresses or CIDR networks); without the variable it counts the direct address of the connection. See [docs/migrations/v4.3.1-upgrade.md](../migrations/v4.3.1-upgrade.md).

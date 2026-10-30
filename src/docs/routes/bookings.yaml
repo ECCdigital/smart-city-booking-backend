@@ -147,7 +147,9 @@
     summary: The bookings of the signed-in customer, across all tenants
     description: |
       Every booking assigned to the signed-in user, of every tenant. Each
-      booking carries, beside its stored fields, the customer view of ticket
+      booking carries its customer fields (`CustomerBooking`, without
+      internal fields such as `internalComments`, ECCdigital/tickets#255)
+      and the customer view of ticket
       18 (tenant supervision spec §5.2): `tenant`, a snapshot of the tenant -
       name and support/emergency contact - whatever its supervision level,
       because the booking is the customer's contract with it; and for a
@@ -158,17 +160,8 @@
       `mailto:` to the tenant, for a live private booking (`isBusiness`
       false, or without it no company) within 14 days of the booking - and
       `null` otherwise.
-      `?populate=true` adds `_populated` with the lead bookable and the
-      workflow status, as before.
     security:
       - bearerAuth: []
-    parameters:
-      - name: populate
-        in: query
-        required: false
-        schema:
-          type: string
-          enum: ["true"]
     responses:
       "200":
         description: The bookings, each with `tenant` and, for a ticket booking, `event`
@@ -194,12 +187,6 @@
       - bearerAuth: []
     parameters:
       - $ref: "#/components/parameters/BookingTenantParam"
-      - name: populate
-        in: query
-        required: false
-        schema:
-          type: string
-          enum: ["true"]
     responses:
       "200":
         description: The bookings, each with `tenant` and, for a ticket booking, `event`
@@ -336,12 +323,25 @@
       to the state it was cancelled from, with price and positions of before;
       the refund audit is removed and the reason cleared. The access is
       granted again at `confirmed`, held at `requested` or `payment_due`. No
-      document, no mail.
+      document, no mail. A booking whose period other bookings took in the
+      meantime - its bookable, a parent or a dependent without room left -
+      is answered 409 `booking_reinstatement_conflict` and stays as it was,
+      unless the body says `ignoreConflicts: true`.
     security:
       - bearerAuth: []
     parameters:
       - $ref: "#/components/parameters/BookingTenantParam"
       - $ref: "#/components/parameters/BookingIdParam"
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              ignoreConflicts:
+                type: boolean
+                description: Reinstate even where the period is taken
     responses:
       "200":
         description: "Booking reinstated (`success: true`, `data: null`, `errors: []`)"
@@ -355,7 +355,13 @@
         description: >-
           `invalid_transition` - the booking is not rejected or cancelled, or
           a cancelled one does not know what it was cancelled from (params
-          carry `bookingId`, `status`, `transition`)
+          carry `bookingId`, `status`, `transition`); or
+          `booking_reinstatement_conflict` - the period is taken (params
+          carry `bookingId` and `conflicts`, one entry per position in
+          conflict: `bookableId`, `title` and `bookings`, each with `id`,
+          `timeBegin`, `timeEnd` and, for a booking that holds the position
+          through a parent or a dependent without room, `parent` or `child`
+          with its `bookableId` and `title`)
       "500":
         description: >-
           The reinstatement aborted and the booking stays as it was; the body
@@ -552,7 +558,12 @@ components:
             on the status lookups by booking number.
     CustomerBooking:
       type: object
-      description: A booking as stored, with the customer view of ticket 18
+      description: >-
+        A booking in the fields its booker reads (ECCdigital/tickets#255),
+        with the customer view of ticket 18. Internal fields -
+        `assignedUserId`, `bookedVia`, `internalComments`, `_couponUsed`,
+        `_populated` -
+        are left out; `cancellationRefund` comes without the refund state
       additionalProperties: true
       properties:
         id:

@@ -1,0 +1,82 @@
+From: Buchungsplattform <noreply@plattform.example.test>
+To: erika@example.test
+Bcc: 
+Subject: Mit Ihrer E-Mail-Adresse besteht bereits ein Konto
+Attachments: 
+
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <style>
+      .content {
+        text-align: left;
+        background-color: white;
+        border: 1px solid grey;
+        padding: 10px 40px;
+        border-radius: 2px;
+        margin: auto;
+        max-width: 750px;
+      }
+
+      body {
+        align-content: center;
+      }
+
+      .layer {
+        text-align: center;
+      }
+    </style>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+
+  <body>
+    <div class="layer">
+      <div class="content">
+        <p>
+  <div style="font-family: inherit;">
+    <p>Hallo Erika,</p>
+
+<p>
+  jemand hat versucht, sich mit dieser E-Mail-Adresse zu registrieren. Mit
+  dieser Adresse besteht bereits ein Konto. Sie können sich damit anmelden.
+</p>
+
+<p>
+  Falls Sie Ihr Kennwort nicht mehr wissen, können Sie es über den folgenden
+  Button zurücksetzen.
+</p>
+
+<p style="text-align: center; margin: 30px 0">
+  <a
+    href="https://buchung.example.test/password/forgot"
+    style="background-color: #0055a5; color: #ffffff; padding: 12px 24px;
+           border-radius: 4px; text-decoration: none; font-weight: bold;
+           display: inline-block"
+  >
+    Passwort vergessen
+  </a>
+</p>
+
+<p style="font-size: 0.9em; color: #555">
+  Falls der Button nicht funktioniert, kopieren Sie diesen Link in Ihren
+  Browser:<br />
+  <a href="https://buchung.example.test/password/forgot" style="word-break: break-all">https://buchung.example.test/password/forgot</a>
+</p>
+
+<hr />
+
+<p style="font-size: 0.9em; color: #c62828">
+  <strong>Sie haben sich nicht registriert?</strong> Dann können Sie diese
+  E-Mail einfach ignorieren. An Ihrem Konto ändert sich nichts.
+</p>
+
+    
+  </div>
+</p>
+      </div>
+    </div>
+  </body>
+  <footer class="footer"></footer>
+</html>

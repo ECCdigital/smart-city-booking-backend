@@ -2,6 +2,7 @@ const { customFieldDefinitionSchema } = require("./customFieldDefinition");
 const { Schema } = require("mongoose");
 const {
   getCancellationRefundTiersError,
+  getRefundPercentageWithoutTimeSpanError,
 } = require("../utilities/cancellation-refund-tiers");
 const {
   LEGAL_DOCUMENT_TYPES,
@@ -87,6 +88,12 @@ const tenantSchemaDefinition = {
     type: [cancellationRefundTierSchema],
     default: [],
     validate: (tiers) => !getCancellationRefundTiersError(tiers),
+  },
+  cancellationRefundPercentageWithoutTimeSpan: {
+    type: Number,
+    default: 100,
+    validate: (percentage) =>
+      !getRefundPercentageWithoutTimeSpanError(percentage),
   },
   pdfBookingLayout: {
     type: String,

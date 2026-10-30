@@ -1,6 +1,6 @@
 /**
  * The CSV of an event's attendee list names each booking's Buchungsweg in
- * words, next to the column "Angemeldeter Benutzer" (`assignedUserId`).
+ * words, next to the column "Zugewiesener Benutzer" (`assignedUserId`).
  */
 
 const { expect } = require("chai");
@@ -66,18 +66,19 @@ describe("the Buchungsweg in the attendee list CSV", function () {
     };
   };
 
-  it("has the column Buchungsweg right after Angemeldeter Benutzer", async function () {
+  it("has the column Buchungsweg right after Zugewiesener Benutzer", async function () {
     BookingManager.getEventBookings.resolves([
       booking("b-user", { bookedVia: "user" }),
     ]);
 
     const { columns } = await exportRows();
 
-    expect(columns.indexOf("Angemeldeter Benutzer")).to.equal(
+    expect(columns).not.to.include("Angemeldeter Benutzer");
+    expect(columns.indexOf("Zugewiesener Benutzer")).to.equal(
       columns.indexOf("Anzahl") + 1,
     );
     expect(columns.indexOf("Buchungsweg")).to.equal(
-      columns.indexOf("Angemeldeter Benutzer") + 1,
+      columns.indexOf("Zugewiesener Benutzer") + 1,
     );
   });
 
@@ -96,7 +97,7 @@ describe("the Buchungsweg in the attendee list CSV", function () {
       rows.map((r) => [r.Buchungsnummer, r.Buchungsweg]),
     );
     expect(bookedVia).to.deep.equal({
-      "b-user": "Angemeldet",
+      "b-user": "Benutzer",
       "b-guest": "Gast",
       "b-admin": "Admin",
       "b-old": "Unbekannt",

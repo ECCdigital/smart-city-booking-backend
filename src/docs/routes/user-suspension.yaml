@@ -1,0 +1,245 @@
+# swagger/routes/user-suspension.yaml
+
+/api/users/{id}/suspension:
+  post:
+    tags:
+      - Users
+    summary: Suspend a user for the whole instance
+    description: |
+      The suspension of a user (glossary "Sperre (eines Users)"),
+      an action of its own: the general update
+      (`PUT /api/users`) no longer takes `isSuspended`. It takes effect at
+      once: every sign-in (password, SSO, card, refresh) is refused and a
+      running session ends with its next request (`403`).
+
+      The reason is required and stored trimmed with the time, the
+      instance owner who suspended and the origin `manual`. Suspending a
+      user already suspended replaces the record; reasons do not pile up.
+      An instance owner cannot be suspended. The instance owner's alone
+      (`user.suspend`).
+
+      With `blacklist: true` the user's address goes on the blacklist too:
+      an exact entry of origin `suspension` with
+      the reason of the suspension, unless an entry already hits the
+      address. The suspension itself stays `manual`.
+
+      It settles every open report about the user as `suspended`, the
+      record points to them (`reportIds`) and the owners of each reporting
+      tenant get a mail. Lifting it later sends
+      none.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/SuspensionUserId"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [reason]
+            properties:
+              reason:
+                type: string
+                description: Why the user is suspended
+              blacklist:
+                type: boolean
+                default: false
+                description: Put the user's address on the blacklist too
+    responses:
+      "200":
+        description: The user as `GET /api/users/{id}` shows them, suspended
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SuspendedUser"
+      "400":
+        description: |
+          `suspension_reason_required`: no reason or a blank one;
+          `blacklist_value_invalid`: `blacklist` for a user id that is no address
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+      "404":
+        description: "`user_not_found`"
+      "409":
+        description: "`instance_owner_not_suspendable`: the user owns the instance"
+  delete:
+    tags:
+      - Users
+    summary: Lift the suspension of a user
+    description: |
+      Lifts the suspension and its record, also a suspension stored before
+      the record existed. The user signs in again at once. The instance
+      owner's alone (`user.suspend`).
+
+      With `removeBlacklistEntry=true` an exact blacklist entry of the
+      user's address goes too. A domain entry
+      stays: the checkout keeps refusing the address, but the entry does
+      not suspend the account anew.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/SuspensionUserId"
+      - name: removeBlacklistEntry
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+    responses:
+      "200":
+        description: The user, no longer suspended (`suspension` is `null`)
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SuspendedUser"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+      "404":
+        description: "`user_not_found`"
+
+/api/users/{id}/suspension-preview:
+  get:
+    tags:
+      - Users
+    summary: The consequences of suspending a user
+    description: |
+      What the suspension dialog names before the instance owner suspends:
+      the bookings assigned to the user across every tenant and their
+      active memberships. The bookings and memberships stay. It names the
+      blacklist entry that hits the user's address, for the checkboxes of
+      both dialogs, and per reporting tenant the
+      open reports the suspension settles with the tenant owners who then
+      get a mail. The instance owner's alone
+      (`user.suspend`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/SuspensionUserId"
+    responses:
+      "200":
+        description: The counts
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                bookings:
+                  type: integer
+                memberships:
+                  type: integer
+                blacklistEntry:
+                  type: object
+                  nullable: true
+                  description: The entry that hits the address, `null` without one
+                  properties:
+                    id:
+                      type: string
+                    value:
+                      type: string
+                    kind:
+                      type: string
+                      enum: [address, domain]
+                openReports:
+                  type: array
+                  description: |
+                    The open reports about the user per reporting tenant;
+                    suspending settles them as `suspended`.
+                  items:
+                    type: object
+                    properties:
+                      tenantId:
+                        type: string
+                      tenantName:
+                        type: string
+                      reports:
+                        type: integer
+                      owners:
+                        type: array
+                        description: The tenant owners who get the outcome
+                        items:
+                          type: string
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+      "404":
+        description: "`user_not_found`"
+
+components:
+  parameters:
+    SuspensionUserId:
+      name: id
+      in: path
+      required: true
+      description: The user id (the address)
+      schema:
+        type: string
+  schemas:
+    SuspendedUser:
+      type: object
+      description: |
+        The public user. `GET /api/users` and `GET /api/users/{id}` answer
+        `suspension` too, and `GET /api/users?suspended=true` narrows the
+        list to the suspended users.
+      properties:
+        id:
+          type: string
+        isSuspended:
+          type: boolean
+        blacklistMatch:
+          type: object
+          nullable: true
+          description: |
+            The blacklist entry that hits the user's address now, `null`
+            without one. Also in `GET /api/users`
+            and `GET /api/users/{id}`.
+          properties:
+            id:
+              type: string
+            value:
+              type: string
+            kind:
+              type: string
+              enum: [address, domain]
+        suspension:
+          nullable: true
+          description: |
+            The record of the suspension, `null` for a user not suspended.
+            A suspension stored before the record reads as one by hand with
+            `reason`, `suspendedAt` and `suspendedBy` `null`.
+          type: object
+          properties:
+            reason:
+              type: string
+              nullable: true
+            suspendedAt:
+              type: number
+              nullable: true
+              description: Milliseconds since the epoch
+            suspendedBy:
+              type: string
+              nullable: true
+            origin:
+              type: string
+              enum: [manual, blacklist]
+            reportIds:
+              type: array
+              description: |
+                With origin `manual`: the reports the suspension settled.
+              items:
+                type: string
+            blacklistEntry:
+              type: object
+              description: |
+                With origin `blacklist` only: the entry that suspended the
+                user as it was then.
+              properties:
+                id:
+                  type: string
+                value:
+                  type: string
