@@ -49,7 +49,7 @@ Sign out the currently authenticated user (revokes the active token; optional re
 
 ### POST /auth/signup
 
-Register a new user. The answer is account-neutral: `201` whether or not the address already has an account. An existing account is never duplicated; if it is still unverified, it receives its verification mail again (within the verification mail limits below), a verified one receives nothing. `400` when `id` or `password` is missing, `429` with `Retry-After` (seconds) past the per-IP limit — no account is created then.
+Register a new user. The answer is account-neutral: `201` whether or not the address already has an account. An existing account is never duplicated; if it is still unverified, it receives its verification mail again (within the verification mail limits below), a verified local one receives a mail that an account already exists with this address, with a button to the client's „Passwort vergessen“ page (`forgotPasswordUrl`, ECCdigital/tickets#600), within the same limits. `400` when `id` or `password` is missing, `429` with `Retry-After` (seconds) past the per-IP limit — no account is created then.
 
 The answer does not wait: the lookup, the account and the verification mail follow after it, so neither its time nor a failing mail server tells whether the address has an account. A failing mail is only logged; the mail can be requested again with `POST /auth/resend-verification`. The address is stored trimmed and in lower case.
 
@@ -75,6 +75,7 @@ The one answer that tells: an address on the blacklist of the instance - the exa
   "company": "Example Company",
   "vatId": "DE123456789",
   "verifyUrl": "https://store.example.com/auth/verify",
+  "forgotPasswordUrl": "https://store.example.com/password/forgot",
   "nextUrl": "/tenants/new"
 }
 ```
@@ -103,7 +104,7 @@ Sends the verification mail of an unverified account again. Answers `202` with t
 }
 ```
 
-`verifyUrl` (optional) is the client's own verify page; the verification mail links it with `?token=<hookId>&id=<email>`. It is kept only as an absolute `http(s)` address on the origin of `FRONTEND_URL`, `STORE_FRONT_URL` or `BACKEND_URL`, path and language prefix as given (ECCdigital/tickets#320). Without it, or for any other address, the mail links `GET /auth/verify/:hookId`; the answer is the same. The same rule holds for `resetUrl` of `POST /auth/forgot-password`, the client's reset page; without an own one the reset mail links `<FRONTEND_URL>/password/reset`. It holds for `linkUrl` of `POST /auth/card/signup` too, the client's page to link a card to an existing account (ECCdigital/tickets#480); without an own one the card link mail links `GET /auth/card/link`.
+`verifyUrl` (optional) is the client's own verify page; the verification mail links it with `?token=<hookId>&id=<email>`. It is kept only as an absolute `http(s)` address on the origin of `FRONTEND_URL`, `STORE_FRONT_URL` or `BACKEND_URL`, path and language prefix as given (ECCdigital/tickets#320). Without it, or for any other address, the mail links `GET /auth/verify/:hookId`; the answer is the same. The same rule holds for `resetUrl` of `POST /auth/forgot-password`, the client's reset page; without an own one the reset mail links `<FRONTEND_URL>/password/reset`. It holds for `linkUrl` of `POST /auth/card/signup` too, the client's page to link a card to an existing account (ECCdigital/tickets#480); without an own one the card link mail links `GET /auth/card/link`. And it holds for `forgotPasswordUrl` of `POST /auth/signup`, the client's „Passwort vergessen“ page; without an own one the hint of an existing account links `<FRONTEND_URL>/password/reset`.
 
 `nextUrl` (optional) is the return target (Rückkehrziel): where the client sends the user once the account is verified and signed in, e.g. the tenant self-creation the user came from. It is kept on the verification hook and travels with the flow: the mail link gains `&next=<encoded nextUrl>`, `POST /auth/verify-email` answers it, and `GET /auth/verify/:hookId` redirects to `<FRONTEND_URL>/email/verify?next=<encoded nextUrl>`. Only a relative path (`/…`, not `//…`) or an absolute `http(s)` address on the origin of `verifyUrl` or of `FRONTEND_URL` is kept; anything else is dropped silently. The client carries the target from its verify page to the login and on.
 

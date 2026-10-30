@@ -161,6 +161,13 @@ describe("public registration: account-neutral answers and rate limits", functio
         mail.subject === "Bestätigen Sie Ihre E-Mail-Adresse",
     );
 
+  const accountExistsMailsTo = (address) =>
+    sent.filter(
+      (mail) =>
+        mail.to === address &&
+        mail.subject === "Mit Ihrer E-Mail-Adresse besteht bereits ein Konto",
+    );
+
   describe("POST /auth/signup", function () {
     it("creates the account of an unknown address and mails the verification", async function () {
       const res = await signup(UNKNOWN);
@@ -184,12 +191,31 @@ describe("public registration: account-neutral answers and rate limits", functio
       assert.strictEqual(users.size, 3);
     });
 
-    it("mails an unverified known account its verification again, a verified one nothing", async function () {
+    it("mails an unverified known account its verification again, a verified one the hint of its account", async function () {
       await signup(KNOWN_UNVERIFIED);
       await signup(KNOWN_VERIFIED);
 
       assert.strictEqual(verificationMailsTo(KNOWN_UNVERIFIED).length, 1);
+      assert.strictEqual(accountExistsMailsTo(KNOWN_UNVERIFIED).length, 0);
       assert.strictEqual(verificationMailsTo(KNOWN_VERIFIED).length, 0);
+      assert.strictEqual(accountExistsMailsTo(KNOWN_VERIFIED).length, 1);
+      assert.strictEqual(accountExistsMailsTo(UNKNOWN).length, 0);
+    });
+
+    it("holds the hint of a verified account to the address' verification limits", async function () {
+      await signup(KNOWN_VERIFIED);
+      await signup(KNOWN_VERIFIED);
+
+      assert.strictEqual(accountExistsMailsTo(KNOWN_VERIFIED).length, 1);
+    });
+
+    it("sends no hint to a suspended account", async function () {
+      users.get(KNOWN_VERIFIED).isSuspended = true;
+
+      const res = await signup(KNOWN_VERIFIED);
+
+      assert.strictEqual(res.status, 201);
+      assert.strictEqual(sent.length, 0);
     });
 
     it("answers 429 with Retry-After past the per-IP limit and creates no account", async function () {

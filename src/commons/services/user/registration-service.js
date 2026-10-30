@@ -23,19 +23,29 @@ class RegistrationService {
   /**
    * Signs a user up, or - when the address already has an account - does
    * what is safe instead: an unverified local account gets its verification
-   * mail again (within the verification limits), a verified one nothing.
-   * Either way nothing tells the caller which branch ran: everything after
-   * the validation runs after the answer.
+   * mail again, a verified one a hint that the account exists with a link to
+   * „Passwort vergessen“, both within the verification limits. Either way
+   * nothing tells the caller which branch ran: everything after the
+   * validation runs after the answer.
    *
    * @param {Object} params
    * @param {User} params.user The account to create
    * @param {string} [params.nextUrl]
    * @param {string} [params.verifyUrl]
+   * @param {string} [params.forgotPasswordUrl] The client's „Passwort
+   *   vergessen“ page the hint of an existing account links
    * @param {{ token: string, tenantId: string }|null} [params.invitation]
    * @param {string} params.ip The client IP the signup limit counts against
    * @throws {TooManyRequestsError} Past the per-IP signup limit
    */
-  static async signup({ user, nextUrl, verifyUrl, invitation = null, ip }) {
+  static async signup({
+    user,
+    nextUrl,
+    verifyUrl,
+    forgotPasswordUrl,
+    invitation = null,
+    ip,
+  }) {
     await RegistrationService._gate(limits.signupPerIp(ip));
     // Validated before the lookup, so a malformed body fails the same way
     // whether or not the address has an account.
@@ -50,6 +60,7 @@ class RegistrationService {
           user,
           nextUrl,
           verifyUrl,
+          forgotPasswordUrl,
           invitation,
           ip,
         }),
@@ -57,9 +68,23 @@ class RegistrationService {
     );
   }
 
-  static async _register({ user, nextUrl, verifyUrl, invitation, ip }) {
+  static async _register({
+    user,
+    nextUrl,
+    verifyUrl,
+    forgotPasswordUrl,
+    invitation,
+    ip,
+  }) {
     const existing = await UserManager.getUser(user.id, true);
     if (existing) {
+      if (RegistrationService._canResetPassword(existing)) {
+        await RegistrationService._sendAccountExistsMail(existing, {
+          forgotPasswordUrl,
+          ip,
+        });
+        return;
+      }
       await RegistrationService._sendVerificationMail(existing, {
         nextUrl,
         verifyUrl,
@@ -137,6 +162,46 @@ class RegistrationService {
       ...limits.verificationMailPerAccount(id),
       ...(ip ? [limits.verificationMailPerIp(ip)] : []),
     ];
+  }
+
+  /**
+   * Whether the account is one „Passwort vergessen“ helps: verified, local
+   * and not suspended - the accounts `UserService.requestForgotPassword`
+   * mails a reset link.
+   */
+  static _canResetPassword(user) {
+    return (
+      user.isVerified &&
+      !user.isSuspended &&
+      (!user.authType || user.authType === "local")
+    );
+  }
+
+  /**
+   * Mails a verified account that someone signed up with its address again,
+   * linking the client's „Passwort vergessen“ page. Counts toward the
+   * address' verification limits, so repeated signups cannot flood its
+   * inbox; past them it does nothing. A failed send gives the reservation
+   * back and rethrows.
+   */
+  static async _sendAccountExistsMail(user, { forgotPasswordUrl, ip }) {
+    const gate = await RateLimiter.consumeAll(
+      RegistrationService._verificationLimits(user.id, ip),
+    );
+    if (!gate.allowed) {
+      return;
+    }
+
+    try {
+      await notify("ACCOUNT_EXISTS", {
+        to: user.id,
+        firstName: user.firstName,
+        forgotPasswordUrl: normalizeClientPage(forgotPasswordUrl),
+      });
+    } catch (error) {
+      await gate.release();
+      throw error;
+    }
   }
 
   /**

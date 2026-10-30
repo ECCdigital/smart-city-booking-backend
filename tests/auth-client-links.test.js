@@ -59,6 +59,8 @@ const NEW = "neu@example.test";
 const RESET_SUBJECT = "Kennwort zurücksetzen";
 const VERIFICATION_SUBJECT = "Bestätigen Sie Ihre E-Mail-Adresse";
 const LINK_CARD_SUBJECT = "Karte mit Ihrem Account verknüpfen";
+const ACCOUNT_EXISTS_SUBJECT =
+  "Mit Ihrer E-Mail-Adresse besteht bereits ein Konto";
 
 const CARD_APP = "stadtkarte";
 const CARD = { publicId: "karte-1", secret: "geheim-1" };
@@ -214,6 +216,45 @@ describe("auth: mail links lead to the instance's own pages (ECCdigital/tickets#
       }
       assert.strictEqual(own.status, 200);
     });
+  });
+
+  describe("POST /auth/signup with the address of a verified account (ECCdigital/tickets#600)", function () {
+    const signup = (forgotPasswordUrl) =>
+      request(app).post("/auth/signup").send({
+        id: OWNER,
+        password: "neu-1234",
+        firstName: "Neu",
+        lastName: "Nutzer",
+        forgotPasswordUrl,
+      });
+
+    it("links the own forgot password page, path and language prefix as named", async function () {
+      const page = `${STORE_FRONT_URL}/en/password/forgot`;
+      const res = await signup(page);
+      await whenIdle();
+
+      assert.strictEqual(res.status, 201);
+      const mail = lastMail(OWNER, ACCOUNT_EXISTS_SUBJECT);
+      assert.ok(mail.html.includes(`href="${inMail(page)}"`));
+    });
+
+    for (const [name, page] of [
+      ["a foreign host", ATTACKER],
+      ["no page", undefined],
+    ]) {
+      it(`links the Admin UI's page for ${name}`, async function () {
+        await signup(page);
+        await whenIdle();
+
+        const mail = lastMail(OWNER, ACCOUNT_EXISTS_SUBJECT);
+        assert.ok(
+          mail.html.includes(
+            `href="${inMail(`${FRONTEND_URL}/password/reset`)}"`,
+          ),
+        );
+        assert.ok(!mail.html.includes("angreifer"));
+      });
+    }
   });
 
   describe("POST /auth/signup and /auth/resend-verification", function () {

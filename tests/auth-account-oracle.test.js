@@ -57,6 +57,8 @@ const WRONG = "falsch-1234";
 
 const VERIFICATION_SUBJECT = "Bestätigen Sie Ihre E-Mail-Adresse";
 const RESET_SUBJECT = "Kennwort zurücksetzen";
+const ACCOUNT_EXISTS_SUBJECT =
+  "Mit Ihrer E-Mail-Adresse besteht bereits ein Konto";
 
 function createApp() {
   const app = express();
@@ -346,6 +348,9 @@ describe("auth: no account oracle (ECCdigital/tickets#259)", function () {
       assert.strictEqual(mailsTo(UNKNOWN, VERIFICATION_SUBJECT).length, 1);
       assert.strictEqual(mailsTo(UNVERIFIED, VERIFICATION_SUBJECT).length, 1);
       assert.strictEqual(mailsTo(OWNER, VERIFICATION_SUBJECT).length, 0);
+      assert.strictEqual(mailsTo(OWNER, ACCOUNT_EXISTS_SUBJECT).length, 1);
+      assert.strictEqual(mailsTo(UNKNOWN, ACCOUNT_EXISTS_SUBJECT).length, 0);
+      assert.strictEqual(mailsTo(UNVERIFIED, ACCOUNT_EXISTS_SUBJECT).length, 0);
     });
 
     it("resend answers at once and alike for an unknown, an unverified and a verified address", async function () {
