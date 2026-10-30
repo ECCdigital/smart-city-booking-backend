@@ -510,6 +510,71 @@ describe("supervision notification sender", function () {
     });
   });
 
+  // The one-time notice of the migration that ends the tenant's suspended
+  // memberships.
+  describe("memberships ended", function () {
+    const membershipsEnded = (payload = {}) => ({
+      type: "memberships.ended",
+      tenantId: TENANT,
+      payload: {
+        tenantName: TENANT_NAME,
+        members: [
+          {
+            userId: "erika@example.test",
+            name: "Erika Muster",
+            instanceSuspended: false,
+          },
+          { userId: "max@example.test", name: "", instanceSuspended: true },
+        ],
+        toInstanceOwners: false,
+        ...payload,
+      },
+      dedupeKey: `migration:memberships-ended:${TENANT}`,
+    });
+
+    it("tells every tenant owner who is no member any more, the way back and the way to report", async function () {
+      given();
+
+      await occasion(membershipsEnded());
+
+      expect(sent.map((mail) => mail.to)).to.deep.equal([
+        TENANT_OWNER_A,
+        TENANT_OWNER_B,
+      ]);
+      const [mail] = sent;
+      expect(mail.subject).to.include(TENANT_NAME);
+      expect(mail.html).to.include("Erika Muster");
+      expect(mail.html).to.include("erika@example.test");
+      expect(mail.html).to.include("max@example.test");
+      expect(mail.html.match(/bereits instanzweit gesperrt/g)).to.have.length(
+        1,
+      );
+      expect(mail.html).to.include("wieder eintreten");
+      expect(mail.html).to.include("Melden");
+      // Handlebars escapes the `=` of the query, as in every members link.
+      expect(mail.html).to.include(
+        `${FRONTEND_URL}/tenant/members?tenant&#x3D;${TENANT}`,
+      );
+      expect(mail.html).not.to.include("keinen Tenant-Owner");
+      expect(rows[0].status).to.equal("sent");
+    });
+
+    it("tells the instance owners instead where the tenant has no owner, naming the tenant", async function () {
+      given({ tenantOwners: [] });
+
+      await occasion(membershipsEnded({ toInstanceOwners: true }));
+
+      expect(sent.map((mail) => mail.to)).to.deep.equal([
+        INSTANCE_OWNER_A,
+        INSTANCE_OWNER_B,
+      ]);
+      expect(sent[0].html).to.include(TENANT_NAME);
+      expect(sent[0].html).to.include("keinen Tenant-Owner");
+      expect(sent[0].html).to.include("Erika Muster");
+      expect(rows[0].status).to.equal("sent");
+    });
+  });
+
   describe("the transport", function () {
     it("is the instance's even where the tenant has a complete mail configuration of its own", async function () {
       given({

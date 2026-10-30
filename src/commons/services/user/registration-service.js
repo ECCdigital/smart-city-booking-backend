@@ -7,12 +7,13 @@ const limits = require("../rate-limit/limits");
 const { TooManyRequestsError } = require("../../../errors/BaseError");
 const { afterAnswer } = require("./after-answer");
 const { normalizeClientPage } = require("./client-page");
+const BlacklistService = require("../blacklist/blacklist-service");
 
 /**
- * The public registration path (spec §6.3): signup and verification resend
- * are rate-limited and answer account-neutrally. Whatever the caller learns
- * from an outcome here must not depend on whether the address has an
- * account: the per-IP limits are the only ones that surface as a 429, the
+ * The public registration path (spec §6.3): signup, verification resend and
+ * forgot password are rate-limited and answer account-neutrally. Whatever
+ * the caller learns from an outcome here must not depend on whether the
+ * address has an account: the per-IP limits are the only ones that surface as a 429, the
  * per-account limits and the "account exists" branches end silently. All
  * that depends on the address - the lookup, the account, the mail - runs
  * after the answer (ECCdigital/tickets#259), so neither the time of the
@@ -49,6 +50,9 @@ class RegistrationService {
     // Validated before the lookup, so a malformed body fails the same way
     // whether or not the address has an account.
     user.validate();
+    // The one answer that tells: an address
+    // on the blacklist gets no account and no mail.
+    await BlacklistService.assertMayRegister(user.id);
 
     afterAnswer(
       () =>
@@ -122,6 +126,26 @@ class RegistrationService {
         ip: null,
       });
     }, `verification mail for ${id}`);
+  }
+
+  /**
+   * Mails a reset link to a local account. The per-IP limit answers
+   * visibly; the account's own limits and the "no such account", SSO and
+   * suspended cases end silently.
+   *
+   * @param {Object} params
+   * @param {string} params.id The address
+   * @param {string} [params.resetUrl]
+   * @param {string} params.ip
+   * @throws {TooManyRequestsError} Past the per-IP forgot-password limit
+   */
+  static async requestForgotPassword({ id, resetUrl, ip }) {
+    await RegistrationService._gate(limits.forgotPasswordPerIp(ip));
+
+    afterAnswer(async () => {
+      const user = await UserManager.getUser(id, true);
+      await RegistrationService._sendResetMail(user, resetUrl);
+    }, `forgot password request for ${id}`);
   }
 
   static async _gate(limit) {
@@ -218,6 +242,42 @@ class RegistrationService {
         to: entity.id,
         hookId: hook.id,
         verifyUrl: ownVerifyUrl,
+      });
+      return true;
+    } catch (error) {
+      await gate.release();
+      throw error;
+    }
+  }
+  /**
+   * Mails a fresh reset link when the account can use one and its limits
+   * allow it; otherwise does nothing. A failed send gives the reservation
+   * back and rethrows.
+   *
+   * @returns {Promise<boolean>} Whether a mail went out
+   */
+  static async _sendResetMail(user, resetUrl) {
+    if (!user || user.authType !== "local" || user.isSuspended) {
+      return false;
+    }
+
+    const gate = await RateLimiter.consumeAll(
+      limits.forgotPasswordPerAccount(user.id),
+    );
+    if (!gate.allowed) {
+      return false;
+    }
+
+    try {
+      const entity = user instanceof User ? user : new User(user);
+      entity.revokeActiveHooks(USER_HOOK_TYPES.FORGOT_PASSWORD);
+      const ownResetUrl = normalizeClientPage(resetUrl);
+      const hook = entity.addForgotPasswordHook(ownResetUrl);
+      await UserManager.updateUser(entity);
+      await notify("FORGOT_PASSWORD_REQUEST", {
+        to: entity.id,
+        hookId: hook.id,
+        resetUrl: ownResetUrl,
       });
       return true;
     } catch (error) {

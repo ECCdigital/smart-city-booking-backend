@@ -19,6 +19,9 @@ const {
 const {
   CHECK_TYPES,
 } = require("../src/commons/availability/checkout-check-types");
+const {
+  installBlacklistCollection,
+} = require("./helpers/blacklist-collection");
 
 const TENANT_ID = "tenant-1";
 const CUSTOMER_ID = "kunde@example.com";
@@ -240,6 +243,8 @@ describe("BookingCheckout.createBooking — maximum per booking", function () {
       .stub(MembershipManager, "getMembershipsByTenantAndRoles")
       .resolves([]);
     sinon.stub(TenantManager, "getTenant").resolves({ id: TENANT_ID });
+    // The blacklist, empty: the checkout asks it for the address.
+    installBlacklistCollection();
     sinon.stub(EventManager, "getEvent").resolves(null);
     sinon.stub(OpeningHoursManager, "hasOpeningHoursConflict").resolves(false);
     sinon.stub(AccessService, "holdForBooking").resolves([]);

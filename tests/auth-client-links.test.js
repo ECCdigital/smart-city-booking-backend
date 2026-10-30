@@ -35,6 +35,9 @@ const {
 } = require("./helpers/in-memory-rate-limit-events");
 const { installMailStackStore } = require("./helpers/mail-stack-fixtures");
 const {
+  installBlacklistCollection,
+} = require("./helpers/blacklist-collection");
+const {
   installInMemoryMailTransport,
 } = require("./helpers/in-memory-mail-transport");
 const {
@@ -86,8 +89,16 @@ describe("auth: mail links lead to the instance's own pages (ECCdigital/tickets#
       FRONTEND_URL: process.env.FRONTEND_URL,
       STORE_FRONT_URL: process.env.STORE_FRONT_URL,
       BACKEND_URL: process.env.BACKEND_URL,
+      RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_SHORT:
+        process.env.RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_SHORT,
     };
-    Object.assign(process.env, { FRONTEND_URL, STORE_FRONT_URL, BACKEND_URL });
+    Object.assign(process.env, {
+      FRONTEND_URL,
+      STORE_FRONT_URL,
+      BACKEND_URL,
+      // The tests ask for several reset mails of one account in a row.
+      RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_SHORT: "100",
+    });
   });
 
   after(function () {
@@ -100,6 +111,8 @@ describe("auth: mail links lead to the instance's own pages (ECCdigital/tickets#
   beforeEach(function () {
     installInMemoryRateLimitEvents();
     installMailStackStore();
+    // An empty blacklist: the signup asks it.
+    installBlacklistCollection();
     // The mail stack fixture answers `getUser` itself; the store below the
     // manager answers it here.
     UserManager.getUser.restore();

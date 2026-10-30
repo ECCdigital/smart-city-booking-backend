@@ -58,7 +58,7 @@ describe("mail recipients", function () {
         .stub(MembershipManager, "getMembershipsByTenantAndRoles")
         .resolves([
           { userId: "aktiv@stadt.de", status: "active" },
-          { userId: "inaktiv@stadt.de", status: "suspended" },
+          { userId: "inaktiv@stadt.de", status: "rejected" },
           { userId: "wartend@stadt.de", status: "pending" },
         ]);
 

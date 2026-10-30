@@ -3,7 +3,9 @@
  * finds over in-memory bookables and bookings, and how
  * `POST /api/:tenant/bookings/:id/reinstate` answers it - 409
  * `booking_reinstatement_conflict` with the conflicts, or the reinstatement
- * when there are none or the body says `ignoreConflicts: true`.
+ * when there are none or the body says `ignoreConflicts: true`; and how
+ * `POST /api/:tenant/group-bookings/:id/reinstate` answers it per member,
+ * `skipConflicts: true` reinstating the members without a conflict.
  */
 
 const { expect } = require("chai");
@@ -26,7 +28,12 @@ const {
 const BookingManager = require("../src/commons/data-managers/booking-manager");
 const {
   bookingLifecycle,
+  groupBookingLifecycle,
 } = require("../src/commons/services/booking-lifecycle");
+const {
+  GroupBookingController,
+} = require("../src/platform/api/controllers/group-booking-controller");
+const GroupBookingManager = require("../src/commons/data-managers/group-booking-manager");
 
 const TENANT = "tenant-1";
 const TIME_BEGIN = Date.now() + 24 * 60 * 60 * 1000;
@@ -372,5 +379,124 @@ describe("BookingController.reinstateBooking: the conflict", function () {
 
     expect(reinstate.calledOnce).to.equal(true);
     expect(res.status.firstCall.args[0]).to.equal(200);
+  });
+});
+
+describe("GroupBookingController.reinstateGroupBooking: the conflicts per member", function () {
+  const DAY = 24 * 60 * 60 * 1000;
+  // B-OLD's period is taken by B-NEW, B-FREE's a week later is not; B-KEPT
+  // two weeks later is confirmed and no candidate.
+  const FREE = booking("B-FREE", {
+    isRejected: true,
+    status: "cancelled",
+    timeBegin: TIME_BEGIN + 7 * DAY,
+    timeEnd: TIME_END + 7 * DAY,
+  });
+  const KEPT = booking("B-KEPT", {
+    status: "confirmed",
+    timeBegin: TIME_BEGIN + 14 * DAY,
+    timeEnd: TIME_END + 14 * DAY,
+  });
+
+  let sandbox;
+  let reinstate;
+
+  function groupRequest(body = {}) {
+    return { ...request(body), params: { tenant: TENANT, id: "G-1" } };
+  }
+
+  beforeEach(function () {
+    sandbox = sinon.createSandbox();
+    sandbox.stub(GroupBookingManager, "getGroupBooking").resolves({
+      id: "G-1",
+      bookingIds: ["B-OLD", "B-FREE", "B-KEPT"],
+      bookings: [CANCELLED, FREE, KEPT],
+    });
+    given(sandbox, {
+      bookingsByBookableId: {
+        "room-a": [CANCELLED, FREE, KEPT, booking("B-NEW")],
+      },
+    });
+    reinstate = sandbox.stub(groupBookingLifecycle, "reinstate").resolves({});
+  });
+
+  afterEach(function () {
+    sandbox.restore();
+  });
+
+  it("answers 409 group_booking_reinstatement_conflict naming the member in conflict, and reinstates nothing", async function () {
+    const res = response();
+
+    await GroupBookingController.reinstateGroupBooking(groupRequest(), res);
+
+    expect(res.status.firstCall.args[0]).to.equal(409);
+    const body = res.json.firstCall.args[0];
+    expect(body.code).to.equal("group_booking_reinstatement_conflict");
+    expect(body.params.groupBookingId).to.equal("G-1");
+    expect(body.params.conflicts.map((c) => c.bookingId)).to.deep.equal([
+      "B-OLD",
+    ]);
+    expect(body.params.conflicts[0].conflicts[0].bookings[0].id).to.equal(
+      "B-NEW",
+    );
+    expect(reinstate.called).to.equal(false);
+  });
+
+  it("reinstates every cancelled member with ignoreConflicts", async function () {
+    const res = response();
+
+    await GroupBookingController.reinstateGroupBooking(
+      groupRequest({ ignoreConflicts: true }),
+      res,
+    );
+
+    expect(reinstate.calledOnce).to.equal(true);
+    expect(reinstate.firstCall.args[2].bookingIds).to.equal(undefined);
+    expect(res.status.lastCall.args[0]).to.equal(200);
+  });
+
+  it("reinstates only the members without a conflict with skipConflicts", async function () {
+    const res = response();
+
+    await GroupBookingController.reinstateGroupBooking(
+      groupRequest({ skipConflicts: true }),
+      res,
+    );
+
+    expect(reinstate.calledOnce).to.equal(true);
+    expect(reinstate.firstCall.args[2].bookingIds).to.deep.equal(["B-FREE"]);
+    expect(res.status.lastCall.args[0]).to.equal(200);
+  });
+
+  it("answers the conflict with skipConflicts where no member is free", async function () {
+    GroupBookingManager.getGroupBooking.resolves({
+      id: "G-1",
+      bookingIds: ["B-OLD", "B-KEPT"],
+      bookings: [CANCELLED, KEPT],
+    });
+    const res = response();
+
+    await GroupBookingController.reinstateGroupBooking(
+      groupRequest({ skipConflicts: true }),
+      res,
+    );
+
+    expect(res.status.firstCall.args[0]).to.equal(409);
+    expect(reinstate.called).to.equal(false);
+  });
+
+  it("reinstates every candidate when no period is taken", async function () {
+    CheckoutDataProvider.fromCheckoutService.resolves(
+      memoryOf({ bookingsByBookableId: { "room-a": [CANCELLED, FREE] } }),
+    );
+    const res = response();
+
+    await GroupBookingController.reinstateGroupBooking(groupRequest(), res);
+
+    expect(reinstate.firstCall.args[2].bookingIds).to.deep.equal([
+      "B-OLD",
+      "B-FREE",
+    ]);
+    expect(res.status.lastCall.args[0]).to.equal(200);
   });
 });

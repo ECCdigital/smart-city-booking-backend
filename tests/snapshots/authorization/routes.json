@@ -239,6 +239,62 @@
     "instanceOwner": 200,
     "expiredToken": 401
   },
+  "GET /api/instances/blacklist": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": 200,
+    "expiredToken": 401
+  },
+  "GET /api/instances/blacklist/preview": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": 400,
+    "expiredToken": 401
+  },
+  "POST /api/instances/blacklist": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": 400,
+    "expiredToken": 401
+  },
+  "PUT /api/instances/blacklist/:id": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": 400,
+    "expiredToken": 401
+  },
+  "DELETE /api/instances/blacklist/:id": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": 404,
+    "expiredToken": 401
+  },
+  "GET /api/instances/reports": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": 200,
+    "expiredToken": 401
+  },
+  "POST /api/instances/reports/resolve": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": 400,
+    "expiredToken": 401
+  },
   "GET /api/rules/meta": {
     "anonymous": 401,
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
@@ -439,6 +495,46 @@
     "instanceOwner": 200,
     "expiredToken": 401
   },
+  "POST /api/tenants/:tenant/users/blacklist-match": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200,
+    "expiredToken": 401
+  },
+  "POST /api/tenants/:tenant/reports": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400,
+    "expiredToken": 401
+  },
+  "GET /api/tenants/:tenant/reports": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200,
+    "expiredToken": 401
+  },
+  "POST /api/tenants/:tenant/reports/:id/additions": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400,
+    "expiredToken": 401
+  },
+  "POST /api/tenants/:tenant/reports/:id/withdraw": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 404,
+    "tenantOwner": 404,
+    "instanceOwner": 404,
+    "expiredToken": 401
+  },
   "POST /api/tenants/:tenant/add-user": {
     "anonymous": 401,
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
@@ -474,9 +570,9 @@
   "POST /api/tenants/:tenant/update-user-status": {
     "anonymous": 401,
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
-    "roleHolder": 200,
-    "tenantOwner": 200,
-    "instanceOwner": 200,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400,
     "expiredToken": 401
   },
   "POST /api/tenants/:tenant/update-user-booking-notification-recipients": {
@@ -527,6 +623,14 @@
     "instanceOwner": 200,
     "expiredToken": 401
   },
+  "POST /api/users/blacklist-match": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": 200,
+    "expiredToken": 401
+  },
   "POST /api/users/:id/change-id": {
     "anonymous": 401,
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
@@ -536,6 +640,30 @@
     "expiredToken": 401
   },
   "PUT /api/users": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": 200,
+    "expiredToken": 401
+  },
+  "GET /api/users/:id/suspension-preview": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": 200,
+    "expiredToken": 401
+  },
+  "POST /api/users/:id/suspension": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": 400,
+    "expiredToken": 401
+  },
+  "DELETE /api/users/:id/suspension": {
     "anonymous": 401,
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
@@ -1295,6 +1423,22 @@
     "instanceOwner": 400,
     "expiredToken": 401
   },
+  "POST /api/:tenant/bookings/blacklist-match": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200,
+    "expiredToken": 401
+  },
+  "POST /api/:tenant/bookings/blacklist-match/mail": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200,
+    "expiredToken": 401
+  },
   "GET /api/:tenant/bookings/assigned": {
     "anonymous": 401,
     "signedIn": 200,
@@ -1541,6 +1685,14 @@
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200,
+    "expiredToken": 401
+  },
+  "POST /api/:tenant/group-bookings/:id/reinstate": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 409,
+    "tenantOwner": 409,
+    "instanceOwner": 409,
     "expiredToken": 401
   },
   "GET /api/:tenant/group-bookings/booking/:bookingId": {

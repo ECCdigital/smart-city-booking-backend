@@ -53,6 +53,8 @@ Register a new user. The answer is account-neutral: `201` whether or not the add
 
 The answer does not wait: the lookup, the account and the verification mail follow after it, so neither its time nor a failing mail server tells whether the address has an account. A failing mail is only logged; the mail can be requested again with `POST /auth/resend-verification`. The address is stored trimmed and in lower case.
 
+The one answer that tells: an address on the blacklist of the instance - the exact address or its domain - is refused before anything happens with `409` and `{ "error": "checkout.address_blacklisted", "params": { "mailAddress": "<instance mail address, empty without one>" } }`, the checkout's refusal (ECCdigital/tickets#628). No account is created and no mail is sent. `POST /auth/sso/signup` (the token's e-mail) and `POST /auth/card/signup` (`email`, after the card is verified, also for a link to a known account) answer the same.
+
 **Response `201`** (the same body as `POST /auth/resend-verification`):
 
 ```json
@@ -129,7 +131,7 @@ Verify a user with the token and address from the verification mail's link.
 }
 ```
 
-`nextUrl` is the signup's return target, `null` when the signup named none. Failures answer their status with a plain text message (`400` bad token or id mismatch, `404` unknown, `410` already verified).
+`nextUrl` is the signup's return target, `null` when the signup named none. Failures answer their status with a plain text message: `400` „Invalid verification token“ for a wrong token, whatever account the id names (ECCdigital/tickets#301), `410` for a link already used or revoked.
 
 ### GET /auth/verify/:hookId
 
@@ -250,6 +252,11 @@ Sliding windows counted in MongoDB (`rateLimitEvents`, rows expire after 7 days)
 | `RATE_LIMIT_VERIFICATION_MAIL_PER_ACCOUNT_SHORT` | 1/min   | verification mails per account           |
 | `RATE_LIMIT_VERIFICATION_MAIL_PER_ACCOUNT_LONG`  | 5/h     | verification mails per account           |
 | `RATE_LIMIT_VERIFICATION_MAIL_PER_IP`            | 30/h    | `POST /auth/resend-verification`, per IP |
+| `RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_SHORT`   | 1/min   | reset mails per account                  |
+| `RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_LONG`    | 5/h     | reset mails per account                  |
+| `RATE_LIMIT_FORGOT_PASSWORD_PER_IP`              | 30/h    | `POST /auth/forgot-password`, per IP     |
 | `RATE_LIMIT_TENANT_SELF_CREATION_PER_USER`       | 3/24h   | tenant self-creation per user            |
+
+The per-IP limits and `RATE_LIMIT_TENANT_SELF_CREATION_PER_USER` answer `429`; the per-account limits of the verification and reset mails end silently with the usual answer, so they do not tell whether the address has an account.
 
 The client IP is `req.ip`. The server takes `X-Forwarded-For` only from the proxies `TRUSTED_PROXIES` names (addresses or CIDR networks); without the variable it counts the direct address of the connection. See [docs/migrations/v4.3.1-upgrade.md](../migrations/v4.3.1-upgrade.md).
