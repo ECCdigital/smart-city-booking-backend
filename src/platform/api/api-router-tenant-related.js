@@ -402,6 +402,12 @@ router.post(
   authorize("groupBooking", "reject"),
   GroupBookingController.rejectGroupBooking,
 );
+// The reinstatement takes the right of the cancellation it undoes.
+router.post(
+  "/group-bookings/:id/reinstate",
+  authorize("groupBooking", "reject"),
+  GroupBookingController.reinstateGroupBooking,
+);
 router.get(
   "/group-bookings/booking/:bookingId",
   authorize("groupBooking", "read"),

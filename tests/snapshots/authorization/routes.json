@@ -1687,6 +1687,14 @@
     "instanceOwner": 200,
     "expiredToken": 401
   },
+  "POST /api/:tenant/group-bookings/:id/reinstate": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 409,
+    "tenantOwner": 409,
+    "instanceOwner": 409,
+    "expiredToken": 401
+  },
   "GET /api/:tenant/group-bookings/booking/:bookingId": {
     "anonymous": 401,
     "signedIn": 200,
