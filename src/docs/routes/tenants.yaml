@@ -3,7 +3,9 @@
 # The tenant API is not documented here in full — only the legal documents a
 # tenant files, since that is the part the media library added. Both operations
 # accept and return the whole tenant; the bodies below name `legalDocuments`
-# alone and leave the remaining tenant fields undocumented.
+# alone and leave the remaining tenant fields undocumented. Of the membership
+# routes only the status update, whose statuses changed with
+# ECCdigital/tickets#633.
 
 /api/tenants:
   post:
@@ -351,3 +353,61 @@
         description: Neither owner of this tenant nor instance owner
       "404":
         description: "Unknown tenant (`code: tenant_not_found`)"
+
+/api/tenants/{tenant}/update-user-status:
+  post:
+    tags:
+      - Tenants
+    summary: Set the status of a membership
+    description: |
+      Sets the status of the user's membership in the tenant. A membership
+      knows `pending`, `active` and `rejected`; the status `suspended` is
+      gone (ECCdigital/tickets#633): a tenant ends a membership and reports
+      the user, a suspension is the instance's alone
+      (`POST /api/users/{id}/suspension`). Needs `tenantUser.manage`.
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: tenant
+        in: path
+        required: true
+        schema:
+          type: string
+        example: tenant1
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [userId, status]
+            properties:
+              userId:
+                type: string
+              status:
+                type: string
+                enum: [pending, active, rejected]
+    responses:
+      "200":
+        description: |
+          The memberships of the tenant (`users`) and their users as public
+          users (`userDetails`), without the record of a suspension
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                users:
+                  type: array
+                  items:
+                    type: object
+                userDetails:
+                  type: array
+                  items:
+                    type: object
+      "400":
+        description: "`membership_status_invalid`: a status the membership does not know, `suspended` too"
+      "401":
+        description: Not signed in
+      "403":
+        description: Not allowed to manage the users of this tenant

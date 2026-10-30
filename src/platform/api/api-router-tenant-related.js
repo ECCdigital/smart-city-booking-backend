@@ -21,6 +21,7 @@ const WorkflowController = require("./controllers/workflow-controller");
 const InvitationController = require("./controllers/invitation-controller");
 const RoleController = require("./controllers/role-controller");
 const { TenantController } = require("./controllers/tenant-controller");
+const BlacklistController = require("./controllers/blacklist-controller");
 const {
   GroupBookingController,
 } = require("./controllers/group-booking-controller");
@@ -226,6 +227,18 @@ router.put(
   "/bookings",
   authorize("booking", "update"),
   BookingController.updateBooking,
+);
+// The warning before the manual booking or a changed mail of a booking
+// goes to an address on the blacklist.
+router.post(
+  "/bookings/blacklist-match",
+  authorize("booking", "create"),
+  BlacklistController.match,
+);
+router.post(
+  "/bookings/blacklist-match/mail",
+  authorize("booking", "update"),
+  BlacklistController.match,
 );
 router.get(
   "/bookings/assigned",

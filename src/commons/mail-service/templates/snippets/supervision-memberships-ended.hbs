@@ -1,0 +1,35 @@
+{{#if noOwner}}
+  <p>
+    Der Mandant <strong>{{tenantName}}</strong> hat keinen Tenant-Owner. Diese
+    Mitteilung geht deshalb an Sie.
+  </p>
+  <br />
+{{/if}}
+<p>
+  Mitglieder lassen sich in einem Mandanten nicht mehr sperren. Gesperrt wird
+  nur noch für die ganze Plattform. Deshalb wurden diese gesperrten
+  Mitgliedschaften im Mandanten <strong>{{tenantName}}</strong> beendet:
+</p>
+<br />
+<ul>
+  {{#each members}}
+    <li>
+      {{#if name}}{{name}} ({{userId}}){{else}}{{userId}}{{/if}}{{#if
+        instanceSuspended
+      }}, bereits instanzweit gesperrt{{/if}}
+    </li>
+  {{/each}}
+</ul>
+<br />
+<p>
+  Die Konten bleiben bestehen. Über eine Einladung für mehrere Personen oder
+  einen öffentlichen Link können diese User wieder eintreten.
+</p>
+<p>
+  Soll ein User dauerhaft ausgeschlossen bleiben, melden Sie ihn an die
+  Plattform: in den Mitgliedern des Mandanten über „Melden“ oder aus einer
+  seiner Buchungen über „Bucher melden“. Die Plattform entscheidet dann über
+  eine Sperre.
+</p>
+<br />
+<p><a href="{{membersUrl}}">Zu den Mitgliedern des Mandanten</a></p>

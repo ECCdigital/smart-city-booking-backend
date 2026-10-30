@@ -32,6 +32,9 @@ const {
   installMailStackStore,
   instance,
 } = require("./helpers/mail-stack-fixtures");
+const {
+  installBlacklistCollection,
+} = require("./helpers/blacklist-collection");
 
 const KNOWN_UNVERIFIED = "pending@example.test";
 const KNOWN_VERIFIED = "erika@example.test";
@@ -44,6 +47,9 @@ const ENV_KEYS = [
   "RATE_LIMIT_VERIFICATION_MAIL_PER_IP",
   "RATE_LIMIT_VERIFICATION_MAIL_PER_ACCOUNT_SHORT",
   "RATE_LIMIT_VERIFICATION_MAIL_PER_ACCOUNT_LONG",
+  "RATE_LIMIT_FORGOT_PASSWORD_PER_IP",
+  "RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_SHORT",
+  "RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_LONG",
   "DISABLE_EMAIL_CHECK",
 ];
 
@@ -66,6 +72,7 @@ describe("public registration: account-neutral answers and rate limits", functio
   let app;
   let users;
   let sent;
+  let mailStore;
   let savedEnv;
 
   /** The user store: `getUser` reads it, `createUser`/`updateUser` write it. */
@@ -116,7 +123,9 @@ describe("public registration: account-neutral answers and rate limits", functio
     savedEnv = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
     for (const key of ENV_KEYS) delete process.env[key];
     installInMemoryRateLimitEvents();
-    installMailStackStore();
+    mailStore = installMailStackStore();
+    // An empty blacklist: the signup asks it.
+    installBlacklistCollection();
     installUserStore();
     sent = installInMemoryMailTransport();
   });
@@ -224,6 +233,7 @@ describe("public registration: account-neutral answers and rate limits", functio
       sinon.restore();
       installInMemoryRateLimitEvents();
       installMailStackStore({ instance: instance({ noreplyHost: "broken" }) });
+      installBlacklistCollection();
       installUserStore();
       sent = installInMemoryMailTransport();
 
@@ -352,6 +362,85 @@ describe("public registration: account-neutral answers and rate limits", functio
     it("wants an address", async function () {
       const res = await request(app).post("/auth/resend-verification").send({});
       assert.strictEqual(res.status, 400);
+    });
+  });
+
+  describe("POST /auth/forgot-password", function () {
+    const forgot = async (id, ip = IP_A) => {
+      const res = await request(app)
+        .post("/auth/forgot-password")
+        .set("X-Forwarded-For", ip)
+        .send({ id });
+      await whenIdle();
+      return res;
+    };
+
+    const resetMailsTo = (address) =>
+      sent.filter(
+        (mail) =>
+          mail.to === address && mail.subject === "Kennwort zurücksetzen",
+      );
+
+    it("applies the per-IP limit visibly, for known and unknown addresses alike", async function () {
+      process.env.RATE_LIMIT_FORGOT_PASSWORD_PER_IP = "2";
+
+      const first = await forgot("x@example.test");
+      const second = await forgot("y@example.test");
+      const unknown = await forgot(UNKNOWN);
+      const known = await forgot(KNOWN_VERIFIED);
+
+      assert.strictEqual(first.status, 200);
+      assert.strictEqual(second.status, 200);
+      assert.strictEqual(unknown.status, 429);
+      assert.strictEqual(known.status, 429);
+      assert.strictEqual(unknown.body.code, "too_many_requests");
+      assert.strictEqual(
+        known.headers["retry-after"],
+        unknown.headers["retry-after"],
+      );
+      assert.strictEqual(resetMailsTo(KNOWN_VERIFIED).length, 0);
+    });
+
+    it("applies the per-account minute limit silently", async function () {
+      const first = await forgot(KNOWN_VERIFIED);
+      const second = await forgot(KNOWN_VERIFIED);
+
+      assert.strictEqual(first.status, 200);
+      assert.strictEqual(second.status, first.status);
+      assert.strictEqual(second.text, first.text);
+      assert.strictEqual(second.headers["retry-after"], undefined);
+      assert.strictEqual(resetMailsTo(KNOWN_VERIFIED).length, 1);
+    });
+
+    it("counts no reset mail that could not go out", async function () {
+      // The transport retries with backoff before it gives up.
+      this.timeout(15000);
+      const host = mailStore.instance.noreplyHost;
+      mailStore.instance.noreplyHost = "broken";
+      const failed = await forgot(KNOWN_VERIFIED);
+      mailStore.instance.noreplyHost = host;
+
+      const retried = await forgot(KNOWN_VERIFIED);
+
+      assert.strictEqual(failed.status, 200);
+      assert.strictEqual(retried.status, 200);
+      assert.strictEqual(resetMailsTo(KNOWN_VERIFIED).length, 1);
+    });
+
+    it("applies the per-account hour limit silently, on top of the minute limit", async function () {
+      process.env.RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_SHORT = "10";
+      process.env.RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_LONG = "2";
+
+      const answers = [];
+      for (let i = 0; i < 3; i++) {
+        answers.push(await forgot(KNOWN_VERIFIED));
+      }
+
+      assert.deepStrictEqual(
+        answers.map((r) => r.status),
+        [200, 200, 200],
+      );
+      assert.strictEqual(resetMailsTo(KNOWN_VERIFIED).length, 2);
     });
   });
 });

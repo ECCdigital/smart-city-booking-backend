@@ -28,7 +28,8 @@ function account(id, password, fields = {}) {
 /**
  * The user collection in memory, behind `UserModel`. It answers the two
  * forms of an id condition MongoDB would - an exact value and `$regex` with
- * `$options` - and the document key `_id`, and refuses every other filter,
+ * `$options` - the document key `_id`, the empty filter and `isSuspended`,
+ * and refuses every other filter,
  * so a lookup it does not know fails loudly instead of matching by accident.
  * A write sets the fields it names (`$set`, or a plain object as Mongoose
  * reads one), inserts only on `upsert` and keeps `keycloakId` unique, as the
@@ -43,6 +44,8 @@ function installUserCollection(documents) {
 
   const matchesId = (stored, condition) => {
     if (typeof condition === "string") return stored === condition;
+    // The lookup of several accounts at once (`getUsersById`).
+    if (Array.isArray(condition?.$in)) return condition.$in.includes(stored);
     if (
       condition &&
       typeof condition === "object" &&
@@ -56,8 +59,15 @@ function installUserCollection(documents) {
   };
   const matches = (doc, filter) => {
     const keys = Object.keys(filter);
+    if (keys.length === 0) {
+      return true;
+    }
     if (keys.length === 1 && keys[0] === "_id") {
       return doc._id === filter._id;
+    }
+    // The list of the suspended.
+    if (keys.length === 1 && keys[0] === "isSuspended") {
+      return (doc.isSuspended ?? false) === filter.isSuspended;
     }
     if (keys.length !== 1 || keys[0] !== "id") {
       throw new Error(
@@ -139,6 +149,13 @@ function installUserCollection(documents) {
       }
       return asDocument(options.new ? after : before);
     });
+  // The write of the user id change, by the document key.
+  sinon.stub(UserModel, "updateOne").callsFake(async (filter, update) => {
+    const index = docs.findIndex((doc) => matches(doc, filter));
+    if (index === -1) return { matchedCount: 0, modifiedCount: 0 };
+    docs[index] = { ...docs[index], ...fieldsOf(update) };
+    return { matchedCount: 1, modifiedCount: 1 };
+  });
   sinon.stub(UserModel, "deleteOne").callsFake(async (filter) => {
     const index = docs.findIndex((doc) => matches(doc, filter));
     if (index === -1) return { deletedCount: 0 };
