@@ -269,6 +269,7 @@ async function checkWindowAvailability(
         childAmountBooked,
         capacity: childBookable.amount,
         requestedAmount: Number(amount),
+        isTicketChild: childBookable.type === "ticket",
       })
     ) {
       return { available: false, reason: "child-bookings" };

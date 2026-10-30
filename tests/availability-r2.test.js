@@ -391,6 +391,71 @@ describe("availability R2 — checkout parity", () => {
     assert.strictEqual(orchestratorResult.reason, "child-bookings");
   });
 
+  it("matches checkout when a child without amount is partly booked", async () => {
+    const fixture = {
+      bookable: scheduleBookable({ id: "parent-room", amount: 1 }),
+      relatedBookables: [
+        { id: "desk-1", title: "Desk 1", isScheduleRelated: true },
+        { id: "desk-2", title: "Desk 2", isScheduleRelated: true },
+      ],
+      bookingsByBookableId: {
+        "parent-room": [],
+        "desk-1": [],
+        "desk-2": [booking("b1", "desk-2", 1)],
+      },
+    };
+
+    const params = {
+      timeBegin: TIME_BEGIN,
+      timeEnd: TIME_END,
+      amount: 1,
+      user: "user-1",
+    };
+
+    const [orchestratorResult, checkoutResult] = await Promise.all([
+      checkWindowAvailability(buildInMemoryProvider(fixture), params),
+      isCheckoutAvailable(fixture, params),
+    ]);
+
+    assert.strictEqual(orchestratorResult.available, checkoutResult);
+    assert.strictEqual(orchestratorResult.available, false);
+    assert.strictEqual(orchestratorResult.reason, "child-bookings");
+  });
+
+  it("matches checkout when a ticket child has capacity left", async () => {
+    const fixture = {
+      bookable: scheduleBookable({ id: "parent-room", amount: 10 }),
+      relatedBookables: [
+        {
+          id: "ticket-child",
+          title: "Ticket",
+          type: "ticket",
+          amount: 5,
+          isScheduleRelated: true,
+        },
+      ],
+      bookingsByBookableId: {
+        "parent-room": [],
+        "ticket-child": [booking("b1", "ticket-child", 1)],
+      },
+    };
+
+    const params = {
+      timeBegin: TIME_BEGIN,
+      timeEnd: TIME_END,
+      amount: 1,
+      user: "user-1",
+    };
+
+    const [orchestratorResult, checkoutResult] = await Promise.all([
+      checkWindowAvailability(buildInMemoryProvider(fixture), params),
+      isCheckoutAvailable(fixture, params),
+    ]);
+
+    assert.strictEqual(orchestratorResult.available, checkoutResult);
+    assert.strictEqual(orchestratorResult.available, true);
+  });
+
   it("matches checkout for ticket parent capacity with child bookings", async () => {
     const fixture = {
       bookable: {
