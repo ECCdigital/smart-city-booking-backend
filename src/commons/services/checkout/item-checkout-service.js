@@ -541,6 +541,10 @@ class ItemCheckoutService {
     const segments = this._splitIntoDailySegments();
 
     const prices = [];
+    // A flat-rate category is the price of the whole booking, not of a day:
+    // the segments only pick the category of each day, so one that covers
+    // several days is charged once (ECCdigital/smart-city-booking-issues#37).
+    const chargedFlatRateCategories = new Set();
 
     for (const segment of segments) {
       const priceCategory = this.getPriceCategory(segment.start, segment.end);
@@ -569,6 +573,13 @@ class ItemCheckoutService {
           available: false,
           message: `Es konnte keine passende Preiskategorie für das Objekt ${this.originBookable.title} gefunden werden.`,
         };
+      }
+
+      if (priceCategory.fixedPrice) {
+        if (chargedFlatRateCategories.has(priceCategory)) {
+          continue;
+        }
+        chargedFlatRateCategories.add(priceCategory);
       }
 
       prices.push((Number(priceCategory.priceEur) || 0) * multiplier);
