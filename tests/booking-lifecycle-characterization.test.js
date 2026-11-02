@@ -830,7 +830,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       ]);
     });
 
-    it("rejects a priced request with a cancellation document and the rejection mail", async function () {
+    it("rejects a priced request free of charge: no cancellation document, the rejection mail", async function () {
       const id = await bookingIn("requested");
 
       const res = await reject(id, { reason: "Kein Platz" });
@@ -840,10 +840,8 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 rejected",
         "access.revoke B1",
-        "documents.cancellation B1",
-        "store.attach B1 cancellation",
         "workflow.onReject B1",
-        "mail.BOOKING_REJECTION erika@example.test [ST-1.pdf]",
+        "mail.BOOKING_REJECTION erika@example.test",
       ]);
     });
 
@@ -1454,8 +1452,8 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(stateOf(h.stored(id))).to.equal("requested");
       expect(h.stored(id)).to.include({ rejectionReason: "" });
       expect(h.takeEffects()).to.deep.equal([
-        "store.save B1 rejected [cancellation]",
-        "store.save B1 requested [cancellation]",
+        "store.save B1 rejected",
+        "store.save B1 requested",
         "access.hold B1",
       ]);
     });
@@ -1562,9 +1560,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
           comment: "nachgetragen",
           rejectionReason: "Kein Platz",
         });
-        expect(h.takeEffects()).to.deep.equal([
-          "store.save B1 rejected [cancellation]",
-        ]);
+        expect(h.takeEffects()).to.deep.equal(["store.save B1 rejected"]);
       });
 
       it("a booking that moved between the load and the write is the 409 of the content write, as before: nothing written", async function () {
@@ -1669,7 +1665,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(res.status).to.equal(200);
       expect(stateOf(h.stored(id))).to.equal("requested");
       expect(h.takeEffects()).to.deep.equal([
-        "store.save B1 requested [cancellation]",
+        "store.save B1 requested",
         "access.hold B1",
       ]);
     });
@@ -1721,7 +1717,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(res.text).to.equal("Could not reinstate booking");
       expect(stateOf(h.stored(id))).to.equal("rejected");
       expect(h.takeEffects()).to.deep.equal([
-        "store.save B1 requested [cancellation]",
+        "store.save B1 requested",
         "access.hold B1 FAILED",
         "store.restore B1 rejected",
       ]);

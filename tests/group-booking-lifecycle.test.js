@@ -767,7 +767,7 @@ describe("group booking lifecycle: cancel", function () {
     ).to.deep.equal([undefined, undefined]);
   });
 
-  it("rejects a group of requests: rejected, the document, the rejection mail", async function () {
+  it("rejects a group of requests: rejected, no document, the rejection mail without attachment", async function () {
     const { adapters, lifecycle } = groupOf("requested");
 
     const outcome = await lifecycle.cancel(TENANT, GROUP, {
@@ -783,11 +783,10 @@ describe("group booking lifecycle: cancel", function () {
     expect(
       adapters.store.rows.get("B-1").cancellationRefund.cancelledFrom,
     ).to.equal(undefined);
+    expect(adapters.documents.calls).to.deep.equal([]);
     const [rejection] = adapters.mail.calls;
     expect(rejection.args[0]).to.equal("BOOKING_REJECTION");
-    expect(rejection.args[1].attachments.map((f) => f.name)).to.deep.equal([
-      "cancellation-1.pdf",
-    ]);
+    expect(rejection.args[1].attachments).to.deep.equal([]);
   });
 
   it("rejects a group of requests free of charge, whatever the tiers or an admin override say", async function () {

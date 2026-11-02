@@ -101,7 +101,9 @@
       `refundPercentage` applies the current policy proposal.
 
       Rejecting a request costs the customer nothing: it refunds in full,
-      `refundPercentage` is ignored.
+      `refundPercentage` is ignored, and no cancellation document is issued
+      (`skipCancellation` makes no difference); the rejection mail goes out
+      without attachment.
 
       A request is rejected, a confirmed booking or one awaiting payment is
       cancelled. The cancellation document is issued after the state change;
@@ -266,7 +268,8 @@
       Without an override, each booking uses its current policy proposal. An
       optional `refundPercentage` applies uniformly to every booking in the group.
       A group of requests is rejected free of charge: every booking refunds in
-      full, `refundPercentage` is ignored.
+      full, `refundPercentage` is ignored, and no cancellation document is
+      issued.
       Consistency validation failures return HTTP 200 with `success: false`
       (same envelope as other group-booking mutation endpoints).
 

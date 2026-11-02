@@ -268,7 +268,7 @@ describe("booking lifecycle: cancel", function () {
     );
   });
 
-  it("rejects a priced request: rejected, the document and the rejection mail", async function () {
+  it("rejects a priced request: rejected, no document, the rejection mail without attachment", async function () {
     const { adapters, lifecycle } = lifecycleOver({
       bookings: [booking({ status: "requested" })],
     });
@@ -281,7 +281,7 @@ describe("booking lifecycle: cancel", function () {
     expect(effectTable(outcome)).to.deep.equal([
       "persist store.save ok",
       "provision access.revoke ok",
-      "document documents.issue ok",
+      "document documents.issue skipped",
       "notify workflow.emit ok",
       "notify mail.BOOKING_REJECTION ok",
       "notify mail.BOOKING_CANCEL skipped",
@@ -295,9 +295,7 @@ describe("booking lifecycle: cancel", function () {
     expect(stored.cancellationRefund).to.not.have.property("cancelledFrom");
     const [mail] = adapters.mail.calls;
     expect(mail.args[0]).to.equal("BOOKING_REJECTION");
-    expect(mail.args[1].attachments.map((f) => f.name)).to.deep.equal([
-      "cancellation-1.pdf",
-    ]);
+    expect(mail.args[1].attachments).to.deep.equal([]);
   });
 
   it("a request the customer withdraws without a hook reads as a cancellation: the cancel mail, not the rejection", async function () {
@@ -506,10 +504,7 @@ describe("booking lifecycle: cancel", function () {
         cancellationFeeEur: 0,
         adminOverride: false,
       });
-      const [issued] = adapters.documents.calls;
-      expect(
-        issued.args[0].options.refundCalculation.cancellationFeeEur,
-      ).to.equal(0);
+      expect(adapters.documents.calls, trigger).to.deep.equal([]);
     }
 
     const customer = lifecycleOver({

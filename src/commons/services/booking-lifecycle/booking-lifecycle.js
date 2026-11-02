@@ -447,7 +447,8 @@ function createBookingLifecycle(adapters) {
    * (glossary "Wiederherstellung" returns to it) and, where a refund is
    * due, the open refund state (glossary "Erstattungsstand"), and drops the
    * hook of a cancellation request; then the access is revoked, the cancellation
-   * document issued for a priced booking unless the caller leaves it out,
+   * document issued for a priced booking unless the caller leaves it out or
+   * it is a rejection (a rejected request costs nothing, so has no document),
    * with the bank details of a paid one (`refundBankDetails`), the workflow
    * told and the customer mailed - the rejection of a request
    * the administration or the system turned down, free of charge (a full
@@ -537,7 +538,7 @@ function createBookingLifecycle(adapters) {
           files.push(issued.file);
           return issued;
         },
-        { when: () => withDocument && isPriced(booking) },
+        { when: () => withDocument && !rejection && isPriced(booking) },
       ),
       step(
         PHASE.NOTIFY,

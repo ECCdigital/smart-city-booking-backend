@@ -710,7 +710,7 @@ describe("group booking lifecycle today: what each state change does at the seam
       ]);
     });
 
-    it("rejects a requested group with the document and the rejection mail", async function () {
+    it("rejects a requested group free of charge: no document, the rejection mail", async function () {
       const id = await groupIn("requested");
 
       const res = await reject(id, { reason: "Kein Platz" });
@@ -722,12 +722,9 @@ describe("group booking lifecycle today: what each state change does at the seam
         "store.save B2 rejected",
         "access.revoke B1",
         "access.revoke B2",
-        "documents.aggregatedCancellation B1,B2",
-        "store.attach B1 cancellation",
-        "store.attach B2 cancellation",
         "workflow.onReject B1",
         "workflow.onReject B2",
-        "mail.BOOKING_REJECTION erika@example.test [ST-1.pdf]",
+        "mail.BOOKING_REJECTION erika@example.test",
       ]);
     });
 

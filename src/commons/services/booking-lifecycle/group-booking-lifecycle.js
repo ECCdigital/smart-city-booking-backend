@@ -437,7 +437,8 @@ function createGroupBookingLifecycle(adapters) {
    * document for a priced group unless the caller leaves it out; the
    * workflow told per member; one rejection mail for a group of requests,
    * one cancel mail otherwise, with the document. A group of requests is
-   * rejected free of charge: every member refunds in full.
+   * rejected free of charge: every member refunds in full, and no
+   * cancellation document is issued.
    *
    * @param {string} tenantId
    * @param {string} groupBookingId
@@ -512,7 +513,7 @@ function createGroupBookingLifecycle(adapters) {
           files.push(issued.file);
           return issued;
         },
-        { when: () => withDocument && isPricedGroup(bookings) },
+        { when: () => withDocument && !rejection && isPricedGroup(bookings) },
       ),
       ...emitEach(bookings, WORKFLOW_EVENT.REJECT, trigger),
       notice(
