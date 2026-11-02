@@ -95,6 +95,9 @@
       save can be refused for the reference rather than the tenant. The owner
       of a declined tenant is refused, the membership rests:
       `403 tenant_declined` (`TenantDeclinedError`).
+      Stored secrets are write only: `__stored_secret__`, as the answer hands
+      it out, keeps the stored secret; an empty value removes it, any other
+      value replaces it.
     security:
       - bearerAuth: []
     requestBody:
@@ -230,6 +233,9 @@
       documents carries the address it resolves to; nothing is normalised on the
       way in, only on the way out. The answer carries `supervisionLevel`,
       `supervisionChangedAt` and `supervisionReason`.
+      Stored secrets are write only: where one is stored, the answer carries
+      `__stored_secret__` instead (the mail password and Graph client secret,
+      and the secrets of the applications).
     security:
       - bearerAuth: []
     parameters:

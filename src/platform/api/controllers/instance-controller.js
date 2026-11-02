@@ -6,6 +6,7 @@ const {
   reachesOf,
 } = require("../../../commons/services/authorization");
 const KeycloakCheckService = require("../../../commons/services/keycloak-check/keycloak-check-service");
+const StoredSecretService = require("../../../commons/services/stored-secret-service");
 const JwtHelper = require("../../../commons/utilities/jwt-helper");
 const { BaseError, BadRequestError } = require("../../../errors/BaseError");
 
@@ -17,7 +18,11 @@ class InstanceController {
   static async getInstance(request, response) {
     try {
       const instance = await InstanceManger.getInstance();
-      response.status(200).send(instance?.exportWithMedia() ?? instance);
+      response
+        .status(200)
+        .send(
+          StoredSecretService.mask(instance?.exportWithMedia() ?? instance),
+        );
     } catch (error) {
       response.status(500).send({ message: error.message });
     }
@@ -61,13 +66,20 @@ class InstanceController {
         reachesOf(request),
       );
 
+      // A secret the answer masked comes back as the marker: it stays.
+      StoredSecretService.restore(await InstanceManger.getInstance(), body);
+
       // The person of the session confirms the licence of a new font.
       const updatedInstance = await InstanceManger.updateInstance(body, {
         userId: request.user?.id ?? null,
       });
       response
         .status(200)
-        .send(updatedInstance?.exportWithMedia() ?? updatedInstance);
+        .send(
+          StoredSecretService.mask(
+            updatedInstance?.exportWithMedia() ?? updatedInstance,
+          ),
+        );
     } catch (error) {
       // A refused body (no owners, a rejected media reference) has to reach
       // the admin UI with its code — the blanket 500 below would hide why the
