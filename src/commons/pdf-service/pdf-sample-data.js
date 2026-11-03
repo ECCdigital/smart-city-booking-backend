@@ -218,6 +218,8 @@ function buildCancellationSampleData(
     alreadyPaid: true,
     daysBeforeStartLabel: "20",
     timeBeforeStartLabel: "20 Tage",
+    timeBeforeStartText: "20 Tage",
+    appliedTierLabel: "bis 14 Tage vor Beginn",
     suggestedRefundPercentage: 100,
     refundPercentage: 100,
     calculationMode: "Automatisch nach Mandantenregel",

@@ -1524,6 +1524,9 @@ class PdfService {
           ? "nicht verfügbar"
           : String(timeBeforeStart.daysBeforeStart),
       timeBeforeStartLabel: timeBeforeStart.label ?? "nicht verfügbar",
+      timeBeforeStartText: timeBeforeStart.detailedLabel,
+      appliedTierLabel:
+        CancellationRefundService.describeAppliedTier(calculation),
       suggestedRefundPercentage: calculation.suggestedRefundPercentage,
       refundPercentage: calculation.appliedRefundPercentage,
       appliedTierHours,

@@ -374,8 +374,11 @@ describe("PdfService document generation (rendering only)", () => {
     );
 
     const html = result.buffer.toString();
-    assert.ok(html.includes("50 % Erstattung"));
-    assert.ok(html.includes("12 Tage vor Buchungsbeginn"));
+    assert.match(
+      html,
+      /Storniert\s+12 Tage\s+vor Beginn der Buchung\.\s+Es gilt die\s+Erstattungsstufe:\s+bis zum Beginn\./,
+    );
+    assert.match(html, /Die Erstattung beträgt\s+50 %/);
     assert.ok(!html.includes("Kalendertage"));
     assert.ok(html.includes("Automatisch nach Mandantenregel"));
     assert.ok(html.includes("-59,50"));
@@ -451,8 +454,14 @@ describe("PdfService document generation (rendering only)", () => {
     assert.ok(html.includes("IBAN: DE89370400440532013000"));
     assert.match(html, /Buchung\s+booking-1/);
     assert.match(html, /Buchung\s+booking-2/);
-    assert.match(html, /12 Tage vor Beginn/);
-    assert.match(html, /13 Stunden vor Beginn/);
+    assert.match(
+      html,
+      /Storniert\s+12 Tage\s+vor Beginn der Buchung\.\s+Es gilt die\s+Erstattungsstufe:\s+bis 20 Tage vor Beginn\./,
+    );
+    assert.match(
+      html,
+      /Storniert\s+13 Stunden\s+vor Beginn der Buchung\.\s+Es gilt die\s+Erstattungsstufe:\s+bis 12 Stunden vor Beginn\./,
+    );
     assert.ok(html.includes("-178,50"));
     assert.ok(html.includes("59,50"));
   });

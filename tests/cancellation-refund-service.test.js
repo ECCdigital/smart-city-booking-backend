@@ -251,6 +251,33 @@ describe("CancellationRefundService", function () {
     );
   });
 
+  it("describes the time before the start in days and hours below three days", function () {
+    const detailed = (hours) =>
+      CancellationRefundService.describeTimeBeforeStart({
+        hoursBeforeStart: hours,
+      }).detailedLabel;
+
+    assert.strictEqual(detailed(46), "1 Tag und 22 Stunden");
+    assert.strictEqual(detailed(49), "2 Tage und 1 Stunde");
+    assert.strictEqual(detailed(48), "2 Tage");
+    assert.strictEqual(detailed(80), "3 Tage");
+    assert.strictEqual(detailed(13), "13 Stunden");
+  });
+
+  it("describes the applied tier as the booker reads it", function () {
+    const tier = (calculation) =>
+      CancellationRefundService.describeAppliedTier(calculation);
+
+    assert.strictEqual(
+      tier({ appliedTierHours: 36 }),
+      "bis 36 Stunden vor Beginn",
+    );
+    assert.strictEqual(tier({ appliedTierHours: 48 }), "bis 2 Tage vor Beginn");
+    assert.strictEqual(tier({ appliedTierHours: 0 }), "bis zum Beginn");
+    assert.strictEqual(tier({ appliedTierDays: 3 }), "bis 3 Tage vor Beginn");
+    assert.strictEqual(tier({ appliedTierHours: null }), null);
+  });
+
   it("coerces MongoDB Double timestamps before calculating hours", function () {
     const { Double } = require("mongodb");
     const hours = CancellationRefundService.calculateHoursBeforeStart(
@@ -269,11 +296,13 @@ describe("CancellationRefundService", function () {
       hoursBeforeStart: 47,
       daysBeforeStart: 1,
       label: "1 Tag",
+      detailedLabel: "1 Tag und 23 Stunden",
     });
     assert.deepStrictEqual(describe({ hoursBeforeStart: 48 }), {
       hoursBeforeStart: 48,
       daysBeforeStart: 2,
       label: "2 Tage",
+      detailedLabel: "2 Tage",
     });
     assert.strictEqual(describe({ hoursBeforeStart: 13 }).label, "13 Stunden");
     assert.strictEqual(describe({ hoursBeforeStart: 1 }).label, "1 Stunde");
@@ -281,11 +310,13 @@ describe("CancellationRefundService", function () {
       hoursBeforeStart: null,
       daysBeforeStart: 3,
       label: "3 Tage",
+      detailedLabel: "3 Tage",
     });
     assert.deepStrictEqual(describe({ hoursBeforeStart: null }), {
       hoursBeforeStart: null,
       daysBeforeStart: null,
       label: null,
+      detailedLabel: null,
     });
   });
 

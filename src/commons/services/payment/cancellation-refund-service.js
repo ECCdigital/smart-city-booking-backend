@@ -206,34 +206,70 @@ class CancellationRefundService {
    * before 4.4 counted calendar days (`daysBeforeStart`) and keeps them.
    *
    * @param {Object} calculation A calculation, preview or stored audit
-   * @returns {{ hoursBeforeStart: number|null, daysBeforeStart: number|null, label: string|null }}
+   * @returns {{ hoursBeforeStart: number|null, daysBeforeStart: number|null, label: string|null, detailedLabel: string|null }}
    *   `daysBeforeStart` in whole days of 24 hours; `label` such as
-   *   "13 Stunden" or "2 Tage", `null` without a time span
+   *   "13 Stunden" or "2 Tage"; `detailedLabel` as the booker reads it,
+   *   below three days in days and hours ("1 Tag und 22 Stunden"); both
+   *   `null` without a time span
    */
   static describeTimeBeforeStart(calculation) {
     const hours = calculation?.hoursBeforeStart;
     if (Number.isFinite(hours)) {
       const days = Math.floor(hours / HOURS_PER_DAY);
+      const rest = hours % HOURS_PER_DAY;
+      const label =
+        hours >= HOURS_PER_DAY ? formatDays(days) : formatHours(hours);
       return {
         hoursBeforeStart: hours,
         daysBeforeStart: days,
-        label:
-          hours >= HOURS_PER_DAY
-            ? formatDays(days)
-            : `${hours} ${hours === 1 ? "Stunde" : "Stunden"}`,
+        label,
+        detailedLabel:
+          hours >= HOURS_PER_DAY && hours < 3 * HOURS_PER_DAY && rest > 0
+            ? `${formatDays(days)} und ${formatHours(rest)}`
+            : label,
       };
     }
 
     const legacyDays = calculation?.daysBeforeStart;
     if (Number.isFinite(legacyDays)) {
+      const label = formatDays(legacyDays);
       return {
         hoursBeforeStart: null,
         daysBeforeStart: legacyDays,
-        label: formatDays(legacyDays),
+        label,
+        detailedLabel: label,
       };
     }
 
-    return { hoursBeforeStart: null, daysBeforeStart: null, label: null };
+    return {
+      hoursBeforeStart: null,
+      daysBeforeStart: null,
+      label: null,
+      detailedLabel: null,
+    };
+  }
+
+  /**
+   * The tier a calculation applied as the booker reads it: "bis 36 Stunden
+   * vor Beginn", in days where its deadline divides by 24, "bis zum Beginn"
+   * at 0 hours. An audit of before 4.4 named it in days
+   * (`appliedTierDays`). `null` where no tier applied.
+   *
+   * @param {Object} calculation A calculation, preview or stored audit
+   * @returns {string|null}
+   */
+  static describeAppliedTier(calculation) {
+    const hours = calculation?.appliedTierHours;
+    if (Number.isFinite(hours)) {
+      if (hours === 0) return "bis zum Beginn";
+      const deadline =
+        hours % HOURS_PER_DAY === 0
+          ? formatDays(hours / HOURS_PER_DAY)
+          : formatHours(hours);
+      return `bis ${deadline} vor Beginn`;
+    }
+    const days = calculation?.appliedTierDays;
+    return Number.isFinite(days) ? `bis ${formatDays(days)} vor Beginn` : null;
   }
 
   static validateRefundPercentage(refundPercentage) {
@@ -315,6 +351,10 @@ class CancellationRefundService {
 
 function formatDays(days) {
   return `${days} ${days === 1 ? "Tag" : "Tage"}`;
+}
+
+function formatHours(hours) {
+  return `${hours} ${hours === 1 ? "Stunde" : "Stunden"}`;
 }
 
 /**

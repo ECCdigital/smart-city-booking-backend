@@ -4,6 +4,8 @@ Tenant PDF templates use Handlebars. Cancellation templates receive the existing
 
 - `cancellationDate` — exact cancellation date and time
 - `timeBeforeStartLabel` — time before the booking starts, such as „2 Tage“ (whole 24-hour spans from one day on) or „13 Stunden“ (below one day)
+- `timeBeforeStartText` — the same as the booker reads it, below three days in days and hours („1 Tag und 22 Stunden“); empty without a time span
+- `appliedTierLabel` — the tier that applied, such as „bis 36 Stunden vor Beginn“ or „bis zum Beginn“; empty without one
 - `hoursBeforeStart` — whole hours before the booking starts
 - `daysBeforeStart` / `daysBeforeStartLabel` — whole 24-hour spans before the booking starts; calendar days until 4.3
 - `appliedTierHours` / `appliedTierDays` — deadline of the applied tier in hours, and in whole days of 24 hours
