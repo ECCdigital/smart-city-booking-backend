@@ -27,8 +27,8 @@ describe("TenantController cancellation refund tiers", function () {
   it("updates valid cancellation refund tiers", async function () {
     const tenant = { id: "tenant-1", name: "Tenant" };
     const tiers = [
-      { daysBeforeStart: 0, refundPercentage: 50 },
-      { daysBeforeStart: 20, refundPercentage: 100 },
+      { hoursBeforeStart: 0, refundPercentage: 50 },
+      { hoursBeforeStart: 480, refundPercentage: 100 },
     ];
     sandbox.stub(TenantManager, "getTenant").resolves(tenant);
     const storeTenant = sandbox
@@ -63,7 +63,7 @@ describe("TenantController cancellation refund tiers", function () {
         body: {
           id: "tenant-1",
           cancellationRefundTiers: [
-            { daysBeforeStart: 0, refundPercentage: 101 },
+            { hoursBeforeStart: 0, refundPercentage: 101 },
           ],
         },
       },

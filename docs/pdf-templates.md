@@ -3,7 +3,10 @@
 Tenant PDF templates use Handlebars. Cancellation templates receive the existing booking, item, total, address, and document-number values plus the following refund fields:
 
 - `cancellationDate` — exact cancellation date and time
-- `daysBeforeStart` / `daysBeforeStartLabel` — calendar days before the booking starts
+- `timeBeforeStartLabel` — time before the booking starts, such as „2 Tage“ (whole 24-hour spans from one day on) or „13 Stunden“ (below one day)
+- `hoursBeforeStart` — whole hours before the booking starts
+- `daysBeforeStart` / `daysBeforeStartLabel` — whole 24-hour spans before the booking starts; calendar days until 4.3
+- `appliedTierHours` / `appliedTierDays` — deadline of the applied tier in hours, and in whole days of 24 hours
 - `suggestedRefundPercentage` — tenant-policy proposal
 - `refundPercentage` — applied percentage
 - `refundAmount` — formatted refund amount

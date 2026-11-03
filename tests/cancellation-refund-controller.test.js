@@ -137,8 +137,8 @@ describe("cancellation refund controllers", function () {
       cancellationFeeEur: 50,
       suggestedRefundPercentage: 50,
       appliedRefundPercentage: 50,
-      daysBeforeStart: 5,
-      appliedTierDays: 0,
+      hoursBeforeStart: 120,
+      appliedTierHours: 0,
     };
     sandbox
       .stub(BookingService, "getPublicCancellationRefundPreview")

@@ -45,8 +45,8 @@ Example:
   "invoiceNumberPrefix": "exmp",
   "invoiceCount": { "2024": 1 },
   "cancellationRefundTiers": [
-    { "daysBeforeStart": 20, "refundPercentage": 100 },
-    { "daysBeforeStart": 0, "refundPercentage": 50 }
+    { "hoursBeforeStart": 480, "refundPercentage": 100 },
+    { "hoursBeforeStart": 12, "refundPercentage": 50 }
   ],
   "paymentPurposeSuffix": "Example 123 4 56",
   "applications": [],
@@ -80,7 +80,7 @@ Example:
 
 > **Note:** Sensitive information (e.g. `noreplyPassword`, payment-related secrets) is stored encrypted in the database.
 
-`cancellationRefundTiers` defines the tenant-wide refund proposal at cancellation time. Thresholds use calendar days in `Europe/Berlin`. An empty array preserves the default full refund. Below the lowest configured threshold, that tier continues to apply.
+`cancellationRefundTiers` defines the tenant-wide refund proposal at cancellation time. Each tier names its threshold `hoursBeforeStart` in whole hours before the start of the booking (the Admin UI enters days of 24 hours or hours); a cancellation counts the hours that actually pass until the start, rounded down. Until 4.3 thresholds were calendar days (`daysBeforeStart`) in `Europe/Berlin`. An empty array preserves the default full refund. Below the lowest configured threshold, that tier continues to apply.
 
 `legalDocuments` holds the legal documents of the tenant, in the same role the instance fields `dataProtection`, `legalNotice` and `termsAndConditions` play for the deployment as a whole. Unlike those it is a list of `{ type, title, reference }`, where `type` is one of `dataProtection`, `legalNotice`, `termsAndConditions`, `rightOfWithdrawal` or `other`. A known type appears at most once and carries no title — its label comes from the admin UI translation; `other` requires a title and no two `other` documents may share one. `reference` is a media reference: a `public` medium of the same tenant, or an external link. On the way out it carries the address it resolves to in `url`; the public tenant export does not include the field. Tenant documents are filed and maintained here, they are not delivered to end users.
 
@@ -474,10 +474,10 @@ Key fields of a booking:
 
 Cancellation attachments may contain a `cancellation` object with:
 
-- `cancelledAt` and `daysBeforeStart`
+- `cancelledAt` and `hoursBeforeStart` (whole hours before the start; audits stored until 4.3 carry calendar days in `daysBeforeStart` instead)
 - original, refunded and retained Euro amounts
 - proposed and applied refund percentages
-- the applied tier threshold
+- the applied tier threshold (`appliedTierHours`; `appliedTierDays` until 4.3)
 - origin (`user`, `admin`, or `system`) and administrator override status
 - the acting administrator ID, when applicable
 - a reference to the original invoice or receipt

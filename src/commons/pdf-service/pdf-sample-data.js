@@ -217,6 +217,7 @@ function buildCancellationSampleData(
     cancellationReason: "Veranstaltung wurde abgesagt",
     alreadyPaid: true,
     daysBeforeStartLabel: "20",
+    timeBeforeStartLabel: "20 Tage",
     suggestedRefundPercentage: 100,
     refundPercentage: 100,
     calculationMode: "Automatisch nach Mandantenregel",

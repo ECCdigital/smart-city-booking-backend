@@ -115,10 +115,10 @@
           <strong>Berechnung der Erstattung:</strong><br />
           Stornierungszeitpunkt: {{cancellationDate}}<br />
           {{#if refundCalculations}} {{#each refundCalculations}} Buchung
-          {{bookingId}}: {{daysBeforeStartLabel}} Kalendertage vor Beginn,
+          {{bookingId}}: {{timeBeforeStartLabel}} vor Beginn,
           {{refundPercentage}} % Erstattung ({{refundAmount}}),
           {{calculationMode}}{{#unless @last}}<br />{{/unless}} {{/each}}
-          {{else}} {{daysBeforeStartLabel}} Kalendertage vor Buchungsbeginn,
+          {{else}} {{timeBeforeStartLabel}} vor Buchungsbeginn,
           {{refundPercentage}} % Erstattung, {{calculationMode}}.{{/if}}
         </div>
         {{#if alreadyPaid}}

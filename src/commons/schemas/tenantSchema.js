@@ -16,7 +16,7 @@ const {
 
 const cancellationRefundTierSchema = new Schema(
   {
-    daysBeforeStart: { type: Number, required: true, min: 0 },
+    hoursBeforeStart: { type: Number, required: true, min: 0 },
     refundPercentage: { type: Number, required: true, min: 0, max: 100 },
   },
   { _id: false },

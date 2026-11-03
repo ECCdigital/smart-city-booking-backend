@@ -447,6 +447,8 @@ const CATALOG_ORDER = [
   "originalAmountEur",
   "refundPercentage",
   "hasCancellationFee",
+  "timeBeforeStartLabel",
+  "hoursBeforeStart",
   "daysBeforeStart",
   "bookingId",
   "groupBookingId",

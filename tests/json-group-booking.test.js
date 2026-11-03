@@ -161,8 +161,8 @@ describe("json-controller groupBookingAllowed", () => {
 
     it("attaches tenant cancellationRefundTiers to the bookable response", async () => {
       const tiers = [
-        { daysBeforeStart: 20, refundPercentage: 100 },
-        { daysBeforeStart: 0, refundPercentage: 50 },
+        { hoursBeforeStart: 480, refundPercentage: 100 },
+        { hoursBeforeStart: 0, refundPercentage: 50 },
       ];
       getTenantStub.resolves({
         id: "tenant-1",
@@ -208,7 +208,7 @@ describe("json-controller groupBookingAllowed", () => {
     });
 
     it("attaches cancellationRefundTiers to related bookables", async () => {
-      const tiers = [{ daysBeforeStart: 0, refundPercentage: 80 }];
+      const tiers = [{ hoursBeforeStart: 0, refundPercentage: 80 }];
       getTenantStub.resolves({
         id: "tenant-1",
         catalogParticipation: { restricted: false },
@@ -247,8 +247,8 @@ describe("json-controller groupBookingAllowed", () => {
   describe("getBookables", () => {
     it("attaches tenant cancellationRefundTiers to each listed bookable", async () => {
       const tiers = [
-        { daysBeforeStart: 14, refundPercentage: 100 },
-        { daysBeforeStart: 0, refundPercentage: 0 },
+        { hoursBeforeStart: 336, refundPercentage: 100 },
+        { hoursBeforeStart: 0, refundPercentage: 0 },
       ];
       getTenantStub.resolves({
         id: "tenant-1",

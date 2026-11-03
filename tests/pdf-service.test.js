@@ -360,13 +360,13 @@ describe("PdfService document generation (rendering only)", () => {
         alreadyPaid: true,
         refundCalculation: {
           cancelledAt: Date.parse("2026-07-20T12:00:00+02:00"),
-          daysBeforeStart: 12,
+          hoursBeforeStart: 290,
           originalAmountEur: 119,
           suggestedRefundPercentage: 50,
           appliedRefundPercentage: 50,
           refundAmountEur: 59.5,
           cancellationFeeEur: 59.5,
-          appliedTierDays: 0,
+          appliedTierHours: 0,
           origin: "user",
           adminOverride: false,
         },
@@ -375,7 +375,8 @@ describe("PdfService document generation (rendering only)", () => {
 
     const html = result.buffer.toString();
     assert.ok(html.includes("50 % Erstattung"));
-    assert.ok(html.includes("12 Kalendertage"));
+    assert.ok(html.includes("12 Tage vor Buchungsbeginn"));
+    assert.ok(!html.includes("Kalendertage"));
     assert.ok(html.includes("Automatisch nach Mandantenregel"));
     assert.ok(html.includes("-59,50"));
     assert.ok(html.includes("59,50"));
@@ -412,26 +413,26 @@ describe("PdfService document generation (rendering only)", () => {
           {
             bookingId: "booking-1",
             cancelledAt,
-            daysBeforeStart: 12,
+            hoursBeforeStart: 290,
             originalAmountEur: 119,
             suggestedRefundPercentage: 100,
             appliedRefundPercentage: 100,
             refundAmountEur: 119,
             cancellationFeeEur: 0,
-            appliedTierDays: 20,
+            appliedTierHours: 480,
             origin: "admin",
             adminOverride: false,
           },
           {
             bookingId: "booking-2",
             cancelledAt,
-            daysBeforeStart: 5,
+            hoursBeforeStart: 13,
             originalAmountEur: 119,
             suggestedRefundPercentage: 50,
             appliedRefundPercentage: 50,
             refundAmountEur: 59.5,
             cancellationFeeEur: 59.5,
-            appliedTierDays: 0,
+            appliedTierHours: 12,
             origin: "admin",
             adminOverride: false,
           },
@@ -450,6 +451,8 @@ describe("PdfService document generation (rendering only)", () => {
     assert.ok(html.includes("IBAN: DE89370400440532013000"));
     assert.match(html, /Buchung\s+booking-1/);
     assert.match(html, /Buchung\s+booking-2/);
+    assert.match(html, /12 Tage vor Beginn/);
+    assert.match(html, /13 Stunden vor Beginn/);
     assert.ok(html.includes("-178,50"));
     assert.ok(html.includes("59,50"));
   });
