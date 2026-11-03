@@ -7,6 +7,8 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ## [Unreleased]
 
+## [4.3.2] — 2026-11-03
+
 ### Fixed
 
 - `GET /api/:tenant/calendar/occupancy` answers every bookable of comma-separated `ids` again ([ECCdigital/tickets#795](https://github.com/ECCdigital/tickets/issues/795)): `ids=a,b` and `ids=a, b`, as the embed's occupancy calendar sends them, are split and trimmed, like `ids=a&ids=b`. Since 4.3.0 the whole string was taken as one id, and an occupancy calendar over several bookables showed no entries at all
