@@ -10,6 +10,7 @@
  * the flags of the form ask for, each atomic for itself.
  */
 
+const { randomInt } = require("crypto");
 const bunyan = require("bunyan");
 const { v4: uuidV4 } = require("uuid");
 const BookingManager = require("../../data-managers/booking-manager");
@@ -458,7 +459,7 @@ async function generateGroupBookingReference(
 
   let text = "";
   for (let i = 0; i < length; i++) {
-    text += possible.charAt(Math.floor(Math.random() * possible.length));
+    text += possible.charAt(randomInt(possible.length));
   }
 
   for (let i = chunkLength; i < text.length; i += chunkLength + 1) {
