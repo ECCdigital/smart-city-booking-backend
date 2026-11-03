@@ -11,6 +11,7 @@ const ChallengeManager = require("../../../commons/data-managers/challenge-manag
 const PaymentUtils = require("../../../commons/utilities/payment-utils");
 const MembershipService = require("../../../commons/services/membership/membership-service");
 const AccessAppLifecycleService = require("../../../commons/services/access/access-app-lifecycle-service");
+const StoredSecretService = require("../../../commons/services/stored-secret-service");
 const {
   validateMailSnippets,
   validateMailSubjects,
@@ -215,8 +216,10 @@ class TenantController {
           tenants.map((tenant) =>
             publicTenants
               ? tenant.exportPublic()
-              : AccessAppLifecycleService.redactBackendState(
-                  tenant.exportWithMedia(),
+              : StoredSecretService.mask(
+                  AccessAppLifecycleService.redactBackendState(
+                    tenant.exportWithMedia(),
+                  ),
                 ),
           ),
         );
@@ -256,8 +259,10 @@ class TenantController {
       response
         .status(200)
         .send(
-          AccessAppLifecycleService.redactBackendState(
-            tenant.exportWithMedia(),
+          StoredSecretService.mask(
+            AccessAppLifecycleService.redactBackendState(
+              tenant.exportWithMedia(),
+            ),
           ),
         );
     } catch (err) {
@@ -379,6 +384,9 @@ class TenantController {
       if (descriptionError) {
         return response.status(400).send(descriptionError);
       }
+
+      // A new tenant has no stored secret a marker could stand for.
+      StoredSecretService.restore(null, request.body);
 
       // `storeTenant` routes an unknown id here too: both creation paths
       // share the one contract of the creation service.
@@ -551,14 +559,18 @@ class TenantController {
       // Backend-owned access-app state (e.g. Salto IQ activations) is
       // neither written by a tenant update nor sent back in the answer.
       AccessAppLifecycleService.preserveBackendState(previousTenant, tenant);
+      // A secret the answer masked comes back as the marker: it stays.
+      StoredSecretService.restore(previousTenant, tenant);
 
       const updatedTenant = await TenantManager.storeTenant(tenant);
       logger.info(`updated tenant ${tenant.id} by user ${user?.id}`);
       response
         .status(200)
         .send(
-          AccessAppLifecycleService.redactBackendState(
-            updatedTenant.exportWithMedia(),
+          StoredSecretService.mask(
+            AccessAppLifecycleService.redactBackendState(
+              updatedTenant.exportWithMedia(),
+            ),
           ),
         );
     } catch (err) {

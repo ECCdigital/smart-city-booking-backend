@@ -6,6 +6,8 @@ const {
   getAccessProviderCapabilities,
 } = require("./providers/access-provider-registry");
 const { DOMAIN } = require("../authorization/reach");
+const StoredSecretService = require("../stored-secret-service");
+const { STORED_SECRET } = StoredSecretService;
 
 require("./clients");
 require("./providers/register-access-providers");
@@ -183,8 +185,38 @@ class AccessInfoService {
     );
   }
 
+  /**
+   * Tests a provider configuration as the admin form sent it. A secret the
+   * form only knows as stored (the marker) is tested with the stored one.
+   *
+   * @param {string} provider
+   * @param {Object} config
+   * @param {Object} [context] `{ tenantId }`
+   * @returns {Promise<Object>} The provider's test result
+   */
   static async testConnection(provider, config, context = {}) {
-    return testProvider(provider, config, context);
+    const stored = Object.values(config || {}).includes(STORED_SECRET)
+      ? await AccessInfoService._storedApp(context.tenantId, provider)
+      : null;
+    return testProvider(
+      provider,
+      StoredSecretService.completeTestConfig(provider, config || {}, stored),
+      context,
+    );
+  }
+
+  /**
+   * @private
+   * The tenant's stored application of a provider, active or not.
+   */
+  static async _storedApp(tenantId, provider) {
+    if (!tenantId) return null;
+    const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
+    return (
+      (tenant?.applications || []).find(
+        (app) => app.type === "access" && app.id === provider,
+      ) || null
+    );
   }
 
   static async registerWebhook(tenantId, provider, callbackUrl) {
