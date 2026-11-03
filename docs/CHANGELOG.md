@@ -9,6 +9,7 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ### Fixed
 
+- `GET /api/:tenant/calendar/occupancy` answers every bookable of comma-separated `ids` again ([ECCdigital/tickets#795](https://github.com/ECCdigital/tickets/issues/795)): `ids=a,b` and `ids=a, b`, as the embed's occupancy calendar sends them, are split and trimmed, like `ids=a&ids=b`. Since 4.3.0 the whole string was taken as one id, and an occupancy calendar over several bookables showed no entries at all
 - GiroCockpit asks for the payment methods in live mode ([ECCdigital/tickets#796](https://github.com/ECCdigital/tickets/issues/796)): the request for the payment page sends `test=0`, and `test=1` only for a tenant whose GiroCockpit app has `paymentMode: "test"`. Before, every request sent `test=1`, which in GiroCheckout means "show the payment methods in test mode"; since Girocockpit 2.0 a live project has none, and the payment page offered no payment method at all, for a single booking as for a group payment. No migration: a tenant without `paymentMode` is live. A tenant on a GiroCockpit test project needs `paymentMode: "test"` in its app, set by the switch „Testmodus“ of the Admin UI (ECCdigital/smart-city-booking-vue-app#331)
 - Tests: the two tests of a lapsed iFBS hold in `tests/access-compartments.test.js` start the fake clock at the moment after the hold, not at the start of the test. Before, a runner slower than 1 ms between the two kept the hold alive, and the test failed now and then. No code change
 
