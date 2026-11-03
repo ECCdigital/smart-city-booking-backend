@@ -1,3 +1,4 @@
+const { randomInt } = require("crypto");
 const { ItemCheckoutService } = require("./item-checkout-service");
 const checkoutPolicy = require("./checkout-policy");
 const { CheckoutPolicy } = checkoutPolicy;
@@ -247,7 +248,7 @@ class BundleCheckoutService {
 
     let text = "";
     for (let i = 0; i < length; i++) {
-      text += possible.charAt(Math.floor(Math.random() * possible.length));
+      text += possible.charAt(randomInt(possible.length));
     }
 
     for (let i = chunkLength; i < text.length; i += chunkLength + 1) {
