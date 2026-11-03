@@ -97,6 +97,20 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Name the pushed image in the run's annotations and summary, so
+      # `gh run view` shows the tag to deploy without reading the log.
+      - name: Report the image
+        if: ${{ github.event_name != 'pull_request' }}
+        continue-on-error: true
+        env:
+          TAGS: ${{ steps.meta_release.outputs.tags || steps.meta_dispatch.outputs.tags }}
+          DIGEST: ${{ steps.build-and-push.outputs.digest }}
+        run: |
+          for tag in ${TAGS}; do
+            echo "::notice title=Image::${tag}"
+            echo "- \`${tag}\` (\`${DIGEST}\`)" >> "$GITHUB_STEP_SUMMARY"
+          done
+
       # Sign the resulting Docker image digest except on PRs.
       # This will only write to the public Rekor transparency log when the Docker
       # repository is public to avoid leaking data.  If you would like to publish
