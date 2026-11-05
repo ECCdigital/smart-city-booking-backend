@@ -1223,6 +1223,14 @@
     "instanceOwner": 200,
     "expiredToken": 401
   },
+  "POST /api/:tenant/bookables/occupancy": {
+    "anonymous": 400,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400,
+    "expiredToken": 401
+  },
   "GET /api/:tenant/bookables/:id/prices": {
     "anonymous": 200,
     "signedIn": 200,

@@ -1,0 +1,93 @@
+# swagger/routes/bookable-occupancy.yaml
+
+/api/{tenant}/bookables/occupancy:
+  post:
+    tags:
+      - Bookables
+    summary: Occupancy and price of many bookables in one period
+    description: |
+      Checks each bookable as `GET /api/{tenant}/bookables/{id}/occupancy`
+      does (all checks of the checkout for one unit in the period) and, where
+      it is available, adds the price of the period as
+      `POST /api/{tenant}/checkout/validateItem` answers it. Made for the
+      storefront's search with a period: one request per tenant instead of
+      two per bookable.
+
+      Public (`bookable.readPublic`): bookables outside the reach of the
+      request, such as ones the public cannot see, are left out of the
+      answer. At most 100 ids per request.
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - bookableIds
+              - timeBegin
+              - timeEnd
+            properties:
+              bookableIds:
+                type: array
+                minItems: 1
+                maxItems: 100
+                items:
+                  type: string
+              timeBegin:
+                type: number
+                description: Begin of the period, epoch milliseconds
+              timeEnd:
+                type: number
+                description: End of the period, epoch milliseconds, after `timeBegin`
+    responses:
+      "200":
+        description: One entry per bookable found
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                properties:
+                  bookableId:
+                    type: string
+                  title:
+                    type: string
+                    nullable: true
+                  isAvailable:
+                    type: boolean
+                  totalCapacity:
+                    type: number
+                    nullable: true
+                  booked:
+                    type: number
+                    nullable: true
+                  remaining:
+                    type: number
+                    nullable: true
+                  reason:
+                    type: string
+                    description: The check that failed, where one did
+                  price:
+                    type: object
+                    nullable: true
+                    description: Price of one unit in the period; null where unavailable or no price can be found
+                    properties:
+                      regularPriceEur:
+                        type: number
+                      userPriceEur:
+                        type: number
+                      regularGrossPriceEur:
+                        type: number
+                      userGrossPriceEur:
+                        type: number
+                      freeBookingAllowed:
+                        type: boolean
+                      bookingDiscountPercent:
+                        type: number
+      "400":
+        description: |
+          `invalid_period_occupancy_request`: no ids, more than 100, or no
+          valid period

@@ -6,7 +6,7 @@ const { Bookable } = require("../../../commons/entities/bookable/bookable");
 const { v4: uuidv4 } = require("uuid");
 const AccessPointManager = require("../../../commons/data-managers/access-point-manager");
 const { ValidationError } = require("../../../errors/ValidationError");
-const { BaseError } = require("../../../errors/BaseError");
+const { BaseError, BadRequestError } = require("../../../errors/BaseError");
 const {
   scopeOf,
   reachesOf,
@@ -33,6 +33,9 @@ const logger = bunyan.createLogger({
   name: "bookable-controller.js",
   level: process.env.LOG_LEVEL,
 });
+
+/** How many bookables `POST /bookables/occupancy` takes in one request. */
+const MAX_PERIOD_OCCUPANCY_IDS = 100;
 
 /**
  * Web Controller for Bookables.
@@ -686,6 +689,56 @@ class BookableController {
       }
       logger.error(err);
       response.status(500).send("Could not get bookable occupancy");
+    }
+  }
+
+  /**
+   * `POST /bookables/occupancy`: the occupancy of many bookables in one
+   * period, each with the price of that period where it is available.
+   * Ids outside the reach of the request are left out of the answer, as `GET /bookables/:id/occupancy` answers them 404.
+   */
+  static async getPeriodOccupancies(request, response, next) {
+    try {
+      const tenantId = request.params.tenant;
+      const { bookableIds, timeBegin, timeEnd } = request.body ?? {};
+      const begin = Number(timeBegin);
+      const end = Number(timeEnd);
+
+      if (
+        !Array.isArray(bookableIds) ||
+        bookableIds.length === 0 ||
+        bookableIds.length > MAX_PERIOD_OCCUPANCY_IDS ||
+        !bookableIds.every((id) => typeof id === "string" && id) ||
+        !Number.isFinite(begin) ||
+        !Number.isFinite(end) ||
+        end <= begin
+      ) {
+        throw new BadRequestError("invalid_period_occupancy_request", {
+          maxBookableIds: MAX_PERIOD_OCCUPANCY_IDS,
+        });
+      }
+
+      const reached = await BookableManager.getBookablesByIds(
+        tenantId,
+        [...new Set(bookableIds)],
+        scopeOf(request),
+      );
+
+      const occupancies = await BookableService.getPeriodOccupancies({
+        bookableIds: reached.map((bookable) => bookable.id),
+        tenantId,
+        timeBegin: begin,
+        timeEnd: end,
+        userId: request.user?.id,
+      });
+
+      response.status(200).send(occupancies);
+    } catch (err) {
+      if (err instanceof BaseError) {
+        return next(err);
+      }
+      logger.error(err);
+      response.status(500).send("Could not get bookable occupancies");
     }
   }
 
