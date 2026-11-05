@@ -3,6 +3,7 @@ const {
   authorize,
   publicRoute,
 } = require("../../../../commons/services/authorization");
+const { acceptSingleFile } = require("../../../../middleware/file-upload");
 const MediaControllerV2 = require("../controllers/media.controller");
 
 const router = asyncRouter();
@@ -16,6 +17,7 @@ const router = asyncRouter();
 router.post(
   "/",
   authorize("instanceMedia", "create"),
+  acceptSingleFile(),
   MediaControllerV2.createMedia,
 );
 router.get(

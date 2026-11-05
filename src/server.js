@@ -3,7 +3,6 @@ require("dotenv").config();
 const express = require("express");
 const cookieParser = require("cookie-parser");
 const helmet = require("helmet");
-const fileUpload = require("express-fileupload");
 const bunyan = require("bunyan");
 const swaggerUi = require("swagger-ui-express");
 
@@ -19,9 +18,7 @@ const { requestLogger } = require("./middleware/logger.js");
 const lazyBrowser = require("./commons/pdf-service/LazyBrowser");
 const { errorHandler } = require("./middleware/error-handler");
 const { assertStorageConfig } = require("./commons/services/storage");
-const {
-  uploadBackstopBytes,
-} = require("./commons/services/media/media-config");
+const { rejectMultipart } = require("./middleware/file-upload");
 const {
   applySharpConcurrency,
 } = require("./commons/services/media/image-variants");
@@ -62,16 +59,9 @@ if (process.env.NODE_ENV !== "production") {
   );
 }
 
-// Global backstop for every upload route. It sits above the largest media
-// limit on purpose: media uploads answer with their own 400, this only stops
-// requests no route would ever accept.
-app.use(
-  fileUpload({
-    limits: { fileSize: uploadBackstopBytes() },
-    abortOnLimit: true,
-    responseOnLimit: "File too large.",
-  }),
-);
+// Files are only parsed on the upload routes, after the authorization there
+// (see `acceptSingleFile`); every other route turns multipart bodies away.
+app.use(rejectMultipart);
 
 app.use(helmet({ crossOriginResourcePolicy: false }));
 

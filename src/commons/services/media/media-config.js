@@ -7,8 +7,8 @@ const DEFAULT_DOCUMENT_SIZE_MB = 50;
 // A font is loaded on every page of the storefront before it may show, so its
 // limit is fixed and far below the others (map #510).
 const FONT_MAX_BYTES = 500 * 1024;
-// Headroom between the largest media limit and the global express-fileupload
-// backstop: the media layer must be the one answering with a 400, the backstop
+// Headroom between the largest media limit and the express-fileupload
+// backstop of the upload routes: the media layer must be the one answering with a 400, the backstop
 // only catches uploads no route would ever accept.
 const BACKSTOP_HEADROOM_MB = 5;
 // Byte size does not bound the decoded pixel count — a small file can still be
@@ -79,8 +79,8 @@ function largestMediaLimitBytes() {
 }
 
 /**
- * Global upload backstop for `express-fileupload`, applying to every upload
- * route of the instance. Deliberately above the largest media limit so media
+ * Upload backstop for `express-fileupload`, applying to the upload routes
+ * (`acceptSingleFile`). Deliberately above the largest media limit so media
  * uploads fail with a proper 400 instead of a truncated request.
  *
  * @returns {number} Size in bytes.

@@ -143,7 +143,7 @@ class MediaService {
   }) {
     const data = file.data;
 
-    // The global express-fileupload backstop truncates instead of rejecting
+    // The express-fileupload backstop truncates instead of rejecting
     // when an operator turns `abortOnLimit` off.
     if (file.truncated) {
       throw new BadRequestError("file_too_large");

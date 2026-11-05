@@ -3,11 +3,17 @@ const {
   authorize,
   publicRoute,
 } = require("../../../../commons/services/authorization");
+const { acceptSingleFile } = require("../../../../middleware/file-upload");
 const MediaControllerV2 = require("../controllers/media.controller");
 
 const router = asyncRouter();
 
-router.post("/", authorize("media", "create"), MediaControllerV2.createMedia);
+router.post(
+  "/",
+  authorize("media", "create"),
+  acceptSingleFile(),
+  MediaControllerV2.createMedia,
+);
 // Listing is the media library itself: it needs the picker right, and the
 // reach narrows it to the caller's own uploads. The metadata routes serve two
 // populations - the library and the booking documents - so they carry the
