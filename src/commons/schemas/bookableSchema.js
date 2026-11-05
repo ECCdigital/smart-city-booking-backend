@@ -1,6 +1,7 @@
 const { Double } = require("mongodb");
 const { Schema } = require("mongoose");
 const { customFieldDefinitionSchema } = require("./customFieldDefinition");
+const { uploadFieldDefinitionSchema } = require("./uploadFieldDefinition");
 const { mediaReferenceSchema } = require("./mediaSchema");
 const { reviewField } = require("./reviewSchema");
 
@@ -321,6 +322,13 @@ const bookableSchemaDefinition = {
 
   customFieldValues: {
     type: [customFieldValueSchema],
+    default: [],
+  },
+
+  // Upload fields (glossary "Upload-Feld"), next to the custom fields,
+  // checked against the tenant by `customer-upload-rules.js`.
+  uploadFieldDefinitions: {
+    type: [uploadFieldDefinitionSchema],
     default: [],
   },
 

@@ -12,6 +12,9 @@ const {
   reachesOf,
 } = require("../../../commons/services/authorization");
 const {
+  assertUploadFieldsStorable,
+} = require("../../../commons/services/customer-upload/upload-field-guard");
+const {
   getRelatedOpeningHours,
 } = require("../../../commons/utilities/opening-hours-manager");
 const BookableService = require("../../../commons/services/bookable-service");
@@ -290,6 +293,7 @@ class BookableController {
       await BookableController._validateAccessPointIds(bookable, tenant);
       BookableController._dropAccessPointAmounts(bookable);
       BookableController._validateAccessBuffers(bookable);
+      await assertUploadFieldsStorable(bookable, tenant);
       await MediaReferenceGuard.assertBookableStorable(
         bookable,
         reachesOf(request),
@@ -373,6 +377,7 @@ class BookableController {
       await BookableController._validateAccessPointIds(bookable, tenant);
       BookableController._dropAccessPointAmounts(bookable);
       BookableController._validateAccessBuffers(bookable);
+      await assertUploadFieldsStorable(bookable, tenant);
       await MediaReferenceGuard.assertBookableStorable(
         bookable,
         reachesOf(request),

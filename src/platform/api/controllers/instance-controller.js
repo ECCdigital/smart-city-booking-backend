@@ -2,6 +2,9 @@ const InstanceManger = require("../../../commons/data-managers/instance-manager"
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const MediaReferenceGuard = require("../../../commons/services/media/media-reference-guard");
 const {
+  customerUploadLimits,
+} = require("../../../commons/services/customer-upload/customer-upload-rules");
+const {
   PUBLIC,
   reachesOf,
 } = require("../../../commons/services/authorization");
@@ -30,9 +33,13 @@ class InstanceController {
 
       const usesDigitalKeys =
         await TenantManager.hasTenantWithDigitalKeys(PUBLIC);
-      response
-        .status(200)
-        .send({ ...instance.exportWithMedia(), usesDigitalKeys });
+      response.status(200).send({
+        ...instance.exportWithMedia(),
+        usesDigitalKeys,
+        // Set by environment variables; the admin shows them on the upload
+        // fields, the storefront checks files against them before sending.
+        customerUploadLimits: customerUploadLimits(),
+      });
     } catch (error) {
       response.status(500).send({ message: error.message });
     }

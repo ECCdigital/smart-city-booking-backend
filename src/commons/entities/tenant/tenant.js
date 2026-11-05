@@ -40,6 +40,13 @@ class Tenant {
     }, {});
     exported.accessApps = this._exportPublicAccessApps();
     exported.usesDigitalKeys = this.usesDigitalKeys();
+    // Whether customer uploads are on and which formats a field may take:
+    // what the bookable form and the storefront need, none of the
+    // retention or mail settings.
+    exported.customerUploads = {
+      enabled: this.customerUploads?.enabled === true,
+      formats: [...(this.customerUploads?.formats || [])],
+    };
     return exported;
   }
 

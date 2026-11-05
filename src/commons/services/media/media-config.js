@@ -119,6 +119,7 @@ module.exports = {
   imageMaxPixels,
   largestMediaLimitBytes,
   maxBytesForKind,
+  positiveNumber,
   sharpConcurrency,
   uploadBackstopBytes,
 };
