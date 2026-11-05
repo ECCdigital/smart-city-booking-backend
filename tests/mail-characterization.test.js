@@ -193,14 +193,28 @@ describe("mail characterization: every notice as it goes out today", function ()
       );
     });
 
-    it("verification of a cancellation request: the link with the hook, the reason, the refund preview", async function () {
+    it("verification of a cancellation request: the link with the hook, the reason, the refund preview of a paid booking", async function () {
       await pin("verify-rejection", () =>
         mail.send(
           "VERIFY_BOOKING_REJECTION",
           single("B-1", {
             hookId: "hook-reject-1",
             reason: "Termin verschoben",
-            refundPreview: cancellationRefund(),
+            refundPreview: cancellationRefund({ appliedTierHours: 336 }),
+            alreadyPaid: true,
+          }),
+        ),
+      );
+    });
+
+    it("verification of a cancellation request of an unpaid booking: what drops and what stays due", async function () {
+      await pin("verify-rejection.unpaid", () =>
+        mail.send(
+          "VERIFY_BOOKING_REJECTION",
+          single("B-1", {
+            hookId: "hook-reject-1",
+            reason: "Termin verschoben",
+            refundPreview: cancellationRefund({ appliedTierHours: 336 }),
           }),
         ),
       );

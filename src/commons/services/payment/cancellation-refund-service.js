@@ -321,6 +321,7 @@ class CancellationRefundService {
         hoursBeforeStart: null,
         daysBeforeStart: null,
         timeBeforeStartLabel: null,
+        appliedTierLabel: null,
         hasCancellationFee: false,
       };
     }
@@ -344,6 +345,7 @@ class CancellationRefundService {
       hoursBeforeStart: timeBeforeStart.hoursBeforeStart,
       daysBeforeStart: timeBeforeStart.daysBeforeStart,
       timeBeforeStartLabel: timeBeforeStart.label,
+      appliedTierLabel: this.describeAppliedTier(calculation),
       hasCancellationFee: cancellationFeeEur > 0,
     };
   }
