@@ -400,6 +400,20 @@ describe("CancellationRefundService", function () {
     assert.strictEqual(mailData.refundPercentage, 50);
     assert.strictEqual(mailData.hasCancellationFee, true);
     assert.strictEqual(mailData.daysBeforeStart, 7);
+    assert.strictEqual(mailData.appliedTierLabel, null);
+  });
+
+  it("names the applied tier for the mail", function () {
+    const mailData = CancellationRefundService.toMailTemplateData({
+      originalAmountEur: 100,
+      refundAmountEur: 25,
+      cancellationFeeEur: 75,
+      appliedRefundPercentage: 25,
+      hoursBeforeStart: 50,
+      appliedTierHours: 36,
+    });
+
+    assert.strictEqual(mailData.appliedTierLabel, "bis 36 Stunden vor Beginn");
   });
 
   it("marks zero-amount bookings as without refund preview", function () {

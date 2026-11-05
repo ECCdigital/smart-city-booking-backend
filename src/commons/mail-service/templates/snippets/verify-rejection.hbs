@@ -17,12 +17,24 @@
 
 {{#if hasRefundPreview}}
   <p>
-    <strong>Erwartete Erstattung</strong> nach aktueller Regelung:
-    {{priceFormatted refundAmountEur}}
-    ({{refundPercentage}}&nbsp;%)
-    {{#if hasCancellationFee}}
+    <strong>Voraussichtliche Erstattungsstufe</strong>:
+    {{#if appliedTierLabel}}{{appliedTierLabel}} mit {{/if}}{{refundPercentage}}&nbsp;%
+    Rückerstattung
+    <br />
+    {{#if alreadyPaid}}
+      Rückerstattung des bezahlten Betrags:
+      {{priceFormatted refundAmountEur}}
+      von
+      {{priceFormatted originalAmountEur}}
       <br />
-      Einbehalt (Stornogebühr): {{priceFormatted cancellationFeeEur}}
+      Einbehaltener Betrag: {{priceFormatted cancellationFeeEur}}
+    {{else}}
+      Entfallener Betrag:
+      {{priceFormatted refundAmountEur}}
+      von
+      {{priceFormatted originalAmountEur}}
+      <br />
+      Noch ausstehend: {{priceFormatted cancellationFeeEur}}
     {{/if}}
   </p>
   <p>

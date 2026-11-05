@@ -254,10 +254,14 @@ const MailType = Object.freeze({
     includeQRCode: false,
     sendBCC: false,
     addRejectionLink: false,
-    templateData: ({ reason, hookId, refundPreview = null }, loaded) => ({
+    templateData: (
+      { reason, hookId, refundPreview = null, alreadyPaid = false },
+      loaded,
+    ) => ({
       cancelReason: reason,
       verifyRejectionUrl: `${process.env.FRONTEND_URL}/booking/verify-reject/${loaded.tenantId}?id=${loaded.bookings[0].id}&hookId=${hookId}`,
       ...CancellationRefundService.toMailTemplateData(refundPreview),
+      alreadyPaid: alreadyPaid === true,
     }),
   },
 

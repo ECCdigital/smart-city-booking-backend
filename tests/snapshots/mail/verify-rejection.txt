@@ -54,11 +54,16 @@ Attachments:
   </p>
 
   <p>
-    <strong>Erwartete Erstattung</strong> nach aktueller Regelung:
-    90,38 €
-    (75&nbsp;%)
+    <strong>Voraussichtliche Erstattungsstufe</strong>:
+    bis 14 Tage vor Beginn mit 75&nbsp;%
+    Rückerstattung
+    <br />
+      Rückerstattung des bezahlten Betrags:
+      90,38 €
+      von
+      120,50 €
       <br />
-      Einbehalt (Stornogebühr): 30,12 €
+      Einbehaltener Betrag: 30,12 €
   </p>
   <p>
     Der endgültige Erstattungsbetrag wird zum Zeitpunkt Ihrer Bestätigung

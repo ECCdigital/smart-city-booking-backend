@@ -728,6 +728,7 @@ describe("booking lifecycle: requestCancel", function () {
     expect(mail.args[1]).to.include({
       hookId: stored.hooks[0].id,
       reason: "Krank",
+      alreadyPaid: true,
     });
     expect(mail.args[1].refundPreview).to.deep.equal({
       bookingId: "B-1",
