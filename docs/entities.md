@@ -291,6 +291,7 @@ Example:
     }
   ],
   "priceType": "per-item",
+  "priceCountStartedHours": false,
   "priceValueAddedTax": 19,
   "enableCoupons": true,
 
@@ -367,6 +368,7 @@ Key fields of a bookable:
 | blockPeriods                 | Block periods with `id`, `label`, `startWeekday`, `startTime`, `endWeekday`, `endTime`.                                                                                                                                                                            |
 | priceCategories              | List of price categories including price, interval, affected weekdays and holidays.                                                                                                                                                                                |
 | priceType                    | Price type (e.g. `per-hour`, `per-day`, `per-item`, `per-square-meter`).                                                                                                                                                                                           |
+| priceCountStartedHours       | If `true`, an hour price counts every started hour in full; otherwise it is reckoned by the minute.                                                                                                                                                                |
 | priceValueAddedTax           | VAT rate (in percent) applied to this bookable.                                                                                                                                                                                                                    |
 | enableCoupons                | If `true`, coupons can be applied to this bookable.                                                                                                                                                                                                                |
 | tags                         | Tags used for internal grouping and filtering.                                                                                                                                                                                                                     |

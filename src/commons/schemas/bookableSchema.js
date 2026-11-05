@@ -207,6 +207,9 @@ const bookableSchemaDefinition = {
     enum: ["per-hour", "per-day", "per-item", "per-square-meter"],
     default: "per-item",
   },
+  // Hour price only: every started hour costs the full price instead of
+  // reckoning the minutes.
+  priceCountStartedHours: { type: Boolean, default: false },
   priceValueAddedTax: { type: Number, default: 0 },
   enableCoupons: { type: Boolean, default: true },
 
