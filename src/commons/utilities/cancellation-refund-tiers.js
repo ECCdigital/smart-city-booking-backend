@@ -1,16 +1,21 @@
+/**
+ * The refund scale of a tenant: each tier names its deadline in whole hours
+ * before the start of the booking, `hoursBeforeStart`. The Admin UI enters it
+ * in days or hours; a day is 24 hours.
+ */
 function getCancellationRefundTiersError(tiers) {
   if (!Array.isArray(tiers)) {
     return "cancellationRefundTiers must be an array";
   }
 
-  const seenDays = new Set();
+  const seenHours = new Set();
   for (const tier of tiers) {
     if (!tier || typeof tier !== "object" || Array.isArray(tier)) {
       return "Each cancellation refund tier must be an object";
     }
 
-    if (!Number.isInteger(tier.daysBeforeStart) || tier.daysBeforeStart < 0) {
-      return "daysBeforeStart must be a non-negative integer";
+    if (!Number.isInteger(tier.hoursBeforeStart) || tier.hoursBeforeStart < 0) {
+      return "hoursBeforeStart must be a non-negative integer";
     }
 
     if (
@@ -21,14 +26,14 @@ function getCancellationRefundTiersError(tiers) {
       return "refundPercentage must be an integer between 0 and 100";
     }
 
-    if (seenDays.has(tier.daysBeforeStart)) {
-      return "daysBeforeStart must be unique";
+    if (seenHours.has(tier.hoursBeforeStart)) {
+      return "hoursBeforeStart must be unique";
     }
-    seenDays.add(tier.daysBeforeStart);
+    seenHours.add(tier.hoursBeforeStart);
   }
 
   const sorted = [...tiers].sort(
-    (left, right) => right.daysBeforeStart - left.daysBeforeStart,
+    (left, right) => right.hoursBeforeStart - left.hoursBeforeStart,
   );
   for (let index = 1; index < sorted.length; index += 1) {
     if (sorted[index].refundPercentage > sorted[index - 1].refundPercentage) {
@@ -57,11 +62,11 @@ function normalizeCancellationRefundTiers(tiers) {
   }
 
   return tiers
-    .map(({ daysBeforeStart, refundPercentage }) => ({
-      daysBeforeStart,
+    .map(({ hoursBeforeStart, refundPercentage }) => ({
+      hoursBeforeStart,
       refundPercentage,
     }))
-    .sort((left, right) => right.daysBeforeStart - left.daysBeforeStart);
+    .sort((left, right) => right.hoursBeforeStart - left.hoursBeforeStart);
 }
 
 module.exports = {

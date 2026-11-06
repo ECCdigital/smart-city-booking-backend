@@ -37,6 +37,8 @@ const originalCancellationDocumentSchema = new Schema(
 const cancellationAuditSchema = new Schema(
   {
     cancelledAt: { type: Double, required: true },
+    hoursBeforeStart: { type: Number, default: null },
+    // Calendar days of an audit stored before 4.4, with `appliedTierDays`.
     daysBeforeStart: { type: Number, default: null },
     originalAmountEur: { type: Number, required: true, min: 0 },
     suggestedRefundPercentage: {
@@ -53,6 +55,7 @@ const cancellationAuditSchema = new Schema(
     },
     refundAmountEur: { type: Number, required: true, min: 0 },
     cancellationFeeEur: { type: Number, required: true, min: 0 },
+    appliedTierHours: { type: Number, default: null, min: 0 },
     appliedTierDays: { type: Number, default: null, min: 0 },
     origin: {
       type: String,

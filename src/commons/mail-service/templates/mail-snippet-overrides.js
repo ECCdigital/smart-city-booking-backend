@@ -157,10 +157,28 @@ function templateVariableCatalog({ tenantId }) {
       snippets: BOOKING_CANCEL_SNIPPETS,
     },
     {
+      name: "timeBeforeStartLabel",
+      label: "Zeit bis Beginn",
+      description:
+        "Zeit bis zum Buchungsbeginn zum Berechnungszeitpunkt als Text: ab einem Tag in ganzen Tagen (z. B. „10 Tage“), darunter in Stunden (z. B. „13 Stunden“)",
+      kind: "text",
+      sample: "10 Tage",
+      snippets: BOOKING_CANCEL_SNIPPETS,
+    },
+    {
+      name: "hoursBeforeStart",
+      label: "Stunden bis Beginn",
+      description:
+        "Ganze Stunden bis zum Buchungsbeginn zum Berechnungszeitpunkt",
+      kind: "number",
+      sample: 240,
+      snippets: BOOKING_CANCEL_SNIPPETS,
+    },
+    {
       name: "daysBeforeStart",
       label: "Tage bis Beginn",
       description:
-        "Kalendertage bis zum Buchungsbeginn zum Berechnungszeitpunkt",
+        "Ganze Tage zu 24 Stunden bis zum Buchungsbeginn zum Berechnungszeitpunkt",
       kind: "number",
       sample: 10,
       snippets: BOOKING_CANCEL_SNIPPETS,
