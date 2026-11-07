@@ -17,7 +17,11 @@ class CsvExportController {
 
     const keys = Object.keys(objects[0]);
     const header = keys.map((k) => headerTranslations[k] || k).join(";");
-    const lines = objects.map((o) => keys.map((k) => o[k]).join(";"));
+    const cell = (value) => {
+      const text = String(value ?? "").replace(/\r?\n|\r/g, " ");
+      return /[;"]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    };
+    const lines = objects.map((o) => keys.map((k) => cell(o[k])).join(";"));
     return [header, ...lines].join("\r\n");
   }
 
