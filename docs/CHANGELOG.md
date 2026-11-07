@@ -7,6 +7,10 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ## [Unreleased]
 
+### Fixed
+
+- The attendee list CSV of an event (`GET /csv/:tenant/events/:id/bookings`) keeps its columns and rows: a value with `;` or `"` is quoted, with inner quotes doubled, and a line break becomes a space. Before, a semicolon in a name or address moved the following columns of that row, and a line break split the row.
+
 ## [4.3.2] — 2026-11-03
 
 ### Fixed
