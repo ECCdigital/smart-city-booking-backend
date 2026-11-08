@@ -208,3 +208,132 @@ describe("RoleController.getUserRolesByTenant", () => {
     expect(res.json.calledWith([])).to.be.true;
   });
 });
+
+describe("RoleController.removeRole", () => {
+  const HOUR = 60 * 60 * 1000;
+  let sandbox,
+    RoleController,
+    RoleManager,
+    MembershipManager,
+    InvitationManager;
+  let req, res, next;
+
+  function invitation(overrides = {}) {
+    return {
+      type: "single",
+      status: "active",
+      usedCount: 0,
+      maxUses: null,
+      expiresAt: null,
+      roles: ["role1"],
+      ...overrides,
+    };
+  }
+
+  function holders(memberships, invitations) {
+    sandbox
+      .stub(MembershipManager, "getMembershipsByTenantAndRoles")
+      .resolves(memberships);
+    sandbox
+      .stub(InvitationManager, "getInvitationsByTenantID")
+      .resolves(invitations);
+  }
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    mock("../src/middleware/logger", () => ({
+      error: sandbox.stub(),
+      info: sandbox.stub(),
+      debug: sandbox.stub(),
+    }));
+    RoleController = mock.reRequire(
+      "../src/platform/api/controllers/role-controller.js",
+    );
+    RoleManager =
+      require("../src/commons/data-managers/role-manager").RoleManager;
+    MembershipManager = require("../src/commons/data-managers/membership-manager");
+    InvitationManager = require("../src/commons/data-managers/invitation-manager");
+    sandbox
+      .stub(RoleManager, "getRole")
+      .resolves(new Role({ id: "role1", name: "Kasse", tenantId: "t1" }));
+    sandbox.stub(RoleManager, "removeRole").resolves();
+    req = { user: { id: "u1" }, params: { tenant: "t1", id: "role1" } };
+    res = {
+      sendStatus: sandbox.stub(),
+      status: sandbox.stub().returnsThis(),
+      send: sandbox.stub(),
+    };
+    next = sandbox.stub();
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+    mock.stopAll();
+  });
+
+  it("removes a role nobody holds", async () => {
+    holders([], [invitation({ roles: ["role2"] })]);
+
+    await RoleController.removeRole(req, res, next);
+
+    expect(RoleManager.removeRole.calledOnceWith("role1", "t1")).to.be.true;
+    expect(res.sendStatus.calledWith(200)).to.be.true;
+    expect(next.called).to.be.false;
+  });
+
+  it("keeps a role two members hold and answers 409 role_in_use with the counts", async () => {
+    holders([{ userId: "a" }, { userId: "b" }], []);
+
+    await RoleController.removeRole(req, res, next);
+
+    expect(RoleManager.removeRole.called).to.be.false;
+    const err = next.firstCall.args[0];
+    expect(err.statusCode).to.equal(409);
+    expect(err.code).to.equal("role_in_use");
+    expect(err.params).to.deep.equal({
+      roleId: "role1",
+      memberships: 2,
+      invitations: 0,
+    });
+  });
+
+  it("keeps a role a usable invitation offers", async () => {
+    holders([], [invitation({ expiresAt: Date.now() + HOUR })]);
+
+    await RoleController.removeRole(req, res, next);
+
+    expect(RoleManager.removeRole.called).to.be.false;
+    const err = next.firstCall.args[0];
+    expect(err.code).to.equal("role_in_use");
+    expect(err.params.memberships).to.equal(0);
+    expect(err.params.invitations).to.equal(1);
+  });
+
+  it("removes a role only expired, used up or revoked invitations offer", async () => {
+    holders(
+      [],
+      [
+        invitation({ expiresAt: Date.now() - HOUR }),
+        invitation({ usedCount: 1 }),
+        invitation({ type: "multi", maxUses: 3, usedCount: 3 }),
+        invitation({ status: "revoked" }),
+      ],
+    );
+
+    await RoleController.removeRole(req, res, next);
+
+    expect(RoleManager.removeRole.calledOnceWith("role1", "t1")).to.be.true;
+    expect(res.sendStatus.calledWith(200)).to.be.true;
+    expect(next.called).to.be.false;
+  });
+
+  it("answers 404 for an unknown role and removes nothing", async () => {
+    RoleManager.getRole.resolves(null);
+    holders([], []);
+
+    await RoleController.removeRole(req, res, next);
+
+    expect(res.sendStatus.calledWith(404)).to.be.true;
+    expect(RoleManager.removeRole.called).to.be.false;
+  });
+});
