@@ -21,6 +21,21 @@ class Invitation {
     return SchemaUtils.validate(this, invitationSchemaDefinition);
   }
 
+  /**
+   * Whether the invitation is active, not expired and not used up. Expiry
+   * never updates `status`, so an expired invitation still reads "active".
+   */
+  static isUsable(invitation, now = Date.now()) {
+    return (
+      invitation.status === "active" &&
+      (!invitation.expiresAt || now <= invitation.expiresAt) &&
+      (invitation.type === "multi"
+        ? invitation.maxUses == null ||
+          invitation.usedCount < invitation.maxUses
+        : invitation.usedCount < 1)
+    );
+  }
+
   static create(params) {
     const invitation = new Invitation(params);
     invitation.validate();

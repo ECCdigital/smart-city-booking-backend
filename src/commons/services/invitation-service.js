@@ -557,14 +557,8 @@ class InvitationService {
       byToken.set(invitation.token, invitation);
     }
 
-    return Array.from(byToken.values()).filter(
-      (invitation) =>
-        invitation.status === "active" &&
-        (!invitation.expiresAt || Date.now() <= invitation.expiresAt) &&
-        (invitation.type === "multi"
-          ? invitation.maxUses == null ||
-            invitation.usedCount < invitation.maxUses
-          : invitation.usedCount < 1),
+    return Array.from(byToken.values()).filter((invitation) =>
+      Invitation.isUsable(invitation),
     );
   }
 
