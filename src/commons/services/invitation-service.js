@@ -864,8 +864,7 @@ function validateInvitation(invitation, tenantID, userID = null) {
   }
 
   if (
-    invitation.maxUses &&
-    invitation.usedCount &&
+    invitation.maxUses != null &&
     invitation.usedCount >= invitation.maxUses
   ) {
     throw { message: "Invitation has reached its maximum uses", code: 410 };
