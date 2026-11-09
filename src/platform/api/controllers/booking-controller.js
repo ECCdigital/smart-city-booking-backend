@@ -406,6 +406,9 @@ class BookingController {
       }
     } catch (err) {
       logger.error(err);
+      if (err.cause?.code === 400) {
+        return response.status(400).send(err.message);
+      }
       response.status(500).send("Could not update booking");
     }
   }

@@ -2,6 +2,7 @@ const { isRangeOverlap } = require("range-overlap");
 const { Booking } = require("../entities/booking/booking");
 const BookingModel = require("./models/bookingModel");
 const BookableModel = require("./models/bookableModel");
+const { coerceBookableItemAmounts } = require("../utilities/booking-amount");
 
 /**
  * Data Manager for Booking objects.
@@ -112,6 +113,8 @@ class BookingManager {
   static async storeBooking(booking, upsert = true) {
     const bookingEntity =
       booking instanceof Booking ? booking : new Booking(booking);
+
+    coerceBookableItemAmounts(bookingEntity.bookableItems);
 
     bookingEntity.validate();
 

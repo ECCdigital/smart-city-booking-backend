@@ -29,6 +29,9 @@ const {
   checkPayedStatus,
   validatePaymentProviderRequirement,
 } = require("../booking-consitency-service");
+const {
+  validateBookableItemAmounts,
+} = require("../../utilities/booking-amount");
 
 const logger = bunyan.createLogger({
   name: "booking-service.js",
@@ -90,6 +93,8 @@ class BookingService {
 
       throw new Error("Missing parameters", { cause: { code: 400 } });
     }
+
+    validateBookableItemAmounts(bookableItems);
 
     async function validateMandatoryAddons(bookableItems) {
       const bookableIds = bookableItems.map((item) => item.bookableId);
@@ -319,6 +324,10 @@ class BookingService {
       throw new Error("", { cause: { code: 400 } });
     }
 
+    for (const bookingAttempt of bookingAttempts) {
+      validateBookableItemAmounts(bookingAttempt?.bookableItems);
+    }
+
     const checkoutId = uuidV4();
     logger.info(
       `${tenantId}, cid ${checkoutId} -- multiple checkout request by user ${user?.id}, simulate=${simulate}`,
@@ -430,6 +439,8 @@ class BookingService {
     if (!oldBooking) {
       throw new Error("Booking not found");
     }
+
+    validateBookableItemAmounts(updatedBooking.bookableItems);
 
     try {
       const bundleCheckoutService = new ManualBundleCheckoutService({
