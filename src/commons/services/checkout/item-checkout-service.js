@@ -64,7 +64,7 @@ class ItemCheckoutService {
    * @param {string} bookableId The ID of the bookable
    * @param {number} amount The amount of the booking
    * @param {string || null} couponCode The coupon code
-   * @param {boolean} bookWithPrice Determines whether the booking process should include pricing calculations. 
+   * @param {boolean} bookWithPrice Determines whether the booking process should include pricing calculations.
    *                                Set to `true` to enable pricing considerations, or `false` to skip them. Defaults to `true`.
    */
   constructor(
@@ -182,11 +182,19 @@ class ItemCheckoutService {
       );
     }
 
-    const amountBooked = concurrentBookings
-      .map((cb) => cb.bookableItems)
-      .flat()
-      .filter((bi) => bi.bookableId === bookable.id)
-      .reduce((acc, bi) => Number(acc) + Number(bi.amount), 0);
+    const amountBooked = concurrentBookings.reduce((sum, cb) => {
+      if (cb.isRejected || !Array.isArray(cb.bookableItems)) {
+        return sum;
+      }
+
+      for (const bi of cb.bookableItems) {
+        if (bi.bookableId === bookable.id) {
+          sum += Number(bi.amount) || 0;
+        }
+      }
+
+      return sum;
+    }, 0);
 
     return {
       amountBooked,
