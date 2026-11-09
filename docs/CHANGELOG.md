@@ -7,6 +7,8 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ## [Unreleased]
 
+## [4.3.3] — 2026-11-09
+
 ### Security
 
 - `GET /api/:tenant/bookings/:id/status/public` answers its refusals instead of ending the server process (ECCdigital/tickets#927): a tenant without the public status view is `405 public_status_view_disabled`, a name that does not match is `401 booking_name_mismatch`, an unknown booking `404`. Before, the refusal of a tenant in the default configuration carried no HTTP status, and setting it on the answer threw outside the handler's `try`, so one unauthenticated request stopped the backend. The handler takes the status from `statusCode`, no longer from the error code
