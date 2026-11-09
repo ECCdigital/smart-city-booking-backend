@@ -80,6 +80,12 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 - An admin edit of a booking (`PUT /api/:tenant/bookings`) keeps the owner `assignedUserId` the booking was created with ([ECCdigital/tickets#484](https://github.com/ECCdigital/tickets/issues/484)): before, the first mail of the form became the owner, so a guest booking fell silently to the account of that mail and a booking of an account left the customer's list when the mail changed. The first mail as owner applies only when a manual booking is created
 - A manual booking follows its corrected mail ([ECCdigital/tickets#563](https://github.com/ECCdigital/tickets/issues/563)): when an admin edit changes the first address of a manual booking's mail (`bookedVia: admin`), the owner `assignedUserId` moves to the new address, so the account of a mistyped address no longer sees the booking. Bookings of an account, guest bookings and bookings without a Buchungsweg keep their owner. See the [upgrade notes](migrations/v4.4-upgrade.md#owner-of-a-booking-after-an-admin-edit)
 
+## [4.3.3] — 2026-11-09
+
+### Security
+
+- `GET /api/:tenant/bookings/:id/status/public` answers its refusals instead of ending the server process (ECCdigital/tickets#927): a tenant without the public status view is `405 public_status_view_disabled`, a name that does not match is `401 booking_name_mismatch`, an unknown booking `404`. Before, the refusal of a tenant in the default configuration carried no HTTP status, and setting it on the answer threw outside the handler's `try`, so one unauthenticated request stopped the backend. The handler takes the status from `statusCode`, no longer from the error code
+
 ## [4.3.2] — 2026-11-03
 
 ### Fixed

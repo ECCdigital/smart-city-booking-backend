@@ -32,7 +32,6 @@ const {
   BadRequestError,
   ConflictError,
   NotFoundError,
-  BaseError,
   MethodNotAllowedError,
   ForbiddenError,
   UnauthorizedError,
@@ -232,7 +231,7 @@ class BookingService {
     const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
 
     if (!tenant.enablePublicStatusView) {
-      throw new BaseError("public_status_view_disabled", {
+      throw new MethodNotAllowedError("public_status_view_disabled", {
         message: "Public status view disabled",
       });
     }
@@ -243,7 +242,7 @@ class BookingService {
       DOMAIN,
     );
 
-    if (!booking.id) {
+    if (!booking) {
       throw new NotFoundError("booking_not_found", { bookingId });
     }
 
@@ -251,7 +250,7 @@ class BookingService {
     const normalizedInputName = name.trim().toLowerCase();
 
     if (normalizedBookingName !== normalizedInputName) {
-      throw new MethodNotAllowedError("booking_name_mismatch", {
+      throw new UnauthorizedError("booking_name_mismatch", {
         message: "Provided name does not match booking name",
       });
     }
