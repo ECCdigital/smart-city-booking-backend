@@ -19,7 +19,8 @@ const MEGABYTE = 1024 * 1024;
 // instance media library (`POST /api/v2/:tenant/media`, where `instance` is
 // the instance library), the customer uploads of a booking (`POST
 // /api/v2/:tenant/bookings/:id/customer-uploads/:fieldId`, a replacement
-// with `PUT .../:fieldId/:mediaId`), and the checkout of a single booking
+// with `PUT .../:fieldId/:mediaId`; for a guest the same below
+// `customer-uploads-by-link`), and the checkout of a single booking
 // with the customer uploads of its upload fields (`POST
 // /api/v2/:tenant/checkout`, the legacy `POST /api/:tenant/checkout`). Every other
 // route turns multipart bodies away before a single byte is parsed.
@@ -29,11 +30,11 @@ const UPLOAD_ROUTES = [
   { method: "POST", path: /^\/api\/v2\/[^/]+\/media\/?$/ },
   {
     method: "POST",
-    path: /^\/api\/v2\/[^/]+\/bookings\/[^/]+\/customer-uploads\/[^/]+\/?$/,
+    path: /^\/api\/v2\/[^/]+\/bookings\/[^/]+\/customer-uploads(-by-link)?\/[^/]+\/?$/,
   },
   {
     method: "PUT",
-    path: /^\/api\/v2\/[^/]+\/bookings\/[^/]+\/customer-uploads\/[^/]+\/[^/]+\/?$/,
+    path: /^\/api\/v2\/[^/]+\/bookings\/[^/]+\/customer-uploads(-by-link)?\/[^/]+\/[^/]+\/?$/,
   },
 ];
 

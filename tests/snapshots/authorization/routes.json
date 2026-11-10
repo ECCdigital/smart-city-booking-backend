@@ -1071,6 +1071,38 @@
     "instanceOwner": 404,
     "expiredToken": 401
   },
+  "GET /api/v2/:tenant/bookings/:id/customer-uploads-by-link/": {
+    "anonymous": "403 {\"error\":\"ForbiddenError\",\"code\":\"customer_upload_link_invalid\",\"statusCode\":403,\"params\":{}}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"customer_upload_link_invalid\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"customer_upload_link_invalid\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"customer_upload_link_invalid\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"customer_upload_link_invalid\",\"statusCode\":403,\"params\":{}}",
+    "expiredToken": 401
+  },
+  "POST /api/v2/:tenant/bookings/:id/customer-uploads-by-link/:fieldId": {
+    "anonymous": "403 {\"error\":\"ForbiddenError\",\"code\":\"customer_upload_link_invalid\",\"statusCode\":403,\"params\":{}}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"customer_upload_link_invalid\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"customer_upload_link_invalid\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"customer_upload_link_invalid\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"customer_upload_link_invalid\",\"statusCode\":403,\"params\":{}}",
+    "expiredToken": 401
+  },
+  "PUT /api/v2/:tenant/bookings/:id/customer-uploads-by-link/:fieldId/:mediaId": {
+    "anonymous": "403 {\"error\":\"ForbiddenError\",\"code\":\"customer_upload_link_invalid\",\"statusCode\":403,\"params\":{}}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"customer_upload_link_invalid\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"customer_upload_link_invalid\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"customer_upload_link_invalid\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"customer_upload_link_invalid\",\"statusCode\":403,\"params\":{}}",
+    "expiredToken": 401
+  },
+  "DELETE /api/v2/:tenant/bookings/:id/customer-uploads-by-link/:fieldId/:mediaId": {
+    "anonymous": "403 {\"error\":\"ForbiddenError\",\"code\":\"customer_upload_link_invalid\",\"statusCode\":403,\"params\":{}}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"customer_upload_link_invalid\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"customer_upload_link_invalid\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"customer_upload_link_invalid\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"customer_upload_link_invalid\",\"statusCode\":403,\"params\":{}}",
+    "expiredToken": 401
+  },
   "GET /api/v2/:tenant/bookings/:ids/status": {
     "anonymous": 200,
     "signedIn": 200,

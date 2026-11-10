@@ -20,9 +20,12 @@ const { renderSnippet } = require("./templates/template-loader");
 const {
   bookingStatusUrl,
   cancellationUrl,
-  customerUploadProofsUrl,
+  customerUploadUrlOf,
   withdrawalUrl,
 } = require("./mail-links");
+const {
+  isGuestBooking,
+} = require("../services/customer-upload/customer-upload-link");
 const {
   getSnippetOverride,
   getSubjectOverride,
@@ -371,6 +374,9 @@ function renderMissingProofs({
   if (missing.length === 0) return "";
 
   const first = missing[0];
+  // A guest's link holds for one booking: in a
+  // group each line of a guest's booking carries the link of its own.
+  const guestGroup = aggregated && isGuestBooking(first.booking);
   return renderSnippet("missing-proofs", {
     missingProofs: missing.map(({ booking, field }) => ({
       label: field.label,
@@ -379,11 +385,12 @@ function renderMissingProofs({
           ? ""
           : Formatters.formatDateTime(field.deadline),
       bookingId: aggregated ? booking.id : "",
+      url: guestGroup ? customerUploadUrlOf(booking, field.fieldId) : "",
     })),
     // One booking: the page opens at its most pressing field; a group:
     // at the first booking with a proof missing.
-    proofsUrl: customerUploadProofsUrl(
-      first.booking.id,
+    proofsUrl: customerUploadUrlOf(
+      first.booking,
       aggregated ? null : first.field.fieldId,
     ),
   });

@@ -36,6 +36,11 @@ const {
   uploadFieldsOf,
 } = require("./customer-upload-state");
 const { ScannerUnavailableError, virusScanner } = require("./virus-scanner");
+const {
+  isGuestBooking,
+  linkHolds,
+  verifyCustomerUploadLink,
+} = require("./customer-upload-link");
 
 const logger = bunyan.createLogger({
   name: "customer-upload-service.js",
@@ -75,6 +80,10 @@ const CUSTOMER_UPLOAD_REASONS = Object.freeze({
   // booking or field that is not one of the group's, one named twice, or
   // a choice a guest does not have.
   TARGET_INVALID: "customer_upload_target_invalid",
+  // The signed link of a guest: not signed here,
+  // or not for this booking; or the booking has ended.
+  LINK_INVALID: "customer_upload_link_invalid",
+  LINK_EXPIRED: "customer_upload_link_expired",
 });
 
 const R = CUSTOMER_UPLOAD_REASONS;
@@ -182,6 +191,97 @@ class CustomerUploadService {
       ip,
       forUpload,
     });
+  }
+
+  /**
+   * The booking a guest's signed link names: the
+   * booking of the route, made without an account, not ended yet. The
+   * link stands in for the sign-in; nothing else of the tenant opens.
+   *
+   * @param {Object} params
+   * @param {string} params.tenantId
+   * @param {string} params.bookingId
+   * @param {string} params.link The token of the link
+   * @param {number} [params.now]
+   * @returns {Promise<Object>} The booking
+   */
+  static async bookingOfLink({ tenantId, bookingId, link, now = Date.now() }) {
+    const named = verifyCustomerUploadLink(link);
+    if (
+      !named ||
+      named.tenantId !== tenantId ||
+      named.bookingId !== bookingId
+    ) {
+      throw new ForbiddenError(R.LINK_INVALID);
+    }
+    const booking = await BookingManager.getBooking(
+      bookingId,
+      tenantId,
+      DOMAIN,
+    );
+    if (!booking || !isGuestBooking(booking)) {
+      throw new ForbiddenError(R.LINK_INVALID);
+    }
+    if (!linkHolds(booking, now)) {
+      throw new ForbiddenError(R.LINK_EXPIRED);
+    }
+    return booking;
+  }
+
+  /**
+   * {@link admit} for a guest with the signed link of the booking:
+   * the same field checks and rate limits as for
+   * a booking person, per booking and IP.
+   *
+   * @param {Object} params As {@link admit}, `link` in place of `userId`
+   * @returns {Promise<Object>} The context of the request
+   */
+  static async admitByLink({
+    tenantId,
+    bookingId,
+    fieldId,
+    link,
+    ip,
+    forUpload = true,
+  }) {
+    const booking = await CustomerUploadService.bookingOfLink({
+      tenantId,
+      bookingId,
+      link,
+    });
+    return CustomerUploadService._admitTo(booking, {
+      fieldId,
+      userId: null,
+      ip,
+      forUpload,
+    });
+  }
+
+  /**
+   * What the page „Nachweise einreichen“ of a guest shows of the booking of
+   * the link: its provider, its time, the titles of
+   * its offers and the derived state of its uploads - no more of it.
+   *
+   * @param {Object} booking Of {@link bookingOfLink}
+   * @returns {Promise<{tenant: Object, booking: Object}>}
+   */
+  static async guestViewOf(booking) {
+    const tenant = await TenantManager.getTenant(booking.tenantId, DOMAIN);
+    const states = await CustomerUploadService.statesOf([booking]);
+    return {
+      tenant: { id: booking.tenantId, name: tenant?.name ?? "" },
+      booking: {
+        id: booking.id,
+        tenantId: booking.tenantId,
+        timeBegin: booking.timeBegin ?? null,
+        timeEnd: booking.timeEnd ?? null,
+        bookableItems: (booking.bookableItems || []).map((item) => ({
+          bookableId: item.bookableId,
+          _bookableUsed: { title: item._bookableUsed?.title ?? "" },
+        })),
+        customerUploadState: states.get(booking.id) ?? null,
+      },
+    };
   }
 
   /** The field and the rate limit at an admitted booking. */

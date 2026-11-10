@@ -131,6 +131,9 @@ const TABLE = {
     // Handing in, replacing and deleting a customer upload (glossary
     // "Kunden-Upload"): the booking person's own booking alone.
     customerUpload: { own: "signedIn" },
+    // The same for a guest with the signed link of the booking:
+    // public, the link is checked by the route.
+    customerUploadByLink: { public: true },
     // Reading the customer uploads of a booking - the derived state in the
     // booking answers: the booking person, and
     // whoever reads the tenant's bookings. Not the instance owner by the

@@ -6,6 +6,12 @@
  * builds its sample links from the same functions.
  */
 
+const {
+  isGuestBooking,
+  linkHolds,
+  signCustomerUploadLink,
+} = require("../services/customer-upload/customer-upload-link");
+
 /** The public status page of a booking - the QR code's address. */
 function bookingStatusUrl(booking, tenantId) {
   return `${process.env.FRONTEND_URL}/booking/status/${tenantId}?id=${booking.id}&name=${encodeURIComponent(booking.name)}`;
@@ -83,9 +89,35 @@ function customerUploadProofsUrl(bookingId = null, fieldId = null) {
   return `${url}?${query}`;
 }
 
+/**
+ * The page „Nachweise einreichen“ of a guest: the
+ * storefront's page without account and menu, with the booking's signed
+ * link, opened at the upload field where one is named. None without
+ * `STORE_FRONT_URL`, nor for a booking whose link no longer holds.
+ */
+function customerUploadGuestUrl(booking, fieldId = null) {
+  const base = (process.env.STORE_FRONT_URL || "").replace(/\/+$/, "");
+  if (!base || !booking || !linkHolds(booking)) return "";
+  const query = new URLSearchParams({ link: signCustomerUploadLink(booking) });
+  if (fieldId) query.set("field", fieldId);
+  return `${base}/proofs?${query}`;
+}
+
+/**
+ * The way of a booking's customer to hand proofs in: a guest's signed link,
+ * the page under the account for everyone else.
+ */
+function customerUploadUrlOf(booking, fieldId = null) {
+  return isGuestBooking(booking)
+    ? customerUploadGuestUrl(booking, fieldId)
+    : customerUploadProofsUrl(booking?.id, fieldId);
+}
+
 module.exports = {
   bookingStatusUrl,
   customerUploadProofsUrl,
+  customerUploadGuestUrl,
+  customerUploadUrlOf,
   cancellationUrl,
   withdrawalUrl,
   adminDashboardUrl,

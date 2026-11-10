@@ -33,6 +33,45 @@ class CustomerUploadControllerV2 {
     next();
   }
 
+  /**
+   * Booking, field and rate limit for a guest with the signed link of the
+   * booking, the token in the header
+   * `X-Customer-Upload-Link`.
+   */
+  static async admitUploadByLink(req, res, next) {
+    req.customerUpload = await CustomerUploadService.admitByLink(
+      CustomerUploadControllerV2._linkParams(req),
+    );
+    next();
+  }
+
+  /** Booking and rate limit for a guest's deletion. */
+  static async admitRemovalByLink(req, res, next) {
+    req.customerUpload = await CustomerUploadService.admitByLink({
+      ...CustomerUploadControllerV2._linkParams(req),
+      forUpload: false,
+    });
+    next();
+  }
+
+  /**
+   * The one booking of a guest's link, for the page „Nachweise einreichen“
+   * without an account: what the page shows of it,
+   * its provider and the derived state of its uploads - no more of the
+   * booking than that.
+   */
+  static async readByLink(req, res) {
+    const booking = await CustomerUploadService.bookingOfLink({
+      tenantId: req.params.tenant,
+      bookingId: req.params.id,
+      link: CustomerUploadControllerV2._link(req),
+    });
+    res.set("Cache-Control", "no-store");
+    return res
+      .status(200)
+      .json(await CustomerUploadService.guestViewOf(booking));
+  }
+
   /** A file for an upload field of the booking. */
   static async upload(req, res) {
     await CustomerUploadService.upload(
@@ -101,6 +140,20 @@ class CustomerUploadControllerV2 {
       bookingId: req.params.id,
       fieldId: req.params.fieldId,
       userId: req.principal?.userId ?? null,
+      ip: req.ip || req.socket?.remoteAddress || "unknown",
+    };
+  }
+
+  static _link(req) {
+    return req.get("x-customer-upload-link") ?? "";
+  }
+
+  static _linkParams(req) {
+    return {
+      tenantId: req.params.tenant,
+      bookingId: req.params.id,
+      fieldId: req.params.fieldId,
+      link: CustomerUploadControllerV2._link(req),
       ip: req.ip || req.socket?.remoteAddress || "unknown",
     };
   }

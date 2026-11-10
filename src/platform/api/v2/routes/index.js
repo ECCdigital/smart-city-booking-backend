@@ -15,6 +15,10 @@ router.use(
   "/:tenant/bookings/:id/customer-uploads",
   require("./tenant.customer-upload.routes"),
 );
+router.use(
+  "/:tenant/bookings/:id/customer-uploads-by-link",
+  require("./tenant.customer-upload-link.routes"),
+);
 router.use("/:tenant/bookings", require("./tenant.booking-status.routes"));
 router.use("/:tenant/media", require("./tenant.media.routes"));
 router.use("/:tenant/dashboard", require("./tenant.dashboard.routes"));

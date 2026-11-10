@@ -59,8 +59,11 @@ const {
 const { SupervisionMailType } = require("./supervision-mail-types");
 const {
   adminTenantMembersUrl,
-  customerUploadProofsUrl,
+  customerUploadUrlOf,
 } = require("./mail-links");
+const {
+  isGuestBooking,
+} = require("../services/customer-upload/customer-upload-link");
 const Formatters = require("../utilities/formatters");
 const { STATUS } = require("../services/booking-lifecycle/booking-state");
 
@@ -286,16 +289,29 @@ const MailType = Object.freeze({
     includeQRCode: false,
     sendBCC: false,
     addRejectionLink: false,
-    // The button opens the page at the field of the (first) booking.
+    // The button opens the page at the field of the (first) booking. A
+    // guest's link holds for one booking: in a
+    // group the guest gets one link per booking instead.
     templateData: (
       { reason, fieldLabels = [], kind, fieldId },
       { bookings },
-    ) => ({
-      customerUploadReason: reason,
-      customerUploadFields: fieldLabels.join(", "),
-      customerUploadRequestedAgain: kind === "requestedAgain",
-      proofsUrl: customerUploadProofsUrl(bookings[0]?.id, fieldId),
-    }),
+    ) => {
+      const guestGroup = bookings.length > 1 && isGuestBooking(bookings[0]);
+      return {
+        customerUploadReason: reason,
+        customerUploadFields: fieldLabels.join(", "),
+        customerUploadRequestedAgain: kind === "requestedAgain",
+        proofsUrl: guestGroup ? "" : customerUploadUrlOf(bookings[0], fieldId),
+        proofLinks: guestGroup
+          ? bookings
+              .map((booking) => ({
+                bookingId: booking.id,
+                url: customerUploadUrlOf(booking, fieldId),
+              }))
+              .filter((link) => link.url)
+          : [],
+      };
+    },
   },
 
   ACCESS_PROVISIONED: {
