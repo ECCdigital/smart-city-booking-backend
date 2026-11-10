@@ -413,6 +413,7 @@ class CheckoutControllerV2 {
         zipCode,
         location,
         comment,
+        customerUploadTargets,
       } = req.body;
 
       const resolved = await CheckoutControllerV2._resolveGroupCheckoutRequest({
@@ -462,6 +463,12 @@ class CheckoutControllerV2 {
         bookingAttempts,
         paymentProvider,
         simulate,
+        // A multipart checkout's files, each for the bookings and fields
+        // its key names.
+        customerUploadFiles: (req.customerUploadFiles ?? []).map(
+          ({ key, file }) => ({ key, file }),
+        ),
+        customerUploadTargets: customerUploadTargets ?? {},
       });
 
       if (simulate || !CheckoutControllerV2._needsGroupPayment(groupBooking)) {

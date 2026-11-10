@@ -262,6 +262,12 @@ class CheckoutController {
         bookingAttempts,
         paymentProvider: req.body.paymentProvider,
         simulate,
+        // A multipart checkout's files, each for the bookings and fields
+        // its key names.
+        customerUploadFiles: (req.customerUploadFiles ?? []).map(
+          ({ key, file }) => ({ key, file }),
+        ),
+        customerUploadTargets: req.body.customerUploadTargets ?? {},
       });
       return res.status(200).json(groupBooking);
     } catch (err) {

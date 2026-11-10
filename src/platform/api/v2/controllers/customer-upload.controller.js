@@ -1,6 +1,8 @@
 const {
   CustomerUploadService,
+  CUSTOMER_UPLOAD_REASONS,
 } = require("../../../../commons/services/customer-upload/customer-upload-service");
+const { BadRequestError } = require("../../../../errors/BaseError");
 const {
   CustomerUploadReview,
 } = require("../../../../commons/services/customer-upload/customer-upload-review");
@@ -63,9 +65,20 @@ class CustomerUploadControllerV2 {
    * position in the request (`index`), field, name, code and params.
    */
   static async submit(req, res) {
+    // The other bookings of the group each new file counts for too, by its
+    // position in the request: the form field `alsoFor` as JSON `{ "<index>":
+    // [{ bookingId, fieldId }] }`.
+    const alsoFor = CustomerUploadControllerV2._alsoFor(req) ?? {};
+    if (typeof alsoFor !== "object" || Array.isArray(alsoFor)) {
+      throw new BadRequestError(CUSTOMER_UPLOAD_REASONS.TARGET_INVALID);
+    }
+    const entries = (req.customerUploadFiles ?? []).map((entry, index) => ({
+      ...entry,
+      alsoFor: alsoFor[index] ?? null,
+    }));
     const { stored, refused } = await CustomerUploadService.submitAll(
       req.customerUpload,
-      req.customerUploadFiles ?? [],
+      entries,
     );
     return res.status(stored.length > 0 ? 201 : 200).json({
       customerUploadState: await CustomerUploadService.stateAfter(
@@ -114,11 +127,17 @@ class CustomerUploadControllerV2 {
       .json(await CustomerUploadService.guestViewOf(booking));
   }
 
-  /** A file for an upload field of the booking. */
+  /**
+   * A file for an upload field of the booking. In a group the booking
+   * person names the fields of other bookings of the group it counts for
+   * too, in the form field `alsoFor` as JSON `[{ bookingId, fieldId }]`;
+   * a guest has no such choice.
+   */
   static async upload(req, res) {
     await CustomerUploadService.upload(
       req.customerUpload,
       CustomerUploadControllerV2._file(req),
+      { alsoFor: CustomerUploadControllerV2._alsoFor(req) },
     );
     return CustomerUploadControllerV2._answerState(req, res, 201);
   }
@@ -150,6 +169,9 @@ class CustomerUploadControllerV2 {
       mediaId: req.params.mediaId,
       result: req.body?.result,
       reason: req.body?.reason,
+      // An upload of a group: the other bookings the check counts for;
+      // all of them without.
+      alsoFor: req.body?.alsoFor ?? null,
       user: req.user,
     });
     return CustomerUploadControllerV2._answerStaffState(req, res);
@@ -198,6 +220,18 @@ class CustomerUploadControllerV2 {
       link: CustomerUploadControllerV2._link(req),
       ip: req.ip || req.socket?.remoteAddress || "unknown",
     };
+  }
+
+  /** The other bookings of `alsoFor`; null where the form has none. */
+  static _alsoFor(req) {
+    const raw = req.body?.alsoFor;
+    if (raw === undefined || raw === null || raw === "") return null;
+    if (typeof raw !== "string") return raw;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      throw new BadRequestError(CUSTOMER_UPLOAD_REASONS.TARGET_INVALID);
+    }
   }
 
   /** The one file of the request, whatever its form field is called. */

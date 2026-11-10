@@ -576,7 +576,18 @@ async function generateGroupBookingReference(
  * states, which the group's guard refuses - every member and the group are
  * deleted, the coupons given back and what caused the abort thrown.
  *
- * @param {{ tenantId: string, user?: Object, contactData: Object, bookingAttempts: Object[], paymentProvider: string, simulate: boolean, policy?: string }} params
+ * The booking person's own checkout (self-service) carries the files of
+ * the upload fields "in the checkout", each for
+ * the bookings of the group and the field of each the customer chose
+ * (`customerUploadTargets` by the key of the file, see
+ * `CustomerUploadService.checkAtGroupCheckout`). Every file passes every
+ * check before the first member is stored, and a required field of a
+ * member without a file refuses the checkout. Once the members are stored
+ * each file becomes one medium for all its bookings, before the group is
+ * admitted; where that fails, the members go again. A booking the staff
+ * makes asks for none.
+ *
+ * @param {{ tenantId: string, user?: Object, contactData: Object, bookingAttempts: Object[], paymentProvider: string, simulate: boolean, policy?: string, customerUploadFiles?: Array<{key: string, file: Object}>, customerUploadTargets?: Object }} params
  * @returns {Promise<GroupBooking>} The group with its members as stored after the admission; under `simulate` the group it would book, unstored, with the computed members
  */
 async function createGroupBooking({
@@ -587,6 +598,8 @@ async function createGroupBooking({
   paymentProvider,
   simulate,
   policy = CheckoutPolicy.SELF_SERVICE,
+  customerUploadFiles = [],
+  customerUploadTargets = {},
 }) {
   if (!Array.isArray(bookingAttempts) || bookingAttempts.length === 0) {
     throw new BadRequestError("missing_booking_attempts");
@@ -609,12 +622,27 @@ async function createGroupBooking({
 
   await assertInvoicePermission(tenantId, user, paymentProvider, policy);
 
+  // The files of the group, every one checked before a member is stored.
+  const uploads =
+    !simulate && checkoutPolicy.runsChecks(policy)
+      ? await asCheckoutRefusal(() =>
+          CustomerUploadService.checkAtGroupCheckout({
+            tenantId,
+            attempts: bookingAttempts,
+            files: customerUploadFiles ?? [],
+            targets: customerUploadTargets ?? {},
+            guest: !user?.id,
+          }),
+        )
+      : [];
+
   const checkoutId = uuidV4();
   logger.info(
     `${tenantId}, cid ${checkoutId} -- multiple checkout request by user ${user?.id}, simulate=${simulate}`,
   );
 
   const allBookings = [];
+  const bookingOfAttempt = new Map();
 
   for (const bookingAttempt of sortedBookingAttempts) {
     bookingAttempt.mail = contactData.mail;
@@ -637,6 +665,32 @@ async function createGroupBooking({
     });
 
     allBookings.push(booking);
+    bookingOfAttempt.set(bookingAttempt, booking);
+  }
+
+  if (uploads.length > 0) {
+    try {
+      const references = await CustomerUploadService.storeAtGroupCheckout({
+        tenantId,
+        accepted: uploads,
+        bookings: bookingAttempts.map((attempt) =>
+          bookingOfAttempt.get(attempt),
+        ),
+        uploadedBy: user?.id ?? null,
+      });
+      // What a rollback after an aborted admission takes back.
+      for (const booking of allBookings) {
+        booking.customerUploads = references.get(booking.id) ?? [];
+      }
+    } catch (err) {
+      logger.error(
+        `${tenantId} -- customer uploads of a group checkout not stored, rolling back: ${err.message}`,
+      );
+      for (const booking of allBookings) {
+        await rollback(tenantId, booking);
+      }
+      throw err;
+    }
   }
 
   const uniqueId = await generateGroupBookingReference(tenantId);

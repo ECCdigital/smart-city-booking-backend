@@ -458,7 +458,13 @@ router.post(
   acceptCheckoutFiles(),
   CheckoutController.checkout,
 );
-router.post("/checkout/group", publicRoute(), CheckoutController.groupCheckout);
+// JSON, or multipart with the customer uploads of the group.
+router.post(
+  "/checkout/group",
+  publicRoute(),
+  acceptCheckoutFiles(),
+  CheckoutController.groupCheckout,
+);
 router.post(
   "/checkout/validateItem",
   publicRoute(),

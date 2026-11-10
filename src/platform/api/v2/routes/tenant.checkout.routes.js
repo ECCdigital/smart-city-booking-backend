@@ -22,9 +22,11 @@ router.post(
   acceptCheckoutFiles(),
   CheckoutControllerV2.checkout,
 );
+// JSON, or multipart with the customer uploads of the group.
 router.post(
   "/group",
   publicRoute("checkout", "all"),
+  acceptCheckoutFiles(),
   CheckoutControllerV2.groupCheckout,
 );
 router.get(

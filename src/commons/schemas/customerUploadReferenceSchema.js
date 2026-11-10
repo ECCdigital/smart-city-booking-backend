@@ -29,6 +29,23 @@ const customerUploadReferenceSchema = new Schema(
     size: { type: Number, default: 0 },
     uploadedAt: { type: Double, required: true },
     uploadedBy: { type: String, default: null },
+    // An upload of a group handed in for several of its bookings:
+    // every booking and field it was handed in
+    // for, this one included, as at the upload. Empty for an upload of this
+    // booking alone. The medium's `bookingIds` say which still hold it.
+    sharedWith: {
+      type: [
+        new Schema(
+          {
+            bookingId: { type: String, required: true },
+            fieldId: { type: String, required: true },
+            fieldLabel: { type: String, default: "" },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
     review: {
       status: {
         type: String,

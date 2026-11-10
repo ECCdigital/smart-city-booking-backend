@@ -204,7 +204,9 @@ class BookingController {
         (booking) => booking.exportCustomer(),
         { withWithdrawalUrl: true },
       );
-      await withCustomerUploadState(view, bookings);
+      // Each with its group, for proofs handed in for several bookings of
+      // a series at once.
+      await withCustomerUploadState(view, bookings, null, { withGroup: true });
 
       logger.info(
         `${tenant} -- sending ${bookings.length} assigned bookings to user ${user?.id}`,

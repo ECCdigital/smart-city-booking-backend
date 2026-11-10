@@ -65,6 +65,7 @@ const {
 const { SupervisionMailType } = require("./supervision-mail-types");
 const {
   adminBookingUrl,
+  adminGroupBookingUrl,
   adminTenantMembersUrl,
   customerUploadUrlOf,
 } = require("./mail-links");
@@ -369,7 +370,8 @@ const MailType = Object.freeze({
 
   // Customer uploads handed in later, or replaced:
   // one notice per request and booking - the page „Nachweise einreichen“
-  // hands in every proof of a booking in one request -
+  // hands in every proof of a booking in one request - and one per request
+  // and group for an upload handed in for several bookings of a group,
   // telling the staff there is something to
   // check: the upload fields and the link into the Admin UI, never a file
   // nor its name. A tenant notice, so it never carries an attachment. To
@@ -380,17 +382,30 @@ const MailType = Object.freeze({
     family: "tenant",
     templateName: "customer-upload-submitted",
     audience: "customerUploadReviewers",
-    subject: (ctx) => `Nachweis eingereicht zur Buchung ${ctx.bookingId}`,
+    subject: (ctx) =>
+      ctx.groupBookingId
+        ? `Nachweis eingereicht zur Gruppe ${ctx.groupBookingId}`
+        : `Nachweis eingereicht zur Buchung ${ctx.bookingId}`,
     gate: (ctx) => {
       const settings = normalizeCustomerUploadSettings(
         ctx.tenant.customerUploads,
       );
       return settings.enabled && settings.notifyOnSubmitted !== false;
     },
-    templateData: ({ tenantId, bookingId, fieldLabels = [] }) => ({
+    templateData: ({
+      tenantId,
       bookingId,
+      groupBookingId = null,
+      bookingIds = [],
+      fieldLabels = [],
+    }) => ({
+      bookingId,
+      groupBookingId,
+      groupBookingIds: groupBookingId ? bookingIds.join(", ") : "",
       customerUploadFieldList: fieldLabels,
-      adminUrl: adminBookingUrl(tenantId, bookingId),
+      adminUrl: groupBookingId
+        ? adminGroupBookingUrl(tenantId, groupBookingId)
+        : adminBookingUrl(tenantId, bookingId),
     }),
   },
 

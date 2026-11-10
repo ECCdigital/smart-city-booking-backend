@@ -23,11 +23,12 @@ const MEGABYTE = 1024 * 1024;
 // with `POST .../customer-uploads`; for a guest the same below
 // `customer-uploads-by-link`), and the checkout of a single booking
 // with the customer uploads of its upload fields (`POST
-// /api/v2/:tenant/checkout`, the legacy `POST /api/:tenant/checkout`). Every other
+// /api/v2/:tenant/checkout`, the legacy `POST /api/:tenant/checkout`) and
+// of a group (`.../checkout/group`). Every other
 // route turns multipart bodies away before a single byte is parsed.
 const UPLOAD_ROUTES = [
-  { method: "POST", path: /^\/api\/v2\/[^/]+\/checkout\/?$/ },
-  { method: "POST", path: /^\/api\/[^/]+\/checkout\/?$/ },
+  { method: "POST", path: /^\/api\/v2\/[^/]+\/checkout(\/group)?\/?$/ },
+  { method: "POST", path: /^\/api\/[^/]+\/checkout(\/group)?\/?$/ },
   { method: "POST", path: /^\/api\/v2\/[^/]+\/media\/?$/ },
   {
     method: "POST",

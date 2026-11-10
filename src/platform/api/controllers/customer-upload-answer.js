@@ -23,12 +23,16 @@ const {
  *   same order; the bookings themselves by default
  * @param {{reach: string|null, userId: string|null}} [scope] Who may read
  *   the state; everyone of the answer without one
+ * @param {Object} [options]
+ * @param {boolean} [options.withGroup] Whether each state names the group
+ *   of its booking - for "my bookings"
  * @returns {Promise<Object[]>}
  */
 async function withCustomerUploadState(
   bookings,
   sources = bookings,
   scope = null,
+  { withGroup = false } = {},
 ) {
   const readable = sources.filter(
     (source) => !scope || withinReach(source, "assignedUserId", scope),
@@ -36,6 +40,7 @@ async function withCustomerUploadState(
   // The staff reads who checked; the customer does not.
   const states = await CustomerUploadService.statesOf(readable, {
     withReviewer: scope?.reach === REACH.ANY,
+    withGroup,
   });
   bookings.forEach((booking, index) => {
     booking.customerUploadState = states.get(sources[index].id) ?? null;

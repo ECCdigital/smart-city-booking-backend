@@ -122,6 +122,15 @@ function adminBookingUrl(tenantId, bookingId) {
   return `${process.env.FRONTEND_URL}/bookings/${encodeURIComponent(bookingId)}?tenant=${encodeURIComponent(tenantId)}`;
 }
 
+/**
+ * A group booking in the Admin UI (its Serienbuchungsseite), the tenant
+ * named as for a booking - where the staff checks an upload handed in for
+ * several bookings of the group.
+ */
+function adminGroupBookingUrl(tenantId, groupBookingId) {
+  return `${process.env.FRONTEND_URL}/group-bookings/${encodeURIComponent(groupBookingId)}?tenant=${encodeURIComponent(tenantId)}`;
+}
+
 module.exports = {
   bookingStatusUrl,
   customerUploadProofsUrl,
@@ -134,4 +143,5 @@ module.exports = {
   adminInstanceReportsUrl,
   adminTenantMembersUrl,
   adminBookingUrl,
+  adminGroupBookingUrl,
 };

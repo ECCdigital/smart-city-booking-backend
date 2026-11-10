@@ -114,12 +114,15 @@ describe("File uploads only on the upload routes", function () {
     assert.strictEqual(res.body.files, null);
   });
 
-  // The single checkout with the customer uploads of its upload fields.
-  it("lets files through on the checkout of a single booking", function () {
+  // The single checkout with the customer uploads of its upload fields,
+  // and the group checkout.
+  it("lets files through on the checkout of a single booking and of a group", function () {
     const routeOf = (method, path) => isUploadRoute({ method, path });
 
     assert.strictEqual(routeOf("POST", "/api/v2/tenant1/checkout"), true);
     assert.strictEqual(routeOf("POST", "/api/tenant1/checkout"), true);
+    assert.strictEqual(routeOf("POST", "/api/v2/tenant1/checkout/group"), true);
+    assert.strictEqual(routeOf("POST", "/api/tenant1/checkout/group"), true);
     assert.strictEqual(
       routeOf("POST", "/api/v2/tenant1/checkout/validate-group"),
       false,
