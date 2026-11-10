@@ -215,7 +215,7 @@ router.get(
 
 router.get(
   "/bookings",
-  publicRoute("booking", "list"),
+  publicRoute("booking", "list", { also: ["readCustomerUploads"] }),
   BookingController.getBookings,
 );
 router.post(
@@ -247,7 +247,7 @@ router.get(
 );
 router.get(
   "/bookings/:id",
-  authorize("booking", "read"),
+  authorize("booking", "read", { also: ["readCustomerUploads"] }),
   BookingController.getBooking,
 );
 router.delete(
@@ -383,7 +383,9 @@ router.get(
 );
 router.get(
   "/group-bookings/:id",
-  authorize("groupBooking", "read"),
+  authorize("groupBooking", "read", {
+    also: ["booking.readCustomerUploads"],
+  }),
   GroupBookingController.getGroupBooking,
 );
 router.put(
@@ -420,7 +422,9 @@ router.post(
 );
 router.get(
   "/group-bookings/booking/:bookingId",
-  authorize("groupBooking", "read"),
+  authorize("groupBooking", "read", {
+    also: ["booking.readCustomerUploads"],
+  }),
   GroupBookingController.getGroupBookingByBookingId,
 );
 router.delete(
@@ -536,7 +540,9 @@ router.delete(
 // rights' to decide, from the questions the marker names.
 router.get(
   "/files/get",
-  publicRoute("media", "file", { also: ["bookingDocument", "intern"] }),
+  publicRoute("media", "file", {
+    also: ["bookingDocument", "customerUpload", "intern"],
+  }),
   FileController.getTenantFile,
 );
 

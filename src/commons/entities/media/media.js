@@ -3,6 +3,7 @@ const {
   mediaSchemaDefinition,
   MEDIA_KIND,
   MEDIA_VISIBILITY,
+  CUSTOMER_UPLOAD_TAG,
 } = require("../../schemas/mediaSchema");
 const SchemaUtils = require("../../utilities/schemaUtils");
 
@@ -60,6 +61,21 @@ class Media {
    */
   isBookingDocument() {
     return Array.isArray(this.bookingIds) && this.bookingIds.length > 0;
+  }
+
+  /**
+   * A booking document the booking person handed in (glossary
+   * "Kunden-Upload"): its own receipt rule, never the instance owner's by
+   * the special position.
+   *
+   * @returns {boolean}
+   */
+  isCustomerUpload() {
+    return (
+      this.isBookingDocument() &&
+      Array.isArray(this.tags) &&
+      this.tags.includes(CUSTOMER_UPLOAD_TAG)
+    );
   }
 }
 

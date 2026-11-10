@@ -18,6 +18,7 @@ const {
   TRIGGER,
 } = require("../../../commons/services/booking-lifecycle");
 const { answerTransitionError } = require("./transition-error-answer");
+const { withMemberCustomerUploadState } = require("./customer-upload-answer");
 const {
   BadRequestError,
   ConflictError,
@@ -77,6 +78,7 @@ class GroupBookingController {
       if (!groupBooking) {
         return GroupBookingController._notFound(res, groupBookingId);
       }
+      await withMemberCustomerUploadState(groupBooking, req);
 
       logger.info(
         { tenantId: tenantId, user: user.id },
@@ -107,6 +109,7 @@ class GroupBookingController {
       if (!groupBooking) {
         return res.status(200).json(null);
       }
+      await withMemberCustomerUploadState(groupBooking, req);
 
       logger.info(
         { tenantId: tenantId, user: user.id },

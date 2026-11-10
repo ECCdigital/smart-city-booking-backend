@@ -344,6 +344,9 @@ class MediaControllerV2 {
 
     res.setHeader("Content-Type", delivery.contentType);
     res.setHeader("Content-Disposition", delivery.disposition);
+    if (delivery.contentSecurityPolicy) {
+      res.setHeader("Content-Security-Policy", delivery.contentSecurityPolicy);
+    }
     if (delivery.contentLength) {
       res.setHeader("Content-Length", delivery.contentLength);
     }
@@ -359,6 +362,7 @@ class MediaControllerV2 {
       if (!res.headersSent) {
         res.removeHeader("Content-Type");
         res.removeHeader("Content-Disposition");
+        res.removeHeader("Content-Security-Policy");
         res.removeHeader("Content-Length");
         res.removeHeader("Cache-Control");
         res.removeHeader("ETag");

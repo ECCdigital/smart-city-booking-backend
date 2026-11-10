@@ -45,6 +45,47 @@ async function withCustomerUploadState(
   return bookings;
 }
 
+/**
+ * Who may read the customer uploads of the bookings of a request: the
+ * second decision of the route's marker - `readCustomerUploads` on a
+ * booking route, `booking.readCustomerUploads` on a group's.
+ *
+ * @param {import("express").Request} request
+ * @returns {{reach: string|null, userId: string|null}}
+ */
+const customerUploadScopeOf = (request) => ({
+  reach:
+    request.reaches?.readCustomerUploads ??
+    request.reaches?.["booking.readCustomerUploads"] ??
+    null,
+  userId: request.principal?.userId ?? null,
+});
+
+/**
+ * The member bookings of a group answer with the state of their customer
+ * uploads, as far as the request may read it; a group answered without
+ * its bookings populated is left as it is.
+ *
+ * @param {Object|null} groupBooking
+ * @param {import("express").Request} request
+ * @returns {Promise<Object|null>}
+ */
+async function withMemberCustomerUploadState(groupBooking, request) {
+  const members = (groupBooking?.bookings || []).filter(
+    (booking) => booking && typeof booking === "object",
+  );
+  if (members.length) {
+    await withCustomerUploadState(
+      members,
+      members,
+      customerUploadScopeOf(request),
+    );
+  }
+  return groupBooking;
+}
+
 module.exports = {
   withCustomerUploadState,
+  customerUploadScopeOf,
+  withMemberCustomerUploadState,
 };

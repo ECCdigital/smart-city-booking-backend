@@ -19,7 +19,7 @@ router.post(
 // populations - the library and the booking documents - so they carry the
 // door both come through (`media.metadata`) and name both questions on the
 // marker; the media rights pick the one the medium follows.
-const READ = { also: ["read", "bookingDocument"] };
+const READ = { also: ["read", "bookingDocument", "customerUpload"] };
 router.get("/", authorize("media", "read"), MediaControllerV2.getMediaList);
 router.get(
   "/:id",
@@ -39,10 +39,13 @@ router.delete(
   MediaControllerV2.deleteMedia,
 );
 // Only the binary route follows the visibility of a medium: an internal file
-// is a member's (`intern`), a booking document the receipt rule's.
+// is a member's (`intern`), a booking document the receipt rule's, a
+// customer upload its own (`customerUpload`).
 router.get(
   "/:id/file",
-  publicRoute("media", "file", { also: ["bookingDocument", "intern"] }),
+  publicRoute("media", "file", {
+    also: ["bookingDocument", "customerUpload", "intern"],
+  }),
   MediaControllerV2.getMediaFile,
 );
 router.get(

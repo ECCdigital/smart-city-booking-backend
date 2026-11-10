@@ -33,7 +33,10 @@ const {
   TRIGGER,
 } = require("../../../commons/services/booking-lifecycle");
 const { answerTransitionError } = require("./transition-error-answer");
-const { withCustomerUploadState } = require("./customer-upload-answer");
+const {
+  withCustomerUploadState,
+  customerUploadScopeOf,
+} = require("./customer-upload-answer");
 
 const {
   findReinstatementConflicts,
@@ -154,7 +157,11 @@ class BookingController {
         },
       );
 
-      await withCustomerUploadState(allowedBookings);
+      await withCustomerUploadState(
+        allowedBookings,
+        allowedBookings,
+        customerUploadScopeOf(request),
+      );
 
       logger.info(
         `${tenant} -- sending ${allowedBookings.length} allowed bookings to user ${user?.id}`,
@@ -341,7 +348,11 @@ class BookingController {
         if (!booking) {
           return BookingController._notFound(response, id);
         }
-        await withCustomerUploadState([booking]);
+        await withCustomerUploadState(
+          [booking],
+          [booking],
+          customerUploadScopeOf(request),
+        );
         logger.info(`${tenantId} -- sending booking ${id} to user ${user?.id}`);
         response.status(200).send(booking);
       } else {

@@ -37,6 +37,17 @@ const REACHES = Object.freeze([REACH.ANY, REACH.OWN, REACH.SELF, REACH.PUBLIC]);
 /** The slots of an entry: the reaches, each named by its least level. */
 const SLOTS = Object.freeze(["public", "own", "self", "any"]);
 
+/**
+ * The flags an entry may carry beside its slots:
+ *
+ *   exceptInstanceOwner: true     the instance owner gets no reach from
+ *                                 the special position alone; only what
+ *                                 they hold in the tenant like anyone else
+ *                                 (owner, role, member) counts. The
+ *                                 customer uploads.
+ */
+const FLAGS = Object.freeze(["exceptInstanceOwner"]);
+
 /** The levels that are not a role level. */
 const LEVEL_KEYWORDS = Object.freeze([
   "signedIn",
@@ -104,15 +115,20 @@ const holdsARole = (principal) =>
  * already in the principal: it is no member, no tenant owner and holds no
  * role level there.
  *
+ * The one exception to "the instance owner satisfies every level" is an
+ * entry flagged `exceptInstanceOwner` (the customer uploads): there the instance owner counts as whoever they
+ * are in the tenant, nothing more.
+ *
  * @param {Object} principal
  * @param {string|undefined} level
+ * @param {{exceptInstanceOwner?: boolean}} [flags] Of the entry asked about
  * @returns {boolean}
  */
-function satisfies(principal, level) {
+function satisfies(principal, level, { exceptInstanceOwner = false } = {}) {
   if (!level) {
     return false;
   }
-  if (principal.isInstanceOwner) {
+  if (principal.isInstanceOwner && !exceptInstanceOwner) {
     return true;
   }
   const parsed = parseLevel(level);
@@ -155,7 +171,7 @@ function decide(principal, resource, action) {
       if (entry.public === true) {
         return reach;
       }
-    } else if (satisfies(principal, entry[reach])) {
+    } else if (satisfies(principal, entry[reach], entry)) {
       return reach;
     }
   }
@@ -198,7 +214,7 @@ function assertTable() {
     for (const [action, entry] of Object.entries(actions)) {
       const where = `${resource}.${action}`;
       for (const key of Object.keys(entry)) {
-        if (!SLOTS.includes(key)) {
+        if (!SLOTS.includes(key) && !FLAGS.includes(key)) {
           throw new Error(`authorization: unknown slot ${key} in ${where}`);
         }
       }
@@ -254,6 +270,7 @@ module.exports = {
   parseLevel,
   REACH,
   REACHES,
+  FLAGS,
   LEVEL_KEYWORDS,
   TENANT_SETS,
 };

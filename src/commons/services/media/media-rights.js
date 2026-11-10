@@ -12,6 +12,9 @@ const { MediaUsageService, USAGE_TYPE } = require("./media-usage");
 const { readsRecords, withinReach, DOMAIN } = require("../authorization/reach");
 const { REACH } = require("../authorization/policy");
 const {
+  CUSTOMER_UPLOAD_REVIEW,
+} = require("../../schemas/customerUploadReferenceSchema");
+const {
   ForbiddenError,
   NotFoundError,
   UnauthorizedError,
@@ -30,6 +33,10 @@ const {
  *   library             `read`, `update`, `delete` over the uploader
  *   booking document    the receipt rule, `bookingDocument` and
  *                       `updateBookingDocument` over the booking's owner
+ *   customer upload     its own receipt rule, `customerUpload`: the
+ *                       booking person until the check, whoever reads
+ *                       the tenant's bookings, never the instance owner
+ *                       by the special position; never changed by hand
  *   file                the visibility: `public` for anyone (a tenant
  *                       medium under the public projection of its tenant),
  *                       `intern` for whoever `file` or `intern` reaches
@@ -122,10 +129,50 @@ async function coversBookingDocument(media, scope) {
 }
 
 /**
+ * The receipt rule of a customer upload: `any`
+ * covers the uploads of every booking of the tenant, `own` those of one's
+ * own booking while they wait for their check - after it the file is gone,
+ * and what the booking person sees is the note at the booking. The
+ * instance owner reaches nothing here by the special position; the policy
+ * decides that (`exceptInstanceOwner`).
+ *
+ * @param {Object} media - The customer upload.
+ * @param {{reach: string|null, userId: string|null}} scope
+ * @returns {Promise<boolean>}
+ */
+async function coversCustomerUpload(media, scope) {
+  if (!readsRecords(scope)) {
+    return false;
+  }
+  return await anyReferencedBooking(
+    media,
+    (booking) =>
+      withinReach(booking, "assignedUserId", scope) &&
+      (scope.reach === REACH.ANY || isPendingAt(booking, media.id)),
+  );
+}
+
+/** Whether a booking holds a reference to the medium that waits for its check. */
+const isPendingAt = (booking, mediaId) =>
+  (booking.customerUploads || []).some(
+    (reference) =>
+      reference.mediaId === mediaId &&
+      (reference.review?.status ?? CUSTOMER_UPLOAD_REVIEW.SUBMITTED) ===
+        CUSTOMER_UPLOAD_REVIEW.SUBMITTED,
+  );
+
+/**
  * Whether the medium is within the reach of a library entry, or - for a
- * booking document - of the receipt rule's entry.
+ * booking document - of the receipt rule's entry, for a customer upload
+ * of its own.
  */
 async function covers(media, reaches, { library, document }) {
+  if (media.isCustomerUpload?.()) {
+    return await coversCustomerUpload(
+      media,
+      entryOf(reaches, "customerUpload"),
+    );
+  }
   if (media.isBookingDocument()) {
     return await coversBookingDocument(media, entryOf(reaches, document));
   }
@@ -208,7 +255,8 @@ const isOwnPeople = (media, reaches) =>
  *
  * @param {string} mediaId
  * @param {string|null} tenantId - `null` is the instance library.
- * @param {Object} reaches - `read`, `bookingDocument`, `userId`.
+ * @param {Object} reaches - `read`, `bookingDocument`, `customerUpload`,
+ *   `userId`.
  * @returns {Promise<Object>} The medium.
  * @throws {UnauthorizedError|NotFoundError}
  */
@@ -239,6 +287,11 @@ async function readable(mediaId, tenantId, reaches) {
 async function updatable(mediaId, tenantId, reaches) {
   assertSignedIn(reaches);
   const media = await load(mediaId, tenantId);
+  // A customer upload is the customer's file and its check's: nobody
+  // changes its metadata by hand.
+  if (media.isCustomerUpload?.()) {
+    throw notFound(media.id);
+  }
   if (
     !(await covers(media, reaches, {
       library: "update",
@@ -280,12 +333,23 @@ async function deletable(mediaId, tenantId, reaches) {
  * document, the visibility for everything else.
  *
  * @param {Object} media
- * @param {Object} reaches - `file`, `intern`, `bookingDocument`, `userId`.
+ * @param {Object} reaches - `file`, `intern`, `bookingDocument`,
+ *   `customerUpload`, `userId`.
  * @returns {Promise<void>}
  * @throws {UnauthorizedError|ForbiddenError|NotFoundError}
  */
 async function assertFileReadable(media, reaches) {
   const isInstance = media.tenantId == null;
+
+  if (media.isCustomerUpload?.()) {
+    assertSignedIn(reaches);
+    if (
+      !(await coversCustomerUpload(media, entryOf(reaches, "customerUpload")))
+    ) {
+      throw new ForbiddenError("forbidden");
+    }
+    return;
+  }
 
   if (media.isBookingDocument()) {
     assertSignedIn(reaches);
@@ -322,7 +386,8 @@ async function assertFileReadable(media, reaches) {
  *
  * @param {string} mediaId
  * @param {string|null} tenantId
- * @param {Object} reaches - `file`, `intern`, `bookingDocument`, `userId`.
+ * @param {Object} reaches - `file`, `intern`, `bookingDocument`,
+ *   `customerUpload`, `userId`.
  * @returns {Promise<Object>} The medium.
  */
 async function fileReadable(mediaId, tenantId, reaches) {
@@ -339,7 +404,8 @@ async function fileReadable(mediaId, tenantId, reaches) {
  *
  * @param {string|null} tenantId - The tenant, `null` on the instance.
  * @param {string} legacyPath - Normalised legacy path.
- * @param {Object} reaches - `file`, `intern`, `bookingDocument`, `userId`.
+ * @param {Object} reaches - `file`, `intern`, `bookingDocument`,
+ *   `customerUpload`, `userId`.
  * @returns {Promise<Object|null>} The medium, or null.
  * @throws {UnauthorizedError|ForbiddenError|NotFoundError}
  */

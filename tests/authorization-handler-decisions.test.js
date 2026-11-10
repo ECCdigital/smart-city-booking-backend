@@ -56,7 +56,9 @@ const REACH_BRANCHES = {
   },
   services: {
     "access/access-service.js": { reach: 1 }, // stays: managesUnder
-    "media/media-rights.js": { readsRecords: 4, withinReach: 5 }, // stays: the bundle
+    // stays: the bundle; a customer upload of one's own booking only until
+    // its check
+    "media/media-rights.js": { reach: 1, readsRecords: 5, withinReach: 6 },
   },
 };
 

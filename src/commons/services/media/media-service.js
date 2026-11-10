@@ -620,10 +620,13 @@ class MediaService {
       contentLength: variant ? variant.size : media.size,
       // Serving an SVG inline would run its script in our origin; the original
       // of a vector medium is a download, its variants are the rendered image.
+      // A customer upload is a download in a sandbox, never a page of our
+      // origin.
       disposition:
-        !variant && media.mimeType === SVG_MIME_TYPE
+        !variant && (media.mimeType === SVG_MIME_TYPE || media.encryption)
           ? `attachment; filename="${asciiFileName(media.originalFileName)}"`
           : "inline",
+      contentSecurityPolicy: media.encryption ? "sandbox" : null,
       cacheControl,
       etag,
     };

@@ -73,8 +73,20 @@ const SATISFIES = {
   instanceOwner: () => true,
 };
 
+/**
+ * The kind a principal counts as at an entry: at one flagged
+ * `exceptInstanceOwner` (the customer uploads) the
+ * instance owner of these cases - no member of the tenant - counts as a
+ * signed-in user.
+ */
+const kindAt = (entry, kind) =>
+  kind === "instanceOwner" && entry.exceptInstanceOwner === true
+    ? "signedIn"
+    : kind;
+
 /** The precedence of the reaches: `any` before `own` before `self` before `public`. */
-function expectedReach(entry, kind, granted) {
+function expectedReach(entry, given, granted) {
+  const kind = kindAt(entry, given);
   if (entry.any && SATISFIES[kind](entry.any, granted)) return REACH.ANY;
   if (entry.own && SATISFIES[kind](entry.own, granted)) return REACH.OWN;
   if (entry.self && SATISFIES[kind](entry.self, granted)) return REACH.SELF;
@@ -152,6 +164,63 @@ describe("authorization policy: the table as the matrix", function () {
       });
     });
   }
+});
+
+describe("authorization policy: the instance owner and the customer uploads", function () {
+  // The one exception to "the instance owner satisfies every level":
+  // a proof of a customer is the tenant's, never
+  // the instance's by the special position.
+  const EXCEPTED = [
+    ["media", "customerUpload"],
+    ["booking", "readCustomerUploads"],
+  ];
+
+  for (const [resource, action] of EXCEPTED) {
+    describe(`${resource}.${action}`, function () {
+      it("is flagged in the table", function () {
+        expect(entryOf(resource, action).exceptInstanceOwner).to.equal(true);
+      });
+
+      it("gives the instance owner no reach over the tenant's records by the special position", function () {
+        expect(decide(instanceOwner(), resource, action)).to.equal(REACH.OWN);
+      });
+
+      it("gives the instance owner what they hold in the tenant like anyone else", function () {
+        const asTenantOwner = principal({
+          isInstanceOwner: true,
+          isMember: true,
+          isTenantOwner: true,
+        });
+        const asReader = principal({
+          isInstanceOwner: true,
+          isMember: true,
+          grants: { manageBookings: { readAny: true } },
+        });
+        expect(decide(asTenantOwner, resource, action)).to.equal(REACH.ANY);
+        expect(decide(asReader, resource, action)).to.equal(REACH.ANY);
+      });
+
+      it("gives the tenant owner and the reader of the bookings every record", function () {
+        expect(decide(tenantOwner(), resource, action)).to.equal(REACH.ANY);
+        expect(
+          decide(roleHolder("manageBookings.readAny"), resource, action),
+        ).to.equal(REACH.ANY);
+      });
+
+      it("gives a member without the right only the own bookings", function () {
+        expect(decide(member(), resource, action)).to.equal(REACH.OWN);
+        expect(
+          decide(roleHolder("manageBookings.readOwn"), resource, action),
+        ).to.equal(REACH.OWN);
+      });
+    });
+  }
+
+  it("keeps the instance owner above everyone at the booking documents of the platform", function () {
+    expect(decide(instanceOwner(), "media", "bookingDocument")).to.equal(
+      REACH.ANY,
+    );
+  });
 });
 
 describe("authorization policy: hand cases", function () {
@@ -299,8 +368,13 @@ describe("authorization policy: invariants of the table", function () {
     for (const { resource, action, entry } of entries()) {
       const where = `${resource}.${action}`;
       expect(Object.keys(entry), where).to.satisfy((keys) =>
-        keys.every((key) => ["public", "own", "self", "any"].includes(key)),
+        keys.every((key) =>
+          ["public", "own", "self", "any", "exceptInstanceOwner"].includes(key),
+        ),
       );
+      if ("exceptInstanceOwner" in entry) {
+        expect(entry.exceptInstanceOwner, where).to.equal(true);
+      }
       if ("public" in entry) {
         expect(entry.public, where).to.be.a("boolean");
       }
@@ -329,7 +403,9 @@ describe("authorization policy: invariants of the table", function () {
         member(),
         ...roleLevelsOf(entry).map((level) => roleHolder(level)),
         tenantOwner(),
-        instanceOwner(),
+        // The instance owner stands above the tenant owner everywhere but
+        // at an entry that excepts them.
+        ...(entry.exceptInstanceOwner ? [] : [instanceOwner()]),
       ].map((who) => rank(decide(who, resource, action)));
       for (let i = 1; i < chain.length; i += 1) {
         expect(chain[i], where).to.be.at.least(chain[i - 1]);
@@ -391,8 +467,9 @@ describe("authorization policy: invariants of the table", function () {
     }
   });
 
-  it("never lets an instance owner reach less than a tenant owner", function () {
-    for (const { resource, action } of entries()) {
+  it("never lets an instance owner reach less than a tenant owner, but where an entry excepts them", function () {
+    for (const { resource, action, entry } of entries()) {
+      if (entry.exceptInstanceOwner) continue;
       expect(
         rank(decide(instanceOwner(), resource, action)),
         `${resource}.${action}`,
