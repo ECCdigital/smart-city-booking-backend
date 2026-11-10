@@ -15,6 +15,9 @@ const {
   assertUploadFieldsStorable,
 } = require("../../../commons/services/customer-upload/upload-field-guard");
 const {
+  CustomerUploadService,
+} = require("../../../commons/services/customer-upload/customer-upload-service");
+const {
   getRelatedOpeningHours,
 } = require("../../../commons/utilities/opening-hours-manager");
 const BookableService = require("../../../commons/services/bookable-service");
@@ -155,6 +158,9 @@ class BookableController {
       const [withDetails] = await withLockerDetails(tenant, [
         bookable.withResolvedMediaUrls(),
       ]);
+      // What the checkout asks for.
+      withDetails.checkoutUploadFields =
+        await CustomerUploadService.checkoutFieldsOf(bookable);
       response.status(200).send(withDetails);
     } catch (err) {
       if (err instanceof BaseError) {

@@ -24,14 +24,22 @@ const logger = bunyan.createLogger({
   level: process.env.LOG_LEVEL,
 });
 
+/** The refusals of the customer uploads of a checkout. */
+const CUSTOMER_UPLOAD_REFUSALS = [
+  CHECKOUT_REASONS.CUSTOMER_UPLOAD_REQUIRED,
+  CHECKOUT_REASONS.CUSTOMER_UPLOAD_REFUSED,
+];
+
 /**
  * The status of a refused checkout: an offer the checkout cannot reach is
  * the public's 404 (ADR 0003), an offer behind a login without a signed-in
  * customer 401 (ECCdigital/tickets#123), a bad request its 400 - a begin in
- * the past among them (ECCdigital/tickets#188) -, everything else the legacy
- * 409.
+ * the past among them -, a refused customer upload
+ * the status of its reason, everything else the
+ * legacy 409.
  */
 const statusOf = (err) => {
+  if (CUSTOMER_UPLOAD_REFUSALS.includes(err?.reason)) return err.statusCode;
   if (err?.statusCode === 404) return 404;
   if (err?.reason === CHECKOUT_REASONS.LOGIN_REQUIRED) return 401;
   if (err?.cause?.code === 400) return 400;
@@ -43,10 +51,12 @@ const statusOf = (err) => {
  * The body of a refused checkout: the reason as text, as before - except an
  * address on the blacklist, whose answer is JSON
  * with the instance's `mailAddress`, so the legacy checkout can name whom
- * to write to.
+ * to write to, and a refused customer upload, whose answer is JSON with the
+ * code of the refusal and its field.
  */
 const bodyOf = (err) =>
-  err?.reason === CHECKOUT_REASONS.ADDRESS_BLACKLISTED
+  err?.reason === CHECKOUT_REASONS.ADDRESS_BLACKLISTED ||
+  CUSTOMER_UPLOAD_REFUSALS.includes(err?.reason)
     ? { error: err.reason, params: err.params }
     : err.message;
 
@@ -164,6 +174,8 @@ class CheckoutController {
           bookingAttempt: request.body,
           simulate,
           checkoutId,
+          // A multipart checkout's files.
+          customerUploadFiles: request.customerUploadFiles ?? [],
         }),
       );
     } catch (err) {

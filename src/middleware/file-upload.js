@@ -1,17 +1,31 @@
 const fileUpload = require("express-fileupload");
 
-const { BadRequestError } = require("../errors/BaseError");
+const {
+  BadRequestError,
+  TooManyRequestsError,
+} = require("../errors/BaseError");
 const {
   uploadBackstopBytes,
 } = require("../commons/services/media/media-config");
+const {
+  customerUploadLimits,
+} = require("../commons/services/customer-upload/customer-upload-rules");
+const RateLimiter = require("../commons/services/rate-limit/rate-limiter");
+const limits = require("../commons/services/rate-limit/limits");
+
+const MEGABYTE = 1024 * 1024;
 
 // The only routes that take files: the upload of the tenant and of the
 // instance media library (`POST /api/v2/:tenant/media`, where `instance` is
 // the instance library), the customer uploads of a booking (`POST
 // /api/v2/:tenant/bookings/:id/customer-uploads/:fieldId`, a replacement
-// with `PUT .../:fieldId/:mediaId`). Every other
+// with `PUT .../:fieldId/:mediaId`), and the checkout of a single booking
+// with the customer uploads of its upload fields (`POST
+// /api/v2/:tenant/checkout`, the legacy `POST /api/:tenant/checkout`). Every other
 // route turns multipart bodies away before a single byte is parsed.
 const UPLOAD_ROUTES = [
+  { method: "POST", path: /^\/api\/v2\/[^/]+\/checkout\/?$/ },
+  { method: "POST", path: /^\/api\/[^/]+\/checkout\/?$/ },
   { method: "POST", path: /^\/api\/v2\/[^/]+\/media\/?$/ },
   {
     method: "POST",
@@ -88,4 +102,101 @@ function acceptSingleFile({
   ];
 }
 
-module.exports = { acceptSingleFile, isUploadRoute, rejectMultipart };
+/** The form field of a multipart checkout that carries its JSON body. */
+const CHECKOUT_BODY_FIELD = "checkout";
+/**
+ * The prefix of a file's form field: the id of its upload field follows,
+ * at a group checkout the key the body names the file's targets by.
+ */
+const CHECKOUT_FILE_PREFIX = "customerUpload:";
+
+/**
+ * The checkout with the customer uploads of its upload fields "in the
+ * checkout". A JSON checkout passes untouched. A
+ * multipart one carries its body as JSON in the field `checkout` and each
+ * file in a field `customerUpload:<fieldId>`, as many as the fields take.
+ * The rate limit of customer uploads, per person and IP, counts before a
+ * byte is parsed; the booking does not exist yet.
+ *
+ * Afterwards `req.body` is the checkout's body and `req.customerUploadFiles`
+ * the files, each `{ fieldId, key, file }` - both the name after the
+ * prefix: the upload field at a single checkout, the key of the file at a
+ * group checkout. Busboy drops files beyond
+ * `limits.files` silently, so the limit is one above what a booking takes:
+ * the file too many is still seen and refused by the limit of the booking.
+ * A file above the instance limit is handed on cut off (`file.truncated`)
+ * for the service to answer with its own reason.
+ *
+ * @returns {import("express").RequestHandler[]}
+ */
+function acceptCheckoutFiles() {
+  const instance = customerUploadLimits();
+  const multipart = (req) => req.is("multipart/form-data");
+  return [
+    async (req, res, next) => {
+      if (!multipart(req)) return next();
+      try {
+        const gate = await RateLimiter.consumeAll(
+          limits.customerUploadLimits({
+            userId: req.user?.id ?? null,
+            ip: req.ip || req.socket?.remoteAddress || "unknown",
+          }),
+        );
+        if (!gate.allowed) {
+          return next(
+            new TooManyRequestsError("customer_upload_rate_limited", {
+              retryAfterSeconds: gate.retryAfterSeconds,
+            }),
+          );
+        }
+        return next();
+      } catch (error) {
+        return next(error);
+      }
+    },
+    fileUpload({
+      limits: {
+        fileSize: (instance.maxFileSizeMb + 1) * MEGABYTE,
+        files: instance.maxFilesPerBooking + 1,
+      },
+      abortOnLimit: false,
+    }),
+    (req, res, next) => {
+      if (!multipart(req)) return next();
+
+      let body;
+      try {
+        body = JSON.parse(req.body?.[CHECKOUT_BODY_FIELD] ?? "");
+      } catch {
+        return next(new BadRequestError("checkout_body_invalid"));
+      }
+      if (!body || typeof body !== "object" || Array.isArray(body)) {
+        return next(new BadRequestError("checkout_body_invalid"));
+      }
+
+      const files = [];
+      for (const [name, value] of Object.entries(req.files || {})) {
+        if (!name.startsWith(CHECKOUT_FILE_PREFIX)) {
+          return next(new BadRequestError("checkout_file_field_invalid"));
+        }
+        const fieldId = name.slice(CHECKOUT_FILE_PREFIX.length);
+        for (const file of [].concat(value)) {
+          files.push({ fieldId, key: fieldId, file });
+        }
+      }
+
+      req.body = body;
+      req.customerUploadFiles = files;
+      return next();
+    },
+  ];
+}
+
+module.exports = {
+  CHECKOUT_BODY_FIELD,
+  CHECKOUT_FILE_PREFIX,
+  acceptCheckoutFiles,
+  acceptSingleFile,
+  isUploadRoute,
+  rejectMultipart,
+};

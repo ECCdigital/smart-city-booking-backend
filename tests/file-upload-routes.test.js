@@ -4,6 +4,7 @@ const request = require("supertest");
 
 const {
   acceptSingleFile,
+  isUploadRoute,
   rejectMultipart,
 } = require("../src/middleware/file-upload");
 const { errorHandler } = require("../src/middleware/error-handler");
@@ -111,5 +112,22 @@ describe("File uploads only on the upload routes", function () {
     assert.strictEqual(res.status, 200);
     assert.deepStrictEqual(res.body.body, { hello: "world" });
     assert.strictEqual(res.body.files, null);
+  });
+
+  // The single checkout with the customer uploads of its upload fields.
+  it("lets files through on the checkout of a single booking", function () {
+    const routeOf = (method, path) => isUploadRoute({ method, path });
+
+    assert.strictEqual(routeOf("POST", "/api/v2/tenant1/checkout"), true);
+    assert.strictEqual(routeOf("POST", "/api/tenant1/checkout"), true);
+    assert.strictEqual(
+      routeOf("POST", "/api/v2/tenant1/checkout/validate-group"),
+      false,
+    );
+    assert.strictEqual(
+      routeOf("POST", "/api/tenant1/checkout/validateItem"),
+      false,
+    );
+    assert.strictEqual(routeOf("PUT", "/api/v2/tenant1/checkout"), false);
   });
 });

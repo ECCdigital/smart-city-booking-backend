@@ -31,6 +31,7 @@ const {
   tokenAuthorized,
 } = require("../../commons/services/authorization");
 const SupervisionController = require("./controllers/supervision-controller");
+const { acceptCheckoutFiles } = require("../../middleware/file-upload");
 const {
   OFFER_TYPES,
 } = require("../../commons/services/supervision/supervision-constants");
@@ -450,7 +451,13 @@ router.post(
 
 // CHECKOUT
 // ========
-router.post("/checkout", publicRoute(), CheckoutController.checkout);
+// JSON, or multipart with the customer uploads of the checkout.
+router.post(
+  "/checkout",
+  publicRoute(),
+  acceptCheckoutFiles(),
+  CheckoutController.checkout,
+);
 router.post("/checkout/group", publicRoute(), CheckoutController.groupCheckout);
 router.post(
   "/checkout/validateItem",

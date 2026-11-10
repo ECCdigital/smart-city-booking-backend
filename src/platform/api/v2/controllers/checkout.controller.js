@@ -212,6 +212,8 @@ class CheckoutControllerV2 {
         bookingAttempt: req.body,
         simulate,
         checkoutId,
+        // A multipart checkout's files.
+        customerUploadFiles: req.customerUploadFiles ?? [],
       });
 
       if (simulate || !CheckoutControllerV2._needsPayment(booking)) {
