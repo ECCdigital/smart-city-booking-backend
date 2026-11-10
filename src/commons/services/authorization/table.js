@@ -125,6 +125,9 @@ const TABLE = {
     delete: { any: "manageBookings.deleteAny" },
     cancel: { own: "signedIn", any: "manageBookings.updateAny" },
     operate: { own: "signedIn", any: "manageBookings.updateAny" },
+    // Handing in, replacing and deleting a customer upload (glossary
+    // "Kunden-Upload"): the booking person's own booking alone.
+    customerUpload: { own: "signedIn" },
   },
 
   groupBooking: {

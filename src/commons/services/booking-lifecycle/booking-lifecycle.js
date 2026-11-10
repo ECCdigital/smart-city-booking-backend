@@ -694,9 +694,9 @@ function createBookingLifecycle(adapters) {
    * booking to be in, and is written on the condition that the stored one
    * still is (spec part 2, section 5): a booking that moved in between - a
    * payment webhook, say - is the guard's `ConflictError`, and the plan
-   * the caller made no longer applies. The refund audit and the hooks - an
-   * open cancellation request (glossary "Stornoanfrage") - are the stored
-   * booking's, whatever the form says; they belong to the lifecycle. Then the
+   * the caller made no longer applies. The refund audit, the hooks - an
+   * open cancellation request (glossary "Stornoanfrage") - and the customer
+   * uploads are the stored booking's, whatever the form says; they belong to the lifecycle. Then the
    * access follows the content: moved along at `confirmed`, the
    * compartments held anew at `requested | payment_due` (`holdForBooking`
    * never holds one twice and drops the held ones beyond what is booked
@@ -726,6 +726,9 @@ function createBookingLifecycle(adapters) {
       delete booking.cancellationRefund;
     }
     booking.hooks = current.hooks || [];
+    // The customer uploads are the customer's and their service's, never
+    // the form's.
+    booking.customerUploads = current.customerUploads || [];
     const bookingId = booking.id;
     const confirmed = () => booking.status === STATUS.CONFIRMED;
     const unpaid = () =>

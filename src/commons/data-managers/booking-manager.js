@@ -608,6 +608,50 @@ class BookingManager {
   }
 
   /**
+   * Adds a customer upload to a booking in one atomic push, so a write of
+   * the booking in between loses nothing.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {Object} reference In the shape of `customerUploadReferenceSchema`
+   * @returns {Promise<boolean>} Whether the booking was there
+   */
+  static async addCustomerUpload(tenantId, bookingId, reference) {
+    const result = await BookingModel.updateOne(
+      { id: bookingId, tenantId },
+      { $push: { customerUploads: reference } },
+    );
+    return result.matchedCount > 0;
+  }
+
+  /**
+   * Takes the reference of a medium off a booking, in one atomic pull, and
+   * only while its check is still the one given.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {string} mediaId
+   * @param {string} reviewStatus The review status the reference must have
+   * @returns {Promise<boolean>} Whether a reference was taken off
+   */
+  static async removeCustomerUpload(
+    tenantId,
+    bookingId,
+    mediaId,
+    reviewStatus,
+  ) {
+    const result = await BookingModel.updateOne(
+      { id: bookingId, tenantId },
+      {
+        $pull: {
+          customerUploads: { mediaId, "review.status": reviewStatus },
+        },
+      },
+    );
+    return result.modifiedCount > 0;
+  }
+
+  /**
    * Remove a booking
    * @param {string} id Booking ID
    * @param {string} tenantId Tenant ID

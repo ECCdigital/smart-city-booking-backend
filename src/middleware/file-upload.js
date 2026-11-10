@@ -7,9 +7,21 @@ const {
 
 // The only routes that take files: the upload of the tenant and of the
 // instance media library (`POST /api/v2/:tenant/media`, where `instance` is
-// the instance library). Every other route turns multipart bodies away before
-// a single byte is parsed.
-const UPLOAD_ROUTE = /^\/api\/v2\/[^/]+\/media\/?$/;
+// the instance library), the customer uploads of a booking (`POST
+// /api/v2/:tenant/bookings/:id/customer-uploads/:fieldId`, a replacement
+// with `PUT .../:fieldId/:mediaId`). Every other
+// route turns multipart bodies away before a single byte is parsed.
+const UPLOAD_ROUTES = [
+  { method: "POST", path: /^\/api\/v2\/[^/]+\/media\/?$/ },
+  {
+    method: "POST",
+    path: /^\/api\/v2\/[^/]+\/bookings\/[^/]+\/customer-uploads\/[^/]+\/?$/,
+  },
+  {
+    method: "PUT",
+    path: /^\/api\/v2\/[^/]+\/bookings\/[^/]+\/customer-uploads\/[^/]+\/[^/]+\/?$/,
+  },
+];
 
 /**
  * Whether a request is addressed to one of the upload routes.
@@ -18,7 +30,9 @@ const UPLOAD_ROUTE = /^\/api\/v2\/[^/]+\/media\/?$/;
  * @returns {boolean}
  */
 function isUploadRoute(req) {
-  return req.method === "POST" && UPLOAD_ROUTE.test(req.path);
+  return UPLOAD_ROUTES.some(
+    (route) => route.method === req.method && route.path.test(req.path),
+  );
 }
 
 /**
@@ -41,15 +55,25 @@ function rejectMultipart(req, res, next) {
  * Busboy drops files beyond `limits.files` silently, so the limit is one above
  * what is allowed: a second file is still seen and turns the request away.
  *
+ * @param {Object} [options]
+ * @param {() => number} [options.backstopBytes] The size no upload of the
+ *   route is ever accepted at; by default the media library's backstop
+ * @param {boolean} [options.truncate] Whether a file above the backstop is
+ *   handed on cut off (`file.truncated`) for the route to answer with its
+ *   own reason, instead of a plain 413 "File too large."
  * @returns {import("express").RequestHandler[]}
  */
-function acceptSingleFile() {
+function acceptSingleFile({
+  backstopBytes = uploadBackstopBytes,
+  truncate = false,
+} = {}) {
   return [
     fileUpload({
-      // Deliberately above the largest media limit: the media layer answers
-      // with its own 400, this only stops requests no upload would accept.
-      limits: { fileSize: uploadBackstopBytes(), files: 2 },
-      abortOnLimit: true,
+      // Deliberately above the largest limit of the route: the service
+      // answers with its own 400, this only stops requests no upload would
+      // accept.
+      limits: { fileSize: backstopBytes(), files: 2 },
+      abortOnLimit: !truncate,
       responseOnLimit: "File too large.",
     }),
     (req, res, next) => {

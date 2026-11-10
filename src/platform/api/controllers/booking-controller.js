@@ -33,6 +33,8 @@ const {
   TRIGGER,
 } = require("../../../commons/services/booking-lifecycle");
 const { answerTransitionError } = require("./transition-error-answer");
+const { withCustomerUploadState } = require("./customer-upload-answer");
+
 const {
   findReinstatementConflicts,
 } = require("../../../commons/services/checkout/reinstatement-conflicts");
@@ -152,6 +154,8 @@ class BookingController {
         },
       );
 
+      await withCustomerUploadState(allowedBookings);
+
       logger.info(
         `${tenant} -- sending ${allowedBookings.length} allowed bookings to user ${user?.id}`,
       );
@@ -193,6 +197,7 @@ class BookingController {
         (booking) => booking.exportCustomer(),
         { withWithdrawalUrl: true },
       );
+      await withCustomerUploadState(view, bookings);
 
       logger.info(
         `${tenant} -- sending ${bookings.length} assigned bookings to user ${user?.id}`,
@@ -336,6 +341,7 @@ class BookingController {
         if (!booking) {
           return BookingController._notFound(response, id);
         }
+        await withCustomerUploadState([booking]);
         logger.info(`${tenantId} -- sending booking ${id} to user ${user?.id}`);
         response.status(200).send(booking);
       } else {

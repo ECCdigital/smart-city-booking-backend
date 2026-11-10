@@ -1,10 +1,14 @@
 const crypto = require("crypto");
+const { Readable } = require("stream");
 const bunyan = require("bunyan");
 const { v4: uuidv4 } = require("uuid");
 
 const MediaManager = require("../../data-managers/media-manager");
 const { Media } = require("../../entities/media/media");
-const { MEDIA_VISIBILITY } = require("../../schemas/mediaSchema");
+const {
+  MEDIA_VISIBILITY,
+  CUSTOMER_UPLOAD_TAG,
+} = require("../../schemas/mediaSchema");
 const { BadRequestError } = require("../../../errors/BaseError");
 const { CACHE_POLICY, strongEtag } = require("../../utilities/cache-headers");
 const storage = require("../storage");
@@ -26,6 +30,11 @@ const {
   detectStoredType,
   detectUploadType,
 } = require("./media-file-type");
+const {
+  ENCRYPTION,
+  decryptUpload,
+  encryptUpload,
+} = require("../customer-upload/customer-upload-crypto");
 
 const logger = bunyan.createLogger({
   name: "media-service.js",
@@ -447,6 +456,80 @@ class MediaService {
   }
 
   /**
+   * Stores a customer upload as a booking document:
+   * the bytes as the customer upload service accepted them - checked,
+   * scanned and an image encoded anew - encrypted before they reach the
+   * storage, without variants, so no preview copy of a proof exists. Its
+   * bookings are the only way to it; it never shows in the library or the
+   * picker.
+   *
+   * @param {Object} params
+   * @param {string} params.tenantId - Owning tenant.
+   * @param {string[]} params.bookingIds - The bookings it is handed in for.
+   * @param {Buffer} params.data - The accepted bytes.
+   * @param {{mimeType: string, kind: string, image: Object|null}} params.detected
+   *   The type of the bytes.
+   * @param {string} params.fileName - The customer's file name.
+   * @param {string} params.uploadedBy - Id of the customer.
+   * @returns {Promise<Object>} The stored medium.
+   */
+  static async createCustomerUpload({
+    tenantId,
+    bookingIds,
+    data,
+    detected,
+    fileName,
+    uploadedBy,
+  }) {
+    if (!Array.isArray(bookingIds) || bookingIds.length === 0) {
+      throw new BadRequestError("missing_booking_ids");
+    }
+
+    const providerName = storage.configuredProviderName();
+    const provider = storage.getStorageProvider(providerName);
+    const mediaId = uuidv4();
+
+    const media = Media.create({
+      id: mediaId,
+      tenantId,
+      kind: detected.kind,
+      mimeType: detected.mimeType,
+      size: data.length,
+      checksum: crypto.createHash("sha256").update(data).digest("hex"),
+      originalFileName: fileName,
+      ...imageDimensions(detected),
+      title: fileName,
+      tags: [CUSTOMER_UPLOAD_TAG],
+      visibility: MEDIA_VISIBILITY.INTERN,
+      uploadedBy,
+      bookingIds,
+      encryption: ENCRYPTION,
+      storage: {
+        provider: providerName,
+        key: originalKey({
+          tenantId,
+          mediaId,
+          mimeType: detected.mimeType,
+          fileName,
+        }),
+      },
+      variants: [],
+    });
+
+    return await MediaService._persist({
+      provider,
+      media,
+      payloads: [
+        {
+          key: media.storage.key,
+          data: encryptUpload(data),
+          contentType: "application/octet-stream",
+        },
+      ],
+    });
+  }
+
+  /**
    * Resolves the provider a medium's bytes actually live on — reading always
    * follows the medium, never the instance configuration.
    *
@@ -554,6 +637,9 @@ class MediaService {
    * @returns {Promise<import("node:stream").Readable>}
    */
   static async getStream(media, key) {
+    if (media.encryption && (!key || key === media.storage.key)) {
+      return Readable.from([await MediaService.getBuffer(media)]);
+    }
     return await MediaService.providerFor(media).getStream({
       key: key || media.storage.key,
     });
@@ -567,9 +653,10 @@ class MediaService {
    * @returns {Promise<Buffer>}
    */
   static async getBuffer(media) {
-    return await MediaService.providerFor(media).getBuffer({
+    const data = await MediaService.providerFor(media).getBuffer({
       key: media.storage.key,
     });
+    return media.encryption ? decryptUpload(data) : data;
   }
 
   /**
@@ -602,5 +689,7 @@ class MediaService {
     return removed;
   }
 }
+
+MediaService.CUSTOMER_UPLOAD_TAG = CUSTOMER_UPLOAD_TAG;
 
 module.exports = MediaService;

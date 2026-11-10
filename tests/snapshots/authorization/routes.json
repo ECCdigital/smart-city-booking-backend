@@ -1031,6 +1031,30 @@
     "instanceOwner": 200,
     "expiredToken": 401
   },
+  "POST /api/v2/:tenant/bookings/:id/customer-uploads/:fieldId": {
+    "anonymous": 401,
+    "signedIn": 404,
+    "roleHolder": 404,
+    "tenantOwner": 404,
+    "instanceOwner": 404,
+    "expiredToken": 401
+  },
+  "PUT /api/v2/:tenant/bookings/:id/customer-uploads/:fieldId/:mediaId": {
+    "anonymous": 401,
+    "signedIn": 404,
+    "roleHolder": 404,
+    "tenantOwner": 404,
+    "instanceOwner": 404,
+    "expiredToken": 401
+  },
+  "DELETE /api/v2/:tenant/bookings/:id/customer-uploads/:fieldId/:mediaId": {
+    "anonymous": 401,
+    "signedIn": 404,
+    "roleHolder": 404,
+    "tenantOwner": 404,
+    "instanceOwner": 404,
+    "expiredToken": 401
+  },
   "GET /api/v2/:tenant/bookings/:ids/status": {
     "anonymous": 200,
     "signedIn": 200,

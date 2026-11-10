@@ -1,0 +1,50 @@
+const {
+  CustomerUploadService,
+} = require("../../../commons/services/customer-upload/customer-upload-service");
+const {
+  REACH,
+  withinReach,
+} = require("../../../commons/services/authorization");
+
+/**
+ * The bookings of an answer, each with the derived state of its customer
+ * uploads (`customerUploadState`) - for the booking
+ * person and for the readers of the tenant's bookings alike.
+ *
+ * With a scope, only the bookings within it carry the state: the reach of
+ * `booking.readCustomerUploads` - the booking
+ * person's own bookings, every booking for whoever reads the tenant's
+ * bookings, none for the instance owner by the special position. The
+ * others carry `null`. The references themselves (`customerUploads`) never
+ * leave: what an answer shows of them is in the state.
+ *
+ * @param {Object[]} bookings Entities or their views, each with `id`
+ * @param {Object[]} [sources] The bookings the state is read off, in the
+ *   same order; the bookings themselves by default
+ * @param {{reach: string|null, userId: string|null}} [scope] Who may read
+ *   the state; everyone of the answer without one
+ * @returns {Promise<Object[]>}
+ */
+async function withCustomerUploadState(
+  bookings,
+  sources = bookings,
+  scope = null,
+) {
+  const readable = sources.filter(
+    (source) => !scope || withinReach(source, "assignedUserId", scope),
+  );
+  // The staff reads who checked; the customer does not.
+  const states = await CustomerUploadService.statesOf(readable, {
+    withReviewer: scope?.reach === REACH.ANY,
+  });
+  bookings.forEach((booking, index) => {
+    booking.customerUploadState = states.get(sources[index].id) ?? null;
+    delete booking.customerUploads;
+    delete booking.customerUploadRequests;
+  });
+  return bookings;
+}
+
+module.exports = {
+  withCustomerUploadState,
+};

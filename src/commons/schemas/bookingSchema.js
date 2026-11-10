@@ -2,6 +2,9 @@ const { Double } = require("mongodb");
 const { Schema } = require("mongoose");
 const { mediaReferenceSchema } = require("./mediaSchema");
 const {
+  customerUploadReferenceSchema,
+} = require("./customerUploadReferenceSchema");
+const {
   STATUSES,
   CANCELLED_FROM_STATUSES,
   WITHDRAWN_FROM_STATUSES,
@@ -200,6 +203,10 @@ const bookingSchemaDefinition = {
     default: { userCancellable: true, contactHint: "" },
   },
   cancellationRefund: { type: cancellationRefundSchema, default: undefined },
+  // The customer uploads handed in for the upload fields of the booked
+  // offers. Written by the customer upload service
+  // alone; the state of each field is derived, never stored.
+  customerUploads: { type: [customerUploadReferenceSchema], default: [] },
 };
 
 module.exports = {

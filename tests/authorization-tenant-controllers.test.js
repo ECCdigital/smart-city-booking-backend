@@ -382,6 +382,8 @@ describe("tenant controllers on the reach", function () {
   });
 
   it("asks the manager to populate a booking it found under own", async function () {
+    // The answer reads the tenant's settings for customer uploads.
+    sinon.stub(TenantManager, "getTenantsByIds").resolves([]);
     const getBooking = sinon
       .stub(BookingManager, "getBooking")
       .resolves({ id: "b1", tenantId: "t1", bookableItems: [] });
