@@ -71,6 +71,10 @@ const customerUploadSettingsSchema = new Schema(
     // Independent of `notifyOnNewBooking`.
     notifyOnSubmitted: { type: Boolean, default: true },
     notifyOnOverdue: { type: Boolean, default: true },
+    // The roles whose active members get „Nachweis eingereicht“ and
+    // „Nachweis überfällig“; never the tenant's
+    // address. None: nobody gets them.
+    notifyRoleIds: { type: [String], default: [] },
   },
   { _id: false },
 );

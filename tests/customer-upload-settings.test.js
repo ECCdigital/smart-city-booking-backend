@@ -64,7 +64,7 @@ describe("customer uploads: settings and upload fields", function () {
   });
 
   describe("the tenant's settings", function () {
-    it("are off by default, with every format, 30 days and both mails", function () {
+    it("are off by default, with every format, 30 days and both mails, to no role yet", function () {
       expect(
         new Tenant({ id: "t", name: "Stadt" }).customerUploads,
       ).to.deep.equal({
@@ -75,6 +75,7 @@ describe("customer uploads: settings and upload fields", function () {
         reviewReminderDaysBeforeDeletion: 3,
         notifyOnSubmitted: true,
         notifyOnOverdue: true,
+        notifyRoleIds: [],
       });
     });
 
@@ -130,6 +131,18 @@ describe("customer uploads: settings and upload fields", function () {
       expect(tenant.customerUploads.formats).to.deep.equal(["pdf", "png"]);
     });
 
+    it("stores the roles of the staff's notices, each once (ECCdigital/tickets#830)", async function () {
+      const { tenant, res } = await update({
+        notifyRoleIds: ["role-pruefung", "role-leitung", "role-pruefung"],
+      });
+
+      expect(res.status.calledWith(200)).to.equal(true);
+      expect(tenant.customerUploads.notifyRoleIds).to.deep.equal([
+        "role-pruefung",
+        "role-leitung",
+      ]);
+    });
+
     const refusals = {
       "a retention over 30 days": [
         { retentionDays: 31 },
@@ -150,6 +163,18 @@ describe("customer uploads: settings and upload fields", function () {
       "a review reminder over 30 days": [
         { reviewReminderDaysBeforeDeletion: 31 },
         "customer_upload_review_reminder_out_of_range",
+      ],
+      "roles that are no list": [
+        { notifyRoleIds: "role-pruefung" },
+        "customer_upload_notify_roles_invalid",
+      ],
+      "an empty role": [
+        { notifyRoleIds: [" "] },
+        "customer_upload_notify_roles_invalid",
+      ],
+      "more than ten roles": [
+        { notifyRoleIds: Array.from({ length: 11 }, (_, i) => `role-${i}`) },
+        "customer_upload_notify_roles_invalid",
       ],
       "a mail switch that is no boolean": [
         { notifyOnOverdue: "yes" },

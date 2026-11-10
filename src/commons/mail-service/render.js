@@ -396,6 +396,34 @@ function renderMissingProofs({
   });
 }
 
+/**
+ * The upload fields the customer handed proofs in for with the checkout,
+ * in the tenant's notice of a new booking: one
+ * line per field and booking, by the label the field had when the proof
+ * came in. Never a file, never a file name. Empty without a proof.
+ *
+ * @param {Object} params
+ * @param {Object[]} params.bookings
+ * @param {boolean} params.aggregated Each line names its booking
+ * @returns {string} HTML
+ */
+function renderSubmittedProofs({ bookings, aggregated }) {
+  const submittedProofs = bookings.flatMap((booking) => {
+    const labels = new Map();
+    for (const reference of booking.customerUploads || []) {
+      if (!labels.has(reference.fieldId)) {
+        labels.set(reference.fieldId, reference.fieldLabel);
+      }
+    }
+    return [...labels.values()].map((label) => ({
+      label,
+      bookingId: aggregated ? booking.id : "",
+    }));
+  });
+  if (submittedProofs.length === 0) return "";
+  return renderSnippet("submitted-proofs", { submittedProofs });
+}
+
 /** The QR code of the public status view: its paragraph and its image. */
 async function qrCode(booking, tenantId) {
   const qrUrl = bookingStatusUrl(booking, tenantId);
@@ -500,6 +528,9 @@ async function render(
     messageAfter,
     missingProofs: mailType.showsMissingProofs
       ? renderMissingProofs({ tenant, bookings, bookables, aggregated })
+      : "",
+    submittedProofs: mailType.showsSubmittedProofs
+      ? renderSubmittedProofs({ bookings, aggregated })
       : "",
   };
   let content;

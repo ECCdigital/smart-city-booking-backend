@@ -19,7 +19,8 @@ const MEGABYTE = 1024 * 1024;
 // instance media library (`POST /api/v2/:tenant/media`, where `instance` is
 // the instance library), the customer uploads of a booking (`POST
 // /api/v2/:tenant/bookings/:id/customer-uploads/:fieldId`, a replacement
-// with `PUT .../:fieldId/:mediaId`; for a guest the same below
+// with `PUT .../:fieldId/:mediaId`, every proof of the booking at once
+// with `POST .../customer-uploads`; for a guest the same below
 // `customer-uploads-by-link`), and the checkout of a single booking
 // with the customer uploads of its upload fields (`POST
 // /api/v2/:tenant/checkout`, the legacy `POST /api/:tenant/checkout`). Every other
@@ -30,7 +31,7 @@ const UPLOAD_ROUTES = [
   { method: "POST", path: /^\/api\/v2\/[^/]+\/media\/?$/ },
   {
     method: "POST",
-    path: /^\/api\/v2\/[^/]+\/bookings\/[^/]+\/customer-uploads(-by-link)?\/[^/]+\/?$/,
+    path: /^\/api\/v2\/[^/]+\/bookings\/[^/]+\/customer-uploads(-by-link)?(\/[^/]+)?\/?$/,
   },
   {
     method: "PUT",
@@ -193,11 +194,64 @@ function acceptCheckoutFiles() {
   ];
 }
 
+/**
+ * Every proof of a booking at once, from the page „Nachweise einreichen“:
+ * each file in a field `customerUpload:<fieldId>`,
+ * a replacement in `customerUpload:<fieldId>:<mediaId>`, as many as the
+ * booking takes. Mounted after the booking and the rate limit were
+ * admitted. Busboy drops files beyond `limits.files` silently, so the limit
+ * is one above what a booking takes: the file too many is still seen and
+ * refused by the limit of the booking. A file above the instance limit is
+ * handed on cut off (`file.truncated`) for the service to answer with its
+ * own reason.
+ *
+ * Afterwards `req.customerUploadFiles` holds the files, each `{ fieldId,
+ * replacing, file }`, `replacing` null for a new one.
+ *
+ * @returns {import("express").RequestHandler[]}
+ */
+function acceptSubmissionFiles() {
+  return [
+    (req, res, next) =>
+      fileUpload({
+        limits: {
+          fileSize: (customerUploadLimits().maxFileSizeMb + 1) * MEGABYTE,
+          files: customerUploadLimits().maxFilesPerBooking + 1,
+        },
+        abortOnLimit: false,
+      })(req, res, next),
+    (req, res, next) => {
+      const files = [];
+      for (const [name, value] of Object.entries(req.files || {})) {
+        if (!name.startsWith(CHECKOUT_FILE_PREFIX)) {
+          return next(
+            new BadRequestError("customer_upload_file_field_invalid"),
+          );
+        }
+        const [fieldId, replacing = null, ...rest] = name
+          .slice(CHECKOUT_FILE_PREFIX.length)
+          .split(":");
+        if (!fieldId || replacing === "" || rest.length > 0) {
+          return next(
+            new BadRequestError("customer_upload_file_field_invalid"),
+          );
+        }
+        for (const file of [].concat(value)) {
+          files.push({ fieldId, replacing, file });
+        }
+      }
+      req.customerUploadFiles = files;
+      return next();
+    },
+  ];
+}
+
 module.exports = {
   CHECKOUT_BODY_FIELD,
   CHECKOUT_FILE_PREFIX,
   acceptCheckoutFiles,
   acceptSingleFile,
+  acceptSubmissionFiles,
   isUploadRoute,
   rejectMultipart,
 };

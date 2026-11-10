@@ -16,6 +16,7 @@ const MediaManager = require("../data-managers/media-manager");
 const MediaService = require("../services/media/media-service");
 const { toMediaReference } = require("../services/media/media-reference");
 const { DOMAIN } = require("../services/authorization/reach");
+const { CUSTOMER_UPLOAD_TAG } = require("../schemas/mediaSchema");
 
 const logger = bunyan.createLogger({
   name: "mail-attachments.js",
@@ -38,6 +39,14 @@ async function loadMediaMailAttachment(att, tenantId) {
 
   if (!media) {
     logger.warn(`Attachment medium ${mediaId} not found in ${tenantId}`);
+    return null;
+  }
+  // No mail ever carries a customer upload, and
+  // there is no switch for it.
+  if ((media.tags || []).includes(CUSTOMER_UPLOAD_TAG)) {
+    logger.warn(
+      `Attachment medium ${mediaId} in ${tenantId} is a customer upload, never attached`,
+    );
     return null;
   }
 

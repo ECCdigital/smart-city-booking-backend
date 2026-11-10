@@ -2,6 +2,7 @@ const { asyncRouter } = require("../../../../middleware/async-router");
 const { publicRoute } = require("../../../../commons/services/authorization");
 const {
   acceptSingleFile,
+  acceptSubmissionFiles,
 } = require("../../../../middleware/file-upload");
 const {
   customerUploadLimits,
@@ -26,6 +27,13 @@ byLink.get(
   "/",
   publicRoute("booking", "customerUploadByLink"),
   CustomerUploadControllerV2.readByLink,
+);
+byLink.post(
+  "/",
+  publicRoute("booking", "customerUploadByLink"),
+  CustomerUploadControllerV2.admitSubmissionByLink,
+  acceptSubmissionFiles(),
+  CustomerUploadControllerV2.submit,
 );
 byLink.post(
   "/:fieldId",

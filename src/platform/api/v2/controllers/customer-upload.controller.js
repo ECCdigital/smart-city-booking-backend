@@ -34,6 +34,48 @@ class CustomerUploadControllerV2 {
   }
 
   /**
+   * Booking and rate limit, for every proof of the booking at once;
+   * the fields are checked per file.
+   */
+  static async admitSubmission(req, res, next) {
+    req.customerUpload = await CustomerUploadService.admit({
+      ...CustomerUploadControllerV2._params(req),
+      forUpload: false,
+    });
+    next();
+  }
+
+  /** Booking and rate limit for every proof of a guest's booking at once. */
+  static async admitSubmissionByLink(req, res, next) {
+    req.customerUpload = await CustomerUploadService.admitByLink({
+      ...CustomerUploadControllerV2._linkParams(req),
+      forUpload: false,
+    });
+    next();
+  }
+
+  /**
+   * Every proof of the booking at once, the button „Nachweise einreichen“:
+   * new files and replacements, each accepted or
+   * refused on its own, and one notice to the staff for the ones stored.
+   * Answers `{ customerUploadState, refused }` - `201` where a file was
+   * stored, `200` where every one was refused - each refused file with its
+   * position in the request (`index`), field, name, code and params.
+   */
+  static async submit(req, res) {
+    const { stored, refused } = await CustomerUploadService.submitAll(
+      req.customerUpload,
+      req.customerUploadFiles ?? [],
+    );
+    return res.status(stored.length > 0 ? 201 : 200).json({
+      customerUploadState: await CustomerUploadService.stateAfter(
+        req.customerUpload,
+      ),
+      refused,
+    });
+  }
+
+  /**
    * Booking, field and rate limit for a guest with the signed link of the
    * booking, the token in the header
    * `X-Customer-Upload-Link`.

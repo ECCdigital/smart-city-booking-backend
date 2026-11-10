@@ -113,6 +113,15 @@ function customerUploadUrlOf(booking, fieldId = null) {
     : customerUploadProofsUrl(booking?.id, fieldId);
 }
 
+/**
+ * A booking in the Admin UI (`FRONTEND_URL`), the tenant named by
+ * `?tenant=` so the staff lands in the right one - where they check its
+ * customer uploads.
+ */
+function adminBookingUrl(tenantId, bookingId) {
+  return `${process.env.FRONTEND_URL}/bookings/${encodeURIComponent(bookingId)}?tenant=${encodeURIComponent(tenantId)}`;
+}
+
 module.exports = {
   bookingStatusUrl,
   customerUploadProofsUrl,
@@ -124,4 +133,5 @@ module.exports = {
   adminInstanceTenantsUrl,
   adminInstanceReportsUrl,
   adminTenantMembersUrl,
+  adminBookingUrl,
 };

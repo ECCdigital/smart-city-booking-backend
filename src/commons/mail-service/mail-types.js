@@ -14,7 +14,9 @@
  *   `tenant`, `supervisors`, `organizers`, `instanceAdmin` (the instance's
  *   address), `instanceOwners` (the users of `instance.ownerUserIds`),
  *   `tenantOwners` (the users owning the tenant `ctx.tenantId` by
- *   membership) or `named` (`ctx.to`).
+ *   membership), `customerUploadReviewers` (the active members of the
+ *   roles the tenant named for the notices of customer uploads) or `named`
+ *   (`ctx.to`).
  * - `subject(ctx)`: the default subject; a subject override of the
  *   tenant takes precedence.
  * - `includeQRCode(ctx)`, `sendBCC(ctx)`, `addRejectionLink`: as before.
@@ -32,6 +34,10 @@
  *   button to the storefront's page „Nachweise einreichen“
  * - the notices confirming a booking or its
  *   receipt. Nothing where none is missing.
+ * - `showsSubmittedProofs`: the upload fields the customer handed proofs in
+ *   for with the checkout stand above the booking details, without a file
+ *   name - the tenant's notice of a new booking,
+ *   which so takes the place of a notice „Nachweis eingereicht“.
  * - `gate({ tenant })`: the audience only gets it where this holds.
  * - `templateData(ctx, loaded)`: the type's own template variables from
  *   the caller's context and what the loader read.
@@ -58,12 +64,16 @@ const {
 
 const { SupervisionMailType } = require("./supervision-mail-types");
 const {
+  adminBookingUrl,
   adminTenantMembersUrl,
   customerUploadUrlOf,
 } = require("./mail-links");
 const {
   isGuestBooking,
 } = require("../services/customer-upload/customer-upload-link");
+const {
+  normalizeCustomerUploadSettings,
+} = require("../services/customer-upload/customer-upload-rules");
 const Formatters = require("../utilities/formatters");
 const { STATUS } = require("../services/booking-lifecycle/booking-state");
 
@@ -239,6 +249,7 @@ const MailType = Object.freeze({
     includeQRCode: false,
     sendBCC: false,
     addRejectionLink: false,
+    showsSubmittedProofs: true,
     gate: (ctx) => Boolean(ctx.tenant.notifyOnNewBooking),
   },
 
@@ -312,6 +323,33 @@ const MailType = Object.freeze({
           : [],
       };
     },
+  },
+
+  // Customer uploads handed in later, or replaced:
+  // one notice per request and booking - the page „Nachweise einreichen“
+  // hands in every proof of a booking in one request -
+  // telling the staff there is something to
+  // check: the upload fields and the link into the Admin UI, never a file
+  // nor its name. A tenant notice, so it never carries an attachment. To
+  // the members of the roles the tenant named, never its address; behind
+  // the tenant's own switch, apart from the notice of new bookings. The
+  // checkout's proofs stand in that one instead.
+  CUSTOMER_UPLOAD_SUBMITTED: {
+    family: "tenant",
+    templateName: "customer-upload-submitted",
+    audience: "customerUploadReviewers",
+    subject: (ctx) => `Nachweis eingereicht zur Buchung ${ctx.bookingId}`,
+    gate: (ctx) => {
+      const settings = normalizeCustomerUploadSettings(
+        ctx.tenant.customerUploads,
+      );
+      return settings.enabled && settings.notifyOnSubmitted !== false;
+    },
+    templateData: ({ tenantId, bookingId, fieldLabels = [] }) => ({
+      bookingId,
+      customerUploadFieldList: fieldLabels,
+      adminUrl: adminBookingUrl(tenantId, bookingId),
+    }),
   },
 
   ACCESS_PROVISIONED: {

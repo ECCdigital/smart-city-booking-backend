@@ -30,6 +30,8 @@ const DEFAULT_REMINDER_DAYS = 3;
 // Days before the automatic deletion the staff is reminded of an upload
 // nobody has checked yet.
 const DEFAULT_REVIEW_REMINDER_DAYS = 3;
+// Roles that get the staff's notices of customer uploads, at most.
+const MAX_NOTIFY_ROLES = 10;
 const MIN_FILES_PER_FIELD = 1;
 const MAX_FILES_PER_FIELD = 5;
 
@@ -51,6 +53,7 @@ function defaultCustomerUploadSettings() {
     reviewReminderDaysBeforeDeletion: DEFAULT_REVIEW_REMINDER_DAYS,
     notifyOnSubmitted: true,
     notifyOnOverdue: true,
+    notifyRoleIds: [],
   };
 }
 
@@ -109,6 +112,9 @@ function normalizeCustomerUploadSettings(settings) {
   if (Array.isArray(normalized.formats)) {
     normalized.formats = [...new Set(normalized.formats)];
   }
+  if (Array.isArray(normalized.notifyRoleIds)) {
+    normalized.notifyRoleIds = [...new Set(normalized.notifyRoleIds)];
+  }
   return normalized;
 }
 
@@ -128,6 +134,17 @@ function getCustomerUploadSettingsError(settings) {
         field: flag,
       });
     }
+  }
+  if (
+    !Array.isArray(settings.notifyRoleIds) ||
+    settings.notifyRoleIds.length > MAX_NOTIFY_ROLES ||
+    !settings.notifyRoleIds.every(
+      (roleId) => typeof roleId === "string" && roleId.trim() !== "",
+    )
+  ) {
+    return new BadRequestError("customer_upload_notify_roles_invalid", {
+      max: MAX_NOTIFY_ROLES,
+    });
   }
 
   const formatError = formatsError(

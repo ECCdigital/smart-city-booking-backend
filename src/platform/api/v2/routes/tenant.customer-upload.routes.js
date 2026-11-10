@@ -2,6 +2,7 @@ const { asyncRouter } = require("../../../../middleware/async-router");
 const { authorize } = require("../../../../commons/services/authorization");
 const {
   acceptSingleFile,
+  acceptSubmissionFiles,
 } = require("../../../../middleware/file-upload");
 const {
   customerUploadLimits,
@@ -22,6 +23,15 @@ const accept = () =>
 
 // Mounted at `/api/v2/:tenant/bookings/:id/customer-uploads`. The booking,
 // the field and the rate limit are checked before the body is parsed.
+// Every proof of the booking at once, from the page „Nachweise einreichen“:
+// one notice to the staff.
+router.post(
+  "/",
+  authorize("booking", "customerUpload"),
+  CustomerUploadControllerV2.admitSubmission,
+  acceptSubmissionFiles(),
+  CustomerUploadControllerV2.submit,
+);
 router.post(
   "/:fieldId",
   authorize("booking", "customerUpload"),

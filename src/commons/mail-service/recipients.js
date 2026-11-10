@@ -16,6 +16,9 @@ const { normalizeUserId } = require("../utilities/user-id-utils");
 const {
   isValidBookingNotificationRecipient,
 } = require("../utilities/booking-notification-utils");
+const {
+  normalizeCustomerUploadSettings,
+} = require("../services/customer-upload/customer-upload-rules");
 
 const logger = bunyan.createLogger({
   name: "mail-recipients.js",
@@ -154,6 +157,24 @@ async function accountAddresses(userIds) {
   return ids.filter((id) => known.has(id) && isEmail(id));
 }
 
+/**
+ * The staff who check customer uploads: the
+ * active members of the roles the tenant named in its settings of customer
+ * uploads, once each - never the tenant's address. None without a role.
+ */
+async function customerUploadReviewerAddresses({ tenantId, tenant }) {
+  const roleIds = normalizeCustomerUploadSettings(
+    tenant.customerUploads,
+  ).notifyRoleIds;
+  if (!Array.isArray(roleIds) || roleIds.length === 0) {
+    return [];
+  }
+  return resolveRecipientEmails(
+    tenantId,
+    roleIds.map((roleId) => ({ type: "role", value: roleId })),
+  );
+}
+
 /** The owners of a tenant: the memberships with `owner: true`. */
 async function tenantOwnerAddresses(tenantId) {
   const memberships =
@@ -185,6 +206,8 @@ async function resolveRecipients(mailType, loaded) {
       return [loaded.bookings[0].mail].filter(Boolean);
     case "tenant":
       return [loaded.tenant.mail].filter(Boolean);
+    case "customerUploadReviewers":
+      return customerUploadReviewerAddresses(loaded);
     case "supervisors":
       return supervisorEmails(loaded);
     case "organizers":

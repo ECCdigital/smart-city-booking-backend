@@ -1,0 +1,40 @@
+{{#if groupBookingId}}
+  <p>
+    Zur Gruppe
+    <strong>{{groupBookingId}}</strong>
+    wurden für die Buchungen
+    {{groupBookingIds}}
+    folgende Nachweise eingereicht:
+  </p>
+{{else}}
+  <p>
+    Zur Buchung
+    <strong>{{bookingId}}</strong>
+    wurden folgende Nachweise eingereicht:
+  </p>
+{{/if}}
+
+<ul>
+  {{#each customerUploadFieldList}}
+    <li>{{this}}</li>
+  {{/each}}
+</ul>
+
+<p>Bitte prüfen Sie die Nachweise in der Verwaltung.</p>
+
+<p>
+  <a
+    href="{{adminUrl}}"
+    style="
+      background-color: #0055a5;
+      color: #ffffff;
+      padding: 12px 24px;
+      border-radius: 4px;
+      text-decoration: none;
+      font-weight: bold;
+      display: inline-block;
+    "
+  >
+    {{#if groupBookingId}}Gruppe öffnen{{else}}Buchung öffnen{{/if}}
+  </a>
+</p>
