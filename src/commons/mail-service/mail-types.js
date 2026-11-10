@@ -52,7 +52,10 @@ const {
 } = require("../services/payment/cancellation-refund-service");
 
 const { SupervisionMailType } = require("./supervision-mail-types");
-const { adminTenantMembersUrl } = require("./mail-links");
+const {
+  adminTenantMembersUrl,
+  customerUploadProofsUrl,
+} = require("./mail-links");
 const Formatters = require("../utilities/formatters");
 const { STATUS } = require("../services/booking-lifecycle/booking-state");
 
@@ -258,6 +261,29 @@ const MailType = Object.freeze({
       cancelReason: reason,
       verifyRejectionUrl: `${process.env.FRONTEND_URL}/booking/verify-reject/${loaded.tenantId}?id=${loaded.bookings[0].id}&hookId=${hookId}`,
       ...CancellationRefundService.toMailTemplateData(refundPreview),
+    }),
+  },
+
+  // A customer upload rejected, or „Erneut anfordern“ of a checked upload
+  // field: the reason and the way to hand in
+  // anew, never the file nor its name. Accepting sends nothing.
+  CUSTOMER_UPLOAD_REOPENED: {
+    family: "booking",
+    templateName: "customer-upload-reopened",
+    audience: "booker",
+    subject: (ctx) => `Nachweis erneut einreichen: ${ctx.tenant.name}`,
+    includeQRCode: false,
+    sendBCC: false,
+    addRejectionLink: false,
+    // The button opens the page at the field of the (first) booking.
+    templateData: (
+      { reason, fieldLabels = [], kind, fieldId },
+      { bookings },
+    ) => ({
+      customerUploadReason: reason,
+      customerUploadFields: fieldLabels.join(", "),
+      customerUploadRequestedAgain: kind === "requestedAgain",
+      proofsUrl: customerUploadProofsUrl(bookings[0]?.id, fieldId),
     }),
   },
 

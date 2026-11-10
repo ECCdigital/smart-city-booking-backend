@@ -729,6 +729,7 @@ function createBookingLifecycle(adapters) {
     // The customer uploads are the customer's and their service's, never
     // the form's.
     booking.customerUploads = current.customerUploads || [];
+    booking.customerUploadRequests = current.customerUploadRequests || [];
     const bookingId = booking.id;
     const confirmed = () => booking.status === STATUS.CONFIRMED;
     const unpaid = () =>

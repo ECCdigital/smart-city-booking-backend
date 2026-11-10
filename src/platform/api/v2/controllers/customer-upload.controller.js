@@ -1,6 +1,9 @@
 const {
   CustomerUploadService,
 } = require("../../../../commons/services/customer-upload/customer-upload-service");
+const {
+  CustomerUploadReview,
+} = require("../../../../commons/services/customer-upload/customer-upload-review");
 
 /**
  * The customer uploads of a booking (glossary "Kunden-Upload", in the UI
@@ -51,6 +54,45 @@ class CustomerUploadControllerV2 {
   static async remove(req, res) {
     await CustomerUploadService.remove(req.customerUpload, req.params.mediaId);
     return CustomerUploadControllerV2._answerState(req, res, 200);
+  }
+
+  /**
+   * The check of a customer upload by the staff:
+   * `{ result: "accepted" | "rejected", reason }`. Answers the derived state
+   * of the booking afterwards, the reviewer's name included.
+   */
+  static async review(req, res) {
+    await CustomerUploadReview.review({
+      tenantId: req.params.tenant,
+      bookingId: req.params.id,
+      fieldId: req.params.fieldId,
+      mediaId: req.params.mediaId,
+      result: req.body?.result,
+      reason: req.body?.reason,
+      user: req.user,
+    });
+    return CustomerUploadControllerV2._answerStaffState(req, res);
+  }
+
+  /** „Erneut anfordern“ of a checked upload field: `{ reason }`. */
+  static async requestAgain(req, res) {
+    await CustomerUploadReview.requestAgain({
+      tenantId: req.params.tenant,
+      bookingId: req.params.id,
+      fieldId: req.params.fieldId,
+      reason: req.body?.reason,
+      user: req.user,
+    });
+    return CustomerUploadControllerV2._answerStaffState(req, res);
+  }
+
+  static async _answerStaffState(req, res) {
+    return res.status(200).json({
+      customerUploadState: await CustomerUploadReview.stateOf(
+        req.params.tenant,
+        req.params.id,
+      ),
+    });
   }
 
   static _params(req) {

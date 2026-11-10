@@ -68,8 +68,24 @@ function adminTenantMembersUrl(tenantId) {
   return `${process.env.FRONTEND_URL}/tenant/members?tenant=${encodeURIComponent(tenantId)}`;
 }
 
+/**
+ * The storefront's page „Nachweise einreichen“,
+ * under the customer's account, opened at the upload field of the booking
+ * where both are named; none without `STORE_FRONT_URL`.
+ */
+function customerUploadProofsUrl(bookingId = null, fieldId = null) {
+  const base = (process.env.STORE_FRONT_URL || "").replace(/\/+$/, "");
+  if (!base) return "";
+  const url = `${base}/account/proofs`;
+  if (!bookingId) return url;
+  const query = new URLSearchParams({ booking: bookingId });
+  if (fieldId) query.set("field", fieldId);
+  return `${url}?${query}`;
+}
+
 module.exports = {
   bookingStatusUrl,
+  customerUploadProofsUrl,
   cancellationUrl,
   withdrawalUrl,
   adminDashboardUrl,

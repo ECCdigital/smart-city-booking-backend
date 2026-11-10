@@ -3,6 +3,7 @@ const { Schema } = require("mongoose");
 const { mediaReferenceSchema } = require("./mediaSchema");
 const {
   customerUploadReferenceSchema,
+  customerUploadRequestSchema,
 } = require("./customerUploadReferenceSchema");
 const {
   STATUSES,
@@ -207,6 +208,8 @@ const bookingSchemaDefinition = {
   // offers. Written by the customer upload service
   // alone; the state of each field is derived, never stored.
   customerUploads: { type: [customerUploadReferenceSchema], default: [] },
+  // „Erneut anfordern“ of checked upload fields.
+  customerUploadRequests: { type: [customerUploadRequestSchema], default: [] },
 };
 
 module.exports = {

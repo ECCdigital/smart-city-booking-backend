@@ -38,12 +38,38 @@ const customerUploadReferenceSchema = new Schema(
       reason: { type: String, default: "" },
       reviewedAt: { type: Double, default: null },
       reviewedBy: { type: String, default: null },
+      // The name of the reviewer at the time of the check, so the note
+      // stays readable once the account is gone.
+      reviewedByName: { type: String, default: "" },
+      // The file was deleted by the deletion deadline, not by a check.
+      autoDeleted: { type: Boolean, default: false },
+      // When the file was deleted; null while it is stored.
+      fileDeletedAt: { type: Double, default: null },
     },
+  },
+  { _id: false },
+);
+
+/**
+ * „Erneut anfordern“ of an upload field: the staff
+ * opens a checked field again, with a reason. It works like a rejection of
+ * the field - the customer hands in a replacement - and takes nothing back:
+ * the notes of the checked uploads stay as they are.
+ */
+const customerUploadRequestSchema = new Schema(
+  {
+    fieldId: { type: String, required: true },
+    fieldLabel: { type: String, default: "" },
+    reason: { type: String, required: true },
+    requestedAt: { type: Double, required: true },
+    requestedBy: { type: String, default: null },
+    requestedByName: { type: String, default: "" },
   },
   { _id: false },
 );
 
 module.exports = {
   customerUploadReferenceSchema,
+  customerUploadRequestSchema,
   CUSTOMER_UPLOAD_REVIEW,
 };

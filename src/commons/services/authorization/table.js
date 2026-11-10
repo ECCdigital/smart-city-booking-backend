@@ -140,6 +140,13 @@ const TABLE = {
       any: "manageBookings.readAny",
       exceptInstanceOwner: true,
     },
+    // Checking a customer upload and „Erneut anfordern“ of a checked field:
+    // whoever may edit the booking. It deletes
+    // the file - not the instance owner by the special position.
+    reviewCustomerUpload: {
+      any: "manageBookings.updateAny",
+      exceptInstanceOwner: true,
+    },
   },
 
   groupBooking: {

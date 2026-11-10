@@ -652,6 +652,58 @@ class BookingManager {
   }
 
   /**
+   * Writes the note of a check onto the reference of a medium, in one atomic
+   * update, and only while it still waits for its check: of two checks at
+   * once only the first one counts. The file name
+   * goes with the file - the note keeps no content.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {string} mediaId
+   * @param {Object} review In the shape of the reference's `review`
+   * @returns {Promise<boolean>} Whether a waiting reference was checked
+   */
+  static async reviewCustomerUpload(tenantId, bookingId, mediaId, review) {
+    const result = await BookingModel.updateOne(
+      {
+        id: bookingId,
+        tenantId,
+        customerUploads: {
+          $elemMatch: {
+            mediaId,
+            "review.status": "submitted",
+            "review.fileDeletedAt": null,
+          },
+        },
+      },
+      {
+        $set: {
+          "customerUploads.$.review": review,
+          "customerUploads.$.originalFileName": "",
+        },
+      },
+    );
+    return result.modifiedCount > 0;
+  }
+
+  /**
+   * Adds „Erneut anfordern“ of an upload field to a booking, in one atomic
+   * push.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {Object} request In the shape of `customerUploadRequestSchema`
+   * @returns {Promise<boolean>} Whether the booking was there
+   */
+  static async addCustomerUploadRequest(tenantId, bookingId, request) {
+    const result = await BookingModel.updateOne(
+      { id: bookingId, tenantId },
+      { $push: { customerUploadRequests: request } },
+    );
+    return result.matchedCount > 0;
+  }
+
+  /**
    * Remove a booking
    * @param {string} id Booking ID
    * @param {string} tenantId Tenant ID

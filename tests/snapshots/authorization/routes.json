@@ -1047,6 +1047,22 @@
     "instanceOwner": 404,
     "expiredToken": 401
   },
+  "POST /api/v2/:tenant/bookings/:id/customer-uploads/:fieldId/request-again": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400,
+    "expiredToken": 401
+  },
+  "POST /api/v2/:tenant/bookings/:id/customer-uploads/:fieldId/:mediaId/review": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400,
+    "expiredToken": 401
+  },
   "DELETE /api/v2/:tenant/bookings/:id/customer-uploads/:fieldId/:mediaId": {
     "anonymous": 401,
     "signedIn": 404,
