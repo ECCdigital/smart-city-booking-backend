@@ -20,6 +20,7 @@ const { renderSnippet } = require("./templates/template-loader");
 const {
   bookingStatusUrl,
   cancellationUrl,
+  customerUploadProofsUrl,
   withdrawalUrl,
 } = require("./mail-links");
 const {
@@ -42,6 +43,15 @@ const {
   formatLabel,
   participationLinkForBooking,
 } = require("../entities/event/event-format");
+const {
+  customerUploadLimits,
+  normalizeCustomerUploadSettings,
+} = require("../services/customer-upload/customer-upload-rules");
+const {
+  deriveCustomerUploadState,
+  missingRequiredFieldsOf,
+  uploadFieldsOf,
+} = require("../services/customer-upload/customer-upload-state");
 
 const overrideDateFormatter = new Intl.DateTimeFormat("de-DE", {
   day: "2-digit",
@@ -317,6 +327,68 @@ function renderShortBookingDetails({
   });
 }
 
+/**
+ * The proofs the customer still has to hand in:
+ * the required upload fields of the bookings that are open, rejected or
+ * overdue, each with its deadline, and the button to the storefront's page
+ * „Nachweise einreichen“. Read off the same derived state the booking
+ * answers carry; never a file, never a file name. Empty where nothing is
+ * missing or the tenant has customer uploads off.
+ *
+ * @param {Object} params
+ * @param {Object} params.tenant
+ * @param {Object[]} params.bookings
+ * @param {Object[]} params.bookables The bookables of every position
+ * @param {boolean} params.aggregated Each line names its booking
+ * @param {number} [params.now]
+ * @returns {string} HTML
+ */
+function renderMissingProofs({
+  tenant,
+  bookings,
+  bookables,
+  aggregated,
+  now = Date.now(),
+}) {
+  const settings = normalizeCustomerUploadSettings(tenant.customerUploads);
+  if (!settings.enabled) return "";
+  const bookablesById = new Map(
+    bookables.map((bookable) => [bookable.id, bookable]),
+  );
+  const limits = customerUploadLimits();
+
+  const missing = bookings.flatMap((booking) =>
+    missingRequiredFieldsOf(
+      deriveCustomerUploadState({
+        booking,
+        fields: uploadFieldsOf(booking, bookablesById),
+        settings,
+        limits,
+        now,
+      }),
+    ).map((field) => ({ booking, field })),
+  );
+  if (missing.length === 0) return "";
+
+  const first = missing[0];
+  return renderSnippet("missing-proofs", {
+    missingProofs: missing.map(({ booking, field }) => ({
+      label: field.label,
+      deadline:
+        field.deadline === null
+          ? ""
+          : Formatters.formatDateTime(field.deadline),
+      bookingId: aggregated ? booking.id : "",
+    })),
+    // One booking: the page opens at its most pressing field; a group:
+    // at the first booking with a proof missing.
+    proofsUrl: customerUploadProofsUrl(
+      first.booking.id,
+      aggregated ? null : first.field.fieldId,
+    ),
+  });
+}
+
 /** The QR code of the public status view: its paragraph and its image. */
 async function qrCode(booking, tenantId) {
   const qrUrl = bookingStatusUrl(booking, tenantId);
@@ -419,6 +491,9 @@ async function render(
     showFooter: tenant.mailShowSupportFooter !== false,
     supportEmail: tenant.mail,
     messageAfter,
+    missingProofs: mailType.showsMissingProofs
+      ? renderMissingProofs({ tenant, bookings, bookables, aggregated })
+      : "",
   };
   let content;
   let allAttachments = attachments;

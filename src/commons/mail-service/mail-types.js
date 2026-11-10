@@ -27,6 +27,11 @@
  *   confirmations, the receipt of a request and the invoices.
  * - `mergeMailAttach`: the `mailAttach` documents of the bookings go
  *   with it.
+ * - `showsMissingProofs`: the required customer uploads still missing
+ *   stand above the booking details, each with its deadline, with the
+ *   button to the storefront's page „Nachweise einreichen“
+ * - the notices confirming a booking or its
+ *   receipt. Nothing where none is missing.
  * - `gate({ tenant })`: the audience only gets it where this holds.
  * - `templateData(ctx, loaded)`: the type's own template variables from
  *   the caller's context and what the loader read.
@@ -79,6 +84,7 @@ const MailType = Object.freeze({
     sendBCC: (ctx) => ctx.hasAttachments && ctx.tenant.receiptEnableBCC,
     addRejectionLink: true,
     showsWithdrawalHint: true,
+    showsMissingProofs: true,
     attachICal: true,
     showsParticipationLink: true,
     mergeMailAttach: true,
@@ -93,6 +99,7 @@ const MailType = Object.freeze({
     sendBCC: false,
     addRejectionLink: true,
     showsWithdrawalHint: true,
+    showsMissingProofs: true,
     attachICal: true,
     showsParticipationLink: true,
     mergeMailAttach: true,
@@ -159,6 +166,7 @@ const MailType = Object.freeze({
     sendBCC: false,
     addRejectionLink: true,
     showsWithdrawalHint: true,
+    showsMissingProofs: true,
     mergeMailAttach: true,
   },
 
@@ -182,6 +190,7 @@ const MailType = Object.freeze({
     sendBCC: false,
     addRejectionLink: true,
     showsWithdrawalHint: true,
+    showsMissingProofs: true,
     attachICal: true,
   },
 
@@ -195,6 +204,7 @@ const MailType = Object.freeze({
     sendBCC: false,
     addRejectionLink: true,
     showsWithdrawalHint: true,
+    showsMissingProofs: true,
     templateData: ({ paymentUrl }) => ({ paymentUrl }),
   },
 
@@ -208,6 +218,7 @@ const MailType = Object.freeze({
     sendBCC: false,
     addRejectionLink: false,
     showsWithdrawalHint: true,
+    showsMissingProofs: true,
   },
 
   INCOMING_BOOKING: {

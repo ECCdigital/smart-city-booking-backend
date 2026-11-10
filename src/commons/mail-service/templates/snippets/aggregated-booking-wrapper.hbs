@@ -1,4 +1,7 @@
-{{{message}}}<br />
+{{{message}}}{{#unless missingProofs}}<br />{{/unless}}
+{{#if missingProofs}}
+  {{{missingProofs}}}
+{{/if}}
 
 {{#if cancelReason}}
   <p>

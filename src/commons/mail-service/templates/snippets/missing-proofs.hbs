@@ -1,0 +1,32 @@
+<p>
+  <strong>Folgende Nachweise fehlen noch:</strong>
+</p>
+
+<ul>
+  {{#each missingProofs}}
+    <li>
+      {{label}}{{#if deadline}} – bis {{deadline}}{{/if}}{{#if bookingId}}
+        (Buchung {{bookingId}}){{/if}}{{#if url}}
+        – <a href="{{url}}">einreichen</a>{{/if}}
+    </li>
+  {{/each}}
+</ul>
+
+{{#if proofsUrl}}
+  <p>
+    <a
+      href="{{proofsUrl}}"
+      style="
+        background-color: #0055a5;
+        color: #ffffff;
+        padding: 12px 24px;
+        border-radius: 4px;
+        text-decoration: none;
+        font-weight: bold;
+        display: inline-block;
+      "
+    >
+      Jetzt einreichen
+    </a>
+  </p>
+{{/if}}
