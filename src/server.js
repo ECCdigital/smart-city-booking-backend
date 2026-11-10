@@ -27,6 +27,9 @@ const {
 } = require("./commons/services/media/media-import-status");
 const { applyTrustedProxies } = require("./commons/utilities/trusted-proxies");
 const { warnIfContactMissing } = require("./commons/services/geo/user-agent");
+const {
+  CustomerUploadJobs,
+} = require("./commons/services/customer-upload/customer-upload-jobs");
 
 // Fail fast when the explicitly chosen storage provider is misconfigured.
 assertStorageConfig();
@@ -166,6 +169,9 @@ dbm.connect().then(() => {
       // Not migrating is not an error: the legacy resolver route keeps serving
       // the old tree until the media CLI has run (§4.10).
       await warnIfImportPending();
+      // Reminders, overdue notices and the deletion deadline of customer
+      // uploads, every hour; idempotent, so every instance may run it.
+      CustomerUploadJobs.schedule();
       if (process.env.RULE_ENGINE_ENABLED === "true") {
         await RuleEngine.initEngine();
       }

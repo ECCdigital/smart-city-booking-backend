@@ -68,8 +68,35 @@ const customerUploadRequestSchema = new Schema(
   { _id: false },
 );
 
+/** What the job of customer uploads tells. */
+const CUSTOMER_UPLOAD_NOTICE = Object.freeze({
+  // To the customer, before the deadline of a missing required upload.
+  REMINDER: "reminder",
+  // To the tenant, once the deadline of a required upload has passed.
+  OVERDUE: "overdue",
+});
+
+/**
+ * A notice the job of customer uploads sent for an upload field of a
+ * booking: the booking remembers it, so a second run sends nothing twice.
+ */
+const customerUploadNoticeSchema = new Schema(
+  {
+    kind: {
+      type: String,
+      enum: Object.values(CUSTOMER_UPLOAD_NOTICE),
+      required: true,
+    },
+    fieldId: { type: String, required: true },
+    sentAt: { type: Double, required: true },
+  },
+  { _id: false },
+);
+
 module.exports = {
   customerUploadReferenceSchema,
   customerUploadRequestSchema,
+  customerUploadNoticeSchema,
+  CUSTOMER_UPLOAD_NOTICE,
   CUSTOMER_UPLOAD_REVIEW,
 };

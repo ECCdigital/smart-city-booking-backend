@@ -730,6 +730,9 @@ function createBookingLifecycle(adapters) {
     // the form's.
     booking.customerUploads = current.customerUploads || [];
     booking.customerUploadRequests = current.customerUploadRequests || [];
+    // What the job of customer uploads remembers is the job's.
+    booking.customerUploadNotices = current.customerUploadNotices || [];
+    booking.customerUploadEndedAt = current.customerUploadEndedAt ?? null;
     const bookingId = booking.id;
     const confirmed = () => booking.status === STATUS.CONFIRMED;
     const unpaid = () =>

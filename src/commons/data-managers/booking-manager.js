@@ -660,6 +660,10 @@ class BookingManager {
    * @param {string} tenantId
    * @param {string} bookingId
    * @param {string} mediaId
+   * The job of customer uploads writes its note of an automatic deletion
+   * the same way; a file deleted so is checked no
+   * more.
+   *
    * @param {Object} review In the shape of the reference's `review`
    * @returns {Promise<boolean>} Whether a waiting reference was checked
    */
@@ -701,6 +705,93 @@ class BookingManager {
       { $push: { customerUploadRequests: request } },
     );
     return result.matchedCount > 0;
+  }
+
+  /**
+   * The bookings of every tenant with a customer upload whose file is still
+   * stored: what the deletion deadline of the job of customer uploads looks
+   * at.
+   *
+   * @returns {Promise<Booking[]>}
+   */
+  static async getBookingsWithStoredCustomerUploads() {
+    const rawBookings = await BookingModel.find({
+      customerUploads: {
+        $elemMatch: {
+          "review.status": "submitted",
+          "review.fileDeletedAt": null,
+        },
+      },
+    });
+    return BookingManager._toEntities(rawBookings, DOMAIN);
+  }
+
+  /**
+   * Notes at a booking that the job of customer uploads sends a notice for
+   * an upload field, in one atomic push and only while the booking has none
+   * of its kind for the field: of two runs at once only one sends it.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {{kind: string, fieldId: string, sentAt: number}} notice
+   * @returns {Promise<boolean>} Whether this call noted it
+   */
+  static async claimCustomerUploadNotice(tenantId, bookingId, notice) {
+    const result = await BookingModel.updateOne(
+      {
+        id: bookingId,
+        tenantId,
+        customerUploadNotices: {
+          $not: {
+            $elemMatch: { kind: notice.kind, fieldId: notice.fieldId },
+          },
+        },
+      },
+      { $push: { customerUploadNotices: notice } },
+    );
+    return result.modifiedCount > 0;
+  }
+
+  /**
+   * Takes a notice off a booking again, so the next run of the job sends it:
+   * its mail could not be sent.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {{kind: string, fieldId: string}} notice
+   * @returns {Promise<void>}
+   */
+  static async releaseCustomerUploadNotice(tenantId, bookingId, notice) {
+    await BookingModel.updateOne(
+      { id: bookingId, tenantId },
+      {
+        $pull: {
+          customerUploadNotices: {
+            kind: notice.kind,
+            fieldId: notice.fieldId,
+          },
+        },
+      },
+    );
+  }
+
+  /**
+   * Sets when the job of customer uploads first found a booking ended by
+   * cancellation, withdrawal or rejection - only where none is set yet - or
+   * takes it off again with null.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {number|null} endedAt
+   * @returns {Promise<void>}
+   */
+  static async setCustomerUploadEndedAt(tenantId, bookingId, endedAt) {
+    await BookingModel.updateOne(
+      endedAt === null
+        ? { id: bookingId, tenantId }
+        : { id: bookingId, tenantId, customerUploadEndedAt: null },
+      { $set: { customerUploadEndedAt: endedAt } },
+    );
   }
 
   /**

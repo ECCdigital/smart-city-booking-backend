@@ -4,6 +4,7 @@ const { mediaReferenceSchema } = require("./mediaSchema");
 const {
   customerUploadReferenceSchema,
   customerUploadRequestSchema,
+  customerUploadNoticeSchema,
 } = require("./customerUploadReferenceSchema");
 const {
   STATUSES,
@@ -210,6 +211,13 @@ const bookingSchemaDefinition = {
   customerUploads: { type: [customerUploadReferenceSchema], default: [] },
   // „Erneut anfordern“ of checked upload fields.
   customerUploadRequests: { type: [customerUploadRequestSchema], default: [] },
+  // What the job of customer uploads sent for the booking, so a second run
+  // sends nothing twice.
+  customerUploadNotices: { type: [customerUploadNoticeSchema], default: [] },
+  // When the job first found the booking cancelled, withdrawn or rejected:
+  // its end for the deletion deadline of its customer uploads. Taken off
+  // again when the booking is live once more.
+  customerUploadEndedAt: { type: Double, default: null },
 };
 
 module.exports = {

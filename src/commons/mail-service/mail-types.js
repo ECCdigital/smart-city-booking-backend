@@ -325,6 +325,48 @@ const MailType = Object.freeze({
     },
   },
 
+  // The reminder before the deadline of a required upload field still
+  // missing: one per booking, from the job of
+  // customer uploads. The missing proofs with their deadlines and the
+  // button to hand them in stand in the block of the missing proofs - a
+  // guest's signed link where the booking has no account.
+  CUSTOMER_UPLOAD_REMINDER: {
+    family: "booking",
+    templateName: "customer-upload-reminder",
+    audience: "booker",
+    subject: (ctx) =>
+      `Erinnerung: Nachweise für Ihre Buchung bei ${ctx.tenant.name}`,
+    includeQRCode: false,
+    sendBCC: false,
+    addRejectionLink: false,
+    showsMissingProofs: true,
+  },
+
+  // The deadline of a required upload field has passed and the field is
+  // not fulfilled: one notice per booking to the
+  // staff, from the job of customer uploads, with the link into the Admin
+  // UI. Biletado itself blocks and cancels nothing - the staff decides.
+  // Behind the tenant's own switch, never with a file.
+  CUSTOMER_UPLOAD_OVERDUE: {
+    family: "tenant",
+    templateName: "customer-upload-overdue",
+    // The roles the tenant named, never its address.
+    audience: "customerUploadReviewers",
+    subject: (ctx) => `Nachweis überfällig zur Buchung ${ctx.bookingId}`,
+    gate: (ctx) => {
+      const settings = normalizeCustomerUploadSettings(
+        ctx.tenant.customerUploads,
+      );
+      return settings.enabled && settings.notifyOnOverdue !== false;
+    },
+    // The overdue upload fields stand one point each.
+    templateData: ({ tenantId, bookingId, fieldLabels = [] }) => ({
+      bookingId,
+      customerUploadFields: fieldLabels,
+      adminUrl: adminBookingUrl(tenantId, bookingId),
+    }),
+  },
+
   // Customer uploads handed in later, or replaced:
   // one notice per request and booking - the page „Nachweise einreichen“
   // hands in every proof of a booking in one request -
