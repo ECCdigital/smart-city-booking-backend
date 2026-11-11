@@ -19,6 +19,7 @@ const {
   isBlockPeriodBookingValid,
   isTimePeriodBookingValid,
 } = require("./availability-rules");
+const { isExhausted } = require("./bookable-capacity");
 
 const logger = bunyan.createLogger({
   name: "checkout-availability-checks.js",
@@ -161,7 +162,13 @@ async function runPermissionCheck({ provider, originBookable, userId }) {
 }
 
 /**
+ * The platform's own count of the bookable against its capacity
+ * (`bookable-capacity.js`), not `amount` directly: a Schließfachanlage with
+ * its own Fächer limits it to the Fächer in Betrieb.
+ *
  * @param {Object} params
+ * @param {number|null} params.capacity The bookable's capacity, `null` for
+ *   no limit
  * @returns {Promise<Object>}
  */
 async function runAvailabilityCheck({
@@ -171,6 +178,7 @@ async function runAvailabilityCheck({
   timeBegin,
   timeEnd,
   excludeBookingIds,
+  capacity,
 }) {
   const { amountBooked, bookings } = await getBookedAmountForBookableWindow(
     provider,
@@ -181,23 +189,25 @@ async function runAvailabilityCheck({
     excludeBookingIds,
   );
 
-  const capacityResult = evaluateOriginCapacity({
-    bookings,
-    bookableId: originBookable.id,
-    capacity: originBookable.amount,
-    amount: Number(amount),
-    mode: CAPACITY_MODES.ADDITIVE,
-  });
+  const available =
+    !isExhausted(capacity) &&
+    evaluateOriginCapacity({
+      bookings,
+      bookableId: originBookable.id,
+      capacity,
+      amount: Number(amount),
+      mode: CAPACITY_MODES.ADDITIVE,
+    }).available;
+  const remaining = capacity === null ? null : capacity - amountBooked;
 
-  if (!capacityResult.available) {
+  if (!available) {
     throw {
       checkType: CHECK_TYPES.AVAILABILITY,
       available: false,
       message: `Das Objekt ${originBookable.title} ist für den gewählten Zeitraum nicht verfügbar.`,
-      totalCapacity: originBookable.amount,
+      totalCapacity: capacity,
       booked: amountBooked,
-      remaining:
-        originBookable.amount > 0 ? originBookable.amount - amountBooked : null,
+      remaining,
       concurrentBookings: summarizeBookings(bookings),
     };
   }
@@ -205,10 +215,9 @@ async function runAvailabilityCheck({
   return {
     checkType: CHECK_TYPES.AVAILABILITY,
     available: true,
-    totalCapacity: originBookable.amount,
+    totalCapacity: capacity,
     booked: amountBooked,
-    remaining:
-      originBookable.amount > 0 ? originBookable.amount - amountBooked : null,
+    remaining,
   };
 }
 

@@ -30,6 +30,10 @@ const {
 const {
   generateLeadTimeBlockedPeriods,
 } = require("../availability/lead-time-calculator");
+const {
+  bookableCapacity,
+  isExhausted,
+} = require("../availability/bookable-capacity");
 const { NotFoundError } = require("../../errors/BaseError");
 const bunyan = require("bunyan");
 
@@ -100,7 +104,14 @@ class CalendarServiceV2 {
       );
     }
 
-    if (bookable.amount && Number(bookable.amount) < Number(amount)) {
+    // Not `amount` directly: a Schließfachanlage with its own Fächer limits
+    // it to the Fächer in Betrieb, and with none in Betrieb nothing is free.
+    const capacity = await bookableCapacity(tenantId, bookable);
+
+    if (
+      isExhausted(capacity) ||
+      (capacity !== null && capacity < Number(amount))
+    ) {
       return CalendarServiceV2.#buildResponse(
         bookable.title,
         [{ timeBegin, timeEnd, available: false }],
@@ -196,6 +207,7 @@ class CalendarServiceV2 {
         period.start,
         period.end,
         Number(amount),
+        capacity,
       );
 
       items.push(...capacitySegments);

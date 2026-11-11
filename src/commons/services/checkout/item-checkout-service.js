@@ -38,6 +38,7 @@ const {
   shouldSkipOpeningHoursCheck,
 } = require("../../availability/availability-rules");
 const { CheckoutPermissions } = require("./checkout-permissions");
+const { bookableCapacity } = require("../../availability/bookable-capacity");
 const { CHECKOUT_REASONS } = require("./checkout-reasons");
 const { CheckoutError } = require("../../../errors/CheckoutError");
 const checkoutPolicy = require("./checkout-policy");
@@ -761,11 +762,25 @@ class ItemCheckoutService {
   async checkAvailability() {
     const result = this.hasExternalAvailability
       ? await this._checkExternalAvailability()
-      : await runAvailabilityCheck(await this._availabilityParams());
+      : await runAvailabilityCheck({
+          ...(await this._availabilityParams()),
+          capacity: await this._capacity(),
+        });
 
     await this._checkNarrowingAvailability();
 
     return result;
+  }
+
+  /**
+   * The bookable's capacity (`bookable-capacity.js`): `amount`, limited to
+   * the Fächer in Betrieb of a Schließfachanlage with its own list.
+   * @returns {Promise<number|null>}
+   */
+  _capacity() {
+    return this._cached("capacity", () =>
+      bookableCapacity(this.tenantId, this.originBookable),
+    );
   }
 
   async _checkNarrowingAvailability() {

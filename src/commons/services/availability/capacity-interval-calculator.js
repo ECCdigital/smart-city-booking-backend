@@ -127,6 +127,8 @@ function getTicketParentBookings(
  * @param {number} windowStart
  * @param {number} windowEnd
  * @param {number} amount
+ * @param {number|null} [capacity] The origin's capacity
+ *   (`availability/bookable-capacity.js`), its `amount` when not given
  * @returns {Array<{ timeBegin: number, timeEnd: number, available: boolean }>}
  */
 function computeWindowAvailability(
@@ -135,6 +137,7 @@ function computeWindowAvailability(
   windowStart,
   windowEnd,
   amount,
+  capacity = originBookable.amount,
 ) {
   const useTimeOverlap = isTimeRelatedBookable(originBookable);
   const constraintSets = [];
@@ -152,7 +155,7 @@ function computeWindowAvailability(
         windowEnd,
       ),
       bookableId: originBookable.id,
-      capacity: originBookable.amount,
+      capacity,
       requestedAmount: amount,
       mode: CAPACITY_MODES.ADDITIVE,
       useTimeOverlap,
