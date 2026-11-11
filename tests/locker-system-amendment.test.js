@@ -30,7 +30,6 @@ const AccessPointManager = require("../src/commons/data-managers/access-point-ma
 const AccessLogService = require("../src/commons/services/access/access-log-service");
 const mailModule = require("../src/commons/mail-service");
 const { Booking } = require("../src/commons/entities/booking/booking");
-const AccessProvisionError = require("../src/errors/AccessProvisionError");
 const {
   installInMemoryLockerSystemHolds,
 } = require("./helpers/in-memory-locker-system-holds");
@@ -269,6 +268,18 @@ describe("Fach on Änderung, Wiederherstellung and Storno: a booking keeps its F
       expect(assigned("b1")).to.deep.equal(["uuid-2"]);
     });
 
+    it("keeps the Fach through the Rücknahme the lifecycle runs right after the hold", async function () {
+      await holding("b1");
+      storeHolding("b0", "uuid-1", later);
+      amendStored("b1", later);
+
+      await AccessService.holdForBooking(TENANT, "b1");
+      await AccessService.revokeForBooking(TENANT, "b1");
+
+      expect(assigned("b1")).to.deep.equal(["uuid-2"]);
+      expect(logged("revoke")).to.have.length(0);
+    });
+
     it("gives the first free Fach when the old one went out of service", async function () {
       await holding("b1");
       accessPoints.labor.config.compartments[0].outOfService = true;
@@ -396,18 +407,35 @@ describe("Fach on Änderung, Wiederherstellung and Storno: a booking keeps its F
       const changed = amendStored("b1", later);
       await AccessService.allocateForBooking(TENANT, "b1");
 
-      // Until Open Locker is provisioned without a grant (tickets#1040),
-      // the update answers that it granted no Fach; it is recorded.
-      await AccessService.updateForBooking(TENANT, old, changed).catch(
-        (err) => {
-          if (!(err instanceof AccessProvisionError)) {
-            throw err;
-          }
-        },
-      );
+      await AccessService.updateForBooking(TENANT, old, changed);
 
       expect(assigned("b1")).to.deep.equal(["uuid-2"]);
       expect(store.get("b1").accessInfo).to.have.length(1);
+      expect(store.get("b1").accessInfo[0]).to.deep.include({
+        isProvisioned: true,
+        revokedAt: null,
+      });
+    });
+
+    it("the update afterwards provisions a Fach the Zuteilung moved, and one added for a new unit, without a grant", async function () {
+      const old = storeConfirmed("b1", "uuid-1");
+      storeHolding("b0", "uuid-1", later);
+      const changed = amendStored("b1", {
+        ...later,
+        bookableItems: [{ bookableId: "faecher", amount: 2 }],
+      });
+      await AccessService.allocateForBooking(TENANT, "b1");
+
+      await AccessService.updateForBooking(TENANT, old, changed);
+
+      expect(assigned("b1")).to.deep.equal(["uuid-2", "uuid-3"]);
+      for (const entry of store.get("b1").accessInfo) {
+        expect(entry).to.deep.include({
+          isProvisioned: true,
+          revokedAt: null,
+          grant: null,
+        });
+      }
     });
 
     it("leaves a booking without an Anlage of its own list alone: Pareva unchanged", async function () {
@@ -455,6 +483,29 @@ describe("Fach on Änderung, Wiederherstellung and Storno: a booking keeps its F
         expect(assigned("b1")).to.deep.equal(["uuid-2"]);
       });
     }
+
+    it("provisions the Fach the Zuteilung gave back, without a grant, when reinstated into confirmed", async function () {
+      storeCancelled("b1", "uuid-3", {
+        revoked: true,
+        accessInfo: [
+          entryAt("uuid-3", {
+            provisionedAt: now - DAY,
+            revokedAt: now - HOUR,
+          }),
+        ],
+      });
+      amendStored("b1", { status: "confirmed" });
+
+      await AccessService.allocateForBooking(TENANT, "b1");
+      await AccessService.provisionForBooking(TENANT, "b1");
+
+      expect(assigned("b1")).to.deep.equal(["uuid-3"]);
+      const live = store
+        .get("b1")
+        .accessInfo.filter((entry) => !entry.revokedAt);
+      expect(live).to.have.length(1);
+      expect(live[0]).to.deep.include({ isProvisioned: true, grant: null });
+    });
 
     it("fails with compartments_unavailable without a free Fach, the stored Fach-Eintrag as it was", async function () {
       storeCancelled("b1", "uuid-1", { revoked: true });
