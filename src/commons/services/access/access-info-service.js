@@ -145,10 +145,13 @@ class AccessInfoService {
    * @param {Object} accessPoint The access point as it would be stored
    * @param {Object|null} listedAccessPoint The provider's listed entry for
    *   it, `null` when the provider does not list it
+   * @param {Object} [listing] What the save knows of the listing
+   * @param {boolean} [listing.asked] `false` when the provider could not be
+   *   asked - the tenant has not switched it on (tickets#311)
    * @returns {void}
    * @throws {ValidationError} What the provider will not store
    */
-  static validateAccessPoint(accessPoint, listedAccessPoint) {
+  static validateAccessPoint(accessPoint, listedAccessPoint, listing = {}) {
     const capabilities = getAccessProviderCapabilities(accessPoint.provider);
 
     if (!capabilities.includes(VALIDATE_ACCESS_POINT_CAPABILITY)) {
@@ -158,6 +161,7 @@ class AccessInfoService {
     getAccessProvider(accessPoint.provider).validateAccessPoint(
       accessPoint,
       listedAccessPoint,
+      listing,
     );
   }
 

@@ -6,7 +6,9 @@ const {
 } = require("../clients/open-locker-api-client");
 const { AccessOpenError } = require("../../../../errors/AccessOpenError");
 const { NotFoundError } = require("../../../../errors/BaseError");
+const { ValidationError } = require("../../../../errors/ValidationError");
 const { DOMAIN } = require("../../authorization/reach");
+const { AccessPointMode } = require("../../../entities/access/access-point");
 
 require("../clients");
 
@@ -224,6 +226,61 @@ class OpenLockerAccessProvider extends AccessProvider {
     }
   }
 
+  /**
+   * The compartments the tenant's technical account holds a permission on -
+   * on an instance several tenants share, only the tenant's own, because
+   * each account is permitted on its own compartments alone. Each is a door
+   * opened remotely, named by its locker bank and number, e.g.
+   * „Labor Fachbank 1 · Fach 2“; its locker bank is the location.
+   *
+   * @param {string} tenant Tenant to list for
+   * @returns {Promise<import("./access-provider").ListedAccessPoint[]>}
+   * @throws {NotFoundError} `open_locker_application_not_found` when the
+   *   tenant has no active Open Locker application
+   * @throws {Error} The client's error when Open Locker does not answer
+   */
+  async listAccessPoints(tenant) {
+    const client = await this._getClient(tenant);
+    const answer = await client.getAccessibleCompartments();
+
+    return (answer?.locker_banks || []).flatMap((lockerBank) =>
+      (lockerBank.compartments || []).map((compartment) =>
+        listedCompartment(lockerBank, compartment),
+      ),
+    );
+  }
+
+  /**
+   * Refuses a compartment the tenant's technical account holds no
+   * permission on - one its listing does not name - so no compartment is
+   * set up that never opens. A save that could not ask Open Locker, because
+   * the tenant has not switched it on, stores the compartment unchecked
+   * (tickets#311); the next save once it is active checks it.
+   *
+   * @param {Object} accessPoint The compartment as it would be stored
+   * @param {import("./access-provider").ListedAccessPoint|null}
+   *   listedAccessPoint The listing's entry for it, `null` where the
+   *   listing does not name it
+   * @param {Object} [listing] What the save knows of the listing
+   * @param {boolean} [listing.asked=true] `false` when Open Locker could not
+   *   be asked
+   * @returns {void}
+   * @throws {ValidationError} `compartment_not_accessible` at `externalId`
+   */
+  validateAccessPoint(accessPoint, listedAccessPoint, listing = {}) {
+    if (listedAccessPoint || listing.asked === false) {
+      return;
+    }
+
+    throw new ValidationError([
+      {
+        field: "externalId",
+        code: "compartment_not_accessible",
+        params: { externalId: accessPoint.externalId },
+      },
+    ]);
+  }
+
   /** Opened without a QR scan, unless the access point configures one. */
   static get requiresScanByDefault() {
     return false;
@@ -233,8 +290,37 @@ class OpenLockerAccessProvider extends AccessProvider {
     // No getStatus: the door state is not shown, the end state of an open
     // is enough. No grant, revoke or hold: Open Locker knows no bookings,
     // Biletado alone decides whether a booking may open.
-    return ["open", "getOpenProgress"];
+    return [
+      "open",
+      "getOpenProgress",
+      "listAccessPoints",
+      "validateAccessPoint",
+    ];
   }
+}
+
+/** A compartment of Open Locker's listing as the shared listed shape. */
+function listedCompartment(lockerBank, compartment) {
+  const id = String(compartment.id);
+
+  return {
+    id,
+    type: "door",
+    provider: PROVIDER_ID,
+    externalId: id,
+    locationId: String(lockerBank.id),
+    label: `${lockerBank.name} · Fach ${compartment.number}`,
+    capabilities: ["remote"],
+    supportedModes: [AccessPointMode.REMOTE],
+    metadata: {
+      ...compartment,
+      lockerBank: {
+        id: String(lockerBank.id),
+        name: lockerBank.name,
+        locationDescription: lockerBank.location_description ?? null,
+      },
+    },
+  };
 }
 
 /** The progress of a poll that could not be read. */

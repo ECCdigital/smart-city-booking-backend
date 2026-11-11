@@ -66,6 +66,22 @@ class OpenLockerApiClient extends BaseAccessApiClient {
   }
 
   /**
+   * The compartments the technical account holds a permission on, grouped
+   * by locker bank: `GET /api/compartments/accessible`. An account of role
+   * `user` sees only these - on an instance shared by several tenants, only
+   * its own tenant's. Reading stays open to an account blocked for terms not
+   * accepted.
+   *
+   * @returns {Promise<{locker_banks: Object[]}>} Open Locker's answer: the
+   *   locker banks ordered by name, each with `id`, `name`,
+   *   `location_description` and its `compartments` (`id`, `number`, ...)
+   *   ordered by number
+   */
+  async getAccessibleCompartments() {
+    return this._request("get", "/api/compartments/accessible");
+  }
+
+  /**
    * The technical account as Open Locker knows it: `GET /api/user`, with
    * whether it accepted the current terms and verified its address.
    *
@@ -225,7 +241,12 @@ class OpenLockerApiClient extends BaseAccessApiClient {
   }
 
   static get capabilities() {
-    return ["openCompartment", "getOpenRequest", "getUser"];
+    return [
+      "openCompartment",
+      "getOpenRequest",
+      "getAccessibleCompartments",
+      "getUser",
+    ];
   }
 }
 
