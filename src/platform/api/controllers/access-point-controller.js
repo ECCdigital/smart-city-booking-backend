@@ -462,20 +462,25 @@ class AccessPointController {
    * through what they cannot judge without it - so an access point can be
    * prepared before its provider is switched on (tickets#311), and is
    * checked on the first save once the provider is active. `asked` says
-   * which of the two a `null` entry is, for a provider whose listing is the
-   * reach of the tenant's account (Open Locker). Anything else the provider
-   * raises is translated.
+   * whether the listing was asked at all - not for a provider that is not
+   * active, nor for an access point without `externalId` - so a provider
+   * that lists only what the tenant's account may open (Open Locker) can
+   * tell "not listed" from "not asked". Anything else the provider raises
+   * is translated.
    *
    * @param {AccessPoint} accessPoint The access point as it would be stored
    * @param {string} tenantId Tenant the access point belongs to
    * @returns {Promise<{entry: Object|null, asked: boolean}>} The listed
    *   entry, `null` when the provider does not list the access point or the
-   *   tenant has not switched the provider on; `asked` is `false` for the
-   *   latter
+   *   listing was not asked; `asked` is `false` for the latter
    * @throws {BaseError} `access_provider_rejected` (502) or
    *   `access_provider_unreachable` (503)
    */
   static async _fetchListedAccessPoint(accessPoint, tenantId) {
+    if (!AccessInfoService.asksListing(accessPoint)) {
+      return { entry: null, asked: false };
+    }
+
     try {
       return {
         entry: await AccessInfoService.findListedAccessPoint(

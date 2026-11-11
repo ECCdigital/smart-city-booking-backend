@@ -52,9 +52,9 @@ function listedAccessPoint(supportedModes) {
 /** The tenant's Open Locker compartment as its listing names it. */
 function listedCompartment() {
   return {
-    id: "9b2f6c1e-3d4a-4f5b-8c7d-1e2f3a4b5c6d",
+    id: COMPARTMENT_ID,
     provider: "open-locker",
-    externalId: "9b2f6c1e-3d4a-4f5b-8c7d-1e2f3a4b5c6d",
+    externalId: COMPARTMENT_ID,
     supportedModes: ["remote"],
   };
 }
@@ -304,7 +304,7 @@ describe("AccessPointController", () => {
           provider: "open-locker",
           type: "door",
           mode: "remote",
-          externalId: "9b2f6c1e-3d4a-4f5b-8c7d-1e2f3a4b5c6d",
+          externalId: COMPARTMENT_ID,
         };
 
         await AccessPointController.storeAccessPoint(request, response, next);
@@ -319,7 +319,7 @@ describe("AccessPointController", () => {
           provider: "open-locker",
           type: "door",
           mode: "remote",
-          externalId: "9b2f6c1e-3d4a-4f5b-8c7d-1e2f3a4b5c6d",
+          externalId: COMPARTMENT_ID,
           validationRules: [{ type: "qrScan" }],
         };
 
@@ -1041,6 +1041,18 @@ describe("AccessPointController", () => {
           },
         ]);
         expect(storeAccessPoint.called).to.be.false;
+      });
+
+      it("stores a compartment without a UUID unchecked - there is nothing to ask Open Locker about", async () => {
+        const { externalId, ...withoutUuid } = compartment(COMPARTMENT_ID);
+        request.body = withoutUuid;
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(externalId).to.equal(COMPARTMENT_ID);
+        expect(next.called).to.be.false;
+        expect(storeAccessPoint.calledOnce).to.be.true;
+        expect(openLocker.requests).to.deep.equal([]);
       });
 
       it("refuses to store a compartment again once the account lost its permission on it", async () => {

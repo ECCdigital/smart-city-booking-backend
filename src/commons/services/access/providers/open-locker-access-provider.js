@@ -8,7 +8,10 @@ const { AccessOpenError } = require("../../../../errors/AccessOpenError");
 const { NotFoundError } = require("../../../../errors/BaseError");
 const { ValidationError } = require("../../../../errors/ValidationError");
 const { DOMAIN } = require("../../authorization/reach");
-const { AccessPointMode } = require("../../../entities/access/access-point");
+const {
+  AccessCapability,
+  AccessPointMode,
+} = require("../../../entities/access/access-point");
 
 require("../clients");
 
@@ -253,17 +256,17 @@ class OpenLockerAccessProvider extends AccessProvider {
   /**
    * Refuses a compartment the tenant's technical account holds no
    * permission on - one its listing does not name - so no compartment is
-   * set up that never opens. A save that could not ask Open Locker, because
-   * the tenant has not switched it on, stores the compartment unchecked
-   * (tickets#311); the next save once it is active checks it.
+   * set up that never opens. A save that did not ask Open Locker - the
+   * tenant has not switched it on (tickets#311), or the compartment names no
+   * UUID - stores it unchecked; the next save that asks checks it.
    *
    * @param {Object} accessPoint The compartment as it would be stored
    * @param {import("./access-provider").ListedAccessPoint|null}
    *   listedAccessPoint The listing's entry for it, `null` where the
    *   listing does not name it
    * @param {Object} [listing] What the save knows of the listing
-   * @param {boolean} [listing.asked=true] `false` when Open Locker could not
-   *   be asked
+   * @param {boolean} [listing.asked=true] `false` when Open Locker was not
+   *   asked
    * @returns {void}
    * @throws {ValidationError} `compartment_not_accessible` at `externalId`
    */
@@ -310,7 +313,7 @@ function listedCompartment(lockerBank, compartment) {
     externalId: id,
     locationId: String(lockerBank.id),
     label: `${lockerBank.name} · Fach ${compartment.number}`,
-    capabilities: ["remote"],
+    capabilities: [AccessCapability.REMOTE],
     supportedModes: [AccessPointMode.REMOTE],
     metadata: {
       ...compartment,
