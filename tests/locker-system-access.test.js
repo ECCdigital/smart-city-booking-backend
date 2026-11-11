@@ -27,6 +27,7 @@ const {
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const AccessPointManager = require("../src/commons/data-managers/access-point-manager");
 const AccessLogService = require("../src/commons/services/access/access-log-service");
+const LockerSystemMutex = require("../src/commons/services/access/locker-system-mutex");
 const mailModule = require("../src/commons/mail-service");
 const { Booking } = require("../src/commons/entities/booking/booking");
 const {
@@ -605,6 +606,244 @@ describe("Zugeteiltes Fach: provisioned, revoked, opened and projected", functio
         isProvisioned: true,
       });
       expect(points[0]).to.not.have.property("assignedCompartment");
+    });
+  });
+
+  describe("Fach umsetzen (tickets#1044)", function () {
+    const FOURTH_COMPARTMENT_ID = "2e3f4a5b-6c7d-4e8f-a0b1-c2d3e4f5a6b7";
+    const C1 = `anlage-1:${COMPARTMENT_ID}`;
+    const C2 = `anlage-1:${OTHER_COMPARTMENT_ID}`;
+    const C3 = `anlage-1:${SECOND_COMPARTMENT_ID}`;
+
+    /**
+     * Four Fächer, the fourth out of service; the access buffer reaches 30
+     * minutes past the booking. "b2" begins 15 minutes after "b1" ends, so
+     * it occupies its Fach for "b1" by the buffer alone. Held first, "b2"
+     * gets Fach 1, "b1" then Fach 2; free for "b1" is Fach 3 alone.
+     */
+    beforeEach(async function () {
+      accessPoints[0].config.compartments = [
+        { id: COMPARTMENT_ID, number: 1, lockerBank: LABOR },
+        { id: OTHER_COMPARTMENT_ID, number: 2, lockerBank: LABOR },
+        { id: SECOND_COMPARTMENT_ID, number: 3, lockerBank: HAFEN },
+        {
+          id: FOURTH_COMPARTMENT_ID,
+          number: 4,
+          lockerBank: HAFEN,
+          outOfService: true,
+        },
+      ];
+      bookables.faecher.accessPointDetails.accessBuffer = {
+        before: 0,
+        after: 30,
+      };
+      await storeHeld("b2", 1, {
+        assignedUserId: "user-2",
+        timeBegin: now + HOUR + 15 * MINUTE,
+        timeEnd: now + 2 * HOUR,
+      });
+      await storeProvisioned("b1");
+      AccessLogService.log.resetHistory();
+    });
+
+    it("offers the Fächer of the same Anlage free for the period with its buffers and in service", async function () {
+      expect(entries("b2")[0].assignedCompartment.id).to.equal(COMPARTMENT_ID);
+      expect(entries("b1")[0].assignedCompartment.id).to.equal(
+        OTHER_COMPARTMENT_ID,
+      );
+
+      const free = await AccessService.freeCompartmentsToReassign(
+        TENANT,
+        "b1",
+        C2,
+      );
+
+      expect(free).to.deep.equal([
+        { id: C3, number: 3, lockerBankName: "Quartiersschrank Hafen" },
+      ]);
+    });
+
+    it("moves a running booking to the chosen Fach, and „Fach öffnen“ opens the new one", async function () {
+      const moved = await AccessService.reassignCompartment(
+        TENANT,
+        "b1",
+        C2,
+        C3,
+        { userId: "admin-1" },
+      );
+
+      expect(moved).to.deep.equal({
+        id: C3,
+        previousId: C2,
+        assignedCompartment: {
+          number: 3,
+          lockerBankName: "Quartiersschrank Hafen",
+        },
+      });
+      const [entry] = entries("b1");
+      expect(entry.assignedCompartment).to.deep.equal({
+        id: SECOND_COMPARTMENT_ID,
+        number: 3,
+        lockerBank: HAFEN,
+      });
+      expect(entry.isProvisioned).to.equal(true);
+
+      const outcome = await AccessService.open(TENANT, "b1", C3, "user-1");
+      expect(outcome.success).to.equal(true);
+      expect(client.requests).to.include(
+        `POST /api/compartments/${SECOND_COMPARTMENT_ID}/open`,
+      );
+      await assert.rejects(AccessService.open(TENANT, "b1", C2, "user-1"), {
+        code: "access_point_not_in_booking",
+      });
+    });
+
+    it("lists the new Fach for the booking and on the Mobile Key's projection", async function () {
+      await AccessService.reassignCompartment(TENANT, "b1", C2, C3, {
+        userId: "admin-1",
+      });
+
+      const { points, accessEligibility } =
+        await AccessService.getByBookingWithEligibility(TENANT, "b1", {
+          userId: "user-1",
+        });
+      expect(points.map((point) => point.id)).to.deep.equal([C3]);
+      expect(accessEligibility.remoteOperableAccessPointIds).to.deep.equal([
+        C3,
+      ]);
+    });
+
+    it("writes the Umsetzen into the access log, at the new Fach, and sends no mail", async function () {
+      await AccessService.reassignCompartment(TENANT, "b1", C2, C3, {
+        userId: "admin-1",
+      });
+
+      const [row] = logged("reassign");
+      expect(row).to.deep.include({
+        bookingId: "b1",
+        accessPointId: C3,
+        externalId: SECOND_COMPARTMENT_ID,
+        provider: "open-locker",
+        result: "success",
+        actor: { userId: "admin-1", source: "user" },
+      });
+      expect(row.payload).to.deep.equal({
+        compartment: {
+          id: SECOND_COMPARTMENT_ID,
+          number: 3,
+          lockerBank: HAFEN,
+        },
+        previous: { id: OTHER_COMPARTMENT_ID, number: 2, lockerBank: LABOR },
+      });
+      expect(mailModule.notify.called).to.equal(false);
+    });
+
+    it("refuses a Fach that is occupied, out of service or the booking's own, and keeps the Fach", async function () {
+      for (const to of [
+        C1,
+        `anlage-1:${FOURTH_COMPARTMENT_ID}`,
+        C2,
+        "anlage-1:not-in-the-anlage",
+        `anlage-2:${SECOND_COMPARTMENT_ID}`,
+      ]) {
+        await assert.rejects(
+          AccessService.reassignCompartment(TENANT, "b1", C2, to, {
+            userId: "admin-1",
+          }),
+          { statusCode: 409, code: "compartment_taken" },
+        );
+      }
+
+      expect(entries("b1")[0].assignedCompartment.id).to.equal(
+        OTHER_COMPARTMENT_ID,
+      );
+      expect(logged("reassign")).to.deep.equal([]);
+    });
+
+    it("checks the occupancy again under the mutex and refuses a Fach taken in between", async function () {
+      const free = await AccessService.freeCompartmentsToReassign(
+        TENANT,
+        "b1",
+        C2,
+      );
+      expect(free.map((c) => c.id)).to.deep.equal([C3]);
+
+      // Another Vormerkung holds the Anlage and takes Fach 3 meanwhile.
+      let release;
+      const other = LockerSystemMutex.hold(
+        { tenantId: TENANT, id: "anlage-1" },
+        () => new Promise((resolve) => (release = resolve)),
+      );
+      await new Promise((resolve) => setImmediate(resolve));
+      const reassign = AccessService.reassignCompartment(TENANT, "b1", C2, C3, {
+        userId: "admin-1",
+      });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      storeBooking("b3", "faecher", 1, {
+        accessInfo: [
+          {
+            ...entries("b1")[0],
+            assignedCompartment: {
+              id: SECOND_COMPARTMENT_ID,
+              number: 3,
+              lockerBank: HAFEN,
+            },
+          },
+        ],
+      });
+      release();
+      await other;
+
+      await assert.rejects(reassign, {
+        statusCode: 409,
+        code: "compartment_taken",
+      });
+      expect(entries("b1")[0].assignedCompartment.id).to.equal(
+        OTHER_COMPARTMENT_ID,
+      );
+    });
+
+    it("moves an unpaid booking's Fach, which stays held", async function () {
+      await storeHeld("b4", 1, {
+        status: "payment_due",
+        isPayed: false,
+        timeBegin: now + 5 * HOUR,
+        timeEnd: now + 6 * HOUR,
+      });
+      const [held] = entries("b4");
+
+      await AccessService.reassignCompartment(
+        TENANT,
+        "b4",
+        `anlage-1:${held.assignedCompartment.id}`,
+        C3,
+        { userId: "admin-1" },
+      );
+
+      const [entry] = entries("b4");
+      expect(entry.assignedCompartment.id).to.equal(SECOND_COMPARTMENT_ID);
+      expect(entry.hold).to.deep.equal(held.hold);
+      expect(entry.isProvisioned).to.not.equal(true);
+    });
+
+    it("answers 404 for an access point of the booking that is no zugeteiltes Fach", async function () {
+      storeBooking("f1", "fixed");
+      await AccessService.provisionForBooking(TENANT, "f1");
+
+      await assert.rejects(
+        AccessService.freeCompartmentsToReassign(TENANT, "f1", "fixed-1"),
+        { statusCode: 404, code: "compartment_not_in_booking" },
+      );
+      await assert.rejects(
+        AccessService.reassignCompartment(TENANT, "b1", C1, C3, {
+          userId: "admin-1",
+        }),
+        { statusCode: 404, code: "compartment_not_in_booking" },
+      );
+      await assert.rejects(
+        AccessService.freeCompartmentsToReassign(TENANT, "missing", C2),
+        { statusCode: 404, code: "compartment_not_in_booking" },
+      );
     });
   });
 });

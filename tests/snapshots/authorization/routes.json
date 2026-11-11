@@ -2167,6 +2167,22 @@
     "instanceOwner": 403,
     "expiredToken": 401
   },
+  "GET /api/:tenant/access/:accessPointId/free-compartments": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 404,
+    "tenantOwner": 404,
+    "instanceOwner": 404,
+    "expiredToken": 401
+  },
+  "POST /api/:tenant/access/:accessPointId/reassign": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400,
+    "expiredToken": 401
+  },
   "GET /api/:tenant/access/": {
     "anonymous": 401,
     "signedIn": 403,

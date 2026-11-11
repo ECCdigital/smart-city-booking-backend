@@ -11,7 +11,11 @@ const { projectAccessPoint } = require("./access-point-projection");
 const { AccessPointMode } = require("../../entities/access/access-point");
 const { AccessPointType } = require("../../schemas/accessPointSchema");
 const mailService = require("../../mail-service");
-const { ForbiddenError, ConflictError } = require("../../../errors/BaseError");
+const {
+  ForbiddenError,
+  ConflictError,
+  NotFoundError,
+} = require("../../../errors/BaseError");
 const AccessProvisionError = require("../../../errors/AccessProvisionError");
 const { customerViewOf } = require("../booking/booking-customer-view");
 const { DOMAIN } = require("../authorization/reach");
@@ -1059,6 +1063,177 @@ class AccessService {
         actor: { source: "system" },
       });
     }
+  }
+
+  /**
+   * The Fächer a zugeteiltes Fach of a booking can be moved to by hand
+   * (Umsetzen, tickets#1044): those of the same Anlage free for the
+   * booking's period with the buffers and in service, the booking's own
+   * Fächer left out, in the order the platform gives them out. Read without
+   * the mutex: `reassignCompartment` checks again under it.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {string} bookingId Booking ID
+   * @param {string} accessPointId The Fach as the booking lists it,
+   *   `<anlageId>:<UUID>`
+   * @returns {Promise<{ id: string, number: number|null,
+   *   lockerBankName: string|null }[]>} Each under the id the entry would
+   *   be listed by after the move
+   * @throws {NotFoundError} `compartment_not_in_booking` when the booking
+   *   holds no such Fach
+   */
+  static async freeCompartmentsToReassign(tenant, bookingId, accessPointId) {
+    const { booking, system } = await this._resolveReassignable(
+      tenant,
+      bookingId,
+      accessPointId,
+    );
+    const free = await this._freeToReassign(tenant, booking, system);
+    return free.map((compartment) => ({
+      id: `${system.accessPoint.id}:${compartment.id}`,
+      number: compartment.number ?? null,
+      lockerBankName: compartment.lockerBank?.name ?? null,
+    }));
+  }
+
+  /**
+   * Moves a zugeteiltes Fach of a booking to another Fach of the same
+   * Anlage by hand (Umsetzen, tickets#1044) - a running booking too, say
+   * when its Fach jams. Under the mutex of the Anlage the booking and the
+   * Anlage are read again and the occupancy is checked anew, so a Fach
+   * taken since it was offered is refused. Only the Fach changes: the
+   * entry stays held or provisioned as it was, so the booking opens the
+   * new Fach right away, under its new id. One row in the access log, at
+   * the new Fach; no mail.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {string} bookingId Booking ID
+   * @param {string} accessPointId The Fach as the booking lists it,
+   *   `<anlageId>:<UUID>`
+   * @param {string} to The Fach to move to, as `freeCompartmentsToReassign`
+   *   names it
+   * @param {Object} [options]
+   * @param {string} [options.userId] Who moves it, for the access log
+   * @returns {Promise<{ id: string, previousId: string,
+   *   assignedCompartment: { number: number|null,
+   *   lockerBankName: string|null } }>} The id the Fach is listed by now
+   * @throws {NotFoundError} `compartment_not_in_booking` when the booking
+   *   holds no such Fach
+   * @throws {ConflictError} `compartment_taken` when the Fach to move to is
+   *   not free for the booking or not in service
+   */
+  static async reassignCompartment(
+    tenant,
+    bookingId,
+    accessPointId,
+    to,
+    { userId = null } = {},
+  ) {
+    const { system } = await this._resolveReassignable(
+      tenant,
+      bookingId,
+      accessPointId,
+    );
+
+    return LockerSystemMutex.hold(system.accessPoint, async () => {
+      // Read again under the mutex: the booking and the Anlage as they are now.
+      const current = await this._resolveReassignable(
+        tenant,
+        bookingId,
+        accessPointId,
+      );
+      const { booking, entry } = current;
+      const free = await this._freeToReassign(tenant, booking, current.system);
+      const target = free.find(
+        (compartment) =>
+          `${current.system.accessPoint.id}:${compartment.id}` === String(to),
+      );
+      if (!target) {
+        throw new ConflictError("compartment_taken", {
+          bookingId,
+          accessPointId,
+          to,
+        });
+      }
+
+      const previous = entry.assignedCompartment;
+      entry.assignedCompartment = assignedCompartmentOf(target);
+      await BookingManager.storeBooking(booking);
+
+      const moved = this._compartmentAccessPoint(current.system, entry);
+      await this._log({
+        tenantId: tenant,
+        userId,
+        accessPoint: moved,
+        bookingId,
+        action: "reassign",
+        result: "success",
+        payload: { compartment: entry.assignedCompartment, previous },
+      });
+
+      return {
+        id: moved.id,
+        previousId: String(accessPointId),
+        assignedCompartment: {
+          number: entry.assignedCompartment.number ?? null,
+          lockerBankName: entry.assignedCompartment.lockerBank?.name ?? null,
+        },
+      };
+    });
+  }
+
+  /**
+   * @private
+   * The booking, its entry of the Fach and the Anlage, for the Umsetzen:
+   * a booking not cancelled holding the Fach in an entry not taken back,
+   * at an Anlage that carries its own list.
+   *
+   * @throws {NotFoundError} `compartment_not_in_booking` otherwise
+   */
+  static async _resolveReassignable(tenant, bookingId, accessPointId) {
+    const booking = bookingId
+      ? await BookingManager.getBooking(bookingId, tenant, DOMAIN)
+      : null;
+    const entry =
+      booking && !booking.isRejected
+        ? this._compartmentEntries(booking).find(
+            (candidate) =>
+              candidate.assignedCompartment &&
+              !candidate.revokedAt &&
+              this._compartmentId(candidate) === String(accessPointId),
+          )
+        : null;
+    const system = entry
+      ? (
+          await this._getBookingAccessPointsFromBooking(tenant, booking)
+        ).lockerSystems.get(String(entry.accessPointId))
+      : null;
+
+    if (!system || !carriesOwnCompartments(system.accessPoint)) {
+      throw new NotFoundError("compartment_not_in_booking", {
+        bookingId,
+        accessPointId,
+      });
+    }
+    return { booking, entry, system };
+  }
+
+  /**
+   * @private
+   * The Fächer of the Anlage free for the booking and in service, but for
+   * those the booking holds itself.
+   */
+  static async _freeToReassign(tenant, booking, system) {
+    const held = this._compartmentEntries(booking)
+      .filter((entry) => !entry.revokedAt && entry.assignedCompartment)
+      .map((entry) => String(entry.assignedCompartment.id));
+
+    return freeCompartments(
+      tenant,
+      system.accessPoint,
+      this._claimOf(booking, system),
+      { exclude: held },
+    );
   }
 
   /**
