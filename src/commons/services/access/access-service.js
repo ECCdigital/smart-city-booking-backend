@@ -752,16 +752,43 @@ class AccessService {
    *   has no compartment left for this booking
    */
   static async holdForBooking(tenant, bookingId) {
-    const resolved = await this._getBookingAccessPoints(tenant, bookingId);
-    const allocating = this._allocatingSystems(resolved.lockerSystems);
-
-    if (allocating.length === 0) {
-      return this._holdResolved(tenant, resolved);
-    }
-    return LockerSystemMutex.holdAll(
-      allocating.map((system) => system.accessPoint),
-      () => this._holdResolved(tenant, resolved),
+    return this._withAllocatingSystemsHeld(tenant, bookingId, (resolved) =>
+      this._holdResolved(tenant, resolved),
     );
+  }
+
+  /**
+   * @private
+   * Runs `work` over the booking resolved with its access points, under the
+   * mutex of every Anlage it is given Fächer at. The first read only names
+   * those Anlagen; once they are held, the booking and the Anlagen are read
+   * again and `work` gets that read: a save of the Anlage (a Fach out of
+   * service) or of the booking (an Umsetzen, a Wandern) the caller waited
+   * for is what it works on, never the state from before. An Anlage the
+   * booking books only since the first read is held as well. Without such
+   * an Anlage `work` gets the first read, under no mutex.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {string} bookingId Booking ID
+   * @param {(resolved: Object) => Promise<*>} work Gets what
+   *   `_getBookingAccessPoints` answers
+   * @returns {Promise<*>} What `work` answers
+   */
+  static async _withAllocatingSystemsHeld(tenant, bookingId, work) {
+    const first = await this._getBookingAccessPoints(tenant, bookingId);
+    const anlagen = (resolved) =>
+      this._allocatingSystems(resolved.lockerSystems).map(
+        (system) => system.accessPoint,
+      );
+    if (anlagen(first).length === 0) {
+      return work(first);
+    }
+
+    return LockerSystemMutex.holdAll(anlagen(first), async () => {
+      const current = await this._getBookingAccessPoints(tenant, bookingId);
+      // The ones held already run straight through (the mutex is re-entrant).
+      return LockerSystemMutex.holdAll(anlagen(current), () => work(current));
+    });
   }
 
   /**
@@ -876,20 +903,17 @@ class AccessService {
    *   stays as it was
    */
   static async allocateForBooking(tenant, bookingId) {
-    const resolved = await this._getBookingAccessPoints(tenant, bookingId);
-    const { booking, lockerSystems } = resolved;
-    const ownLists = [...lockerSystems.values()].filter((system) =>
-      carriesOwnCompartments(system.accessPoint),
-    );
-    if (ownLists.length === 0) {
-      return booking.accessInfo;
-    }
+    return this._withAllocatingSystemsHeld(
+      tenant,
+      bookingId,
+      async ({ booking, lockerSystems }) => {
+        const ownLists = [...lockerSystems.values()].filter((system) =>
+          carriesOwnCompartments(system.accessPoint),
+        );
+        if (ownLists.length === 0) {
+          return booking.accessInfo;
+        }
 
-    return LockerSystemMutex.holdAll(
-      this._allocatingSystems(lockerSystems).map(
-        (system) => system.accessPoint,
-      ),
-      async () => {
         const allocated = await this._allocateCompartments(
           tenant,
           booking,
