@@ -202,3 +202,68 @@ describe("LockerSystemMutex.hold", function () {
     assert.strictEqual(result, "compartment-1");
   });
 });
+
+describe("LockerSystemMutex.holdAll", function () {
+  let holds;
+
+  beforeEach(function () {
+    holds = installInMemoryLockerSystemHolds();
+  });
+
+  afterEach(function () {
+    sinon.restore();
+  });
+
+  it("runs the work while holding every locker system, a doubled one once, and gives them back", async function () {
+    const second = { tenantId: "tenant-1", id: "locker-system-2" };
+    let held;
+
+    const result = await LockerSystemMutex.holdAll(
+      [second, LOCKER_SYSTEM, second],
+      async () => {
+        held = [...holds.keys()].sort();
+        return "done";
+      },
+    );
+
+    assert.strictEqual(result, "done");
+    assert.deepStrictEqual(held, [
+      "tenant-1:locker-system-1",
+      "tenant-1:locker-system-2",
+    ]);
+    assert.strictEqual(holds.size, 0);
+  });
+
+  it("makes a second caller over the same locker systems wait, whatever order it names them in", async function () {
+    const second = { tenantId: "tenant-1", id: "locker-system-2" };
+    const first = deferred();
+    const order = [];
+
+    const firstHold = LockerSystemMutex.holdAll(
+      [LOCKER_SYSTEM, second],
+      async () => {
+        order.push("first started");
+        await first.promise;
+        order.push("first done");
+      },
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    const secondHold = LockerSystemMutex.holdAll(
+      [second, LOCKER_SYSTEM],
+      async () => {
+        order.push("second started");
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    assert.deepStrictEqual(order, ["first started"]);
+
+    first.resolve();
+    await Promise.all([firstHold, secondHold]);
+
+    assert.deepStrictEqual(order, [
+      "first started",
+      "first done",
+      "second started",
+    ]);
+  });
+});

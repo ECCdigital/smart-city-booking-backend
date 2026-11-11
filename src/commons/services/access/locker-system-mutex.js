@@ -79,6 +79,40 @@ class LockerSystemMutex {
       });
     }
   }
+
+  /**
+   * Runs `work` while holding every one of the locker systems: one after
+   * another in the order of their ids, so two callers holding the same
+   * ones never wait for each other crosswise. A locker system named twice
+   * is held once.
+   *
+   * @template T
+   * @param {{tenantId: string, id: string}[]} lockerSystems The access
+   *   points of the locker systems
+   * @param {() => Promise<T>} work As for `hold`
+   * @param {Object} [options] As for `hold`, per locker system
+   * @returns {Promise<T>} What the work answers
+   */
+  static async holdAll(lockerSystems, work, options = {}) {
+    const byId = new Map(
+      lockerSystems.map((lockerSystem) => [
+        String(lockerSystem.id),
+        lockerSystem,
+      ]),
+    );
+    const ordered = [...byId.keys()].sort().map((id) => byId.get(id));
+
+    const holdFrom = (index) =>
+      index === ordered.length
+        ? work()
+        : LockerSystemMutex.hold(
+            ordered[index],
+            () => holdFrom(index + 1),
+            options,
+          );
+
+    return holdFrom(0);
+  }
 }
 
 module.exports = LockerSystemMutex;

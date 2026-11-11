@@ -15,6 +15,13 @@ const { ForbiddenError, ConflictError } = require("../../../errors/BaseError");
 const AccessProvisionError = require("../../../errors/AccessProvisionError");
 const { customerViewOf } = require("../booking/booking-customer-view");
 const { DOMAIN } = require("../authorization/reach");
+const LockerSystemMutex = require("./locker-system-mutex");
+const { carriesOwnCompartments } = require("./locker-system-compartments");
+const {
+  accessBufferMs,
+  freeCompartments,
+  assignedCompartmentOf,
+} = require("./compartment-allocation");
 const { REACH } = require("../authorization/policy");
 
 const logger = bunyan.createLogger({
@@ -738,13 +745,32 @@ class AccessService {
    *   has no compartment left for this booking
    */
   static async holdForBooking(tenant, bookingId) {
-    const { booking, lockerSystems } = await this._getBookingAccessPoints(
-      tenant,
-      bookingId,
-    );
+    const resolved = await this._getBookingAccessPoints(tenant, bookingId);
+    const allocating = this._allocatingSystems(resolved.lockerSystems);
 
+    if (allocating.length === 0) {
+      return this._holdResolved(tenant, resolved);
+    }
+    return LockerSystemMutex.holdAll(
+      allocating.map((system) => system.accessPoint),
+      () => this._holdResolved(tenant, resolved),
+    );
+  }
+
+  /**
+   * @private
+   * The hold of `holdForBooking` once the booking is resolved - under the
+   * mutex of every Anlage the platform assigns Fächer at.
+   */
+  static async _holdResolved(tenant, { booking, lockerSystems }) {
+    const bookingId = booking.id;
     this._trimHeldCompartments(booking, lockerSystems);
     this._ensureCompartmentEntries(booking, lockerSystems);
+    const assigned = await this._assignCompartments(
+      tenant,
+      booking,
+      lockerSystems,
+    );
 
     const platformHeld = new Map();
     for (const entry of this._compartmentEntries(booking)) {
@@ -798,11 +824,131 @@ class AccessService {
 
     await BookingManager.storeBooking(booking);
 
+    for (const { system, entry } of assigned) {
+      await this._log({
+        tenantId: tenant,
+        accessPoint: this._compartmentAccessPoint(system, entry),
+        bookingId,
+        action: "hold",
+        result: "success",
+        payload: { compartment: entry.assignedCompartment },
+        actor: { source: "system" },
+      });
+    }
+
     for (const system of platformHeld.values()) {
       await this._assertCompartmentCapacity(tenant, booking, system);
     }
 
     return booking.accessInfo;
+  }
+
+  /**
+   * @private
+   * The locker systems of the booking at which the platform assigns the
+   * Fach - those carrying their own list, booked by a bookable of the
+   * booking. To be held under their mutex while assigning.
+   *
+   * @param {Map<string, Object>} lockerSystems As `_resolveLockerSystems`
+   * @returns {Object[]} The systems
+   */
+  static _allocatingSystems(lockerSystems) {
+    return [...lockerSystems.values()].filter(
+      (system) => system.bookable && carriesOwnCompartments(system.accessPoint),
+    );
+  }
+
+  /**
+   * @private
+   * Gives every entry still without a Fach, at an Anlage that carries its
+   * own list, the first free Fach in service (`compartment-allocation.js`),
+   * held by the platform: the stored booking is the claim, without a handle
+   * at the provider and without a deadline. A Fach the booking holds in
+   * another entry is not given twice. To run under the mutex of those
+   * Anlagen, before the booking is stored.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {Object} booking The booking, written into
+   * @param {Map<string, Object>} lockerSystems The systems of the booking
+   * @returns {Promise<{ system: Object, entry: Object }[]>} The entries
+   *   given a Fach now
+   * @throws {ConflictError} `compartments_unavailable` when an Anlage has
+   *   fewer free Fächer than the booking needs there; nothing is assigned
+   *   then
+   */
+  static async _assignCompartments(tenant, booking, lockerSystems) {
+    const holding = new Set(
+      this._compartmentEntries(booking)
+        .filter((entry) => !entry.revokedAt && entry.assignedCompartment)
+        .map((entry) => String(entry.assignedCompartment.id)),
+    );
+    const plans = [];
+
+    for (const system of this._allocatingSystems(lockerSystems)) {
+      const waiting = this._compartmentEntries(booking).filter(
+        (entry) =>
+          String(entry.accessPointId) === String(system.accessPoint.id) &&
+          !entry.revokedAt &&
+          !entry.grant &&
+          !entry.hold &&
+          !entry.assignedCompartment,
+      );
+      if (waiting.length === 0) {
+        continue;
+      }
+
+      const free = await freeCompartments(
+        tenant,
+        system.accessPoint,
+        this._claimOf(booking, system),
+        { exclude: holding },
+      );
+      if (free.length < waiting.length) {
+        await this._log({
+          tenantId: tenant,
+          accessPoint: system.accessPoint,
+          bookingId: booking.id,
+          action: "hold",
+          result: "failure",
+          errorCode: "compartments_unavailable",
+          errorMessage: `${free.length} of ${waiting.length} compartments free`,
+          actor: { source: "system" },
+        });
+        throw new ConflictError("compartments_unavailable", {
+          bookableId: system.bookable.id,
+          accessPointId: system.accessPoint.id,
+          needed: waiting.length,
+          free: free.length,
+        });
+      }
+
+      waiting.forEach((entry, index) => {
+        holding.add(String(free[index].id));
+        plans.push({ system, entry, compartment: free[index] });
+      });
+    }
+
+    return plans.map(({ system, entry, compartment }) => {
+      Object.assign(entry, {
+        hold: { ...PLATFORM_HOLD },
+        assignedCompartment: assignedCompartmentOf(compartment),
+      });
+      return { system, entry };
+    });
+  }
+
+  /**
+   * @private
+   * The booking as it asks for a Fach of the system: its period, and the
+   * bookable whose access buffer widens it (`compartment-allocation.js`).
+   */
+  static _claimOf(booking, system) {
+    return {
+      bookingId: booking.id,
+      timeBegin: booking.timeBegin,
+      timeEnd: booking.timeEnd,
+      bookable: system.bookable,
+    };
   }
 
   /**
@@ -2438,14 +2584,17 @@ class AccessService {
   /**
    * @private
    * The opaque id a compartment is operated by: the locker system's row and
-   * the grant, or `hold` before the grant.
+   * the Fach the platform assigned (an Anlage with its own list), else the
+   * grant, or `hold` before the grant.
    *
    * @param {Object} entry The compartment's `accessInfo` entry
-   * @returns {string} `<accessPointId>:<authorizationId>` or
-   *   `<accessPointId>:hold`
+   * @returns {string} `<accessPointId>:<Fach UUID>`,
+   *   `<accessPointId>:<authorizationId>` or `<accessPointId>:hold`
    */
   static _compartmentId(entry) {
-    return `${entry.accessPointId}:${entry.grant?.authorizationId ?? "hold"}`;
+    const key =
+      entry.assignedCompartment?.id ?? entry.grant?.authorizationId ?? "hold";
+    return `${entry.accessPointId}:${key}`;
   }
 
   /**
@@ -2862,15 +3011,7 @@ class AccessService {
    * @returns {{ beforeMs: number, afterMs: number }}
    */
   static _resolveAccessBuffer(bookable) {
-    const buffer = bookable.accessPointDetails?.accessBuffer || {};
-
-    const before = Number(buffer.before ?? 0);
-    const after = Number(buffer.after ?? 0);
-
-    const toMs = (minutes) =>
-      Number.isFinite(minutes) && minutes > 0 ? minutes * 60 * 1000 : 0;
-
-    return { beforeMs: toMs(before), afterMs: toMs(after) };
+    return accessBufferMs(bookable);
   }
 
   /**
@@ -3104,14 +3245,19 @@ class AccessService {
    *
    * A compartment of a locker system (`accessPointType: locker`) has one
    * entry per compartment at the system's `accessPointId`, told apart by
-   * `grant.authorizationId`, and is written in place rather than through
-   * here. On top of the fields above it carries:
+   * `grant.authorizationId` - or by the Fach the platform assigned - and is
+   * written in place rather than through here. On top of the fields above
+   * it carries:
    *
    *   bookableId - the bookable whose item books the compartment
    *   hold: { holdId, expiresAt, compartment } | null
    *     - the claim before the grant; `null` once granted or revoked
    *   compartment - the compartment the provider named (iFBS' box number)
    *   externalBookingId - `grant.authorizationId`, for the projection
+   *   assignedCompartment: { id, number, lockerBank: { id, name } }
+   *     - the Fach the platform assigned at an Anlage with its own list
+   *       (`compartment-allocation.js`): its UUID at the provider, its
+   *       number and Schließfachschrank, copied from the Anlage's list
    *
    * @param {Object} booking The booking to write into
    * @param {Object} accessPoint The access point the entry is for

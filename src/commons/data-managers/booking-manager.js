@@ -852,6 +852,38 @@ class BookingManager {
    *   the domain says `DOMAIN`; none is a programming error
    * @returns {Promise<Booking[]>} Filtered bookings
    */
+  /**
+   * The bookings of the tenant, not rejected, cancelled or withdrawn, that
+   * hold one of the Fächer in an entry not taken back - at whichever
+   * Schließfachanlage. What the occupancy of a Fach is judged from
+   * (`compartment-occupancy.js`); the time is judged there, with the
+   * buffers of each booking's bookable.
+   *
+   * @param {string} tenantId Tenant ID
+   * @param {string[]} compartmentIds The UUIDs of the Fächer at the provider
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002); the domain says `DOMAIN`
+   * @returns {Promise<Booking[]>} The bookings
+   */
+  static async getBookingsHoldingCompartments(tenantId, compartmentIds, scope) {
+    if (compartmentIds.length === 0) {
+      return [];
+    }
+    return BookingManager.getBookingsCustomFilter(
+      tenantId,
+      {
+        isRejected: { $ne: true },
+        accessInfo: {
+          $elemMatch: {
+            "assignedCompartment.id": { $in: compartmentIds },
+            revokedAt: null,
+          },
+        },
+      },
+      scope,
+    );
+  }
+
   static async getBookingsCustomFilter(tenantId, filter, scope) {
     const rawBookings = await BookingModel.find({
       tenantId: tenantId,

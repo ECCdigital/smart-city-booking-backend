@@ -117,7 +117,7 @@ Das Konto eines Mandanten bei einem Provider, mit dem sich die Plattform dort an
 _Avoid_: Service-Account, Maschinenkonto, Admin-Konto
 
 **Vormerkung**:
-Der Anspruch einer noch unbezahlten Buchung auf ein Fach, vor dem Grant. Wird vom Provider gehalten (iFBS, befristet und erneuerbar) oder von der Plattform (Pareva, durch die gespeicherte Buchung selbst). Scheitert die Vormerkung im Checkout, entsteht die Buchung nicht; scheitert der Grant nach der Zahlung, bleibt die Buchung und der Fall geht an die Verwaltung.
+Der Anspruch einer noch unbezahlten Buchung auf ein Fach, vor dem Grant. Wird vom Provider gehalten (iFBS, befristet und erneuerbar) oder von der Plattform (Pareva, durch die gespeicherte Buchung selbst). Bei Open Locker hält die Plattform und teilt das Fach dabei schon endgültig zu: je gebuchter Einheit das erste freie Fach in Betrieb der Schließfachanlage, nach Schließfachschrank (Name, dann id) und Fachnummer. Open Locker kennt keinen Grant, das Fach der Vormerkung ist das Fach der Buchung; es gilt ohne Frist, auch für unbezahlte Buchungen. Belegt ist ein Fach, solange eine andere Buchung, die nicht abgelehnt, storniert oder widerrufen ist, es hält und sich ihre Zugangsfenster oder der Zeitraum mit dem Buchungspuffer der anderen überschneiden, über alle Anlagen des Mandanten. Ist kein Fach frei, entsteht die Buchung nicht. Scheitert die Vormerkung im Checkout, entsteht die Buchung nicht; scheitert der Grant nach der Zahlung, bleibt die Buchung und der Fall geht an die Verwaltung.
 _Avoid_: Hold (als Sprechbegriff), Pre-Reservation, Reservierung (das ist die Buchung)
 
 **Standort**:
