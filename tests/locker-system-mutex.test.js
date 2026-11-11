@@ -164,6 +164,51 @@ describe("LockerSystemMutex.hold", function () {
     assert.deepStrictEqual(order, ["next started", "third started"]);
   });
 
+  it("runs a hold of the same locker system inside its own work straight away, keeping the hold until the outer work is done", async function () {
+    const order = [];
+
+    const result = await LockerSystemMutex.hold(LOCKER_SYSTEM, async () => {
+      const inner = await LockerSystemMutex.hold(LOCKER_SYSTEM, async () => {
+        order.push("inner");
+        return "inner done";
+      });
+      order.push(`outer after ${inner}`);
+      assert.strictEqual(
+        await LockerSystemHoldManager.acquire("tenant-1:locker-system-1", {
+          holder: "someone else",
+          now: new Date(),
+          ttlMs: 1000,
+        }),
+        false,
+      );
+      return "outer done";
+    });
+
+    assert.strictEqual(result, "outer done");
+    assert.deepStrictEqual(order, ["inner", "outer after inner done"]);
+  });
+
+  it("still makes a hold from outside the work wait, the nesting notwithstanding", async function () {
+    const first = deferred();
+    const order = [];
+
+    const firstHold = LockerSystemMutex.hold(LOCKER_SYSTEM, async () => {
+      await first.promise;
+      order.push("first done");
+    });
+    await clock.tickAsync(10);
+    const secondHold = LockerSystemMutex.hold(LOCKER_SYSTEM, async () => {
+      order.push("second started");
+    });
+    await clock.tickAsync(1000);
+    assert.deepStrictEqual(order, []);
+
+    first.resolve();
+    await clock.tickAsync(1000);
+    await Promise.all([firstHold, secondHold]);
+    assert.deepStrictEqual(order, ["first done", "second started"]);
+  });
+
   it("gives up waiting after the wait limit, without running the work", async function () {
     const first = deferred();
     let secondRan = false;
