@@ -397,6 +397,9 @@ describe("BookingService cancellation refunds", function () {
         return { ...oldBooking, status: "cancelled" };
       });
     sinon.stub(AccessService, "allocateForBooking").resolves([]);
+    sinon
+      .stub(AccessService, "holdLockerSystemsOf")
+      .callsFake(async (tenant, bookings, work) => work());
     sinon.stub(AccessService, "provisionForBooking").resolves([]);
     sinon.stub(BundleCheckoutService.prototype, "prepareBooking").resolves(
       new Booking({

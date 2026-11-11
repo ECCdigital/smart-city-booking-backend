@@ -265,6 +265,9 @@ describe("checkout on the access seam", function () {
       sinon
         .stub(BundleCheckoutService.prototype, "prepareBooking")
         .resolves(new Booking({ ...stored, ...changes }));
+      sinon
+        .stub(AccessService, "holdLockerSystemsOf")
+        .callsFake(async (tenant, bookings, work) => work());
       return BookingCheckout.updateBooking(TENANT, { ...stored, ...changes });
     }
 
