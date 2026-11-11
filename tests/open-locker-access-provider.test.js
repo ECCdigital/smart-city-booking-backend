@@ -112,7 +112,7 @@ describe("Open Locker access provider", () => {
       ).to.be.instanceOf(OpenLockerAccessApplication);
     });
 
-    it("declares open, getOpenProgress, listAccessPoints and validateAccessPoint, and neither grant, revoke nor hold", () => {
+    it("declares open, getOpenProgress, listAccessPoints and both save checks, and neither grant, revoke nor hold", () => {
       const capabilities = getAccessProviderCapabilities("open-locker");
 
       expect(capabilities).to.include.members([

@@ -106,7 +106,7 @@ _Avoid_: Box (als Begriff — iFBS-Jargon), Unit, Locker, Compartment (als Sprec
 
 **Schließfachschrank**:
 Ein Schrank mit nummerierten Fächern, den Open Locker steuert. Nicht der Schrank ist ein AccessPoint, sondern jedes seiner Fächer; der Schrank gibt dem Fach Namen und Ort, etwa „Labor Fachbank 1 · Fach 2“.
-_Avoid_: Locker Bank, Fachbank (als Begriff), Schließfachanlage (die teilt je Buchung ein Fach zu), Quartiersschrank (ist ein Einsatzort, kein Typ)
+_Avoid_: Locker Bank (als Sprechbegriff), Fachbank (als Begriff), Schließfachanlage (die teilt je Buchung ein Fach zu), Quartiersschrank (ist ein Einsatzort, kein Typ)
 
 **Technisches Konto**:
 Das Konto eines Mandanten bei einem Provider, mit dem sich die Plattform dort anmeldet, ohne Person dahinter. Bei Open Locker ist es nur auf die Fächer seines Mandanten berechtigt, auch wenn sich mehrere Mandanten eine Instanz teilen.
