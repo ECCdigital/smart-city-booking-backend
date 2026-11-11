@@ -6,6 +6,9 @@ const {
   INITIAL_SUPERVISION_LEVELS,
 } = require("../services/supervision/supervision-constants");
 const { defaultBranding } = require("../services/instance/branding-schema");
+const {
+  defaultInstanceCustomerUploads,
+} = require("../services/customer-upload/customer-upload-rules");
 const defaultMailTemplate = fs.readFileSync(
   path.join(
     __dirname,
@@ -108,6 +111,13 @@ const instanceSchemaDefinition = {
   bookableCustomFields: {
     type: [customFieldDefinitionSchema],
     default: [],
+  },
+
+  // Customer uploads („Nachweise“): whether tenants may use them at all, and
+  // the limits below the ceilings of the environment (`null`: the ceiling).
+  customerUploads: {
+    type: Object,
+    default: defaultInstanceCustomerUploads,
   },
 };
 

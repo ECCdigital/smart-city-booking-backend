@@ -6,6 +6,7 @@ const GroupBookingManager = require("../../data-managers/group-booking-manager")
 const { BookableManager } = require("../../data-managers/bookable-manager");
 const MediaManager = require("../../data-managers/media-manager");
 const TenantManager = require("../../data-managers/tenant-manager");
+const InstanceManager = require("../../data-managers/instance-manager");
 const MediaService = require("../media/media-service");
 const mailService = require("../../mail-service");
 const RateLimiter = require("../rate-limit/rate-limiter");
@@ -27,6 +28,7 @@ const {
 const {
   UPLOAD_FIELD_TIMINGS,
   customerUploadLimits,
+  effectiveCustomerUploadSettings,
   normalizeCustomerUploadSettings,
 } = require("./customer-upload-rules");
 const {
@@ -48,6 +50,31 @@ const logger = bunyan.createLogger({
 });
 
 const MEGABYTE = 1024 * 1024;
+
+/**
+ * The instance's settings of customer uploads and the limits they hold:
+ * while the instance has them off, no tenant has them on.
+ */
+async function instanceUploads() {
+  const settings = await InstanceManager.getCustomerUploads();
+  return { settings, limits: customerUploadLimits(settings) };
+}
+
+/**
+ * The tenant's settings as they hold under the instance's, and the limits.
+ * The instance is read only for a tenant that has customer uploads on.
+ */
+async function tenantUploads(tenant) {
+  const stored = normalizeCustomerUploadSettings(tenant?.customerUploads);
+  if (!stored.enabled) {
+    return { settings: stored, limits: customerUploadLimits() };
+  }
+  const ofInstance = await instanceUploads();
+  return {
+    settings: effectiveCustomerUploadSettings(stored, ofInstance.settings),
+    limits: ofInstance.limits,
+  };
+}
 
 /** The formats of an upload field by the type detected from the content. */
 const FORMAT_OF_MIME_TYPE = Object.freeze({
@@ -291,8 +318,11 @@ class CustomerUploadService {
     const context = { tenantId, booking, fieldId, userId };
 
     if (forUpload) {
-      const { settings, fields } =
-        await CustomerUploadService._fieldsOf(booking);
+      const {
+        settings,
+        fields,
+        limits: uploadLimits,
+      } = await CustomerUploadService._fieldsOf(booking);
       const field = settings.enabled
         ? fields.find((candidate) => candidate.id === fieldId)
         : null;
@@ -303,7 +333,7 @@ class CustomerUploadService {
         throw new ConflictError(R.NOT_OPEN, { fieldId });
       }
       context.field = field;
-      context.limits = customerUploadLimits();
+      context.limits = uploadLimits;
     }
 
     const gate = await RateLimiter.consumeAll(
@@ -532,10 +562,9 @@ class CustomerUploadService {
       throw new BadRequestError(R.FILE_MISSING);
     }
 
-    const { settings, fields } = await CustomerUploadService._fieldsOf(
+    const { settings, fields, limits } = await CustomerUploadService._fieldsOf(
       context.booking,
     );
-    const limits = customerUploadLimits();
     let booking = context.booking;
     const stored = [];
     const refused = [];
@@ -695,8 +724,10 @@ class CustomerUploadService {
       });
     }
 
+    if (checkoutFields.length === 0) return [];
+
     // Every check first: the counts grow with each file of the request.
-    const instance = customerUploadLimits();
+    const { limits: instance } = await instanceUploads();
     const accepted = [];
     let bytesInBooking = 0;
     for (const field of checkoutFields) {
@@ -764,10 +795,10 @@ class CustomerUploadService {
     if (definitions.length === 0) return [];
 
     const tenant = await TenantManager.getTenant(bookable.tenantId, DOMAIN);
-    if (!normalizeCustomerUploadSettings(tenant?.customerUploads).enabled) {
+    const { settings, limits: instance } = await tenantUploads(tenant);
+    if (!settings.enabled) {
       return [];
     }
-    const instance = customerUploadLimits();
     return definitions.map((field) => ({
       id: field.id,
       label: field.label,
@@ -855,9 +886,11 @@ class CustomerUploadService {
       });
     }
 
+    if (resolved.length === 0) return [];
+
     // Every check first: the counts of each booking grow with each file of
     // the request that is for it.
-    const instance = customerUploadLimits();
+    const { limits: instance } = await instanceUploads();
     const counts = attempts.map(() => ({
       inBooking: 0,
       bytesInBooking: 0,
@@ -998,10 +1031,7 @@ class CustomerUploadService {
     const ids = [...new Set(attempts.flatMap(idsOf))];
 
     const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
-    if (
-      ids.length === 0 ||
-      !normalizeCustomerUploadSettings(tenant?.customerUploads).enabled
-    ) {
+    if (ids.length === 0 || !(await tenantUploads(tenant)).settings.enabled) {
       return attempts.map(() => []);
     }
     const bookables = await BookableManager.getBookablesByIds(
@@ -1144,12 +1174,17 @@ class CustomerUploadService {
 
     const tenantIds = [...new Set(bookings.map((b) => b.tenantId))];
     const tenants = await TenantManager.getTenantsByIds(tenantIds, DOMAIN);
+    const ofTenants = await Promise.all(tenants.map(tenantUploads));
     const settingsByTenant = new Map(
-      tenants.map((t) => [
-        t.id,
-        normalizeCustomerUploadSettings(t.customerUploads),
-      ]),
+      tenants.map((t, index) => [t.id, ofTenants[index].settings]),
     );
+    // The same for every tenant: the instance's, or the ceilings while no
+    // tenant has customer uploads on.
+    const instance = (
+      ofTenants.find((ofTenant) => ofTenant.settings.enabled) ?? {
+        limits: customerUploadLimits(),
+      }
+    ).limits;
 
     const bookablesById = new Map();
     for (const tenantId of tenantIds) {
@@ -1174,7 +1209,6 @@ class CustomerUploadService {
 
     const holders = await CustomerUploadService._holdersOf(bookings);
     const times = await CustomerUploadService._timesOfShared(bookings);
-    const instance = customerUploadLimits();
     for (const booking of bookings) {
       const ofTenant = new Map(
         (booking.bookableItems || []).map((item) => [
@@ -1364,15 +1398,16 @@ class CustomerUploadService {
     if (fields.length === 0) return [];
 
     const tenant = await TenantManager.getTenant(booking.tenantId, DOMAIN);
-    return normalizeCustomerUploadSettings(tenant?.customerUploads).enabled
-      ? fields
-      : [];
+    return (await tenantUploads(tenant)).settings.enabled ? fields : [];
   }
 
-  /** The tenant's settings and the upload fields of the booked offers. */
+  /**
+   * The tenant's settings under the instance's, the instance limits and
+   * the upload fields of the booked offers.
+   */
   static async _fieldsOf(booking) {
     const tenant = await TenantManager.getTenant(booking.tenantId, DOMAIN);
-    const settings = normalizeCustomerUploadSettings(tenant?.customerUploads);
+    const { settings, limits } = await tenantUploads(tenant);
     const ids = [
       ...new Set((booking.bookableItems || []).map((i) => i.bookableId)),
     ].filter(Boolean);
@@ -1382,7 +1417,11 @@ class CustomerUploadService {
       DOMAIN,
     );
     const byId = new Map(bookables.map((b) => [b.id, b]));
-    return { settings, fields: uploadFieldsOf(booking, byId) };
+    return {
+      settings,
+      limits,
+      fields: uploadFieldsOf(booking, byId),
+    };
   }
 
   /**

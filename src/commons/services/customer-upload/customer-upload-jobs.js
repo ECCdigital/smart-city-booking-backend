@@ -4,6 +4,7 @@ const schedule = require("node-schedule");
 const BookingManager = require("../../data-managers/booking-manager");
 const MediaManager = require("../../data-managers/media-manager");
 const TenantManager = require("../../data-managers/tenant-manager");
+const InstanceManager = require("../../data-managers/instance-manager");
 const MediaService = require("../media/media-service");
 const mailService = require("../../mail-service");
 const { DOMAIN } = require("../authorization");
@@ -12,7 +13,10 @@ const {
   CUSTOMER_UPLOAD_REVIEW,
 } = require("../../schemas/customerUploadReferenceSchema");
 const { LIVE_STATUSES } = require("../booking-lifecycle/booking-state");
-const { normalizeCustomerUploadSettings } = require("./customer-upload-rules");
+const {
+  effectiveCustomerUploadSettings,
+  normalizeCustomerUploadSettings,
+} = require("./customer-upload-rules");
 const {
   isWaiting,
   missingRequiredFieldsOf,
@@ -112,11 +116,19 @@ class CustomerUploadJobs {
     });
   }
 
-  /** Reminders and notices „Nachweis überfällig“, per tenant with the feature. */
+  /**
+   * Reminders and notices „Nachweis überfällig“, per tenant with the
+   * feature; none while the instance has it off. The deletion runs apart.
+   */
   static async _tell(now, outcome) {
+    const ofInstance = await InstanceManager.getCustomerUploads();
+    if (!ofInstance.enabled) return;
     const tenants = await TenantManager.getTenants(DOMAIN);
     for (const tenant of tenants) {
-      const settings = normalizeCustomerUploadSettings(tenant.customerUploads);
+      const settings = effectiveCustomerUploadSettings(
+        tenant.customerUploads,
+        ofInstance,
+      );
       if (!settings.enabled) continue;
       try {
         await CustomerUploadJobs._tellTenant(tenant, settings, now, outcome);

@@ -289,6 +289,57 @@ describe("customer uploads: with the checkout", function () {
     });
   });
 
+  describe("under the instance's settings", function () {
+    it("asks for no file while the instance has customer uploads off, whatever the tenant stores", async function () {
+      h.instance.customerUploads = { enabled: false };
+
+      const res = await h
+        .api()
+        .post(`/api/v2/${TENANT}/checkout?simulate=false`)
+        .set(h.as(CUSTOMER))
+        .send(checkoutBody("proof-room"));
+
+      expect(res.body.success, res.text).to.equal(true);
+      expect(
+        h.store.get(res.body.data.booking.id).customerUploads || [],
+      ).to.deep.equal([]);
+    });
+
+    it("refuses a file while the instance has customer uploads off", async function () {
+      h.instance.customerUploads = { enabled: false };
+
+      const res = await checkout([{ data: PDF, name: "ausweis.pdf" }]);
+
+      expectRefused(res, "customer_upload_field_not_found");
+      expectNothingStored();
+    });
+
+    it("holds the instance's limit of the booking below the ceiling", async function () {
+      h.instance.customerUploads = { enabled: true, maxFilesPerBooking: 1 };
+
+      const res = await checkout([
+        { data: PDF, name: "1.pdf" },
+        { data: PDF, name: "2.pdf" },
+      ]);
+
+      expectRefused(res, "customer_upload_booking_limit");
+      expectNothingStored();
+    });
+
+    it("never lets the instance's limit above the ceiling", async function () {
+      process.env.CUSTOMER_UPLOAD_MAX_FILES_PER_BOOKING = "1";
+      h.instance.customerUploads = { enabled: true, maxFilesPerBooking: 5 };
+
+      const res = await checkout([
+        { data: PDF, name: "1.pdf" },
+        { data: PDF, name: "2.pdf" },
+      ]);
+
+      expectRefused(res, "customer_upload_booking_limit");
+      expectNothingStored();
+    });
+  });
+
   describe("the tenant's notice of the new booking (ECCdigital/tickets#830)", function () {
     /** The mails the transport got, as sent. */
     const sentMails = () =>

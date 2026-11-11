@@ -2,6 +2,7 @@ const InstanceManger = require("../../../commons/data-managers/instance-manager"
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const MediaReferenceGuard = require("../../../commons/services/media/media-reference-guard");
 const {
+  customerUploadCeilings,
   customerUploadLimits,
 } = require("../../../commons/services/customer-upload/customer-upload-rules");
 const {
@@ -36,9 +37,12 @@ class InstanceController {
       response.status(200).send({
         ...instance.exportWithMedia(),
         usesDigitalKeys,
-        // Set by environment variables; the admin shows them on the upload
-        // fields, the storefront checks files against them before sending.
-        customerUploadLimits: customerUploadLimits(),
+        // The instance's limits, held under the ceilings of the environment;
+        // the admin shows them on the upload fields, the storefront checks
+        // files against them before sending.
+        customerUploadLimits: customerUploadLimits(instance.customerUploads),
+        // The ceilings themselves: how high the admin may set the limits.
+        customerUploadCeilings: customerUploadCeilings(),
       });
     } catch (error) {
       response.status(500).send({ message: error.message });

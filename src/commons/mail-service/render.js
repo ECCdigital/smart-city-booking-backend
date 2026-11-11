@@ -48,7 +48,7 @@ const {
 } = require("../entities/event/event-format");
 const {
   customerUploadLimits,
-  normalizeCustomerUploadSettings,
+  effectiveCustomerUploadSettings,
 } = require("../services/customer-upload/customer-upload-rules");
 const {
   deriveCustomerUploadState,
@@ -343,6 +343,8 @@ function renderShortBookingDetails({
  * @param {Object[]} params.bookings
  * @param {Object[]} params.bookables The bookables of every position
  * @param {boolean} params.aggregated Each line names its booking
+ * @param {?Object} [params.customerUploads] The instance's settings of
+ *   customer uploads; none: off
  * @param {number} [params.now]
  * @returns {string} HTML
  */
@@ -351,14 +353,18 @@ function renderMissingProofs({
   bookings,
   bookables,
   aggregated,
+  customerUploads = null,
   now = Date.now(),
 }) {
-  const settings = normalizeCustomerUploadSettings(tenant.customerUploads);
+  const settings = effectiveCustomerUploadSettings(
+    tenant.customerUploads,
+    customerUploads,
+  );
   if (!settings.enabled) return "";
   const bookablesById = new Map(
     bookables.map((bookable) => [bookable.id, bookable]),
   );
-  const limits = customerUploadLimits();
+  const limits = customerUploadLimits(customerUploads);
 
   const missing = bookings.flatMap((booking) =>
     missingRequiredFieldsOf(
@@ -452,6 +458,7 @@ async function qrCode(booking, tenantId) {
  * @param {Object[]} loaded.bookings In the order of the context's ids
  * @param {Object[]} loaded.bookables The bookables of every position
  * @param {Map<string, Object>} loaded.events The events of the tickets, by id
+ * @param {?Object} [loaded.customerUploads] The instance's settings of customer uploads
  * @param {boolean} loaded.aggregated One notice for a group
  * @param {string|null} [loaded.groupBookingId] The group's id of an aggregated notice
  * @param {string[]} loaded.recipients
@@ -468,6 +475,7 @@ async function render(
     bookings,
     bookables,
     events,
+    customerUploads = null,
     aggregated,
     groupBookingId = null,
     recipients,
@@ -527,7 +535,13 @@ async function render(
     supportEmail: tenant.mail,
     messageAfter,
     missingProofs: mailType.showsMissingProofs
-      ? renderMissingProofs({ tenant, bookings, bookables, aggregated })
+      ? renderMissingProofs({
+          tenant,
+          bookings,
+          bookables,
+          aggregated,
+          customerUploads,
+        })
       : "",
     submittedProofs: mailType.showsSubmittedProofs
       ? renderSubmittedProofs({ bookings, aggregated })

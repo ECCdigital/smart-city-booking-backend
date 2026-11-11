@@ -5,6 +5,7 @@ const cache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
 const KEYS = {
   branding: "instance:branding",
   portal: "instance:portal",
+  customerUploads: "instance:customerUploads",
 };
 
 class InstanceCache {
@@ -24,9 +25,18 @@ class InstanceCache {
     cache.set(KEYS.portal, portal);
   }
 
+  static getCustomerUploads() {
+    return cache.get(KEYS.customerUploads);
+  }
+
+  static setCustomerUploads(customerUploads) {
+    cache.set(KEYS.customerUploads, customerUploads);
+  }
+
   static invalidate() {
     cache.del(KEYS.branding);
     cache.del(KEYS.portal);
+    cache.del(KEYS.customerUploads);
   }
 }
 

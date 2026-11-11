@@ -71,6 +71,9 @@ const WorkflowManager = require("../../src/commons/data-managers/workflow-manage
 const OpeningHoursManager = require("../../src/commons/utilities/opening-hours-manager");
 const PaymentUtils = require("../../src/commons/utilities/payment-utils");
 const InstanceManager = require("../../src/commons/data-managers/instance-manager");
+const {
+  normalizeInstanceCustomerUploads,
+} = require("../../src/commons/services/customer-upload/customer-upload-rules");
 const InstanceModel = require("../../src/commons/data-managers/models/instanceModel");
 const { RoleManager } = require("../../src/commons/data-managers/role-manager");
 const CouponService = require("../../src/commons/services/coupon-service");
@@ -432,12 +435,16 @@ function membershipsOf(userId) {
     : [membershipOf(userId, TENANT)];
 }
 
-/** The stored instance: the admin owns it, nobody else may open a tenant. */
+/**
+ * The stored instance: the admin owns it, nobody else may open a tenant,
+ * customer uploads are cleared for the tenants.
+ */
 function instanceRecord(overrides = {}) {
   return {
     id: "instance",
     ownerUserIds: [ADMIN],
     allowAllUsersToCreateTenant: false,
+    customerUploads: { enabled: true },
     allowedUsersToCreateTenant: [],
     mailEnabled: true,
     applications: [],
@@ -812,6 +819,13 @@ async function installHarness({
   sinon
     .stub(InstanceManager, "getInstance")
     .callsFake(async () => instanceOf(storedInstance));
+  // The settings of customer uploads as the manager reads them, past its
+  // cache: the stored ones over the defaults.
+  sinon
+    .stub(InstanceManager, "getCustomerUploads")
+    .callsFake(async () =>
+      normalizeInstanceCustomerUploads(storedInstance.customerUploads),
+    );
   // `InstanceManager.getPortalConfig` reads the stored record itself, lean:
   // as stored, without the schema's defaults (an absent Portal-URL falls
   // back to the legacy `catalogUrl`, an emptied one does not). Every other

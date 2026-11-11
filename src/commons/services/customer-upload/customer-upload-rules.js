@@ -57,13 +57,20 @@ function defaultCustomerUploadSettings() {
   };
 }
 
+const LIMIT_KEYS = Object.freeze([
+  "maxFileSizeMb",
+  "maxFilesPerBooking",
+  "maxTotalSizeMbPerBooking",
+]);
+
 /**
- * The limits of the instance, set by environment variables and apart from
- * the limits of the media library.
+ * The ceilings of customer uploads, set by environment variables and apart
+ * from the limits of the media library. The instance may set its limits
+ * below them, never above.
  *
  * @returns {{maxFileSizeMb: number, maxFilesPerBooking: number, maxTotalSizeMbPerBooking: number}}
  */
-function customerUploadLimits() {
+function customerUploadCeilings() {
   return {
     maxFileSizeMb: positiveNumber(
       "CUSTOMER_UPLOAD_MAX_FILE_SIZE_MB",
@@ -78,6 +85,106 @@ function customerUploadLimits() {
       DEFAULT_MAX_TOTAL_SIZE_MB_PER_BOOKING,
     ),
   };
+}
+
+/**
+ * The limits of the instance: what it stores, held under the ceilings; a
+ * limit it does not set is the ceiling. Without stored settings, the
+ * ceilings themselves.
+ *
+ * @param {?Object} [stored] The instance's settings (`instance.customerUploads`).
+ * @returns {{maxFileSizeMb: number, maxFilesPerBooking: number, maxTotalSizeMbPerBooking: number}}
+ */
+function customerUploadLimits(stored = null) {
+  const ceilings = customerUploadCeilings();
+  const limits = {};
+  for (const key of LIMIT_KEYS) {
+    const own = stored?.[key];
+    limits[key] =
+      Number.isFinite(own) && own > 0
+        ? Math.min(own, ceilings[key])
+        : ceilings[key];
+  }
+  return limits;
+}
+
+/**
+ * The instance's settings when it has none stored yet: customer uploads
+ * off, no limits of its own.
+ *
+ * @returns {Object}
+ */
+function defaultInstanceCustomerUploads() {
+  return {
+    enabled: false,
+    maxFileSizeMb: null,
+    maxFilesPerBooking: null,
+    maxTotalSizeMbPerBooking: null,
+  };
+}
+
+/**
+ * The instance's settings as stored: what the request brings over the
+ * defaults, nothing else.
+ *
+ * @param {Object} settings
+ * @returns {Object}
+ */
+function normalizeInstanceCustomerUploads(settings) {
+  const given =
+    settings !== null &&
+    typeof settings === "object" &&
+    !Array.isArray(settings)
+      ? settings
+      : {};
+  const normalized = defaultInstanceCustomerUploads();
+  for (const key of Object.keys(normalized)) {
+    if (given[key] !== undefined) normalized[key] = given[key];
+  }
+  return normalized;
+}
+
+/**
+ * Why the instance's settings cannot be stored, or null: the switch a
+ * yes or no, each limit none or a whole number from 1 up to its ceiling.
+ *
+ * @param {Object} settings Normalized settings.
+ * @returns {BadRequestError|null}
+ */
+function getInstanceCustomerUploadsError(settings) {
+  if (typeof settings?.enabled !== "boolean") {
+    return new BadRequestError("customer_upload_settings_invalid", {
+      field: "enabled",
+    });
+  }
+  const ceilings = customerUploadCeilings();
+  for (const key of LIMIT_KEYS) {
+    const value = settings[key];
+    if (value === null) continue;
+    const max = Math.floor(ceilings[key]);
+    if (!Number.isInteger(value) || value < 1 || value > max) {
+      return new BadRequestError("customer_upload_limit_out_of_range", {
+        field: key,
+        max,
+      });
+    }
+  }
+  return null;
+}
+
+/**
+ * The tenant's settings as they hold: off while the instance has customer
+ * uploads off, whatever the tenant stores.
+ *
+ * @param {Object} tenantSettings The tenant's stored settings.
+ * @param {?Object} instanceSettings The instance's settings.
+ * @returns {Object} Normalized settings.
+ */
+function effectiveCustomerUploadSettings(tenantSettings, instanceSettings) {
+  const settings = normalizeCustomerUploadSettings(tenantSettings);
+  return instanceSettings?.enabled === true
+    ? settings
+    : { ...settings, enabled: false };
 }
 
 const isPlainObject = (value) =>
@@ -318,10 +425,15 @@ module.exports = {
   UPLOAD_FIELD_TIMINGS,
   MAX_RETENTION_DAYS,
   MAX_FILES_PER_FIELD,
+  customerUploadCeilings,
   customerUploadLimits,
   defaultCustomerUploadSettings,
+  defaultInstanceCustomerUploads,
+  effectiveCustomerUploadSettings,
   getCustomerUploadSettingsError,
+  getInstanceCustomerUploadsError,
   getUploadFieldDefinitionsError,
   normalizeCustomerUploadSettings,
+  normalizeInstanceCustomerUploads,
   normalizeUploadFieldDefinitions,
 };

@@ -23,6 +23,11 @@ const {
   assertSupervisionLevel,
   INITIAL_SUPERVISION_LEVELS,
 } = require("../services/supervision/supervision-constants");
+const {
+  defaultInstanceCustomerUploads,
+  getInstanceCustomerUploadsError,
+  normalizeInstanceCustomerUploads,
+} = require("../services/customer-upload/customer-upload-rules");
 const { NotFoundError } = require("../../errors/BaseError");
 const { userIdsMatch } = require("../utilities/user-id-utils");
 
@@ -108,6 +113,19 @@ class InstanceManager {
       });
     }
 
+    // The settings of customer uploads are refused before anything is read
+    // or written; a write that does not name them keeps the stored ones.
+    const namesCustomerUploads = synced.customerUploads !== undefined;
+    if (namesCustomerUploads) {
+      synced.customerUploads = normalizeInstanceCustomerUploads(
+        synced.customerUploads,
+      );
+      const customerUploadsError = getInstanceCustomerUploadsError(
+        synced.customerUploads,
+      );
+      if (customerUploadsError) throw customerUploadsError;
+    }
+
     const instanceEntity = new Instance(synced);
 
     CustomFieldService.normalizeDefinitions(
@@ -140,6 +158,12 @@ class InstanceManager {
     if (initialLevel === undefined) {
       instanceEntity.tenantInitialSupervisionLevel =
         rawInstance.tenantInitialSupervisionLevel ?? SUPERVISION_LEVELS.FREE;
+    }
+
+    if (!namesCustomerUploads) {
+      instanceEntity.customerUploads = normalizeInstanceCustomerUploads(
+        rawInstance.customerUploads,
+      );
     }
 
     const previousCustomFields = rawInstance.bookableCustomFields || [];
@@ -286,6 +310,26 @@ class InstanceManager {
 
     if (!fresh) InstanceCache.setPortal(portal);
     return portal;
+  }
+
+  /**
+   * The instance's settings of customer uploads: whether tenants may use
+   * them, and its own limits (`null`: the ceiling of the environment).
+   * Cached, since every upload and every booking list reads them.
+   *
+   * @returns {Promise<{enabled: boolean, maxFileSizeMb: ?number, maxFilesPerBooking: ?number, maxTotalSizeMbPerBooking: ?number}>}
+   */
+  static async getCustomerUploads() {
+    const cached = InstanceCache.getCustomerUploads();
+    if (cached) return cached;
+
+    const raw = await InstanceModel.findOne({}, { customerUploads: 1 }).lean();
+    const customerUploads = raw
+      ? normalizeInstanceCustomerUploads(raw.customerUploads)
+      : defaultInstanceCustomerUploads();
+
+    InstanceCache.setCustomerUploads(customerUploads);
+    return customerUploads;
   }
 
   /**

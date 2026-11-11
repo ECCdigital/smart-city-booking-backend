@@ -100,7 +100,15 @@ async function load({ tenantId, bookingIds }) {
     ),
   );
 
-  return { tenantId, tenant, bookings, bookables, events };
+  // The instance's settings of customer uploads: whether the missing proofs
+  // show at all, and the limits they name. Read only for a tenant that has
+  // them on.
+  const customerUploads =
+    tenant.customerUploads?.enabled === true
+      ? await InstanceManager.getCustomerUploads()
+      : null;
+
+  return { tenantId, tenant, bookings, bookables, events, customerUploads };
 }
 
 /**
