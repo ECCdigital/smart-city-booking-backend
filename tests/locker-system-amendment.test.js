@@ -35,6 +35,8 @@ const {
 } = require("./helpers/in-memory-locker-system-holds");
 
 const TENANT = "tenant-1";
+/** The reach of the routes of the Umsetzen: Buchung bearbeiten, any. */
+const MANAGER = { reach: "any", userId: "admin-1" };
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
 
@@ -349,6 +351,7 @@ describe("Fach on Änderung, Wiederherstellung and Storno: a booking keeps its F
         "b1",
         "anlage-labor:uuid-1",
         "anlage-labor:uuid-3",
+        { scope: MANAGER },
       );
       amendStored("b1", {
         bookableItems: [{ bookableId: "faecher", amount: 1 }],

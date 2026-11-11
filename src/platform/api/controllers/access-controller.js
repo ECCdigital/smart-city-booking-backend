@@ -329,6 +329,7 @@ class AccessController {
         tenant,
         bookingId,
         accessPointId,
+        { scope: scopeOf(request) },
       );
       return ApiResponse.ok(response, { data: compartments });
     } catch (err) {
@@ -359,7 +360,7 @@ class AccessController {
         bookingId,
         accessPointId,
         to,
-        { userId: request.user.id },
+        { userId: request.user.id, scope: scopeOf(request) },
       );
       logger.info(
         `${tenant} -- user ${request.user.id} moved ${accessPointId} of booking ${bookingId} to ${moved.id}`,

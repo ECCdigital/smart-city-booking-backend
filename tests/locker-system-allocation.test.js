@@ -33,6 +33,8 @@ const {
 } = require("./helpers/in-memory-locker-system-holds");
 
 const TENANT = "tenant-1";
+/** The reach of the routes of the Umsetzen: Buchung bearbeiten, any. */
+const MANAGER = { reach: "any", userId: "admin-1" };
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 
@@ -558,6 +560,7 @@ describe("Zuteilung in der Vormerkung: the platform assigns a free Fach per unit
           "b1",
           "anlage-labor:uuid-hafen-1",
           "anlage-labor:uuid-labor-2",
+          { scope: MANAGER },
         );
       });
       await settle();

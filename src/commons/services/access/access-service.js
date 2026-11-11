@@ -1155,17 +1155,26 @@ class AccessService {
    * @param {string} bookingId Booking ID
    * @param {string} accessPointId The Fach as the booking lists it,
    *   `<anlageId>:<UUID>`
+   * @param {Object} options
+   * @param {{reach: string, userId?: string|null}} options.scope The reach
+   *   of the route the booking is read under (ADR 0002)
    * @returns {Promise<{ id: string, number: number|null,
    *   lockerBankName: string|null }[]>} Each under the id the entry would
    *   be listed by after the move
    * @throws {NotFoundError} `compartment_not_in_booking` when the booking
    *   holds no such Fach
    */
-  static async freeCompartmentsToReassign(tenant, bookingId, accessPointId) {
+  static async freeCompartmentsToReassign(
+    tenant,
+    bookingId,
+    accessPointId,
+    { scope },
+  ) {
     const { booking, system } = await this._resolveReassignable(
       tenant,
       bookingId,
       accessPointId,
+      scope,
     );
     const free = await this._freeToReassign(tenant, booking, system);
     return free.map((compartment) => ({
@@ -1191,8 +1200,10 @@ class AccessService {
    *   `<anlageId>:<UUID>`
    * @param {string} to The Fach to move to, as `freeCompartmentsToReassign`
    *   names it
-   * @param {Object} [options]
+   * @param {Object} options
    * @param {string} [options.userId] Who moves it, for the access log
+   * @param {{reach: string, userId?: string|null}} options.scope The reach
+   *   of the route the booking is read under (ADR 0002)
    * @returns {Promise<{ id: string, previousId: string,
    *   assignedCompartment: { number: number|null,
    *   lockerBankName: string|null } }>} The id the Fach is listed by now
@@ -1206,12 +1217,13 @@ class AccessService {
     bookingId,
     accessPointId,
     to,
-    { userId = null } = {},
+    { userId = null, scope },
   ) {
     const { system } = await this._resolveReassignable(
       tenant,
       bookingId,
       accessPointId,
+      scope,
     );
 
     return LockerSystemMutex.hold(system.accessPoint, async () => {
@@ -1220,6 +1232,7 @@ class AccessService {
         tenant,
         bookingId,
         accessPointId,
+        scope,
       );
       const { booking, entry } = current;
       const free = await this._freeToReassign(tenant, booking, current.system);
@@ -1265,13 +1278,14 @@ class AccessService {
    * @private
    * The booking, its entry of the Fach and the Anlage, for the Umsetzen:
    * a booking not cancelled holding the Fach in an entry not taken back,
-   * at an Anlage that carries its own list.
+   * at an Anlage that carries its own list. The booking is the route's
+   * resource and read within its reach; its Anlage the domain reads.
    *
    * @throws {NotFoundError} `compartment_not_in_booking` otherwise
    */
-  static async _resolveReassignable(tenant, bookingId, accessPointId) {
+  static async _resolveReassignable(tenant, bookingId, accessPointId, scope) {
     const booking = bookingId
-      ? await BookingManager.getBooking(bookingId, tenant, DOMAIN)
+      ? await BookingManager.getBooking(bookingId, tenant, scope)
       : null;
     const entry =
       booking && !booking.isRejected
