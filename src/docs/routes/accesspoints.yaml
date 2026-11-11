@@ -43,8 +43,10 @@
       Fields that are omitted keep their current value; on create they fall back
       to their default, and `provider` has to be part of the body.
       `validationRules` therefore distinguishes an omitted field from an
-      explicitly empty list: omitting it on create requires a QR scan,
-      submitting `[]` means no evidence is required.
+      explicitly empty list: omitting it on create requires a QR scan -
+      except at a provider whose doors open from the list, `open-locker`,
+      where it requires none -, submitting `[]` means no evidence is
+      required.
 
       A validation rule may require other fields of the access point (a geo
       rule would need `location`). Those preconditions are checked against the

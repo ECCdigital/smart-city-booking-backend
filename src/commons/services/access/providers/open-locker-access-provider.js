@@ -182,6 +182,11 @@ class OpenLockerAccessProvider extends AccessProvider {
    * A failed open request as the failure class the guest may see. A
    * denial names Open Locker's `command_id`, so the audit, which stores the
    * message, keeps it for the lookup in Open Locker.
+   *
+   * @param {Error} err What the open request threw
+   * @param {string} compartmentId The UUID of the compartment
+   * @returns {AccessOpenError} `configuration` for what the tenant's setup is
+   *   to blame for, `temporary` for everything else
    */
   _mapOpenError(err, compartmentId) {
     const detail = describeError(err);

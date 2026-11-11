@@ -776,21 +776,83 @@ describe("Open Locker through AccessService", () => {
     );
 
     expect(status).to.include({ confirmed: false, errorCode: "door_jammed" });
-    expect(logged("status").map((entry) => entry.payload)).to.deep.equal([
-      {
-        confirmed: false,
-        confirmedAt: null,
-        errorCode: null,
-        errorMessage: null,
-      },
-      {
-        confirmed: false,
-        confirmedAt: null,
-        errorCode: "door_jammed",
-        errorMessage: "Open Locker reports the compartment door as jammed",
-      },
-    ]);
+    const [pending, jammed] = logged("status");
+    expect(pending).to.include({ result: "success" });
+    expect(pending.payload).to.deep.equal({
+      confirmed: false,
+      confirmedAt: null,
+      errorCode: null,
+      errorMessage: null,
+    });
+    expect(jammed).to.include({
+      result: "failure",
+      errorCode: "door_jammed",
+      errorMessage: "Open Locker reports the compartment door as jammed",
+    });
+    expect(jammed.payload).to.deep.include({
+      confirmed: false,
+      errorCode: "door_jammed",
+    });
   });
+
+  for (const [state, errorCode] of [
+    ["door_jammed", "door_jammed"],
+    ["failed", "open_failed"],
+    ["denied", "configuration"],
+  ]) {
+    it(`audits a poll that ends in ${state} as a failure, not a success`, async () => {
+      stubBooking(createBooking());
+      const {
+        data: { openProcessId },
+      } = await AccessService.open(
+        TENANT,
+        "booking-1",
+        COMPARTMENT.id,
+        "user-1",
+      );
+      client.advance(openProcessId, state);
+
+      await AccessService.getOpenStatus(
+        TENANT,
+        "booking-1",
+        COMPARTMENT.id,
+        openProcessId,
+        "user-1",
+      );
+
+      const [entry] = logged("status");
+      expect(entry.result).to.equal("failure");
+      expect(entry.errorCode).to.equal(errorCode);
+      expect(entry.errorMessage).to.be.a("string").and.not.empty;
+    });
+  }
+
+  for (const state of ["sent", "opened", "already_open"]) {
+    it(`audits a poll that answers ${state} as a success`, async () => {
+      stubBooking(createBooking());
+      const {
+        data: { openProcessId },
+      } = await AccessService.open(
+        TENANT,
+        "booking-1",
+        COMPARTMENT.id,
+        "user-1",
+      );
+      client.advance(openProcessId, state);
+
+      await AccessService.getOpenStatus(
+        TENANT,
+        "booking-1",
+        COMPARTMENT.id,
+        openProcessId,
+        "user-1",
+      );
+
+      const [entry] = logged("status");
+      expect(entry.result).to.equal("success");
+      expect(entry.errorCode ?? null).to.equal(null);
+    });
+  }
 
   it("tells Open Locker nothing when access is provisioned, revoked or updated", async () => {
     const booking = createBooking();

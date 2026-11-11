@@ -389,7 +389,9 @@ class AccessService {
    *
    * The provider is asked for the progress of a process only where it
    * declares `getOpenProgress` - a process id at a provider that opens
-   * synchronously is nothing to poll.
+   * synchronously is nothing to poll. A process that ended in failure is
+   * audited with `result: "failure"` and the provider's code; every other
+   * answer with `success`.
    *
    * @param {string} tenant Tenant ID
    * @param {string} bookingId Booking ID
@@ -451,18 +453,45 @@ class AccessService {
       };
     }
 
+    // A process the provider reports as ended in failure - the door jammed,
+    // the open failed or was denied - is audited as one: a failure row with
+    // the provider's code, not a success that only says so in its payload.
+    const failed = this._isFailedProgress(response);
     await this._log({
       tenantId: tenant,
       userId,
       accessPoint,
       bookingId,
       action: "status",
-      result: "success",
+      result: failed ? "failure" : "success",
+      ...(failed && {
+        errorCode: response.errorCode,
+        errorMessage: response.errorMessage,
+      }),
       payload,
       ...capacity,
     });
 
     return response;
+  }
+
+  /**
+   * @private
+   * Whether the provider reported the open process as ended in failure: not
+   * confirmed, and with a code saying why. A process still under way has no
+   * code, and a poll the provider could not read is not confirmed either way
+   * (`confirmed: null`) - neither is a failure of the open.
+   *
+   * @param {{confirmed: boolean|null, errorCode: string|number|null}} status
+   *   The status of the open attempt
+   * @returns {boolean}
+   */
+  static _isFailedProgress(status) {
+    return (
+      status.confirmed === false &&
+      status.errorCode !== null &&
+      status.errorCode !== undefined
+    );
   }
 
   /**

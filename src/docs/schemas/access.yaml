@@ -69,7 +69,13 @@ components:
               description: |
                 How the attempt failed, `null` when it did not.
                 Known codes:
-                - `1904` – waiting timed out
+                - `1904` – waiting timed out (`ifbs`)
+                - `door_jammed` – the compartment door is jammed (`open-locker`)
+                - `open_failed` – the compartment did not open (`open-locker`)
+                - `configuration` – Open Locker denied the open, the setup is
+                  to blame (`open-locker`)
+                With `confirmed: false`, a code means the process ended in
+                failure; the poll is then audited with `result: failure`.
               example: 1904
             errorMessage:
               type: string

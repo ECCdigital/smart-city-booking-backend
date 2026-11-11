@@ -122,6 +122,13 @@ class OpenLockerApiClient extends BaseAccessApiClient {
   /**
    * Runs the connection test of {@link OpenLockerApiClient#checkConnection}
    * with the configuration of the admin form.
+   *
+   * @param {string} serverUrl Where the Open Locker backend answers
+   * @param {string} email E-mail address of the technical account
+   * @param {string} password Its password, in clear
+   * @returns {Promise<{success: boolean, message: string, code?: string}>}
+   *   The result; `code` is `invalid_credentials`, `terms_not_accepted` or
+   *   `email_not_verified` where Open Locker refused the account
    */
   static async testConnection(serverUrl, email, password) {
     return new OpenLockerApiClient(
@@ -135,6 +142,13 @@ class OpenLockerApiClient extends BaseAccessApiClient {
    * @private
    * A call as the technical account: signs in where there is no token yet,
    * and after a `401` signs in again and repeats the call exactly once.
+   *
+   * @param {"get"|"post"} method HTTP method
+   * @param {string} path Path below the server URL, e.g. `/api/user`
+   * @param {Object|null} [data=null] JSON body
+   * @returns {Promise<Object>} Open Locker's JSON answer
+   * @throws {Error} The axios error of the call, or an
+   *   {@link OpenLockerLoginError} when the login is refused
    */
   async _request(method, path, data = null) {
     if (!this._token) {
@@ -159,6 +173,11 @@ class OpenLockerApiClient extends BaseAccessApiClient {
    * Signs in as the technical account. A refused login (`422`) is thrown
    * as an {@link OpenLockerLoginError}, so it is never mistaken for a `422`
    * of another route.
+   *
+   * @returns {Promise<void>} Resolves once the token is kept
+   * @throws {OpenLockerLoginError} When Open Locker refuses the credentials
+   * @throws {Error} The axios error for every other failure, or one of our
+   *   own when the answer carries no token
    */
   async _login() {
     let answer;
@@ -181,6 +200,14 @@ class OpenLockerApiClient extends BaseAccessApiClient {
   /**
    * @private
    * The HTTP transport: one request, its JSON answer. Tests replace this.
+   *
+   * @param {"get"|"post"} method HTTP method
+   * @param {string} path Path below the server URL
+   * @param {Object|null} data JSON body, `null` for none
+   * @param {Object} [options]
+   * @param {string|null} [options.token=null] Bearer token to send
+   * @returns {Promise<Object>} The JSON answer
+   * @throws {Error} The axios error for a status outside 2xx or no answer
    */
   async _send(method, path, data, { token = null } = {}) {
     const response = await axios.request({
