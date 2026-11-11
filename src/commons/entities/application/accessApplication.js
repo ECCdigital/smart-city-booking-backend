@@ -251,11 +251,47 @@ class ParevaAccessApplication extends AccessApplication {
   }
 }
 
+/**
+ * The Open Locker instance of a tenant, spoken to as the tenant's technical
+ * account: the server, the account's e-mail address and its password,
+ * stored encrypted like the other providers' secrets.
+ */
+class OpenLockerAccessApplication extends AccessApplication {
+  constructor(params) {
+    super(params);
+    this.serverUrl = params.serverUrl || "";
+    this.email = params.email || "";
+    this.password = params.password || null;
+  }
+
+  decrypt() {
+    if (isEncrypted(this.password)) {
+      this.password = SecurityUtils.decrypt(this.password);
+    }
+  }
+
+  encrypt() {
+    if (this.password && typeof this.password === "string") {
+      this.password = SecurityUtils.encrypt(this.password);
+    }
+  }
+
+  static get Schema() {
+    return {
+      ...super.Schema,
+      serverUrl: { type: String, default: "" },
+      email: { type: String, default: "" },
+      password: { type: Object, default: null },
+    };
+  }
+}
+
 const accessAppTypes = {
   nuki: NukiAccessApplication,
   "salto-ks": SaltoKsAccessApplication,
   ifbs: IfbsAccessApplication,
   pareva: ParevaAccessApplication,
+  "open-locker": OpenLockerAccessApplication,
 };
 
 function createAccessApplication(params) {
@@ -273,6 +309,7 @@ module.exports = {
   SaltoKsAccessApplication,
   IfbsAccessApplication,
   ParevaAccessApplication,
+  OpenLockerAccessApplication,
   accessAppTypes,
   createAccessApplication,
   registerAccessAppType,

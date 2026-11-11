@@ -7,6 +7,7 @@ const {
 const { SaltoKsApiClient } = require("./salto-ks-api-client");
 const IfbsApiClient = require("./ifbs-api-client");
 const ParevaApiClient = require("./pareva-api-client");
+const { OpenLockerApiClient } = require("./open-locker-api-client");
 const {
   SaltoKsAccessApplication,
 } = require("../../../entities/application/accessApplication");
@@ -61,5 +62,18 @@ registerTestHandler("pareva", {
   requiredFields: ["serverUrl", "lockerId", "user", "password"],
   handler: ({ serverUrl, lockerId, user, password }) => {
     return ParevaApiClient.testConnection(serverUrl, lockerId, user, password);
+  },
+});
+
+registerClient("open-locker", OpenLockerApiClient, (app) => [
+  app.serverUrl,
+  app.email,
+  app.password,
+]);
+
+registerTestHandler("open-locker", {
+  requiredFields: ["serverUrl", "email", "password"],
+  handler: ({ serverUrl, email, password }) => {
+    return OpenLockerApiClient.testConnection(serverUrl, email, password);
   },
 });

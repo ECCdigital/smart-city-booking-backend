@@ -10,6 +10,9 @@ const { BookableManager } = require("./bookable-manager");
 const {
   releaseSaltoKsClient,
 } = require("../services/access/clients/salto-ks-clients");
+const {
+  releaseOpenLockerClient,
+} = require("../services/access/clients/open-locker-clients");
 const { ownCondition } = require("../services/authorization/reach");
 const { REACH } = require("../services/authorization/policy");
 const {
@@ -262,6 +265,7 @@ class TenantManager {
 
     CustomFieldCache.invalidateTenant(tenantEntity.id);
     releaseSaltoKsClient(tenantEntity.id, tenantEntity);
+    releaseOpenLockerClient(tenantEntity.id, tenantEntity);
 
     return tenantEntity;
   }
@@ -301,6 +305,7 @@ class TenantManager {
   static async removeTenant(id) {
     await TenantModel.deleteOne({ id: id });
     releaseSaltoKsClient(id);
+    releaseOpenLockerClient(id);
   }
 
   /**

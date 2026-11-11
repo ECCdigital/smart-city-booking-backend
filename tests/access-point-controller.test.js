@@ -282,6 +282,35 @@ describe("AccessPointController", () => {
         expect(created.validationRules).to.deep.equal([{ type: "qrScan" }]);
       });
 
+      it("requires no qr scan at an Open Locker compartment when validationRules are omitted", async () => {
+        request.body = {
+          provider: "open-locker",
+          type: "door",
+          mode: "remote",
+          externalId: "9b2f6c1e-3d4a-4f5b-8c7d-1e2f3a4b5c6d",
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        const [created] = storeAccessPoint.firstCall.args;
+        expect(created.validationRules).to.deep.equal([]);
+      });
+
+      it("requires a qr scan at an Open Locker compartment that configures one", async () => {
+        request.body = {
+          provider: "open-locker",
+          type: "door",
+          mode: "remote",
+          externalId: "9b2f6c1e-3d4a-4f5b-8c7d-1e2f3a4b5c6d",
+          validationRules: [{ type: "qrScan" }],
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        const [created] = storeAccessPoint.firstCall.args;
+        expect(created.validationRules).to.deep.equal([{ type: "qrScan" }]);
+      });
+
       it("keeps an explicitly empty validationRules list empty", async () => {
         request.body = { provider: "nuki", validationRules: [] };
 

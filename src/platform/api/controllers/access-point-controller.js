@@ -12,6 +12,7 @@ const AccessInfoService = require("../../../commons/services/access/access-info-
 const AccessService = require("../../../commons/services/access/access-service");
 const LocationGuard = require("../../../commons/services/location/location-guard");
 const {
+  getAccessProvider,
   hasAccessProvider,
 } = require("../../../commons/services/access/providers/access-provider-registry");
 const { ValidationError } = require("../../../errors/ValidationError");
@@ -145,6 +146,7 @@ class AccessPointController {
   static async _createAccessPoint(request, response, tenantId) {
     const user = request.user;
     const accessPoint = AccessPoint.create({
+      ...AccessPointController._defaultValidationRules(request.body),
       ...AccessPointController._writableFields(request.body),
       tenantId: tenantId,
     });
@@ -170,6 +172,29 @@ class AccessPointController {
       `${tenantId} -- Access point ${createdAccessPoint.id} created by user ${user?.id}`,
     );
     return response.status(201).send(createdAccessPoint.toResponse());
+  }
+
+  /**
+   * The rules a new access point gets when the request names none: the
+   * schema's QR scan, unless its provider opens without one by default
+   * (`requiresScanByDefault`) - then none. Rules the request names are
+   * taken as they are.
+   *
+   * @param {Object} body The request body
+   * @returns {{validationRules?: Object[]}} The default to spread under the
+   *   writable fields, empty where the schema default applies
+   */
+  static _defaultValidationRules(body) {
+    if (
+      body.validationRules !== undefined ||
+      !hasAccessProvider(body.provider)
+    ) {
+      return {};
+    }
+
+    return getAccessProvider(body.provider).constructor.requiresScanByDefault
+      ? {}
+      : { validationRules: [] };
   }
 
   static async _updateAccessPoint(request, response, tenantId) {
