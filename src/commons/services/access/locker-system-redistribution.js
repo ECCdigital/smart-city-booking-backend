@@ -1,14 +1,23 @@
 const BookingManager = require("../../data-managers/booking-manager");
-const { BookableManager } = require("../../data-managers/bookable-manager");
 const AccessLogService = require("./access-log-service");
 const LockerSystemMutex = require("./locker-system-mutex");
 const {
   accessBufferMs,
   assignedCompartmentOf,
+  bookablesById,
+  claimOf,
+  compartmentPointId,
   freeCompartments,
+  holdingsOf,
 } = require("./compartment-allocation");
 const { compartmentsOf } = require("./locker-system-compartments");
-const { DOMAIN } = require("../authorization/reach");
+
+/** Where a booking's access window stands, seen from now. */
+const WINDOW = Object.freeze({
+  FUTURE: "future",
+  RUNNING: "running",
+  OVER: "over",
+});
 
 /**
  * A Fach leaves the Zuteilung of its Schließfachanlage (tickets#1043): the
@@ -80,7 +89,7 @@ class LockerSystemRedistribution {
         compartmentIds,
         now,
       )
-    ).filter(({ state }) => state !== "over");
+    ).filter(({ state }) => state !== WINDOW.OVER);
 
     return {
       total: holdings.length,
@@ -146,7 +155,7 @@ class LockerSystemRedistribution {
     const unmoved = [];
 
     for (const { booking, entry, bookable, state } of holdings) {
-      if (state !== "future") {
+      if (state !== WINDOW.FUTURE) {
         continue;
       }
 
@@ -154,12 +163,7 @@ class LockerSystemRedistribution {
       const [free] = await freeCompartments(
         tenant,
         lockerSystem,
-        {
-          bookingId: booking.id,
-          timeBegin: booking.timeBegin,
-          timeEnd: booking.timeEnd,
-          bookable,
-        },
+        claimOf(booking, bookable),
         { exclude: LockerSystemRedistribution._heldBy(booking, entry) },
       );
 
@@ -195,31 +199,11 @@ class LockerSystemRedistribution {
    * state of its access window, earliest first.
    */
   static async _holdings(tenant, lockerSystem, compartmentIds, now) {
-    const asked = new Set(compartmentIds.map(String));
-    if (asked.size === 0) {
-      return [];
-    }
-
-    const bookings = (
-      await BookingManager.getBookingsHoldingCompartments(
-        tenant,
-        [...asked],
-        DOMAIN,
-      )
-    ).filter((booking) => !booking.isRejected);
-
-    const found = bookings.flatMap((booking) =>
-      (booking.accessInfo || [])
-        .filter(
-          (entry) =>
-            !entry.revokedAt &&
-            String(entry.accessPointId) === String(lockerSystem.id) &&
-            asked.has(String(entry.assignedCompartment?.id)),
-        )
-        .map((entry) => ({ booking, entry })),
+    const found = (await holdingsOf(tenant, compartmentIds)).filter(
+      ({ entry }) => String(entry.accessPointId) === String(lockerSystem.id),
     );
 
-    const bookables = await LockerSystemRedistribution._bookablesById(
+    const bookables = await bookablesById(
       tenant,
       found.map(({ entry }) => entry.bookableId),
     );
@@ -248,16 +232,16 @@ class LockerSystemRedistribution {
    */
   static _stateOf(booking, bookable, now) {
     if (booking.timeBegin == null || booking.timeEnd == null) {
-      return "running";
+      return WINDOW.RUNNING;
     }
     const { beforeMs, afterMs } = accessBufferMs(bookable);
     if (now < booking.timeBegin - beforeMs) {
-      return "future";
+      return WINDOW.FUTURE;
     }
     if (now > booking.timeEnd + afterMs) {
-      return "over";
+      return WINDOW.OVER;
     }
-    return "running";
+    return WINDOW.RUNNING;
   }
 
   /** The Fächer the booking holds in its other entries. */
@@ -282,21 +266,6 @@ class LockerSystemRedistribution {
     };
   }
 
-  static async _bookablesById(tenant, ids) {
-    const unique = [...new Set(ids.filter(Boolean).map(String))];
-    if (unique.length === 0) {
-      return new Map();
-    }
-    const bookables = await BookableManager.getBookablesByIds(
-      tenant,
-      unique,
-      DOMAIN,
-    );
-    return new Map(
-      bookables.map((bookable) => [String(bookable.id), bookable]),
-    );
-  }
-
   /**
    * One row of the access log per booking moved or left, at the Fach -
    * `<anlageId>:<UUID>`, as the Zuteilung writes it.
@@ -318,7 +287,7 @@ class LockerSystemRedistribution {
       await AccessLogService.log({
         tenantId: tenant,
         bookingId: booking.id,
-        accessPointId: `${lockerSystem.id}:${compartment.id}`,
+        accessPointId: compartmentPointId(lockerSystem.id, compartment.id),
         accessPointType: lockerSystem.type,
         provider: lockerSystem.provider,
         externalId: lockerSystem.externalId || null,

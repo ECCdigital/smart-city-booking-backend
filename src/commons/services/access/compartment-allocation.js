@@ -73,34 +73,78 @@ function inAllocationOrder(compartments) {
 }
 
 /**
- * Which of the Fächer another booking of the tenant occupies for the claim.
+ * The id a Fach of an Anlage is operated and logged by: the Anlage's row
+ * and the Fach's key - its UUID where the platform assigned it.
+ *
+ * @param {string} accessPointId The Anlage's row id
+ * @param {string} key The UUID of the Fach (or another provider's key)
+ * @returns {string} `<accessPointId>:<key>`
+ */
+function compartmentPointId(accessPointId, key) {
+  return `${accessPointId}:${key}`;
+}
+
+/**
+ * The booking as it asks for a Fach: its period, and the bookable whose
+ * access buffer widens it.
+ *
+ * @param {Object} booking
+ * @param {Object|null} bookable The bookable that books the Anlage
+ * @returns {{ bookingId: string, timeBegin: number, timeEnd: number,
+ *   bookable: Object|null }}
+ */
+function claimOf(booking, bookable) {
+  return {
+    bookingId: booking.id,
+    timeBegin: booking.timeBegin,
+    timeEnd: booking.timeEnd,
+    bookable: bookable ?? null,
+  };
+}
+
+/**
+ * Every entry not taken back that holds one of the Fächer, at whichever
+ * Anlage, of a booking of the tenant not rejected, cancelled or withdrawn.
  *
  * @param {string} tenant Tenant ID
- * @param {string[]} compartmentIds UUIDs of the Fächer to ask for
- * @param {{ bookingId: string, timeBegin: number, timeEnd: number,
- *   bookable: Object|null }} claim The booking asking
- * @returns {Promise<Set<string>>} The UUIDs occupied
+ * @param {Iterable<string>} compartmentIds UUIDs of the Fächer
+ * @returns {Promise<{ booking: Object, entry: Object }[]>}
  */
-async function occupiedCompartmentIds(tenant, compartmentIds, claim) {
-  const asked = new Set(compartmentIds.map(String));
-  const others = (
+async function holdingsOf(tenant, compartmentIds) {
+  const asked = new Set([...compartmentIds].map(String));
+  if (asked.size === 0) {
+    return [];
+  }
+  const bookings = (
     await BookingManager.getBookingsHoldingCompartments(
       tenant,
       [...asked],
       DOMAIN,
     )
-  ).filter(
-    (booking) =>
-      !booking.isRejected && String(booking.id) !== String(claim.bookingId),
-  );
+  ).filter((booking) => !booking.isRejected);
 
-  const holdings = others.flatMap((booking) =>
+  return bookings.flatMap((booking) =>
     (booking.accessInfo || [])
       .filter(
         (entry) =>
           !entry.revokedAt && asked.has(String(entry.assignedCompartment?.id)),
       )
       .map((entry) => ({ booking, entry })),
+  );
+}
+
+/**
+ * Which of the Fächer another booking of the tenant occupies for the claim.
+ *
+ * @param {string} tenant Tenant ID
+ * @param {string[]} compartmentIds UUIDs of the Fächer to ask for
+ * @param {{ bookingId: string, timeBegin: number, timeEnd: number,
+ *   bookable: Object|null }} claim The booking asking (`claimOf`)
+ * @returns {Promise<Set<string>>} The UUIDs occupied
+ */
+async function occupiedCompartmentIds(tenant, compartmentIds, claim) {
+  const holdings = (await holdingsOf(tenant, compartmentIds)).filter(
+    ({ booking }) => String(booking.id) !== String(claim.bookingId),
   );
   const bookables = await bookablesById(
     tenant,
@@ -205,6 +249,13 @@ function overlaps(claim, other, otherBookable) {
   );
 }
 
+/**
+ * The bookables of the ids, by id; read by the domain.
+ *
+ * @param {string} tenant Tenant ID
+ * @param {Array<string|null|undefined>} ids
+ * @returns {Promise<Map<string, Object>>}
+ */
 async function bookablesById(tenant, ids) {
   const unique = [...new Set(ids.filter(Boolean).map(String))];
   if (unique.length === 0) {
@@ -221,6 +272,10 @@ async function bookablesById(tenant, ids) {
 module.exports = {
   accessBufferMs,
   inAllocationOrder,
+  compartmentPointId,
+  claimOf,
+  holdingsOf,
+  bookablesById,
   occupiedCompartmentIds,
   freeCompartments,
   assignedCompartmentOf,

@@ -7,7 +7,10 @@ const AccessPointManager = require("../../data-managers/access-point-manager");
 const SecurityUtils = require("../../utilities/security-utils");
 const AccessLogService = require("./access-log-service");
 const { decide, satisfy } = require("./access-decision");
-const { projectAccessPoint } = require("./access-point-projection");
+const {
+  projectAccessPoint,
+  assignedCompartmentView,
+} = require("./access-point-projection");
 const { AccessPointMode } = require("../../entities/access/access-point");
 const { AccessPointType } = require("../../schemas/accessPointSchema");
 const mailService = require("../../mail-service");
@@ -23,6 +26,8 @@ const LockerSystemMutex = require("./locker-system-mutex");
 const { carriesOwnCompartments } = require("./locker-system-compartments");
 const {
   accessBufferMs,
+  claimOf,
+  compartmentPointId,
   freeCompartments,
   assignedCompartmentOf,
 } = require("./compartment-allocation");
@@ -894,10 +899,8 @@ class AccessService {
     for (const booking of bookings) {
       const sources = await this._loadAccessPointSources(tenant, booking);
       const systems = this._resolveLockerSystems(tenant, booking, sources);
-      for (const system of systems.values()) {
-        if (carriesOwnCompartments(system.accessPoint)) {
-          anlagen.push(system.accessPoint);
-        }
+      for (const system of this._ownListSystems(systems)) {
+        anlagen.push(system.accessPoint);
       }
     }
     if (anlagen.length === 0) {
@@ -916,8 +919,22 @@ class AccessService {
    * @returns {Object[]} The systems
    */
   static _allocatingSystems(lockerSystems) {
-    return [...lockerSystems.values()].filter(
-      (system) => system.bookable && carriesOwnCompartments(system.accessPoint),
+    return this._ownListSystems(lockerSystems).filter(
+      (system) => system.bookable,
+    );
+  }
+
+  /**
+   * @private
+   * The locker systems of the booking that carry their own list of Fächer,
+   * booked or only held at.
+   *
+   * @param {Map<string, Object>} lockerSystems As `_resolveLockerSystems`
+   * @returns {Object[]} The systems
+   */
+  static _ownListSystems(lockerSystems) {
+    return [...lockerSystems.values()].filter((system) =>
+      carriesOwnCompartments(system.accessPoint),
     );
   }
 
@@ -941,10 +958,7 @@ class AccessService {
       tenant,
       bookingId,
       async ({ booking, lockerSystems }) => {
-        const ownLists = [...lockerSystems.values()].filter((system) =>
-          carriesOwnCompartments(system.accessPoint),
-        );
-        if (ownLists.length === 0) {
+        if (this._ownListSystems(lockerSystems).length === 0) {
           return booking.accessInfo;
         }
 
@@ -1019,7 +1033,7 @@ class AccessService {
       const free = await freeCompartments(
         tenant,
         system.accessPoint,
-        this._claimOf(booking, system),
+        claimOf(booking, system.bookable),
       );
       const freeById = new Map(free.map((c) => [String(c.id), c]));
 
@@ -1178,9 +1192,8 @@ class AccessService {
     );
     const free = await this._freeToReassign(tenant, booking, system);
     return free.map((compartment) => ({
-      id: `${system.accessPoint.id}:${compartment.id}`,
-      number: compartment.number ?? null,
-      lockerBankName: compartment.lockerBank?.name ?? null,
+      id: compartmentPointId(system.accessPoint.id, compartment.id),
+      ...assignedCompartmentView(compartment),
     }));
   }
 
@@ -1238,7 +1251,8 @@ class AccessService {
       const free = await this._freeToReassign(tenant, booking, current.system);
       const target = free.find(
         (compartment) =>
-          `${current.system.accessPoint.id}:${compartment.id}` === String(to),
+          compartmentPointId(current.system.accessPoint.id, compartment.id) ===
+          String(to),
       );
       if (!target) {
         throw new ConflictError("compartment_taken", {
@@ -1266,10 +1280,7 @@ class AccessService {
       return {
         id: moved.id,
         previousId: String(accessPointId),
-        assignedCompartment: {
-          number: entry.assignedCompartment.number ?? null,
-          lockerBankName: entry.assignedCompartment.lockerBank?.name ?? null,
-        },
+        assignedCompartment: assignedCompartmentView(entry.assignedCompartment),
       };
     });
   }
@@ -1324,23 +1335,9 @@ class AccessService {
     return freeCompartments(
       tenant,
       system.accessPoint,
-      this._claimOf(booking, system),
+      claimOf(booking, system.bookable),
       { exclude: held },
     );
-  }
-
-  /**
-   * @private
-   * The booking as it asks for a Fach of the system: its period, and the
-   * bookable whose access buffer widens it (`compartment-allocation.js`).
-   */
-  static _claimOf(booking, system) {
-    return {
-      bookingId: booking.id,
-      timeBegin: booking.timeBegin,
-      timeEnd: booking.timeEnd,
-      bookable: system.bookable,
-    };
   }
 
   /**
@@ -3120,7 +3117,7 @@ class AccessService {
   static _compartmentId(entry) {
     const key =
       entry.assignedCompartment?.id ?? entry.grant?.authorizationId ?? "hold";
-    return `${entry.accessPointId}:${key}`;
+    return compartmentPointId(entry.accessPointId, key);
   }
 
   /**
