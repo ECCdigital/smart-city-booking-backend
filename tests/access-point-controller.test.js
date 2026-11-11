@@ -7,6 +7,10 @@ const { ValidationError } = require("../src/errors/ValidationError");
 const { BaseError, NotFoundError } = require("../src/errors/BaseError");
 const { TEST_GEO_RULE } = require("./helpers/test-validation-rule");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
+const BookingManager = require("../src/commons/data-managers/booking-manager");
+const LockerSystemMutex = require("../src/commons/services/access/locker-system-mutex");
+const LockerSystemRedistribution = require("../src/commons/services/access/locker-system-redistribution");
+const { Booking } = require("../src/commons/entities/booking/booking");
 const SaltoKsAccessProvider = require("../src/commons/services/access/providers/salto-ks-access-provider");
 const OpenLockerAccessProvider = require("../src/commons/services/access/providers/open-locker-access-provider");
 const {
@@ -1095,6 +1099,7 @@ describe("AccessPointController", () => {
     describe("Open Locker locker system", () => {
       let openLocker;
       let tenantAccessPoints;
+      let bookingsHolding;
 
       after(() => {
         registerAccessProvider("open-locker", OpenLockerAccessProvider);
@@ -1108,6 +1113,17 @@ describe("AccessPointController", () => {
         AccessPointManager.getAccessPoints.callsFake(
           async () => tenantAccessPoints,
         );
+        // A Fach leaving the Anlage moves the bookings at it, under the
+        // mutex of the Anlage (tickets#1043): none hang at it here.
+        bookingsHolding = [];
+        sandbox
+          .stub(BookingManager, "getBookingsHoldingCompartments")
+          .callsFake(async () => bookingsHolding);
+        sandbox.stub(BookingManager, "storeBooking").callsFake(async (b) => b);
+        sandbox.stub(BookableManager, "getBookablesByIds").resolves([]);
+        sandbox
+          .stub(LockerSystemMutex, "hold")
+          .callsFake(async (lockerSystem, work) => work());
       });
 
       function registerOpenLocker(client) {
@@ -1457,6 +1473,121 @@ describe("AccessPointController", () => {
           },
         ]);
         expect(storeAccessPoint.called).to.be.false;
+      });
+
+      /**
+       * A Fach going out of service or out of the Anlage moves the future
+       * bookings at it on the save; the answer names the ones that stay
+       * (tickets#1043). Which bookings move is
+       * `locker-system-redistribution.test.js`'s.
+       */
+      describe("a Fach leaving the Zuteilung", () => {
+        const HOUR = 60 * 60 * 1000;
+        let stored;
+
+        beforeEach(() => {
+          stored = createAccessPoint({
+            id: "anlage-1",
+            ...lockerSystem([
+              {
+                id: COMPARTMENT_ID,
+                number: 1,
+                lockerBank: { id: LOCKER_BANK_ID, name: "Labor Fachbank 1" },
+                outOfService: false,
+              },
+            ]),
+            externalId: "",
+            validationRules: [],
+          });
+          sandbox.stub(AccessPointManager, "getAccessPoint").resolves(stored);
+          bookingsHolding = [
+            new Booking({
+              id: "booking-1",
+              tenantId: "tenant-1",
+              name: "Erika Mustermann",
+              mail: "erika@example.test",
+              status: "confirmed",
+              timeBegin: Date.now() + HOUR,
+              timeEnd: Date.now() + 2 * HOUR,
+              bookableItems: [{ bookableId: "faecher", amount: 1 }],
+              accessInfo: [
+                {
+                  accessPointId: "anlage-1",
+                  accessPointType: "locker",
+                  provider: "open-locker",
+                  bookableId: "faecher",
+                  assignedCompartment: { id: COMPARTMENT_ID, number: 1 },
+                  revokedAt: null,
+                },
+              ],
+            }),
+          ];
+        });
+
+        it("stores the Anlage under its mutex and moves the future booking to a free Fach in service", async () => {
+          request.body = {
+            id: "anlage-1",
+            config: {
+              compartments: [
+                { id: COMPARTMENT_ID, outOfService: true },
+                { id: SECOND_COMPARTMENT_ID },
+              ],
+            },
+          };
+
+          await AccessPointController.storeAccessPoint(request, response, next);
+
+          expect(next.called).to.be.false;
+          expect(LockerSystemMutex.hold.firstCall.args[0].id).to.equal(
+            "anlage-1",
+          );
+          expect(
+            BookingManager.storeBooking.firstCall.args[0].accessInfo[0]
+              .assignedCompartment.id,
+          ).to.equal(SECOND_COMPARTMENT_ID);
+          expect(response.status.calledWith(200)).to.be.true;
+          expect(response.send.firstCall.args[0].unmovedBookings).to.deep.equal(
+            [],
+          );
+        });
+
+        it("names the future bookings no Fach was free for in its answer", async () => {
+          request.body = {
+            id: "anlage-1",
+            config: {
+              compartments: [{ id: COMPARTMENT_ID, outOfService: true }],
+            },
+          };
+
+          await AccessPointController.storeAccessPoint(request, response, next);
+
+          expect(next.called).to.be.false;
+          const answer = response.send.firstCall.args[0];
+          expect(answer.id).to.equal("anlage-1");
+          expect(answer.unmovedBookings).to.deep.equal([
+            {
+              id: "booking-1",
+              name: "Erika Mustermann",
+              mail: "erika@example.test",
+              timeBegin: bookingsHolding[0].timeBegin,
+              timeEnd: bookingsHolding[0].timeEnd,
+              compartment: { id: COMPARTMENT_ID, number: 1 },
+            },
+          ]);
+          expect(BookingManager.storeBooking.called).to.be.false;
+        });
+
+        it("answers a save that moves nothing without the mutex", async () => {
+          request.body = { id: "anlage-1", label: "Fahrradgarage Nord" };
+
+          await AccessPointController.storeAccessPoint(request, response, next);
+
+          expect(next.called).to.be.false;
+          expect(LockerSystemMutex.hold.called).to.be.false;
+          expect(response.send.firstCall.args[0].unmovedBookings).to.deep.equal(
+            [],
+          );
+        });
       });
     });
 
@@ -1925,6 +2056,75 @@ describe("AccessPointController", () => {
 
       expect(response.sendStatus.calledWith(404)).to.be.true;
       expect(storeAccessPoint.called).to.be.false;
+    });
+  });
+
+  /**
+   * What the administration reads before a Fach leaves its Anlage
+   * (tickets#1043): the running and future bookings at the Fächer. Which
+   * ones those are is `locker-system-redistribution.test.js`'s.
+   */
+  describe("getCompartmentBookings", () => {
+    let bookingsAt;
+
+    beforeEach(() => {
+      bookingsAt = sandbox
+        .stub(LockerSystemRedistribution, "bookingsAt")
+        .resolves({ total: 0, bookings: [] });
+      request.params.id = "anlage-1";
+    });
+
+    it("asks for the Fächer the query names, at the Anlage of the path, capped like the booking list", async () => {
+      const anlage = createAccessPoint({ id: "anlage-1", type: "locker" });
+      sandbox.stub(AccessPointManager, "getAccessPoint").resolves(anlage);
+      request.query = { compartmentIds: "uuid-1,uuid-2" };
+      bookingsAt.resolves({ total: 1, bookings: [{ id: "booking-1" }] });
+
+      await AccessPointController.getCompartmentBookings(
+        request,
+        response,
+        next,
+      );
+
+      expect(bookingsAt.firstCall.args.slice(0, 3)).to.deep.equal([
+        "tenant-1",
+        anlage,
+        ["uuid-1", "uuid-2"],
+      ]);
+      expect(bookingsAt.firstCall.args[3]).to.deep.include({ limit: 10 });
+      expect(response.status.calledWith(200)).to.be.true;
+      expect(response.json.firstCall.args[0]).to.deep.equal({
+        total: 1,
+        bookings: [{ id: "booking-1" }],
+      });
+    });
+
+    it("takes the Fächer as a repeated parameter too", async () => {
+      sandbox
+        .stub(AccessPointManager, "getAccessPoint")
+        .resolves(createAccessPoint({ id: "anlage-1" }));
+      request.query = { compartmentIds: ["uuid-1", "uuid-2"] };
+
+      await AccessPointController.getCompartmentBookings(
+        request,
+        response,
+        next,
+      );
+
+      expect(bookingsAt.firstCall.args[2]).to.deep.equal(["uuid-1", "uuid-2"]);
+    });
+
+    it("answers 404 for an access point the tenant does not have", async () => {
+      sandbox.stub(AccessPointManager, "getAccessPoint").resolves(null);
+
+      await AccessPointController.getCompartmentBookings(
+        request,
+        response,
+        next,
+      );
+
+      expect(response.sendStatus.calledWith(404)).to.be.true;
+      expect(bookingsAt.called).to.be.false;
     });
   });
 

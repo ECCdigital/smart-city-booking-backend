@@ -10,6 +10,7 @@ const AccessLocationService = require("../../../commons/services/access/access-l
 const AccessEvidenceService = require("../../../commons/services/access/access-evidence-service");
 const AccessInfoService = require("../../../commons/services/access/access-info-service");
 const AccessService = require("../../../commons/services/access/access-service");
+const LockerSystemRedistribution = require("../../../commons/services/access/locker-system-redistribution");
 const LocationGuard = require("../../../commons/services/location/location-guard");
 const {
   carriesOwnCompartments,
@@ -121,6 +122,49 @@ class AccessPointController {
   }
 
   /**
+   * The running and future bookings at Fächer of a Schließfachanlage
+   * (`?compartmentIds=<uuid>,<uuid>`), for the administration to see before
+   * it takes them out of service or out of the Anlage (tickets#1043) - which
+   * ones those are is `LockerSystemRedistribution.bookingsAt`. Capped like
+   * the booking list, with the whole `total` next to it.
+   */
+  static async getCompartmentBookings(request, response, next) {
+    try {
+      const tenantId = request.params.tenant;
+
+      const accessPoint = await AccessPointManager.getAccessPoint(
+        request.params.id,
+        tenantId,
+      );
+
+      if (!accessPoint) {
+        return response.sendStatus(404);
+      }
+
+      const result = await LockerSystemRedistribution.bookingsAt(
+        tenantId,
+        accessPoint,
+        AccessPointController._listParam(request.query.compartmentIds),
+        { limit: LIVE_ACCESS_BOOKING_LIMIT },
+      );
+
+      return response.status(200).json(result);
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  /** A query parameter given comma-separated or repeated, as a list. */
+  static _listParam(value) {
+    return [value]
+      .flat()
+      .filter((part) => typeof part === "string")
+      .flatMap((part) => part.split(","))
+      .map((part) => part.trim())
+      .filter(Boolean);
+  }
+
+  /**
    * Upsert an access point: an `id` in the body updates that access point,
    * a body without `id` creates a new one with a server-side id. An `id` the
    * tenant does not know is answered with 404 rather than created, so ids
@@ -221,6 +265,7 @@ class AccessPointController {
     }
 
     const storedLocation = accessPoint.location;
+    const before = { ...accessPoint };
     Object.assign(
       accessPoint,
       AccessPointController._writableFields(request.body),
@@ -248,15 +293,27 @@ class AccessPointController {
       tenantId,
     );
 
-    const updatedAccessPoint = await AccessPointManager.storeAccessPoint(
-      accessPoint,
-      tenantId,
-    );
+    const { accessPoint: updatedAccessPoint, unmoved } =
+      await LockerSystemRedistribution.storeRedistributing(
+        tenantId,
+        before,
+        accessPoint,
+        () => AccessPointManager.storeAccessPoint(accessPoint, tenantId),
+        { userId: user?.id },
+      );
 
     logger.info(
       `${tenantId} -- Access point ${updatedAccessPoint.id} updated by user ${user?.id}`,
     );
-    return response.status(200).send(updatedAccessPoint.toResponse());
+    if (!carriesOwnCompartments(updatedAccessPoint)) {
+      return response.status(200).send(updatedAccessPoint.toResponse());
+    }
+    // A Fach that left the Zuteilung moved the future bookings at it
+    // (tickets#1043); the ones no Fach was free for stay there, and the
+    // answer names them for the administration to solve by hand.
+    return response
+      .status(200)
+      .send({ ...updatedAccessPoint.toResponse(), unmovedBookings: unmoved });
   }
 
   /**

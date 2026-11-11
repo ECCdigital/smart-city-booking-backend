@@ -30,6 +30,15 @@ router.get(
   AccessPointController.getAccessPointBookings,
 );
 
+// The bookings at Fächer of a Schließfachanlage, read before they go out of
+// service or out of the Anlage (tickets#1043): naming them names their
+// customers, so the reach is the booking reader's, as above.
+router.get(
+  "/:id/compartment-bookings",
+  authorize("accessPoint", "bookings"),
+  AccessPointController.getCompartmentBookings,
+);
+
 router.get(
   "/:id/qrcode",
   authorize("accessPoint", "write"),
