@@ -970,8 +970,9 @@ class AccessService {
    * else the entry gets the first free one. An entry taken back gives its
    * Fach first to a unit that needs one, so a Wiederherstellung gets its
    * old Fach back where it can. Units past what the booking books now free
-   * the Fächer assigned last, as an Anlage the booking no longer books
-   * frees all of its. To run under the mutex of those Anlagen, before the
+   * the Fächer assigned last - by the time the unit got its first Fach
+   * (`assignedAt`), which an Umsetzen or a Wandern does not change - as an
+   * Anlage the booking no longer books frees all of its. To run under the mutex of those Anlagen, before the
    * booking is stored.
    *
    * @param {string} tenant Tenant ID
@@ -995,7 +996,11 @@ class AccessService {
       const atSystem = this._compartmentEntries(booking).filter(
         (entry) => String(entry.accessPointId) === accessPointId,
       );
-      const active = atSystem.filter((entry) => !entry.revokedAt);
+      // The units that got their Fach first stay; an Umsetzen or a Wandern
+      // changes the Fach, not when the unit got one.
+      const active = this._byAssignment(
+        atSystem.filter((entry) => !entry.revokedAt),
+      );
       const amount = system.bookable ? system.amount : 0;
       const kept = active.slice(0, amount);
       const plan = {
@@ -1066,6 +1071,7 @@ class AccessService {
     }
 
     const allocated = [];
+    const assignedAt = Date.now();
     for (const { system, dropped, moved, added } of plans) {
       booking.accessInfo = booking.accessInfo.filter(
         (entry) => !dropped.includes(entry),
@@ -1077,6 +1083,8 @@ class AccessService {
           ...(entry.hold || entry.isProvisioned
             ? {}
             : { hold: { ...PLATFORM_HOLD } }),
+          // A unit given its first Fach now; a move keeps its time.
+          ...(previous ? {} : { assignedAt }),
           assignedCompartment: assignedCompartmentOf(compartment),
         });
         allocated.push({ system, entry, previous });
@@ -1094,12 +1102,25 @@ class AccessService {
       fresh.forEach((entry, index) => {
         Object.assign(entry, {
           hold: { ...PLATFORM_HOLD },
+          assignedAt,
           assignedCompartment: assignedCompartmentOf(added[index]),
         });
         allocated.push({ system, entry, previous: null });
       });
     }
     return allocated;
+  }
+
+  /**
+   * @private
+   * The entries in the order their units got a Fach (`assignedAt`), the
+   * first first; entries from before the time was noted count as earliest,
+   * in the order they stand.
+   */
+  static _byAssignment(entries) {
+    return [...entries].sort(
+      (a, b) => (a.assignedAt ?? 0) - (b.assignedAt ?? 0),
+    );
   }
 
   /**

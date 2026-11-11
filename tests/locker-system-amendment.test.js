@@ -317,6 +317,48 @@ describe("Fach on Änderung, Wiederherstellung and Storno: a booking keeps its F
       expect(assigned("b2")).to.deep.equal(["uuid-2", "uuid-3"]);
     });
 
+    it("frees by when each unit got its Fach, not by where its entry stands", async function () {
+      storeBooking("b1", "faecher", 3, {
+        accessInfo: [
+          entryAt("uuid-3", { assignedAt: now - HOUR }),
+          entryAt("uuid-1", { assignedAt: now - 3 * HOUR }),
+          entryAt("uuid-2", { assignedAt: now - 2 * HOUR }),
+        ],
+      });
+      amendStored("b1", {
+        bookableItems: [{ bookableId: "faecher", amount: 2 }],
+      });
+
+      await AccessService.holdForBooking(TENANT, "b1");
+
+      expect(assigned("b1")).to.deep.equal(["uuid-1", "uuid-2"]);
+    });
+
+    it("counts an Umsetzen as no new Zuteilung: the unit moved keeps its turn", async function () {
+      const clock = sinon.useFakeTimers({ now, shouldAdvanceTime: true });
+      await holding("b1");
+      clock.tick(HOUR);
+      amendStored("b1", {
+        bookableItems: [{ bookableId: "faecher", amount: 2 }],
+      });
+      await AccessService.holdForBooking(TENANT, "b1");
+      expect(assigned("b1")).to.deep.equal(["uuid-1", "uuid-2"]);
+      clock.tick(HOUR);
+      await AccessService.reassignCompartment(
+        TENANT,
+        "b1",
+        "anlage-labor:uuid-1",
+        "anlage-labor:uuid-3",
+      );
+      amendStored("b1", {
+        bookableItems: [{ bookableId: "faecher", amount: 1 }],
+      });
+
+      await AccessService.holdForBooking(TENANT, "b1");
+
+      expect(assigned("b1")).to.deep.equal(["uuid-3"]);
+    });
+
     it("fails with compartments_unavailable without a free Fach and leaves the stored Fach as it was", async function () {
       await holding("b1");
       for (const number of [1, 2, 3]) {
