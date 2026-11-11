@@ -169,7 +169,9 @@ components:
           description: >
             Whether the access for this booking is set up: a door once its
             access is provisioned, a compartment of a locker system once it is
-            granted and not revoked. Only on the booking ways.
+            granted and not revoked - a Fach the platform assigned (Open
+            Locker) once it is provisioned and not revoked. Only on the
+            booking ways.
         externalBookingId:
           type: string
           nullable: true
@@ -184,6 +186,26 @@ components:
             - the box number of an iFBS bike box. `null` where the provider
             does not (Pareva mails the access code itself). Locker systems
             only, and only on the booking ways.
+        assignedCompartment:
+          type: object
+          nullable: true
+          description: >
+            The Fach the platform assigned at a locker system that carries its
+            own list of compartments (Open Locker), from the hold on, before
+            the payment too: its number and the name of its locker bank. The
+            locker system's name is `label`; a client shows it as
+            „{label} — Schrank {lockerBankName}, Fach {number}“. `null` where
+            the provider assigns the compartment (iFBS, Pareva). Locker
+            systems only, and only on the booking ways.
+          properties:
+            number:
+              type: integer
+              nullable: true
+              example: 3
+            lockerBankName:
+              type: string
+              nullable: true
+              example: Quartiersschrank Hafen
 
     ResolvedAccessBuffer:
       type: object

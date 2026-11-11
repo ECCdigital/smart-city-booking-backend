@@ -148,9 +148,10 @@ function decide(
     // An access point whose grant is its only way in is nothing without the
     // grant: no grant or a revoked one locks it. That is a door that only
     // takes a code - and every compartment of a locker system, which is
-    // assigned by the grant whatever mode the system opens in. A door that
-    // also opens remotely stays operable meanwhile, and the missing or
-    // revoked grant is a hint at it.
+    // assigned by the grant whatever mode the system opens in. A Fach the
+    // platform assigned (Open Locker) has no grant: its Bereitstellung is
+    // what stands for it. A door that also opens remotely stays operable
+    // meanwhile, and the missing or revoked grant is a hint at it.
     let authorizationUsable = false;
     const grantIsTheOnlyWayIn =
       accessPoint.mode === AccessPointMode.AUTHORIZATION ||
@@ -158,7 +159,8 @@ function decide(
     if (grantIsTheOnlyWayIn || usesAuthorization(accessPoint.mode)) {
       const isGranted =
         bookingContext.isProvisioned === true &&
-        Boolean(bookingContext.grant?.authorizationId);
+        (Boolean(bookingContext.grant?.authorizationId) ||
+          Boolean(bookingContext.assignedCompartment));
       if (!isGranted) {
         anyUnprovisioned = true;
       } else if (!revokedAt) {

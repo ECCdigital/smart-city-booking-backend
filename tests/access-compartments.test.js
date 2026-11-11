@@ -804,6 +804,7 @@ describe("Compartments on the access seam", function () {
         isProvisioned: true,
         externalBookingId: "100",
         compartment: BOX_A,
+        assignedCompartment: null,
       });
     });
 

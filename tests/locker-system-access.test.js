@@ -1,0 +1,610 @@
+/**
+ * The zugeteilte Fach of an Open Locker Schließfachanlage, seen and opened
+ * (tickets#1040): the Bereitstellung marks it provisioned without a call to
+ * Open Locker, the Rücknahme marks it revoked the same way, "Fach öffnen"
+ * sends the UUID of the zugeteilte Fach - not the Anlage's - and the
+ * projection names Anlage, Schließfachschrank and number from the
+ * Vormerkung on, offering the open only with a running access.
+ *
+ * On the access seam like `locker-system-allocation.test.js`: the Anlage is
+ * a real row, the service runs for real, Open Locker is the fake of
+ * `tests/helpers/`, and below the service the data managers are stubbed with
+ * an in-memory booking store.
+ */
+
+const assert = require("assert");
+const { expect } = require("chai");
+const sinon = require("sinon");
+
+process.env.CRYPTO_SECRET =
+  process.env.CRYPTO_SECRET || "0123456789abcdef0123456789abcdef";
+
+const AccessService = require("../src/commons/services/access/access-service");
+const BookingManager = require("../src/commons/data-managers/booking-manager");
+const {
+  BookableManager,
+} = require("../src/commons/data-managers/bookable-manager");
+const TenantManager = require("../src/commons/data-managers/tenant-manager");
+const AccessPointManager = require("../src/commons/data-managers/access-point-manager");
+const AccessLogService = require("../src/commons/services/access/access-log-service");
+const mailModule = require("../src/commons/mail-service");
+const { Booking } = require("../src/commons/entities/booking/booking");
+const {
+  registerAccessProvider,
+} = require("../src/commons/services/access/providers/access-provider-registry");
+const OpenLockerAccessProvider = require("../src/commons/services/access/providers/open-locker-access-provider");
+const { AccessOpenError } = require("../src/errors/AccessOpenError");
+const {
+  FakeOpenLockerApiClient,
+  COMPARTMENT_ID,
+  OTHER_COMPARTMENT_ID,
+  SECOND_COMPARTMENT_ID,
+  LOCKER_BANK_ID,
+  SECOND_LOCKER_BANK_ID,
+} = require("./helpers/fake-open-locker-api-client");
+const {
+  installInMemoryLockerSystemHolds,
+} = require("./helpers/in-memory-locker-system-holds");
+
+const TENANT = "tenant-1";
+const MINUTE = 60 * 1000;
+const HOUR = 60 * MINUTE;
+
+const LABOR = { id: LOCKER_BANK_ID, name: "Labor Fachbank 1" };
+const HAFEN = { id: SECOND_LOCKER_BANK_ID, name: "Quartiersschrank Hafen" };
+
+/** The Anlage: the tenant's two Fächer at Open Locker, no `externalId`. */
+const anlage = () => ({
+  id: "anlage-1",
+  tenantId: TENANT,
+  type: "locker",
+  provider: "open-locker",
+  externalId: "",
+  label: "Fächer Bahnhof",
+  mode: "remote",
+  validationRules: [],
+  scanCode: "code-anlage-1",
+  config: {
+    compartments: [
+      { id: COMPARTMENT_ID, number: 1, lockerBank: LABOR, outOfService: false },
+      {
+        id: SECOND_COMPARTMENT_ID,
+        number: 3,
+        lockerBank: HAFEN,
+        outOfService: false,
+      },
+    ],
+  },
+});
+
+/** A fixed Fach of Open Locker: a door with the Fach's UUID. */
+const FIXED_FACH = {
+  id: "fixed-1",
+  tenantId: TENANT,
+  type: "door",
+  provider: "open-locker",
+  externalId: SECOND_COMPARTMENT_ID,
+  label: "Quartiersschrank Hafen · Fach 3",
+  mode: "remote",
+  validationRules: [],
+  scanCode: "code-fixed-1",
+};
+
+describe("Zugeteiltes Fach: provisioned, revoked, opened and projected", function () {
+  let store;
+  let accessPoints;
+  let bookables;
+  let client;
+  let now;
+
+  before(function () {
+    // The registry keeps one instance; a new one reads the new fake.
+    registerAccessProvider(
+      "open-locker",
+      class extends OpenLockerAccessProvider {
+        constructor() {
+          super({ client });
+        }
+      },
+    );
+  });
+
+  after(function () {
+    registerAccessProvider("open-locker", OpenLockerAccessProvider);
+  });
+
+  beforeEach(function () {
+    now = Date.now();
+    client = new FakeOpenLockerApiClient();
+    registerAccessProvider(
+      "open-locker",
+      class extends OpenLockerAccessProvider {
+        constructor() {
+          super({ client });
+        }
+      },
+    );
+    store = new Map();
+    accessPoints = [anlage(), FIXED_FACH];
+    bookables = {
+      faecher: {
+        id: "faecher",
+        title: "Fächer",
+        amount: 2,
+        accessPointDetails: { active: true, accessPointIds: ["anlage-1"] },
+      },
+      fixed: {
+        id: "fixed",
+        title: "Festes Fach",
+        amount: 1,
+        accessPointDetails: { active: true, accessPointIds: ["fixed-1"] },
+      },
+    };
+    installInMemoryLockerSystemHolds();
+    stubDataManagers();
+  });
+
+  afterEach(function () {
+    sinon.restore();
+  });
+
+  function stubDataManagers() {
+    sinon
+      .stub(BookingManager, "getBooking")
+      .callsFake(async (id) =>
+        store.has(id) ? new Booking(clone(store.get(id))) : null,
+      );
+    sinon.stub(BookingManager, "storeBooking").callsFake(async (booking) => {
+      store.set(booking.id, clone(booking));
+      return booking;
+    });
+    sinon
+      .stub(BookingManager, "getBookingsHoldingCompartments")
+      .callsFake(async (tenantId, compartmentIds) =>
+        [...store.values()]
+          .filter((booking) =>
+            (booking.accessInfo || []).some((entry) =>
+              compartmentIds.includes(entry.assignedCompartment?.id),
+            ),
+          )
+          .map((booking) => new Booking(clone(booking))),
+      );
+    sinon.stub(BookingManager, "getConcurrentBookings").resolves([]);
+    sinon
+      .stub(BookableManager, "getBookablesByIds")
+      .callsFake(async (tenantId, ids) =>
+        ids.map((id) => bookables[id]).filter(Boolean),
+      );
+    sinon.stub(BookableManager, "getRelatedBookables").resolves([]);
+    sinon.stub(BookableManager, "getAllParentBookables").resolves([]);
+    sinon
+      .stub(AccessPointManager, "getAccessPointsByIds")
+      .callsFake(async (tenantId, ids) =>
+        accessPoints.filter((row) => ids.includes(row.id)),
+      );
+    sinon
+      .stub(AccessPointManager, "getAccessPoint")
+      .callsFake(
+        async (id) => accessPoints.find((row) => row.id === id) || null,
+      );
+    sinon
+      .stub(TenantManager, "getTenant")
+      .resolves({ id: TENANT, applications: [] });
+    sinon.stub(AccessLogService, "log").resolves();
+    sinon.stub(mailModule, "notify").resolves([]);
+  }
+
+  function clone(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  /**
+   * A booking of the bookable, stored - running now and paid, unless the
+   * overrides say otherwise.
+   */
+  function storeBooking(
+    id,
+    bookableId = "faecher",
+    amount = 1,
+    overrides = {},
+  ) {
+    const booking = {
+      id,
+      tenantId: TENANT,
+      assignedUserId: "user-1",
+      mail: "erika@example.test",
+      status: "confirmed",
+      isCommitted: true,
+      isPayed: true,
+      priceEur: 5,
+      timeBegin: now - 5 * MINUTE,
+      timeEnd: now + HOUR,
+      bookableItems: [{ bookableId, amount }],
+      accessInfo: [],
+      ...overrides,
+    };
+    store.set(id, clone(booking));
+    return booking;
+  }
+
+  /** A booking that went through the Vormerkung: its Fächer are assigned. */
+  async function storeHeld(id, amount = 1, overrides = {}) {
+    storeBooking(id, "faecher", amount, overrides);
+    await AccessService.holdForBooking(TENANT, id);
+  }
+
+  /** A booking that went through the Vormerkung and the Bereitstellung. */
+  async function storeProvisioned(id, amount = 1, overrides = {}) {
+    await storeHeld(id, amount, overrides);
+    await AccessService.provisionForBooking(TENANT, id);
+  }
+
+  const entries = (id) =>
+    store
+      .get(id)
+      .accessInfo.filter((entry) => entry.accessPointType === "locker");
+
+  function logged(action) {
+    return AccessLogService.log.args
+      .map(([entry]) => entry)
+      .filter((entry) => entry.action === action);
+  }
+
+  describe("the Bereitstellung", function () {
+    it("marks the zugeteilte Fach provisioned without a call to Open Locker", async function () {
+      await storeHeld("b1");
+      const before = client.requests.length;
+
+      await AccessService.provisionForBooking(TENANT, "b1");
+
+      const [entry] = entries("b1");
+      expect(entry).to.deep.include({
+        isProvisioned: true,
+        revokedAt: null,
+        grant: null,
+      });
+      expect(entry.provisionedAt).to.be.a("number");
+      expect(entry.assignedCompartment.id).to.equal(COMPARTMENT_ID);
+      expect(client.requests.length).to.equal(before);
+    });
+
+    it("writes the Bereitstellung into the access log, at the Fach", async function () {
+      await storeHeld("b1");
+
+      await AccessService.provisionForBooking(TENANT, "b1");
+
+      const [row] = logged("provision");
+      expect(row).to.deep.include({
+        bookingId: "b1",
+        accessPointId: `anlage-1:${COMPARTMENT_ID}`,
+        accessPointType: "locker",
+        provider: "open-locker",
+        externalId: COMPARTMENT_ID,
+        result: "success",
+      });
+      expect(row.payload.compartment).to.deep.equal({
+        id: COMPARTMENT_ID,
+        number: 1,
+        lockerBank: LABOR,
+      });
+    });
+
+    it("gives the booking a running access to every Fach it holds", async function () {
+      await storeHeld("b1", 2);
+
+      await AccessService.provisionForBooking(TENANT, "b1");
+
+      const { points, accessEligibility } =
+        await AccessService.getByBookingWithEligibility(TENANT, "b1", {
+          userId: "user-1",
+        });
+      expect(points.map((point) => point.isProvisioned)).to.deep.equal([
+        true,
+        true,
+      ]);
+      expect(accessEligibility.remoteOperableAccessPointIds).to.deep.equal([
+        `anlage-1:${COMPARTMENT_ID}`,
+        `anlage-1:${SECOND_COMPARTMENT_ID}`,
+      ]);
+      expect(accessEligibility.blockingReasons).to.deep.equal([]);
+    });
+
+    it("provisions a Fach once, however often it runs", async function () {
+      await storeHeld("b1");
+      await AccessService.provisionForBooking(TENANT, "b1");
+
+      await AccessService.provisionForBooking(TENANT, "b1");
+
+      expect(logged("provision")).to.have.length(1);
+    });
+  });
+
+  describe("Fach öffnen", function () {
+    it("sends the UUID of the zugeteilte Fach to Open Locker, not the Anlage's", async function () {
+      await storeProvisioned("b1", 2);
+
+      const outcome = await AccessService.open(
+        TENANT,
+        "b1",
+        `anlage-1:${SECOND_COMPARTMENT_ID}`,
+        "user-1",
+      );
+
+      expect(outcome.success).to.equal(true);
+      expect(client.requests).to.include(
+        `POST /api/compartments/${SECOND_COMPARTMENT_ID}/open`,
+      );
+      const [row] = logged("open");
+      expect(row).to.deep.include({
+        accessPointId: `anlage-1:${SECOND_COMPARTMENT_ID}`,
+        externalId: SECOND_COMPARTMENT_ID,
+        result: "success",
+      });
+    });
+
+    it("polls the progress of the open at the zugeteilte Fach", async function () {
+      await storeProvisioned("b1");
+      const id = `anlage-1:${COMPARTMENT_ID}`;
+      const {
+        data: { openProcessId },
+      } = await AccessService.open(TENANT, "b1", id, "user-1");
+      client.advance(openProcessId, "opened");
+
+      const status = await AccessService.getOpenStatus(
+        TENANT,
+        "b1",
+        id,
+        openProcessId,
+        "user-1",
+      );
+
+      expect(status).to.include({ confirmed: true });
+    });
+
+    it("refuses the open outside the access window", async function () {
+      await storeProvisioned("b1", 1, {
+        timeBegin: now + HOUR,
+        timeEnd: now + 2 * HOUR,
+      });
+
+      const outcome = await AccessService.open(
+        TENANT,
+        "b1",
+        `anlage-1:${COMPARTMENT_ID}`,
+        "user-1",
+      );
+
+      expect(outcome.success).to.equal(false);
+      expect(outcome.blockingReasons).to.include("outside_access_window");
+      expect(client.openRequests.size).to.equal(0);
+    });
+
+    it("refuses the open of a Fach only held, before the Bereitstellung", async function () {
+      await storeHeld("b1", 1, {
+        status: "payment_due",
+        isCommitted: true,
+        isPayed: false,
+      });
+
+      const outcome = await AccessService.open(
+        TENANT,
+        "b1",
+        `anlage-1:${COMPARTMENT_ID}`,
+        "user-1",
+      );
+
+      expect(outcome.success).to.equal(false);
+      expect(client.openRequests.size).to.equal(0);
+    });
+
+    it("writes a failed open into the access log", async function () {
+      accessPoints[0].config.compartments = [
+        { id: OTHER_COMPARTMENT_ID, number: 2, lockerBank: LABOR },
+      ];
+      await storeProvisioned("b1");
+
+      await assert.rejects(
+        AccessService.open(
+          TENANT,
+          "b1",
+          `anlage-1:${OTHER_COMPARTMENT_ID}`,
+          "user-1",
+        ),
+        AccessOpenError,
+      );
+
+      const [row] = logged("open");
+      expect(row).to.deep.include({
+        result: "failure",
+        externalId: OTHER_COMPARTMENT_ID,
+      });
+    });
+  });
+
+  describe("the Rücknahme", function () {
+    it("marks the provisioned Fach revoked without a call to Open Locker", async function () {
+      await storeProvisioned("b1");
+      const before = client.requests.length;
+
+      await AccessService.revokeForBooking(TENANT, "b1");
+
+      const [entry] = entries("b1");
+      expect(entry.isProvisioned).to.equal(false);
+      expect(entry.revokedAt).to.be.a("number");
+      expect(entry.assignedCompartment.id).to.equal(COMPARTMENT_ID);
+      expect(client.requests.length).to.equal(before);
+      const [row] = logged("revoke");
+      expect(row).to.deep.include({
+        accessPointId: `anlage-1:${COMPARTMENT_ID}`,
+        externalId: COMPARTMENT_ID,
+        result: "success",
+      });
+      expect(row.payload.compartment).to.deep.equal({
+        id: COMPARTMENT_ID,
+        number: 1,
+        lockerBank: LABOR,
+      });
+    });
+
+    it("locks the Fach afterwards", async function () {
+      await storeProvisioned("b1");
+      await AccessService.revokeForBooking(TENANT, "b1");
+
+      const outcome = await AccessService.open(
+        TENANT,
+        "b1",
+        `anlage-1:${COMPARTMENT_ID}`,
+        "user-1",
+      );
+
+      expect(outcome.success).to.equal(false);
+      expect(outcome.blockingReasons).to.include("authorization_revoked");
+      expect(client.openRequests.size).to.equal(0);
+    });
+
+    it("frees the Fach for the next booking", async function () {
+      bookables.faecher.amount = 1;
+      accessPoints[0].config.compartments = [
+        { id: COMPARTMENT_ID, number: 1, lockerBank: LABOR },
+      ];
+      await storeProvisioned("b1");
+      await AccessService.revokeForBooking(TENANT, "b1");
+
+      await storeHeld("b2");
+
+      expect(entries("b2")[0].assignedCompartment.id).to.equal(COMPARTMENT_ID);
+    });
+
+    it("leaves a Fach only held alone - the unpaid change holds before it revokes", async function () {
+      await storeHeld("b1", 1, { status: "payment_due", isPayed: false });
+
+      await AccessService.revokeForBooking(TENANT, "b1");
+
+      const [entry] = entries("b1");
+      expect(entry.revokedAt).to.equal(null);
+      expect(entry.assignedCompartment.id).to.equal(COMPARTMENT_ID);
+      expect(logged("revoke")).to.deep.equal([]);
+    });
+  });
+
+  describe("what the booking lists", function () {
+    it("lists the Fach from the Vormerkung on, before the payment, with Anlage, Schließfachschrank and number - but offers no open yet", async function () {
+      await storeHeld("b1", 1, { status: "payment_due", isPayed: false });
+
+      const { points, accessEligibility } =
+        await AccessService.getByBookingWithEligibility(TENANT, "b1", {
+          userId: "user-1",
+        });
+
+      expect(points).to.have.length(1);
+      expect(points[0]).to.deep.include({
+        id: `anlage-1:${COMPARTMENT_ID}`,
+        type: "locker",
+        provider: "open-locker",
+        label: "Fächer Bahnhof",
+        isProvisioned: false,
+        capabilities: ["open"],
+        assignedCompartment: { number: 1, lockerBankName: "Labor Fachbank 1" },
+      });
+      expect(accessEligibility.remoteOperableAccessPointIds).to.deep.equal([]);
+    });
+
+    it("lets the booker and the management view the list of an unpaid booking holding a Fach", async function () {
+      await storeHeld("b1", 1, { status: "payment_due", isPayed: false });
+
+      expect(
+        await AccessService.canView("user-1", TENANT, "b1", { reach: "own" }),
+      ).to.equal(true);
+      expect(
+        await AccessService.canView("admin-1", TENANT, "b1", { reach: "any" }),
+      ).to.equal(true);
+      expect(
+        await AccessService.canView("other-1", TENANT, "b1", { reach: "own" }),
+      ).to.equal(false);
+    });
+
+    it("lists nothing of a cancelled booking that held a Fach", async function () {
+      await storeHeld("b1", 1, { status: "payment_due", isPayed: false });
+      const cancelled = store.get("b1");
+      cancelled.status = "cancelled";
+      store.set("b1", cancelled);
+
+      expect(
+        await AccessService.canView("user-1", TENANT, "b1", { reach: "own" }),
+      ).to.equal(false);
+    });
+
+    it("keeps an unpaid booking at a door out of view, as before", async function () {
+      storeBooking("f1", "fixed", 1, { status: "payment_due", isPayed: false });
+
+      expect(
+        await AccessService.canView("user-1", TENANT, "f1", { reach: "own" }),
+      ).to.equal(false);
+    });
+
+    it("offers the open once the access runs", async function () {
+      await storeProvisioned("b1");
+
+      const { points, accessEligibility } =
+        await AccessService.getByBookingWithEligibility(TENANT, "b1", {
+          userId: "user-1",
+        });
+
+      expect(points[0].isProvisioned).to.equal(true);
+      expect(accessEligibility.remoteOperableAccessPointIds).to.deep.equal([
+        `anlage-1:${COMPARTMENT_ID}`,
+      ]);
+    });
+
+    it("lists the Fach on the Mobile Key, under the same id", async function () {
+      await storeProvisioned("b1");
+      sinon
+        .stub(BookingManager, "getUserBookingsFiltered")
+        .callsFake(async () => [new Booking(clone(store.get("b1")))]);
+      // The tenant snapshot of the answer: no tenant here.
+      sinon.stub(TenantManager, "getTenantsByIds").resolves([]);
+      sinon.stub(BookableManager, "getBookablesWithAccessPoints").resolves([
+        {
+          ...bookables.faecher,
+          tenantId: TENANT,
+          accessPoints: [anlage()],
+        },
+      ]);
+
+      const [result] = await AccessService.getUserBookingsWithAccess("user-1", {
+        includeAccessPoints: true,
+        includeLockers: true,
+        includeEligibility: true,
+      });
+
+      expect(result.accessPointIds).to.deep.equal([
+        `anlage-1:${COMPARTMENT_ID}`,
+      ]);
+      expect(result.accessPoints[0].assignedCompartment).to.deep.equal({
+        number: 1,
+        lockerBankName: "Labor Fachbank 1",
+      });
+      expect(
+        result.accessEligibility.remoteOperableAccessPointIds,
+      ).to.deep.equal([`anlage-1:${COMPARTMENT_ID}`]);
+    });
+
+    it("keeps the fixed Fach a door with its label", async function () {
+      storeBooking("f1", "fixed");
+      await AccessService.provisionForBooking(TENANT, "f1");
+
+      const points = await AccessService.getByBooking(TENANT, "f1", {
+        userId: "user-1",
+      });
+
+      expect(points).to.have.length(1);
+      expect(points[0]).to.include({
+        id: "fixed-1",
+        type: "door",
+        label: "Quartiersschrank Hafen · Fach 3",
+        isProvisioned: true,
+      });
+      expect(points[0]).to.not.have.property("assignedCompartment");
+    });
+  });
+});

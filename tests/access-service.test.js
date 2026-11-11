@@ -471,6 +471,7 @@ describe("AccessService compartments of a booking", () => {
         isProvisioned: true,
         externalBookingId: "27473",
         compartment: "62100103",
+        assignedCompartment: null,
       },
     ]);
   });
