@@ -120,6 +120,7 @@ describe("Open Locker access provider", () => {
         "getOpenProgress",
         "listAccessPoints",
         "validateAccessPoint",
+        "validateAccessPointWithoutListing",
       ]);
       for (const capability of [
         "grantAuthorization",
@@ -633,6 +634,28 @@ describe("Open Locker access provider", () => {
 
       expect(points).to.have.length(2);
       expect(client.logins).to.have.length(2);
+    });
+  });
+
+  describe("validateAccessPointWithoutListing", () => {
+    it("refuses a compartment without a UUID", () => {
+      for (const externalId of [undefined, null, ""]) {
+        expect(() =>
+          provider.validateAccessPointWithoutListing({
+            ...COMPARTMENT,
+            externalId,
+          }),
+        )
+          .to.throw(ValidationError)
+          .with.property("errors")
+          .that.deep.equals([{ field: "externalId", code: "required" }]);
+      }
+    });
+
+    it("lets a compartment with its UUID through to the listing", () => {
+      expect(() =>
+        provider.validateAccessPointWithoutListing(COMPARTMENT),
+      ).not.to.throw();
     });
   });
 

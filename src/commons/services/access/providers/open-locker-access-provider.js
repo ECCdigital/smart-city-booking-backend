@@ -254,11 +254,29 @@ class OpenLockerAccessProvider extends AccessProvider {
   }
 
   /**
+   * Refuses a compartment without its UUID, before the listing is fetched:
+   * Open Locker knows a compartment by its UUID alone, so one without it
+   * never opens - whether the tenant's application is active or not.
+   *
+   * @param {Object} accessPoint The compartment as it would be stored
+   * @returns {void}
+   * @throws {ValidationError} `required` at `externalId`
+   */
+  validateAccessPointWithoutListing(accessPoint) {
+    if (accessPoint.externalId) {
+      return;
+    }
+
+    throw new ValidationError([{ field: "externalId", code: "required" }]);
+  }
+
+  /**
    * Refuses a compartment the tenant's technical account holds no
    * permission on - one its listing does not name - so no compartment is
-   * set up that never opens. A save that did not ask Open Locker - the
-   * tenant has not switched it on (tickets#311), or the compartment names no
-   * UUID - stores it unchecked; the next save that asks checks it.
+   * set up that never opens. A save that did not ask Open Locker, because
+   * the tenant has not switched it on (tickets#311), stores it unchecked;
+   * the next save that asks checks it. A compartment without its UUID never
+   * gets here (`validateAccessPointWithoutListing`).
    *
    * @param {Object} accessPoint The compartment as it would be stored
    * @param {import("./access-provider").ListedAccessPoint|null}
@@ -298,6 +316,7 @@ class OpenLockerAccessProvider extends AccessProvider {
       "getOpenProgress",
       "listAccessPoints",
       "validateAccessPoint",
+      "validateAccessPointWithoutListing",
     ];
   }
 }

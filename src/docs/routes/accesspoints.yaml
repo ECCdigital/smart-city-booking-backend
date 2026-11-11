@@ -85,7 +85,10 @@
       answered with a `compartment_not_accessible` validation error at
       `externalId`, carrying the `externalId`. So no compartment is stored
       that the account cannot open - also when an existing one is saved
-      again after Open Locker took the permission away.
+      again after Open Locker took the permission away. A compartment
+      without `externalId` is refused with a `required` validation error at
+      `externalId`, without asking Open Locker, so also while the listing is
+      not available.
 
       `location` is checked like the location of a bookable or an event
       (glossary „Standort“): a new or changed location with an address, a

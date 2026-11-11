@@ -1043,15 +1043,18 @@ describe("AccessPointController", () => {
         expect(storeAccessPoint.called).to.be.false;
       });
 
-      it("stores a compartment without a UUID unchecked - there is nothing to ask Open Locker about", async () => {
-        const { externalId, ...withoutUuid } = compartment(COMPARTMENT_ID);
-        request.body = withoutUuid;
+      it("refuses a compartment without a UUID, without asking Open Locker", async () => {
+        request.body = compartment("");
 
         await AccessPointController.storeAccessPoint(request, response, next);
 
-        expect(externalId).to.equal(COMPARTMENT_ID);
-        expect(next.called).to.be.false;
-        expect(storeAccessPoint.calledOnce).to.be.true;
+        const error = next.firstCall.args[0];
+        expect(error).to.be.instanceOf(ValidationError);
+        expect(error.statusCode).to.equal(400);
+        expect(error.errors).to.deep.equal([
+          { field: "externalId", code: "required" },
+        ]);
+        expect(storeAccessPoint.called).to.be.false;
         expect(openLocker.requests).to.deep.equal([]);
       });
 
@@ -1493,6 +1496,26 @@ describe("AccessPointController", () => {
       // for a tenant without its active application. That is no answer about
       // the lock, so the save goes through unchecked, to be checked on the
       // first save once the provider is active.
+      // A compartment without its UUID is refused all the same: that rule
+      // needs no listing.
+      it("refuses an Open Locker compartment without a UUID while the tenant's application is not active", async () => {
+        findListedAccessPoint.restore();
+        sandbox.stub(TenantManager, "getTenant").resolves({
+          id: "tenant-1",
+          applications: [{ type: "access", id: "open-locker", active: false }],
+        });
+        request.body = { provider: "open-locker", mode: "remote" };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        const error = next.firstCall.args[0];
+        expect(error).to.be.instanceOf(ValidationError);
+        expect(error.errors).to.deep.equal([
+          { field: "externalId", code: "required" },
+        ]);
+        expect(storeAccessPoint.called).to.be.false;
+      });
+
       ["nuki", "ifbs", "salto-ks", "open-locker"].forEach((provider) => {
         it(`stores a ${provider} access point while the tenant's ${provider} application is not active`, async () => {
           findListedAccessPoint.restore();
