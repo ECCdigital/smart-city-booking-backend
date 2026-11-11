@@ -1,3 +1,4 @@
+const { AsyncLocalStorage } = require("node:async_hooks");
 const { v4: uuidv4 } = require("uuid");
 const bunyan = require("bunyan");
 const LockerSystemHoldManager = require("../../data-managers/locker-system-hold-manager");
@@ -17,6 +18,9 @@ const POLL_MS = 50;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** The keys the running work holds, along its own chain of calls. */
+const heldHere = new AsyncLocalStorage();
+
 /**
  * A short mutex per locker system (glossary "Schließfachanlage"), shared
  * by every server process through MongoDB. The platform allocates a
@@ -25,6 +29,12 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * allocations at the same locker system run one after the other, while
  * other locker systems do not wait. A hold expires, so a process that
  * died holding blocks the locker system for one expiry at most.
+ *
+ * A hold is re-entrant along its own chain of calls: work that holds the
+ * locker system already runs a nested hold of it straight away, so a
+ * caller may hold an Anlage around a whole lifecycle step (the save of an
+ * Änderung and its Zuteilung) and the Zuteilung inside need not know.
+ * Another caller, a concurrent request, still waits.
  */
 class LockerSystemMutex {
   /**
@@ -49,6 +59,10 @@ class LockerSystemMutex {
     { ttlMs = TTL_MS, waitMs = WAIT_MS } = {},
   ) {
     const key = `${lockerSystem.tenantId}:${lockerSystem.id}`;
+    const held = heldHere.getStore() ?? new Set();
+    if (held.has(key)) {
+      return work();
+    }
     const holder = uuidv4();
     const giveUpAt = Date.now() + waitMs;
 
@@ -68,7 +82,7 @@ class LockerSystemMutex {
     }
 
     try {
-      return await work();
+      return await heldHere.run(new Set([...held, key]), work);
     } finally {
       // The hold expires on its own; the work's outcome stands.
       await LockerSystemHoldManager.release(key, holder).catch((error) => {

@@ -941,6 +941,10 @@ async function installHarness({
       record("access.update", label(newBooking.id));
       return [];
     });
+  // The guard of the Anlagen around a save and its Zuteilung: no mutex here.
+  sinon
+    .stub(AccessService, "holdLockerSystemsOf")
+    .callsFake(async (tenantId, bookings, work) => work());
   sinon
     .stub(AccessService, "refreshHolds")
     .callsFake(async (tenantId, bookingIds) => {

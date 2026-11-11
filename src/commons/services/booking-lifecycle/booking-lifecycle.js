@@ -663,37 +663,41 @@ function createBookingLifecycle(adapters) {
     // one notice it can send.
     const notice = noticeOf(tenantId, bookingId);
 
-    return runPipeline({ transition, tenantId, bookingId, booking, store }, [
-      step(PHASE.PERSIST, "store", "save", () =>
-        store.save(booking, {
-          expectStatus: from,
-          transition,
-          unset: ["cancellationRefund"],
-        }),
-      ),
-      step(
-        PHASE.PROVISION,
-        "access",
-        "hold",
-        () => access.hold(tenantId, bookingId),
-        { when: () => !confirmed() },
-      ),
-      step(
-        PHASE.PROVISION,
-        "access",
-        "allocate",
-        () => access.allocate(tenantId, bookingId),
-        { when: confirmed },
-      ),
-      step(
-        PHASE.PROVISION,
-        "access",
-        "provision",
-        () => access.provision(tenantId, bookingId),
-        { when: confirmed },
-      ),
-      provisionFailureNotice(notice),
-    ]);
+    return runPipeline(
+      { transition, tenantId, bookingId, booking, store },
+      [
+        step(PHASE.PERSIST, "store", "save", () =>
+          store.save(booking, {
+            expectStatus: from,
+            transition,
+            unset: ["cancellationRefund"],
+          }),
+        ),
+        step(
+          PHASE.PROVISION,
+          "access",
+          "hold",
+          () => access.hold(tenantId, bookingId),
+          { when: () => !confirmed() },
+        ),
+        step(
+          PHASE.PROVISION,
+          "access",
+          "allocate",
+          () => access.allocate(tenantId, bookingId),
+          { when: confirmed },
+        ),
+        step(
+          PHASE.PROVISION,
+          "access",
+          "provision",
+          () => access.provision(tenantId, bookingId),
+          { when: confirmed },
+        ),
+        provisionFailureNotice(notice),
+      ],
+      { guard: (work) => access.exclusive(tenantId, [booking], work) },
+    );
   }
 
   /**
@@ -743,39 +747,48 @@ function createBookingLifecycle(adapters) {
       booking.status === STATUS.REQUESTED ||
       booking.status === STATUS.PAYMENT_DUE;
 
-    return runPipeline({ transition, tenantId, bookingId, booking, store }, [
-      step(PHASE.PERSIST, "store", "save", () =>
-        store.save(booking, { expectStatus: from, transition }),
-      ),
-      step(
-        PHASE.PROVISION,
-        "access",
-        "allocate",
-        () => access.allocate(tenantId, bookingId),
-        { when: confirmed },
-      ),
-      step(
-        PHASE.PROVISION,
-        "access",
-        "update",
-        () => access.update(tenantId, current, booking),
-        { when: confirmed },
-      ),
-      step(
-        PHASE.PROVISION,
-        "access",
-        "hold",
-        () => access.hold(tenantId, bookingId),
-        { when: unpaid },
-      ),
-      step(
-        PHASE.PROVISION,
-        "access",
-        "revoke",
-        () => access.revoke(tenantId, bookingId),
-        { when: unpaid },
-      ),
-    ]);
+    // The Anlagen of the old and the new content stay held from the save
+    // until the Zuteilung or its restore (tickets#1042).
+    const guard = (work) =>
+      access.exclusive(tenantId, [current, booking], work);
+
+    return runPipeline(
+      { transition, tenantId, bookingId, booking, store },
+      [
+        step(PHASE.PERSIST, "store", "save", () =>
+          store.save(booking, { expectStatus: from, transition }),
+        ),
+        step(
+          PHASE.PROVISION,
+          "access",
+          "allocate",
+          () => access.allocate(tenantId, bookingId),
+          { when: confirmed },
+        ),
+        step(
+          PHASE.PROVISION,
+          "access",
+          "update",
+          () => access.update(tenantId, current, booking),
+          { when: confirmed },
+        ),
+        step(
+          PHASE.PROVISION,
+          "access",
+          "hold",
+          () => access.hold(tenantId, bookingId),
+          { when: unpaid },
+        ),
+        step(
+          PHASE.PROVISION,
+          "access",
+          "revoke",
+          () => access.revoke(tenantId, bookingId),
+          { when: unpaid },
+        ),
+      ],
+      { guard },
+    );
   }
 
   /**

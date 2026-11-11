@@ -843,20 +843,10 @@ class BookingManager {
   }
 
   /**
-   * Get bookings with custom filter - a free condition of the domain,
-   * within a reach like every other record read (ticket 22).
-   * @param {string} tenantId Tenant ID
-   * @param {Object} filter MongoDB filter object
-   * @param {{reach: string, userId?: string|null}} scope The reach the
-   *   caller reads under (ADR 0002): `own` narrows to the user's own,
-   *   the domain says `DOMAIN`; none is a programming error
-   * @returns {Promise<Booking[]>} Filtered bookings
-   */
-  /**
    * The bookings of the tenant, not rejected, cancelled or withdrawn, that
    * hold one of the Fächer in an entry not taken back - at whichever
    * Schließfachanlage. What the occupancy of a Fach is judged from
-   * (`compartment-occupancy.js`); the time is judged there, with the
+   * (`compartment-allocation.js`); the time is judged there, with the
    * buffers of each booking's bookable.
    *
    * @param {string} tenantId Tenant ID
@@ -884,6 +874,16 @@ class BookingManager {
     );
   }
 
+  /**
+   * Get bookings with custom filter - a free condition of the domain,
+   * within a reach like every other record read (ticket 22).
+   * @param {string} tenantId Tenant ID
+   * @param {Object} filter MongoDB filter object
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
+   * @returns {Promise<Booking[]>} Filtered bookings
+   */
   static async getBookingsCustomFilter(tenantId, filter, scope) {
     const rawBookings = await BookingModel.find({
       tenantId: tenantId,

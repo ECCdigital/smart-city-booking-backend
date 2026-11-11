@@ -25,12 +25,16 @@ const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const AccessPointManager = require("../src/commons/data-managers/access-point-manager");
 const AccessLogService = require("../src/commons/services/access/access-log-service");
 const mailModule = require("../src/commons/mail-service");
+const LockerSystemMutex = require("../src/commons/services/access/locker-system-mutex");
+const LockerSystemRedistribution = require("../src/commons/services/access/locker-system-redistribution");
 const { Booking } = require("../src/commons/entities/booking/booking");
 const {
   installInMemoryLockerSystemHolds,
 } = require("./helpers/in-memory-locker-system-holds");
 
 const TENANT = "tenant-1";
+/** The reach of the routes of the Umsetzen: Buchung bearbeiten, any. */
+const MANAGER = { reach: "any", userId: "admin-1" };
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 
@@ -478,6 +482,94 @@ describe("Zuteilung in der Vormerkung: the platform assigns a free Fach per unit
       expect([...assigned("b1"), ...assigned("b2")]).to.deep.equal([
         "uuid-only",
       ]);
+    });
+  });
+
+  describe("waiting on the mutex: the Zuteilung reads the booking and the Anlage again once it holds it", function () {
+    /** A promise with its `resolve` at hand: work that ends when the test says. */
+    function deferred() {
+      let resolve;
+      const promise = new Promise((r) => {
+        resolve = r;
+      });
+      return { promise, resolve };
+    }
+
+    /** Lets the calls started so far read what they read before they wait. */
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+
+    /**
+     * The save of the Anlage taking the first Fach out of service, under
+     * its mutex, held open until `saved` resolves. The row is replaced, as
+     * the database hands out a fresh one on every read.
+     */
+    function savingOutOfService(compartmentId, saved) {
+      const before = accessPoints.labor;
+      const after = clone(before);
+      after.config.compartments.find(
+        (compartment) => compartment.id === compartmentId,
+      ).outOfService = true;
+      return LockerSystemRedistribution.storeRedistributing(
+        TENANT,
+        before,
+        after,
+        async () => {
+          await saved.promise;
+          accessPoints.labor = after;
+          return after;
+        },
+      );
+    }
+
+    it("a Vormerkung that waited while the save took a Fach out of service does not get it", async function () {
+      storeBooking("b1", "faecher");
+      const saved = deferred();
+
+      const saving = savingOutOfService("uuid-hafen-1", saved);
+      await settle();
+      const holding = AccessService.holdForBooking(TENANT, "b1");
+      await settle();
+      saved.resolve();
+      await Promise.all([saving, holding]);
+
+      expect(assigned("b1")).to.deep.equal(["uuid-hafen2-1"]);
+    });
+
+    it("a Zuteilung at confirmed that waited while the save took a Fach out of service does not get it", async function () {
+      storeBooking("b1", "faecher", 1, { status: "confirmed" });
+      const saved = deferred();
+
+      const saving = savingOutOfService("uuid-hafen-1", saved);
+      await settle();
+      const allocating = AccessService.allocateForBooking(TENANT, "b1");
+      await settle();
+      saved.resolve();
+      await Promise.all([saving, allocating]);
+
+      expect(assigned("b1")).to.deep.equal(["uuid-hafen2-1"]);
+    });
+
+    it("a hold anew that read the booking before an Umsetzen does not put the old Fach back", async function () {
+      storeHolding("b1", "uuid-hafen-1");
+      const read = deferred();
+
+      const moving = LockerSystemMutex.hold(accessPoints.labor, async () => {
+        await read.promise;
+        await AccessService.reassignCompartment(
+          TENANT,
+          "b1",
+          "anlage-labor:uuid-hafen-1",
+          "anlage-labor:uuid-labor-2",
+          { scope: MANAGER },
+        );
+      });
+      await settle();
+      const holding = AccessService.holdForBooking(TENANT, "b1");
+      await settle();
+      read.resolve();
+      await Promise.all([moving, holding]);
+
+      expect(assigned("b1")).to.deep.equal(["uuid-labor-2"]);
     });
   });
 

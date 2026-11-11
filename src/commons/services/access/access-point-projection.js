@@ -134,4 +134,5 @@ function assignedCompartmentView(assigned) {
 
 module.exports = {
   projectAccessPoint,
+  assignedCompartmentView,
 };

@@ -30,6 +30,7 @@ const AccessLogService = require("../src/commons/services/access/access-log-serv
 const LockerSystemMutex = require("../src/commons/services/access/locker-system-mutex");
 const mailModule = require("../src/commons/mail-service");
 const { Booking } = require("../src/commons/entities/booking/booking");
+const { ownCondition } = require("../src/commons/services/authorization");
 const {
   registerAccessProvider,
 } = require("../src/commons/services/access/providers/access-provider-registry");
@@ -48,6 +49,8 @@ const {
 } = require("./helpers/in-memory-locker-system-holds");
 
 const TENANT = "tenant-1";
+/** The reach of the routes of the Umsetzen: Buchung bearbeiten, any. */
+const MANAGER = { reach: "any", userId: "admin-1" };
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 
@@ -150,11 +153,16 @@ describe("Zugeteiltes Fach: provisioned, revoked, opened and projected", functio
   });
 
   function stubDataManagers() {
+    // Within the reach, as the manager reads: none throws, `own` narrows.
     sinon
       .stub(BookingManager, "getBooking")
-      .callsFake(async (id) =>
-        store.has(id) ? new Booking(clone(store.get(id))) : null,
-      );
+      .callsFake(async (id, tenantId, scope) => {
+        const within = Object.entries(ownCondition("booking", scope));
+        const row = store.get(id);
+        return row && within.every(([key, value]) => row[key] === value)
+          ? new Booking(clone(row))
+          : null;
+      });
     sinon.stub(BookingManager, "storeBooking").callsFake(async (booking) => {
       store.set(booking.id, clone(booking));
       return booking;
@@ -656,6 +664,7 @@ describe("Zugeteiltes Fach: provisioned, revoked, opened and projected", functio
         TENANT,
         "b1",
         C2,
+        { scope: MANAGER },
       );
 
       expect(free).to.deep.equal([
@@ -669,7 +678,7 @@ describe("Zugeteiltes Fach: provisioned, revoked, opened and projected", functio
         "b1",
         C2,
         C3,
-        { userId: "admin-1" },
+        { userId: "admin-1", scope: MANAGER },
       );
 
       expect(moved).to.deep.equal({
@@ -701,6 +710,7 @@ describe("Zugeteiltes Fach: provisioned, revoked, opened and projected", functio
     it("lists the new Fach for the booking and on the Mobile Key's projection", async function () {
       await AccessService.reassignCompartment(TENANT, "b1", C2, C3, {
         userId: "admin-1",
+        scope: MANAGER,
       });
 
       const { points, accessEligibility } =
@@ -716,6 +726,7 @@ describe("Zugeteiltes Fach: provisioned, revoked, opened and projected", functio
     it("writes the Umsetzen into the access log, at the new Fach, and sends no mail", async function () {
       await AccessService.reassignCompartment(TENANT, "b1", C2, C3, {
         userId: "admin-1",
+        scope: MANAGER,
       });
 
       const [row] = logged("reassign");
@@ -749,6 +760,7 @@ describe("Zugeteiltes Fach: provisioned, revoked, opened and projected", functio
         await assert.rejects(
           AccessService.reassignCompartment(TENANT, "b1", C2, to, {
             userId: "admin-1",
+            scope: MANAGER,
           }),
           { statusCode: 409, code: "compartment_taken" },
         );
@@ -765,6 +777,7 @@ describe("Zugeteiltes Fach: provisioned, revoked, opened and projected", functio
         TENANT,
         "b1",
         C2,
+        { scope: MANAGER },
       );
       expect(free.map((c) => c.id)).to.deep.equal([C3]);
 
@@ -777,6 +790,7 @@ describe("Zugeteiltes Fach: provisioned, revoked, opened and projected", functio
       await new Promise((resolve) => setImmediate(resolve));
       const reassign = AccessService.reassignCompartment(TENANT, "b1", C2, C3, {
         userId: "admin-1",
+        scope: MANAGER,
       });
       await new Promise((resolve) => setTimeout(resolve, 20));
       storeBooking("b3", "faecher", 1, {
@@ -817,7 +831,7 @@ describe("Zugeteiltes Fach: provisioned, revoked, opened and projected", functio
         "b4",
         `anlage-1:${held.assignedCompartment.id}`,
         C3,
-        { userId: "admin-1" },
+        { userId: "admin-1", scope: MANAGER },
       );
 
       const [entry] = entries("b4");
@@ -831,18 +845,44 @@ describe("Zugeteiltes Fach: provisioned, revoked, opened and projected", functio
       await AccessService.provisionForBooking(TENANT, "f1");
 
       await assert.rejects(
-        AccessService.freeCompartmentsToReassign(TENANT, "f1", "fixed-1"),
+        AccessService.freeCompartmentsToReassign(TENANT, "f1", "fixed-1", {
+          scope: MANAGER,
+        }),
         { statusCode: 404, code: "compartment_not_in_booking" },
       );
       await assert.rejects(
         AccessService.reassignCompartment(TENANT, "b1", C1, C3, {
           userId: "admin-1",
+          scope: MANAGER,
         }),
         { statusCode: 404, code: "compartment_not_in_booking" },
       );
       await assert.rejects(
-        AccessService.freeCompartmentsToReassign(TENANT, "missing", C2),
+        AccessService.freeCompartmentsToReassign(TENANT, "missing", C2, {
+          scope: MANAGER,
+        }),
         { statusCode: 404, code: "compartment_not_in_booking" },
+      );
+    });
+
+    it("reads the booking within the reach of the route: a booking out of it holds no Fach to move", async function () {
+      const elsewhere = { reach: "own", userId: "user-2" };
+
+      await assert.rejects(
+        AccessService.freeCompartmentsToReassign(TENANT, "b1", C2, {
+          scope: elsewhere,
+        }),
+        { statusCode: 404, code: "compartment_not_in_booking" },
+      );
+      await assert.rejects(
+        AccessService.reassignCompartment(TENANT, "b1", C2, C3, {
+          userId: "user-2",
+          scope: elsewhere,
+        }),
+        { statusCode: 404, code: "compartment_not_in_booking" },
+      );
+      expect(entries("b1")[0].assignedCompartment.id).to.equal(
+        OTHER_COMPARTMENT_ID,
       );
     });
   });

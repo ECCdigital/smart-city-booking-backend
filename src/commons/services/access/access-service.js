@@ -7,7 +7,10 @@ const AccessPointManager = require("../../data-managers/access-point-manager");
 const SecurityUtils = require("../../utilities/security-utils");
 const AccessLogService = require("./access-log-service");
 const { decide, satisfy } = require("./access-decision");
-const { projectAccessPoint } = require("./access-point-projection");
+const {
+  projectAccessPoint,
+  assignedCompartmentView,
+} = require("./access-point-projection");
 const { AccessPointMode } = require("../../entities/access/access-point");
 const { AccessPointType } = require("../../schemas/accessPointSchema");
 const mailService = require("../../mail-service");
@@ -23,7 +26,10 @@ const LockerSystemMutex = require("./locker-system-mutex");
 const { carriesOwnCompartments } = require("./locker-system-compartments");
 const {
   accessBufferMs,
+  claimOf,
+  compartmentPointId,
   freeCompartments,
+  inAssignmentOrder,
   assignedCompartmentOf,
 } = require("./compartment-allocation");
 const { REACH } = require("../authorization/policy");
@@ -752,16 +758,43 @@ class AccessService {
    *   has no compartment left for this booking
    */
   static async holdForBooking(tenant, bookingId) {
-    const resolved = await this._getBookingAccessPoints(tenant, bookingId);
-    const allocating = this._allocatingSystems(resolved.lockerSystems);
-
-    if (allocating.length === 0) {
-      return this._holdResolved(tenant, resolved);
-    }
-    return LockerSystemMutex.holdAll(
-      allocating.map((system) => system.accessPoint),
-      () => this._holdResolved(tenant, resolved),
+    return this._withAllocatingSystemsHeld(tenant, bookingId, (resolved) =>
+      this._holdResolved(tenant, resolved),
     );
+  }
+
+  /**
+   * @private
+   * Runs `work` over the booking resolved with its access points, under the
+   * mutex of every Anlage it is given Fächer at. The first read only names
+   * those Anlagen; once they are held, the booking and the Anlagen are read
+   * again and `work` gets that read: a save of the Anlage (a Fach out of
+   * service) or of the booking (an Umsetzen, a Wandern) the caller waited
+   * for is what it works on, never the state from before. An Anlage the
+   * booking books only since the first read is held as well. Without such
+   * an Anlage `work` gets the first read, under no mutex.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {string} bookingId Booking ID
+   * @param {(resolved: Object) => Promise<*>} work Gets what
+   *   `_getBookingAccessPoints` answers
+   * @returns {Promise<*>} What `work` answers
+   */
+  static async _withAllocatingSystemsHeld(tenant, bookingId, work) {
+    const first = await this._getBookingAccessPoints(tenant, bookingId);
+    const anlagen = (resolved) =>
+      this._allocatingSystems(resolved.lockerSystems).map(
+        (system) => system.accessPoint,
+      );
+    if (anlagen(first).length === 0) {
+      return work(first);
+    }
+
+    return LockerSystemMutex.holdAll(anlagen(first), async () => {
+      const current = await this._getBookingAccessPoints(tenant, bookingId);
+      // The ones held already run straight through (the mutex is re-entrant).
+      return LockerSystemMutex.holdAll(anlagen(current), () => work(current));
+    });
   }
 
   /**
@@ -846,6 +879,38 @@ class AccessService {
   }
 
   /**
+   * Runs `work` under the mutex of every Anlage with its own list that one
+   * of the bookings books or holds Fächer at - the lifecycle's guard around
+   * the save of an Änderung or a Wiederherstellung, its Zuteilung and the
+   * restore when that fails (tickets#1042): between the save and the
+   * restore the booking stands at its new period, and its old Fächer must
+   * not go to another Vormerkung meanwhile. Pass the booking as stored and
+   * as it is to be. The Zuteilung inside holds the same mutex again and
+   * runs straight through (`LockerSystemMutex` is re-entrant). Without
+   * such an Anlage `work` runs under no mutex.
+   *
+   * @template T
+   * @param {string} tenant Tenant ID
+   * @param {Object[]} bookings The bookings, as loaded or to be stored
+   * @param {() => Promise<T>} work
+   * @returns {Promise<T>} What `work` answers
+   */
+  static async holdLockerSystemsOf(tenant, bookings, work) {
+    const anlagen = [];
+    for (const booking of bookings) {
+      const sources = await this._loadAccessPointSources(tenant, booking);
+      const systems = this._resolveLockerSystems(tenant, booking, sources);
+      for (const system of this._ownListSystems(systems)) {
+        anlagen.push(system.accessPoint);
+      }
+    }
+    if (anlagen.length === 0) {
+      return work();
+    }
+    return LockerSystemMutex.holdAll(anlagen, work);
+  }
+
+  /**
    * @private
    * The locker systems of the booking at which the platform assigns the
    * Fach - those carrying their own list, booked by a bookable of the
@@ -855,8 +920,22 @@ class AccessService {
    * @returns {Object[]} The systems
    */
   static _allocatingSystems(lockerSystems) {
-    return [...lockerSystems.values()].filter(
-      (system) => system.bookable && carriesOwnCompartments(system.accessPoint),
+    return this._ownListSystems(lockerSystems).filter(
+      (system) => system.bookable,
+    );
+  }
+
+  /**
+   * @private
+   * The locker systems of the booking that carry their own list of Fächer,
+   * booked or only held at.
+   *
+   * @param {Map<string, Object>} lockerSystems As `_resolveLockerSystems`
+   * @returns {Object[]} The systems
+   */
+  static _ownListSystems(lockerSystems) {
+    return [...lockerSystems.values()].filter((system) =>
+      carriesOwnCompartments(system.accessPoint),
     );
   }
 
@@ -876,20 +955,14 @@ class AccessService {
    *   stays as it was
    */
   static async allocateForBooking(tenant, bookingId) {
-    const resolved = await this._getBookingAccessPoints(tenant, bookingId);
-    const { booking, lockerSystems } = resolved;
-    const ownLists = [...lockerSystems.values()].filter((system) =>
-      carriesOwnCompartments(system.accessPoint),
-    );
-    if (ownLists.length === 0) {
-      return booking.accessInfo;
-    }
+    return this._withAllocatingSystemsHeld(
+      tenant,
+      bookingId,
+      async ({ booking, lockerSystems }) => {
+        if (this._ownListSystems(lockerSystems).length === 0) {
+          return booking.accessInfo;
+        }
 
-    return LockerSystemMutex.holdAll(
-      this._allocatingSystems(lockerSystems).map(
-        (system) => system.accessPoint,
-      ),
-      async () => {
         const allocated = await this._allocateCompartments(
           tenant,
           booking,
@@ -912,8 +985,9 @@ class AccessService {
    * else the entry gets the first free one. An entry taken back gives its
    * Fach first to a unit that needs one, so a Wiederherstellung gets its
    * old Fach back where it can. Units past what the booking books now free
-   * the Fächer assigned last, as an Anlage the booking no longer books
-   * frees all of its. To run under the mutex of those Anlagen, before the
+   * the Fächer assigned last - by the time the unit got its first Fach
+   * (`assignedAt`), which an Umsetzen or a Wandern does not change - as an
+   * Anlage the booking no longer books frees all of its. To run under the mutex of those Anlagen, before the
    * booking is stored.
    *
    * @param {string} tenant Tenant ID
@@ -937,7 +1011,11 @@ class AccessService {
       const atSystem = this._compartmentEntries(booking).filter(
         (entry) => String(entry.accessPointId) === accessPointId,
       );
-      const active = atSystem.filter((entry) => !entry.revokedAt);
+      // The units that got their Fach first stay; an Umsetzen or a Wandern
+      // changes the Fach, not when the unit got one.
+      const active = inAssignmentOrder(
+        atSystem.filter((entry) => !entry.revokedAt),
+      );
       const amount = system.bookable ? system.amount : 0;
       const kept = active.slice(0, amount);
       const plan = {
@@ -956,7 +1034,7 @@ class AccessService {
       const free = await freeCompartments(
         tenant,
         system.accessPoint,
-        this._claimOf(booking, system),
+        claimOf(booking, system.bookable),
       );
       const freeById = new Map(free.map((c) => [String(c.id), c]));
 
@@ -1008,6 +1086,7 @@ class AccessService {
     }
 
     const allocated = [];
+    const assignedAt = Date.now();
     for (const { system, dropped, moved, added } of plans) {
       booking.accessInfo = booking.accessInfo.filter(
         (entry) => !dropped.includes(entry),
@@ -1019,6 +1098,8 @@ class AccessService {
           ...(entry.hold || entry.isProvisioned
             ? {}
             : { hold: { ...PLATFORM_HOLD } }),
+          // A unit given its first Fach now; a move keeps its time.
+          ...(previous ? {} : { assignedAt }),
           assignedCompartment: assignedCompartmentOf(compartment),
         });
         allocated.push({ system, entry, previous });
@@ -1036,6 +1117,7 @@ class AccessService {
       fresh.forEach((entry, index) => {
         Object.assign(entry, {
           hold: { ...PLATFORM_HOLD },
+          assignedAt,
           assignedCompartment: assignedCompartmentOf(added[index]),
         });
         allocated.push({ system, entry, previous: null });
@@ -1076,23 +1158,31 @@ class AccessService {
    * @param {string} bookingId Booking ID
    * @param {string} accessPointId The Fach as the booking lists it,
    *   `<anlageId>:<UUID>`
+   * @param {Object} options
+   * @param {{reach: string, userId?: string|null}} options.scope The reach
+   *   of the route the booking is read under (ADR 0002)
    * @returns {Promise<{ id: string, number: number|null,
    *   lockerBankName: string|null }[]>} Each under the id the entry would
    *   be listed by after the move
    * @throws {NotFoundError} `compartment_not_in_booking` when the booking
    *   holds no such Fach
    */
-  static async freeCompartmentsToReassign(tenant, bookingId, accessPointId) {
+  static async freeCompartmentsToReassign(
+    tenant,
+    bookingId,
+    accessPointId,
+    { scope },
+  ) {
     const { booking, system } = await this._resolveReassignable(
       tenant,
       bookingId,
       accessPointId,
+      scope,
     );
     const free = await this._freeToReassign(tenant, booking, system);
     return free.map((compartment) => ({
-      id: `${system.accessPoint.id}:${compartment.id}`,
-      number: compartment.number ?? null,
-      lockerBankName: compartment.lockerBank?.name ?? null,
+      id: compartmentPointId(system.accessPoint.id, compartment.id),
+      ...assignedCompartmentView(compartment),
     }));
   }
 
@@ -1112,8 +1202,10 @@ class AccessService {
    *   `<anlageId>:<UUID>`
    * @param {string} to The Fach to move to, as `freeCompartmentsToReassign`
    *   names it
-   * @param {Object} [options]
+   * @param {Object} options
    * @param {string} [options.userId] Who moves it, for the access log
+   * @param {{reach: string, userId?: string|null}} options.scope The reach
+   *   of the route the booking is read under (ADR 0002)
    * @returns {Promise<{ id: string, previousId: string,
    *   assignedCompartment: { number: number|null,
    *   lockerBankName: string|null } }>} The id the Fach is listed by now
@@ -1127,12 +1219,13 @@ class AccessService {
     bookingId,
     accessPointId,
     to,
-    { userId = null } = {},
+    { userId = null, scope },
   ) {
     const { system } = await this._resolveReassignable(
       tenant,
       bookingId,
       accessPointId,
+      scope,
     );
 
     return LockerSystemMutex.hold(system.accessPoint, async () => {
@@ -1141,12 +1234,14 @@ class AccessService {
         tenant,
         bookingId,
         accessPointId,
+        scope,
       );
       const { booking, entry } = current;
       const free = await this._freeToReassign(tenant, booking, current.system);
       const target = free.find(
         (compartment) =>
-          `${current.system.accessPoint.id}:${compartment.id}` === String(to),
+          compartmentPointId(current.system.accessPoint.id, compartment.id) ===
+          String(to),
       );
       if (!target) {
         throw new ConflictError("compartment_taken", {
@@ -1174,10 +1269,7 @@ class AccessService {
       return {
         id: moved.id,
         previousId: String(accessPointId),
-        assignedCompartment: {
-          number: entry.assignedCompartment.number ?? null,
-          lockerBankName: entry.assignedCompartment.lockerBank?.name ?? null,
-        },
+        assignedCompartment: assignedCompartmentView(entry.assignedCompartment),
       };
     });
   }
@@ -1186,13 +1278,14 @@ class AccessService {
    * @private
    * The booking, its entry of the Fach and the Anlage, for the Umsetzen:
    * a booking not cancelled holding the Fach in an entry not taken back,
-   * at an Anlage that carries its own list.
+   * at an Anlage that carries its own list. The booking is the route's
+   * resource and read within its reach; its Anlage the domain reads.
    *
    * @throws {NotFoundError} `compartment_not_in_booking` otherwise
    */
-  static async _resolveReassignable(tenant, bookingId, accessPointId) {
+  static async _resolveReassignable(tenant, bookingId, accessPointId, scope) {
     const booking = bookingId
-      ? await BookingManager.getBooking(bookingId, tenant, DOMAIN)
+      ? await BookingManager.getBooking(bookingId, tenant, scope)
       : null;
     const entry =
       booking && !booking.isRejected
@@ -1231,23 +1324,9 @@ class AccessService {
     return freeCompartments(
       tenant,
       system.accessPoint,
-      this._claimOf(booking, system),
+      claimOf(booking, system.bookable),
       { exclude: held },
     );
-  }
-
-  /**
-   * @private
-   * The booking as it asks for a Fach of the system: its period, and the
-   * bookable whose access buffer widens it (`compartment-allocation.js`).
-   */
-  static _claimOf(booking, system) {
-    return {
-      bookingId: booking.id,
-      timeBegin: booking.timeBegin,
-      timeEnd: booking.timeEnd,
-      bookable: system.bookable,
-    };
   }
 
   /**
@@ -3027,7 +3106,7 @@ class AccessService {
   static _compartmentId(entry) {
     const key =
       entry.assignedCompartment?.id ?? entry.grant?.authorizationId ?? "hold";
-    return `${entry.accessPointId}:${key}`;
+    return compartmentPointId(entry.accessPointId, key);
   }
 
   /**

@@ -22,6 +22,15 @@ const access = {
     return await AccessService.allocateForBooking(tenantId, bookingId);
   },
 
+  /**
+   * Runs `work` - the save of an Änderung or a Wiederherstellung, its
+   * Zuteilung and the restore - under the mutex of the Anlagen with their
+   * own list the bookings are at (tickets#1042).
+   */
+  async exclusive(tenantId, bookings, work) {
+    return await AccessService.holdLockerSystemsOf(tenantId, bookings, work);
+  },
+
   /** Renews the holds of unpaid bookings. */
   async refreshHolds(tenantId, bookingIds) {
     return await AccessService.refreshHolds(tenantId, bookingIds);

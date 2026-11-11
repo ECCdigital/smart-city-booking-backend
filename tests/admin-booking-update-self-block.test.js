@@ -185,6 +185,9 @@ describe("BookingCheckout.updateBooking — admin edit self-block & prices", () 
     sinon.stub(AccessService, "updateForBooking").resolves([]);
     sinon.stub(AccessService, "provisionForBooking").resolves([]);
     sinon.stub(AccessService, "revokeForBooking").resolves([]);
+    sinon
+      .stub(AccessService, "holdLockerSystemsOf")
+      .callsFake(async (tenant, bookings, work) => work());
   });
 
   afterEach(() => {
@@ -429,6 +432,9 @@ describe("BookingCheckout.createBooking — admin create never hard-fails checks
     sinon.stub(AccessService, "updateForBooking").resolves([]);
     sinon.stub(AccessService, "provisionForBooking").resolves([]);
     sinon.stub(AccessService, "revokeForBooking").resolves([]);
+    sinon
+      .stub(AccessService, "holdLockerSystemsOf")
+      .callsFake(async (tenant, bookings, work) => work());
   });
 
   afterEach(() => {

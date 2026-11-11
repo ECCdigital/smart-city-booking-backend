@@ -265,6 +265,9 @@ describe("BookingCheckout.updateBooking with a manual price", function () {
     sinon.stub(AccessService, "revokeForBooking").resolves();
     sinon.stub(AccessService, "updateForBooking").resolves();
     sinon.stub(AccessService, "provisionForBooking").resolves();
+    sinon
+      .stub(AccessService, "holdLockerSystemsOf")
+      .callsFake(async (tenant, bookings, work) => work());
     sinon.stub(WorkflowService, "updateTask").resolves();
     sinon.stub(WorkflowService, "handleWorkflowEvent").resolves();
 
