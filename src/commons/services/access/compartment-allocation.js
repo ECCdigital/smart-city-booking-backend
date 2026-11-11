@@ -73,6 +73,20 @@ function inAllocationOrder(compartments) {
 }
 
 /**
+ * A booking's entries at an Anlage in the order their units got a Fach
+ * (`assignedAt`), the first first: when units go down, the last ones are
+ * freed. An Umsetzen or a Wandern swaps the Fach, not the time. Entries
+ * from before the time was noted count as earliest, in the order they
+ * stand.
+ *
+ * @param {Object[]} entries `accessInfo` entries
+ * @returns {Object[]} A sorted copy
+ */
+function inAssignmentOrder(entries) {
+  return [...entries].sort((a, b) => (a.assignedAt ?? 0) - (b.assignedAt ?? 0));
+}
+
+/**
  * The id a Fach of an Anlage is operated and logged by: the Anlage's row
  * and the Fach's key - its UUID where the platform assigned it.
  *
@@ -272,6 +286,7 @@ async function bookablesById(tenant, ids) {
 module.exports = {
   accessBufferMs,
   inAllocationOrder,
+  inAssignmentOrder,
   compartmentPointId,
   claimOf,
   holdingsOf,

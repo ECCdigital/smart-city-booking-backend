@@ -29,6 +29,7 @@ const {
   claimOf,
   compartmentPointId,
   freeCompartments,
+  inAssignmentOrder,
   assignedCompartmentOf,
 } = require("./compartment-allocation");
 const { REACH } = require("../authorization/policy");
@@ -1012,7 +1013,7 @@ class AccessService {
       );
       // The units that got their Fach first stay; an Umsetzen or a Wandern
       // changes the Fach, not when the unit got one.
-      const active = this._byAssignment(
+      const active = inAssignmentOrder(
         atSystem.filter((entry) => !entry.revokedAt),
       );
       const amount = system.bookable ? system.amount : 0;
@@ -1123,18 +1124,6 @@ class AccessService {
       });
     }
     return allocated;
-  }
-
-  /**
-   * @private
-   * The entries in the order their units got a Fach (`assignedAt`), the
-   * first first; entries from before the time was noted count as earliest,
-   * in the order they stand.
-   */
-  static _byAssignment(entries) {
-    return [...entries].sort(
-      (a, b) => (a.assignedAt ?? 0) - (b.assignedAt ?? 0),
-    );
   }
 
   /**
