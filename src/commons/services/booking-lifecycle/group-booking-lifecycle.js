@@ -611,6 +611,7 @@ function createGroupBookingLifecycle(adapters) {
         ),
       ),
       ...accessEach(members, "hold", (booking) => !confirmed(booking)),
+      ...accessEach(members, "allocate", confirmed),
       ...accessEach(members, "provision", confirmed),
       provisionFailureNotice(notice),
     ]);

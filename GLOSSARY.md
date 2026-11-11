@@ -262,7 +262,7 @@ Der vom Buchenden geäußerte Wunsch, eine Buchung zu stornieren, der erst mit s
 _Avoid_: Reject-Hook (das ist die Speicherform), Kündigung, Stornierung (das ist der Übergang danach)
 
 **Wiederherstellung (einer Buchung)**:
-Der Lebenszyklus-Übergang, der eine abgelehnte oder stornierte Buchung in den Zustand zurückholt, den sie vor dem Storno hatte, mit Preis und Positionen von damals; die Erstattung fällt weg, der Zugang wird neu gewährt. Der Zustand vor dem Storno wird beim Storno festgehalten.
+Der Lebenszyklus-Übergang, der eine abgelehnte oder stornierte Buchung in den Zustand zurückholt, den sie vor dem Storno hatte, mit Preis und Positionen von damals; die Erstattung fällt weg, der Zugang wird neu gewährt. Der Zustand vor dem Storno wird beim Storno festgehalten. An einer Schließfachanlage von Open Locker bekommt die Buchung ihr altes Fach zurück, wenn es frei und in Betrieb ist, sonst das erste freie; ist keins frei, findet die Wiederherstellung nicht statt, und die Buchung bleibt storniert. Ein Storno gibt das Fach sofort frei.
 _Avoid_: Unreject, Reaktivierung, Rücknahme des Stornos (das ist die Handlung, nicht der Übergang)
 
 **Widerruf (einer Buchung)**:
@@ -274,7 +274,7 @@ Der Vermerk an einer stornierten oder widerrufenen Buchung, ob das Geld schon zu
 _Avoid_: Rückerstattungsstatus, Refund-Status, erstattet (als Buchungszustand)
 
 **Änderung (einer Buchung)**:
-Der Lebenszyklus-Übergang, der den Inhalt einer Buchung ändert — Zeiten, Positionen, Kontaktdaten, Preis —, ohne ihren Zustand zu wechseln: die neue Buchung wird im Zustand der gespeicherten geschrieben, und der Zugang folgt dem Inhalt (bei _bestätigt_ verschoben, bei _angefragt_ oder _Zahlung offen_ neu vorgemerkt). Der Admin-PUT ist ein Plan: erst die Änderung, dann die Übergänge, die die Flags verlangen, jeder für sich und ohne Rücknahme über Übergangsgrenzen.
+Der Lebenszyklus-Übergang, der den Inhalt einer Buchung ändert — Zeiten, Positionen, Kontaktdaten, Preis —, ohne ihren Zustand zu wechseln: die neue Buchung wird im Zustand der gespeicherten geschrieben, und der Zugang folgt dem Inhalt (bei _bestätigt_ verschoben, bei _angefragt_ oder _Zahlung offen_ neu vorgemerkt). An einer Schließfachanlage von Open Locker behält die Buchung ihr Fach, solange es im neuen Zeitraum frei (die Buchung selbst nicht mitgezählt) und in Betrieb ist, sonst bekommt sie das erste freie; mehr Einheiten bekommen zusätzliche Fächer, bei weniger werden die zuletzt zugeteilten frei. Fehlt ein Fach, findet die Änderung nicht statt, in jedem Buchungszustand, und die Buchung bleibt samt Fach, wie sie war. Der Admin-PUT ist ein Plan: erst die Änderung, dann die Übergänge, die die Flags verlangen, jeder für sich und ohne Rücknahme über Übergangsgrenzen.
 _Avoid_: Update (als Übergangsname), Bearbeiten, Flag-Kombination speichern
 
 **Gruppenzustand**:
@@ -282,7 +282,7 @@ Der Buchungszustand, den alle Mitglieder einer Gruppenbuchung teilen; die Gruppe
 _Avoid_: Gruppenstatus (als gespeicherter Wert — den gibt es nicht), allCommitted/allPaid (das sind Ableitungen über die Flags), Sammelstatus
 
 **Fehlerpolitik (eines Effekts)**:
-Was ein gescheiterter Effekt mit seinem Lebenszyklus-Übergang macht: _abbrechen_ (der Übergang findet nicht statt, schon Geschriebenes wird zurückgenommen) oder _protokollieren_ (der Übergang gilt, der Fehler steht im Ergebnis und im Log). Am Effekt festgelegt, für jeden Übergang gleich, nie vom Aufrufer gewählt. Nur das Speichern und die Vormerkung brechen ab; Zugang, Dokument und Mitteilungen werden protokolliert.
+Was ein gescheiterter Effekt mit seinem Lebenszyklus-Übergang macht: _abbrechen_ (der Übergang findet nicht statt, schon Geschriebenes wird zurückgenommen) oder _protokollieren_ (der Übergang gilt, der Fehler steht im Ergebnis und im Log). Am Effekt festgelegt, für jeden Übergang gleich, nie vom Aufrufer gewählt. Nur das Speichern, die Vormerkung und die Zuteilung eines Fachs (Open Locker, bei _bestätigt_) brechen ab; Zugang, Dokument und Mitteilungen werden protokolliert.
 _Avoid_: onFailure (als Sprechbegriff), Verschlucken, Rollback (das ist die Handlung beim Abbrechen, nicht die Politik), Retry (gibt es nicht)
 
 **Ausstellung (eines Buchungsdokuments)**:

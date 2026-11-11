@@ -1,8 +1,8 @@
 /**
  * The access adapter of the booking lifecycle seam: `AccessService` behind
- * the five operations the lifecycle knows (spec part 2, section 10). Only
- * `hold` aborts a transition; the others are recorded, the failure standing
- * in the access audit log the service writes.
+ * the operations the lifecycle knows (spec part 2, section 10). Only `hold`
+ * and `allocate` abort a transition; the others are recorded, the failure
+ * standing in the access audit log the service writes.
  */
 
 const AccessService = require("../../access/access-service");
@@ -11,6 +11,15 @@ const access = {
   /** Holds the compartments a booking books (glossary "Vormerkung"). */
   async hold(tenantId, bookingId) {
     return await AccessService.holdForBooking(tenantId, bookingId);
+  },
+
+  /**
+   * Keeps or gives the Fächer of a booking at the Anlagen with their own
+   * list, where it holds nothing anew: `confirmed` after an Änderung and on
+   * a Wiederherstellung (tickets#1042).
+   */
+  async allocate(tenantId, bookingId) {
+    return await AccessService.allocateForBooking(tenantId, bookingId);
   },
 
   /** Renews the holds of unpaid bookings. */
