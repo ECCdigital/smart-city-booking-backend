@@ -362,6 +362,28 @@ class BookableManager {
   }
 
   /**
+   * Get all bookables of a tenant that link one of the access points, their
+   * access switched on or off: a link is stored either way and takes effect
+   * as soon as the access is switched on.
+   * @param {string} tenantId Tenant ID
+   * @param {string[]} accessPointIds Access point IDs
+   * @param {{reach: string, userId?: string|null}} scope As of `getBookables`
+   * @returns {Promise<Bookable[]>} Bookables linking at least one of them
+   */
+  static async getBookablesReferencingAccessPoints(
+    tenantId,
+    accessPointIds,
+    scope,
+  ) {
+    const rawBookables = await BookableModel.find({
+      tenantId: tenantId,
+      "accessPointDetails.accessPointIds": { $in: accessPointIds },
+      ...ownCondition("bookable", scope),
+    });
+    return rawBookables.map((doc) => doc.toEntity());
+  }
+
+  /**
    * Remove an access point reference from every bookable of a tenant. Called
    * when the access point itself is deleted, so no bookable is left pointing at
    * an access point that no longer exists.
