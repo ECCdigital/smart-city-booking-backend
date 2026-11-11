@@ -633,8 +633,10 @@ function createBookingLifecycle(adapters) {
    * cleared, the refund audit removed and an open cancellation request
    * (hook `REJECT`) dropped. The access is granted again at
    * `confirmed`, held at `requested | payment_due` - a hold that fails
-   * aborts, the booking is cancelled again. No document, no workflow
-   * event, no mail.
+   * aborts, the booking is cancelled again. At `confirmed` the Zuteilung
+   * runs in front of the grant: the old Fach of an Anlage with its own
+   * list, else the first free one, and none free aborts as the hold does
+   * (tickets#1042). No document, no workflow event, no mail.
    *
    * @param {string} tenantId
    * @param {string} bookingId
@@ -679,6 +681,13 @@ function createBookingLifecycle(adapters) {
       step(
         PHASE.PROVISION,
         "access",
+        "allocate",
+        () => access.allocate(tenantId, bookingId),
+        { when: confirmed },
+      ),
+      step(
+        PHASE.PROVISION,
+        "access",
         "provision",
         () => access.provision(tenantId, bookingId),
         { when: confirmed },
@@ -697,7 +706,9 @@ function createBookingLifecycle(adapters) {
    * the caller made no longer applies. The refund audit and the hooks - an
    * open cancellation request (glossary "Stornoanfrage") - are the stored
    * booking's, whatever the form says; they belong to the lifecycle. Then the
-   * access follows the content: moved along at `confirmed`, the
+   * access follows the content: moved along at `confirmed` - after the
+   * Zuteilung, which keeps the Fach of an Anlage with its own list where it
+   * is free and aborts where none is (tickets#1042) - the
    * compartments held anew at `requested | payment_due` (`holdForBooking`
    * never holds one twice and drops the held ones beyond what is booked
    * now, so the hold comes first and a hold that fails aborts before
@@ -735,6 +746,13 @@ function createBookingLifecycle(adapters) {
     return runPipeline({ transition, tenantId, bookingId, booking, store }, [
       step(PHASE.PERSIST, "store", "save", () =>
         store.save(booking, { expectStatus: from, transition }),
+      ),
+      step(
+        PHASE.PROVISION,
+        "access",
+        "allocate",
+        () => access.allocate(tenantId, bookingId),
+        { when: confirmed },
       ),
       step(
         PHASE.PROVISION,

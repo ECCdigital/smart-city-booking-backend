@@ -1226,6 +1226,8 @@ describe("group booking lifecycle: reinstate", function () {
       "persist store.save B-2 ok",
       "provision access.hold B-1 skipped",
       "provision access.hold B-2 skipped",
+      "provision access.allocate B-1 ok",
+      "provision access.allocate B-2 ok",
       "provision access.provision B-1 ok",
       "provision access.provision B-2 ok",
       "notify mail.ACCESS_PROVISION_FAILED skipped",

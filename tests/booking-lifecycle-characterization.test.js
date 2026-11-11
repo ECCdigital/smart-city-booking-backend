@@ -1147,6 +1147,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       ]);
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 confirmed [receipt]",
+        "access.allocate B1",
         "access.update B1",
       ]);
     });
@@ -1366,6 +1367,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       });
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 confirmed [receipt]",
+        "access.allocate B1",
         "access.update B1",
         "store.save B1 cancelled [receipt]",
         "access.revoke B1",
@@ -1419,6 +1421,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 cancelled [receipt,cancellation]",
         "store.save B1 confirmed [receipt,cancellation]",
+        "access.allocate B1",
         "access.provision B1",
       ]);
     });
@@ -1476,6 +1479,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       ]);
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 confirmed [receipt]",
+        "access.allocate B1",
         "access.update B1",
         "store.save B1 cancelled [receipt]",
         "access.revoke B1",
@@ -1544,6 +1548,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         expect(stateOf(h.stored(id))).to.equal("confirmed");
         expect(h.takeEffects()).to.deep.equal([
           "store.save B1 confirmed [receipt]",
+          "access.allocate B1",
           "access.update B1",
         ]);
       });
@@ -1655,6 +1660,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(stored.cancellationRefund).to.equal(undefined);
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 confirmed [receipt,cancellation]",
+        "access.allocate B1",
         "access.provision B1",
       ]);
     });

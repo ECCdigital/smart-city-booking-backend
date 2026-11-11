@@ -13,9 +13,10 @@
  * The failure policy belongs to the adapter operation (glossary
  * "Fehlerpolitik"): `POLICY_TABLE` says for every operation whether its
  * failure aborts the transition or is recorded; a transition never chooses.
- * Only the store write and the hold abort. An abort restores every persist
- * write of the run from the snapshot the conditional write answered, in
- * reverse order, and throws a `LifecycleError` with the partial outcome.
+ * Only the store write, the hold and the Zuteilung of a Fach abort. An
+ * abort restores every persist write of the run from the snapshot the
+ * conditional write answered, in reverse order, and throws a
+ * `LifecycleError` with the partial outcome.
  * There is no undo register: provision, document and notify run after the
  * persist phase and only ever record, so there is nothing else to take
  * back. A guard that fires inside the conditional write (`ConflictError
@@ -62,6 +63,7 @@ const EFFECT_STATUS = Object.freeze({
 const POLICY_TABLE = Object.freeze({
   "store.save": POLICY.ABORT,
   "access.hold": POLICY.ABORT,
+  "access.allocate": POLICY.ABORT,
   "access.provision": POLICY.RECORD,
   "access.update": POLICY.RECORD,
   "access.revoke": POLICY.RECORD,

@@ -174,11 +174,12 @@ function inMemoryStore(seed = [], tenant = DEFAULT_TENANT, groups = []) {
 function inMemoryAccess(options) {
   return recordingAdapter(
     "access",
-    ["hold", "provision", "update", "revoke", "refreshHolds"],
+    ["hold", "allocate", "provision", "update", "revoke", "refreshHolds"],
     {
       ...options,
       returns: {
         hold: () => [],
+        allocate: () => [],
         provision: () => [],
         update: () => [],
         revoke: () => [],

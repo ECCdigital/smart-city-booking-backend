@@ -88,6 +88,7 @@ describe("booking lifecycle: amend", function () {
 
     expect(effectTable(outcome)).to.deep.equal([
       "persist store.save ok",
+      "provision access.allocate ok",
       "provision access.update ok",
       "provision access.hold skipped",
       "provision access.revoke skipped",
@@ -110,7 +111,8 @@ describe("booking lifecycle: amend", function () {
     expect(adapters.store.calls).to.deep.equal([
       { op: "save", args: ["B-1", "confirmed"] },
     ]);
-    const [update] = adapters.access.calls;
+    const [allocate, update] = adapters.access.calls;
+    expect(allocate).to.deep.equal({ op: "allocate", args: [TENANT, "B-1"] });
     expect(update.op).to.equal("update");
     expect(update.args[0]).to.equal(TENANT);
     expect(update.args[1]).to.include({ id: "B-1", timeBegin: NOW + 10 * DAY });
@@ -132,6 +134,7 @@ describe("booking lifecycle: amend", function () {
 
       expect(effectTable(outcome)).to.deep.equal([
         "persist store.save ok",
+        "provision access.allocate skipped",
         "provision access.update skipped",
         "provision access.hold ok",
         "provision access.revoke ok",
@@ -173,6 +176,7 @@ describe("booking lifecycle: amend", function () {
 
     expect(effectTable(outcome)).to.deep.equal([
       "persist store.save ok",
+      "provision access.allocate skipped",
       "provision access.update skipped",
       "provision access.hold skipped",
       "provision access.revoke skipped",
@@ -212,6 +216,7 @@ describe("booking lifecycle: amend", function () {
 
     expect(effectTable(outcome)).to.deep.equal([
       "persist store.save ok",
+      "provision access.allocate skipped",
       "provision access.update skipped",
       "provision access.hold skipped",
       "provision access.revoke skipped",
@@ -294,6 +299,7 @@ describe("booking lifecycle: amend", function () {
     expect(err.effect).to.include({ adapter: "access", op: "hold" });
     expect(effectTable(err.outcome)).to.deep.equal([
       "persist store.save ok",
+      "provision access.allocate skipped",
       "provision access.update skipped",
       "provision access.hold failed",
     ]);
@@ -325,6 +331,7 @@ describe("booking lifecycle: amend", function () {
 
     expect(effectTable(outcome)).to.deep.equal([
       "persist store.save ok",
+      "provision access.allocate ok",
       "provision access.update recorded",
       "provision access.hold skipped",
       "provision access.revoke skipped",
