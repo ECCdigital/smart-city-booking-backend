@@ -339,7 +339,9 @@ function uploadFieldsOf(booking, bookablesById) {
  *   hold each medium of an upload of a group, by media id
  * @param {Map<string, {timeBegin: number, timeEnd: number}>} [params.times]
  *   The times of the other bookings an upload of a group counts for
- * @returns {{state: string|null, fields: Object[], otherFields: Object[]}}
+ * @returns {{state: string|null, fields: Object[], otherFields: Object[],
+ *   retentionDays: number|null}} `retentionDays`: the tenant's deletion
+ *   deadline for sensitive uploads, for the notice before their download
  */
 function deriveCustomerUploadState({
   booking,
@@ -412,8 +414,17 @@ function deriveCustomerUploadState({
     if (other) other.requests.push(exportRequest(request, options));
   }
 
+  const retentionDays = Number.isInteger(settings?.retentionDays)
+    ? settings.retentionDays
+    : null;
+
   if (!settings?.enabled) {
-    return { state: null, fields: [], otherFields: [...others.values()] };
+    return {
+      state: null,
+      fields: [],
+      otherFields: [...others.values()],
+      retentionDays,
+    };
   }
 
   const requiredStates = derived
@@ -424,7 +435,12 @@ function deriveCustomerUploadState({
       requiredStates.includes(candidate),
     ) ?? null;
 
-  return { state, fields: derived, otherFields: [...others.values()] };
+  return {
+    state,
+    fields: derived,
+    otherFields: [...others.values()],
+    retentionDays,
+  };
 }
 
 /** The states of a field that still wants a file from the customer. */

@@ -719,6 +719,7 @@ describe("customer uploads: handing in later", function () {
         state: null,
         fields: [],
         otherFields: [],
+        retentionDays: 30,
       });
     });
   });
@@ -1128,7 +1129,23 @@ describe("customer uploads: the derived state", function () {
       limits,
       now: START + 2 * DAY,
     });
-    expect(ended).to.deep.equal({ state: null, fields: [], otherFields: [] });
+    expect(ended).to.deep.equal({
+      state: null,
+      fields: [],
+      otherFields: [],
+      retentionDays: null,
+    });
+  });
+
+  it("names the tenant's deletion deadline, for the notice before a download", function () {
+    expect(
+      deriveCustomerUploadState({
+        booking: { status: "confirmed", customerUploads: [] },
+        fields: [],
+        settings: { enabled: true, retentionDays: 7 },
+        limits,
+      }).retentionDays,
+    ).to.equal(7);
   });
 
   it("opens a field after the confirmation only once the booking is no request", function () {
