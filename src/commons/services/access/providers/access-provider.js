@@ -536,6 +536,19 @@ class AccessProvider {
   }
 
   /**
+   * Whether an access point of this provider demands a QR scan when it is
+   * created without `validationRules`. A door is opened in front of its
+   * sticker as a rule; a provider whose access points are opened from the
+   * list instead - Open Locker - answers `false`, and a scan is then only
+   * demanded where the access point configures one.
+   *
+   * @returns {boolean}
+   */
+  static get requiresScanByDefault() {
+    return true;
+  }
+
+  /**
    * The methods this provider honours. The service asks nothing it does not
    * find here.
    *

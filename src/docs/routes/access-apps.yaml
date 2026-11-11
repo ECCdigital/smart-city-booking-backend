@@ -383,11 +383,21 @@ components:
           enum:
             - missing_fields
             - missing_secret
+            - invalid_credentials
+            - terms_not_accepted
+            - email_not_verified
           description: |
             `missing_fields` (`salto-ks`): `clientId` or `username` is empty or
             left out; Salto was not asked. Checked before `missing_secret`.
             `missing_secret` (`salto-ks`): a secret is neither in the body nor
             stored for the identity the body names; Salto was not asked.
+            `invalid_credentials` (`open-locker`): Open Locker refused the
+            e-mail address or the password of the technical account.
+            `terms_not_accepted` (`open-locker`): the technical account is
+            blocked until it accepts Open Locker's current terms; an open
+            would be refused.
+            `email_not_verified` (`open-locker`): the technical account has
+            not verified its e-mail address; an open would be refused.
         missing:
           type: array
           description: |

@@ -1,8 +1,8 @@
 /**
  * The contract every access provider adapter has to keep at the seam
  * `AccessService` talks through. One suite, run against every adapter -
- * NUKI, Salto KS, iFBS and Pareva over fake API clients, plus the in-memory
- * provider that tests use as the fifth implementation.
+ * NUKI, Salto KS, iFBS, Pareva and Open Locker over fake API clients, plus
+ * the in-memory provider that tests use as the sixth implementation.
  */
 
 const assert = require("assert");
@@ -13,6 +13,7 @@ const NukiAccessProvider = require("../src/commons/services/access/providers/nuk
 const SaltoKsAccessProvider = require("../src/commons/services/access/providers/salto-ks-access-provider");
 const IfbsAccessProvider = require("../src/commons/services/access/providers/ifbs-access-provider");
 const ParevaAccessProvider = require("../src/commons/services/access/providers/pareva-access-provider");
+const OpenLockerAccessProvider = require("../src/commons/services/access/providers/open-locker-access-provider");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const UserManager = require("../src/commons/data-managers/user-manager");
 const {
@@ -36,6 +37,11 @@ const {
   FakeParevaApiClient,
   brokenParevaApiClient,
 } = require("./helpers/fake-pareva-api-client");
+const {
+  FakeOpenLockerApiClient,
+  brokenOpenLockerApiClient,
+  COMPARTMENT_ID: OPEN_LOCKER_COMPARTMENT_ID,
+} = require("./helpers/fake-open-locker-api-client");
 const {
   InMemoryAccessProvider,
   PROVIDER_ID: IN_MEMORY_PROVIDER_ID,
@@ -186,6 +192,35 @@ const IMPLEMENTATIONS = [
     },
     createBroken() {
       return new IfbsAccessProvider({ client: brokenIfbsApiClient() });
+    },
+  },
+  {
+    // Open Locker declares no grant and no revoke either: a compartment is
+    // a door opened remotely, and Biletado alone decides who may open it.
+    name: "open-locker",
+    Provider: OpenLockerAccessProvider,
+    secretBearing: false,
+    accessPoint: {
+      id: "compartment-1",
+      tenantId: TENANT,
+      type: "door",
+      provider: "open-locker",
+      externalId: OPEN_LOCKER_COMPARTMENT_ID,
+      label: "Fach 1",
+      mode: AccessPointMode.REMOTE,
+    },
+    bookingContext: bookingContext(),
+    create() {
+      const client = new FakeOpenLockerApiClient();
+      return {
+        provider: new OpenLockerAccessProvider({ client }),
+        client,
+      };
+    },
+    createBroken() {
+      return new OpenLockerAccessProvider({
+        client: brokenOpenLockerApiClient(),
+      });
     },
   },
   {
