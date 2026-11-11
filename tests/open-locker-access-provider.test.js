@@ -164,6 +164,77 @@ describe("Open Locker access provider", () => {
     });
   });
 
+  describe("client per tenant", () => {
+    const {
+      releaseTenantClients,
+    } = require("../src/commons/services/access/clients/tenant-client-cache");
+
+    function tenantWithOpenLocker(password = FAKE_PASSWORD) {
+      return {
+        id: TENANT,
+        applications: [
+          {
+            type: "access",
+            id: "open-locker",
+            active: true,
+            serverUrl: FAKE_SERVER_URL,
+            email: FAKE_EMAIL,
+            password,
+          },
+        ],
+      };
+    }
+
+    afterEach(() => {
+      releaseTenantClients(TENANT);
+    });
+
+    it("keeps the tenant's client, and with it the token, while the credentials stay the same", async () => {
+      sinon.stub(TenantManager, "getTenant").resolves(tenantWithOpenLocker());
+      const unregistered = new OpenLockerAccessProvider();
+
+      const first = await unregistered._getClient(TENANT);
+      const second = await unregistered._getClient(TENANT);
+
+      expect(first).to.be.instanceOf(OpenLockerApiClient);
+      expect(second).to.equal(first);
+    });
+
+    it("builds a new client when the password changes", async () => {
+      const getTenant = sinon
+        .stub(TenantManager, "getTenant")
+        .resolves(tenantWithOpenLocker());
+      const unregistered = new OpenLockerAccessProvider();
+      const first = await unregistered._getClient(TENANT);
+      getTenant.resolves(tenantWithOpenLocker("rotated"));
+
+      const second = await unregistered._getClient(TENANT);
+
+      expect(second).not.to.equal(first);
+      expect(second.password).to.equal("rotated");
+    });
+
+    it("drops the client when the tenant is stored without an active Open Locker application", async () => {
+      sinon.stub(TenantManager, "getTenant").resolves(tenantWithOpenLocker());
+      const unregistered = new OpenLockerAccessProvider();
+      const first = await unregistered._getClient(TENANT);
+
+      releaseTenantClients(TENANT, { id: TENANT, applications: [] });
+
+      expect(await unregistered._getClient(TENANT)).not.to.equal(first);
+    });
+
+    it("keeps the client when the tenant is stored with its application still active", async () => {
+      sinon.stub(TenantManager, "getTenant").resolves(tenantWithOpenLocker());
+      const unregistered = new OpenLockerAccessProvider();
+      const first = await unregistered._getClient(TENANT);
+
+      releaseTenantClients(TENANT, tenantWithOpenLocker());
+
+      expect(await unregistered._getClient(TENANT)).to.equal(first);
+    });
+  });
+
   describe("open", () => {
     it("answers pending with the command_id as the process to poll", async () => {
       const outcome = await provider.open(COMPARTMENT, bookingContext());
@@ -751,6 +822,36 @@ describe("Open Locker through AccessService", () => {
     expect(outcome.success).to.equal(false);
     expect(outcome.blockingReasons).to.include("rejected");
     expect(client.requests).to.deep.equal([]);
+  });
+
+  it("opens in the new window after a rebooking from later to now", async () => {
+    const now = Date.now();
+    const booking = createBooking({
+      timeBegin: now + 120 * MINUTE,
+      timeEnd: now + 180 * MINUTE,
+    });
+    stubBooking(booking);
+    const early = await AccessService.open(
+      TENANT,
+      "booking-1",
+      COMPARTMENT.id,
+      "user-1",
+    );
+    booking.timeBegin = now - 5 * MINUTE;
+    booking.timeEnd = now + 55 * MINUTE;
+
+    const moved = await AccessService.open(
+      TENANT,
+      "booking-1",
+      COMPARTMENT.id,
+      "user-1",
+    );
+
+    expect(early.blockingReasons).to.include("outside_access_window");
+    expect(moved).to.deep.equal({
+      success: true,
+      data: { openProcessId: client.lastOpenRequest().command_id },
+    });
   });
 
   it("refuses to open in the old window after a rebooking to later, without asking Open Locker", async () => {

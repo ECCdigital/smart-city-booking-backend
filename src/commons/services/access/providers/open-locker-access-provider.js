@@ -1,6 +1,6 @@
 const AccessProvider = require("./access-provider");
 const TenantManager = require("../../../data-managers/tenant-manager");
-const { openLockerClientFor } = require("../clients/open-locker-clients");
+const { createTenantClientCache } = require("../clients/tenant-client-cache");
 const {
   classifyOpenLockerError,
 } = require("../clients/open-locker-api-client");
@@ -12,6 +12,15 @@ require("../clients");
 
 const PROVIDER_ID = "open-locker";
 const APP_TYPE = "access";
+
+// The client of each tenant, kept while server, account and password stay
+// the same, so its token is reused instead of signing in on every open and
+// every poll - Open Locker throttles the login to six attempts a minute.
+const clients = createTenantClientCache(PROVIDER_ID, (app) => [
+  app.serverUrl,
+  app.email,
+  app.password,
+]);
 
 // Open Locker's states before the locker reported an end: the storefront
 // polls on.
@@ -71,7 +80,7 @@ class OpenLockerAccessProvider extends AccessProvider {
       throw new NotFoundError("open_locker_application_not_found", { tenant });
     }
 
-    return openLockerClientFor(tenant, rawApp);
+    return clients.clientFor(tenant, rawApp);
   }
 
   /**
@@ -128,7 +137,7 @@ class OpenLockerAccessProvider extends AccessProvider {
       request = await client.getOpenRequest(openProcessId);
     } catch (err) {
       return unreadProgress(
-        `Open Locker could not report open request '${openProcessId}': ${describe(err)}`,
+        `Open Locker could not report open request '${openProcessId}': ${describeError(err)}`,
       );
     }
 
@@ -175,7 +184,7 @@ class OpenLockerAccessProvider extends AccessProvider {
    * message, keeps it for the lookup in Open Locker.
    */
   _mapOpenError(err, compartmentId) {
-    const detail = describe(err);
+    const detail = describeError(err);
     const data = err?.response?.data || {};
 
     switch (classifyOpenLockerError(err)) {
@@ -234,7 +243,7 @@ function unreadProgress(errorMessage) {
 }
 
 /** Open Locker's own message where it answered, the error's otherwise. */
-function describe(err) {
+function describeError(err) {
   const status = err?.response?.status;
   const message = err?.response?.data?.message || err?.message || String(err);
   return status ? `${status} ${message}` : message;

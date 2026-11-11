@@ -154,12 +154,22 @@ class OpenLockerApiClient extends BaseAccessApiClient {
     return this._send(method, path, data, { token: this._token });
   }
 
-  /** @private */
+  /**
+   * @private
+   * Signs in as the technical account. A refused login (`422`) is thrown
+   * as an {@link OpenLockerLoginError}, so it is never mistaken for a `422`
+   * of another route.
+   */
   async _login() {
-    const answer = await this._send("post", "/api/login", {
-      email: this.email,
-      password: this.password,
-    });
+    let answer;
+    try {
+      answer = await this._send("post", "/api/login", {
+        email: this.email,
+        password: this.password,
+      });
+    } catch (err) {
+      throw err.response?.status === 422 ? new OpenLockerLoginError(err) : err;
+    }
 
     if (!answer?.token) {
       throw new Error("Open Locker answered the login without a token");
@@ -193,9 +203,21 @@ class OpenLockerApiClient extends BaseAccessApiClient {
 }
 
 /**
+ * Open Locker refused the credentials of the technical account at the login.
+ * Keeps Open Locker's answer, as the axios error had it.
+ */
+class OpenLockerLoginError extends Error {
+  constructor(cause) {
+    super(cause.response?.data?.message || cause.message);
+    this.name = "OpenLockerLoginError";
+    this.response = cause.response;
+  }
+}
+
+/**
  * What an Open Locker failure means for the platform, read off the HTTP
  * answer:
- * - `invalid_credentials`: the login was refused (`422`)
+ * - `invalid_credentials`: the login was refused (`422` at `POST /api/login`)
  * - `unauthorized`: a token was refused even after signing in again (`401`)
  * - `terms_not_accepted`: the account is blocked until it accepts the
  *   current terms (`403`, `code: terms_not_accepted`)
@@ -212,7 +234,7 @@ function classifyOpenLockerError(err) {
   const status = err?.response?.status;
   const data = err?.response?.data || {};
 
-  if (status === 422) return "invalid_credentials";
+  if (err instanceof OpenLockerLoginError) return "invalid_credentials";
   if (status === 401) return "unauthorized";
   if (status === 403 && data.code === "terms_not_accepted") {
     return "terms_not_accepted";
@@ -223,4 +245,8 @@ function classifyOpenLockerError(err) {
   return "unavailable";
 }
 
-module.exports = { OpenLockerApiClient, classifyOpenLockerError };
+module.exports = {
+  OpenLockerApiClient,
+  OpenLockerLoginError,
+  classifyOpenLockerError,
+};
