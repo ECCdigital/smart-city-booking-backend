@@ -90,6 +90,28 @@
       `externalId`, without asking Open Locker, so also while the listing is
       not available.
 
+      An Open Locker locker system (`type: locker`, mode `remote`) carries
+      its own compartments in `config.compartments` and needs no
+      `externalId`; without the list it is refused with `required` at
+      `config.compartments`, in another mode with `unsupported_mode`. Each
+      compartment named by its `id` (the UUID) is stored with `number` and
+      `lockerBank` (`id`, `name`) from the listing, whatever the request
+      says, and its `outOfService` as sent; one the listing does not name is
+      refused with `compartment_not_accessible` at
+      `config.compartments.<i>`, carrying `compartmentId`. While the tenant's
+      Open Locker application is not active the compartments are stored as
+      the request names them. One compartment stands in at most one locker
+      system and is then no fixed compartment, across all access points of
+      the tenant: a compartment another locker system holds is refused with
+      `compartment_in_locker_system`, a fixed compartment with
+      `compartment_is_fixed`, both at `config.compartments.<i>` with
+      `compartmentId` and the holder's `accessPointId` and `label`; a fixed
+      compartment a locker system holds is refused with
+      `compartment_in_locker_system` at `externalId`. A compartment named
+      twice is refused with `duplicate_compartment`, a list on the locker of
+      a provider that assigns the compartment itself with
+      `unsupported_by_provider` at `config.compartments`.
+
       `location` is checked like the location of a bookable or an event
       (glossary „Standort“): a new or changed location with an address, a
       display text or an addition needs a point, a point alone is enough, and
@@ -553,7 +575,9 @@ components:
             iFBS location or a Pareva product - whose provider assigns a
             compartment per booking; `externalId` is the location or size,
             `providerLocationId` the iFBS location or the Pareva locker
-            system. Capacity is the bookable's `amount`, never the row's.
+            system. An Open Locker locker system instead carries its own
+            compartments (`config.compartments`) and the platform assigns
+            them. Capacity is the bookable's `amount`, never the row's.
           example: door
         provider:
           type: string
@@ -582,6 +606,14 @@ components:
           properties:
             openAction:
               $ref: "#/components/schemas/AccessPointOpenAction"
+            compartments:
+              type: array
+              description: |
+                The compartments of an Open Locker locker system, in their
+                stored order. Only on a `locker` whose provider lets it carry
+                its own list.
+              items:
+                $ref: "#/components/schemas/LockerSystemCompartment"
           additionalProperties: true
         location:
           allOf:
@@ -625,6 +657,14 @@ components:
           properties:
             openAction:
               $ref: "#/components/schemas/AccessPointOpenAction"
+            compartments:
+              type: array
+              description: |
+                The compartments of an Open Locker locker system, in their
+                stored order. Only on a `locker` whose provider lets it carry
+                its own list.
+              items:
+                $ref: "#/components/schemas/LockerSystemCompartment"
           additionalProperties: true
         location:
           allOf:
@@ -634,6 +674,36 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AccessPointValidationRule"
+
+    LockerSystemCompartment:
+      type: object
+      description: |
+        A compartment of a locker system that carries its own list. On write
+        only `id` and `outOfService` count while the provider is active;
+        `number` and `lockerBank` are taken from its listing.
+      required: [id]
+      properties:
+        id:
+          type: string
+          description: UUID of the compartment at Open Locker
+          example: "9b2f6c1e-3d4a-4f5b-8c7d-1e2f3a4b5c6d"
+        number:
+          type: integer
+          nullable: true
+          example: 1
+        lockerBank:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+              example: Labor Fachbank 1
+        outOfService:
+          type: boolean
+          description: Taken out of the assignment by hand
+          default: false
 
     AccessPointLocation:
       type: object
