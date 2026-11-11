@@ -112,6 +112,10 @@ _Avoid_: Locker Bank (als Sprechbegriff), Fachbank (als Begriff), Schließfachan
 Ein Fach einer Schließfachanlage, das die Verwaltung von Hand aus der Zuteilung nimmt, etwa weil es kaputt ist. Es bekommt keine neue Buchung und zählt nicht zur Verfügbarkeit, laufende Buchungen behalten es. Die Plattform setzt es nie von selbst, auch nicht nach `door_jammed`.
 _Avoid_: gesperrt, Sperre (das ist die Sperre eines Users), defekt
 
+**Umsetzen (Fach)**:
+Die Verwaltung tauscht das zugeteilte Fach einer Buchung von Hand gegen ein anderes Fach derselben Schließfachanlage, das im Zeitraum samt Puffer frei und in Betrieb ist, auch bei einer laufenden Buchung, etwa wenn das Fach klemmt. Die Plattform prüft die Belegung dabei unter der Sperre der Anlage erneut. Nur das Fach wechselt: Was vorgemerkt war, bleibt vorgemerkt, was bereitgestellt war, bleibt bereitgestellt; „Fach öffnen“ und der Mobile Key öffnen danach das neue Fach. Recht: Buchung bearbeiten. Das Umsetzen steht im Zugangsprotokoll und löst keine Mail aus.
+_Avoid_: Tauschen, Verschieben (das ist die Änderung des Zeitraums), Wandern (das tun künftige Buchungen beim Außer-Betrieb-Nehmen von selbst)
+
 **Technisches Konto**:
 Das Konto eines Mandanten bei einem Provider, mit dem sich die Plattform dort anmeldet, ohne Person dahinter. Bei Open Locker ist es nur auf die Fächer seines Mandanten berechtigt, auch wenn sich mehrere Mandanten eine Instanz teilen.
 _Avoid_: Service-Account, Maschinenkonto, Admin-Konto
