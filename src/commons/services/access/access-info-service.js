@@ -14,6 +14,7 @@ const APP_TYPE = "access";
 const LIST_ACCESS_POINTS_CAPABILITY = "listAccessPoints";
 const VALIDATE_ACCESS_POINT_CAPABILITY = "validateAccessPoint";
 const VALIDATE_WITHOUT_LISTING_CAPABILITY = "validateAccessPointWithoutListing";
+const RESOLVE_COMPARTMENTS_CAPABILITY = "resolveCompartments";
 
 class AccessInfoService {
   /**
@@ -198,6 +199,36 @@ class AccessInfoService {
 
     getAccessProvider(accessPoint.provider).validateAccessPointWithoutListing(
       accessPoint,
+    );
+  }
+
+  /**
+   * Whether the provider's Schließfachanlagen may carry their own list of
+   * Fächer, picked from its listing - Open Locker's alone today.
+   *
+   * @param {string} provider The provider id
+   * @returns {boolean}
+   */
+  static resolvesCompartments(provider) {
+    return getAccessProviderCapabilities(provider).includes(
+      RESOLVE_COMPARTMENTS_CAPABILITY,
+    );
+  }
+
+  /**
+   * The Fächer of a Schließfachanlage as its provider has them: see the
+   * provider's `resolveCompartments`.
+   *
+   * @param {Object} accessPoint The Anlage, read for `provider`
+   * @param {Object[]} compartments The requested Fächer in the stored shape
+   * @param {Object[]} listedAccessPoints The provider's listing
+   * @returns {Object[]} The Fächer as they are stored
+   * @throws {ValidationError} What the provider will not store, at the Fach
+   */
+  static resolveCompartments(accessPoint, compartments, listedAccessPoints) {
+    return getAccessProvider(accessPoint.provider).resolveCompartments(
+      compartments,
+      listedAccessPoints,
     );
   }
 

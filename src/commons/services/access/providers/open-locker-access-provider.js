@@ -11,6 +11,7 @@ const { DOMAIN } = require("../../authorization/reach");
 const {
   AccessCapability,
   AccessPointMode,
+  AccessPointType,
 } = require("../../../entities/access/access-point");
 
 require("../clients");
@@ -51,8 +52,11 @@ const STATES_FAILED = {
 };
 
 /**
- * Open Locker compartments: each compartment is a door in mode `remote`, its
- * `externalId` the UUID of the compartment, bound to one bookable. The
+ * Open Locker compartments, in mode `remote`: a fixed compartment is a door,
+ * its `externalId` the UUID of the compartment, bound to one bookable; a
+ * locker system is a `locker` that carries its own compartments, picked
+ * from the listing (`resolveCompartments`), and the platform assigns them.
+ * The
  * tenant's technical account (role `user`) holds a standing permission on
  * the tenant's compartments; whether a booking may open one right now is
  * Biletado's decision alone, so Open Locker learns of no booking, and a
@@ -263,11 +267,64 @@ class OpenLockerAccessProvider extends AccessProvider {
    * @throws {ValidationError} `required` at `externalId`
    */
   validateAccessPointWithoutListing(accessPoint) {
+    if (accessPoint.type === AccessPointType.LOCKER) {
+      return validateLockerSystem(accessPoint);
+    }
+
     if (accessPoint.externalId) {
       return;
     }
 
     throw new ValidationError([{ field: "externalId", code: "required" }]);
+  }
+
+  /**
+   * The Fächer of a Schließfachanlage as stored: each with its
+   * Schließfachschrank (`id`, `name`) and number from the listing of the
+   * tenant's technical account. A Fach the account holds no permission on
+   * is refused at that Fach, like a fixed Fach (`compartment_not_accessible`).
+   *
+   * @param {Object[]} compartments The requested Fächer in the stored shape
+   * @param {import("./access-provider").ListedAccessPoint[]}
+   *   listedAccessPoints The listing of the tenant's technical account
+   * @returns {Object[]} The Fächer as they are stored
+   * @throws {ValidationError} `compartment_not_accessible` at
+   *   `config.compartments.<i>`
+   */
+  resolveCompartments(compartments, listedAccessPoints) {
+    const listed = new Map(
+      (listedAccessPoints || []).map((entry) => [String(entry.id), entry]),
+    );
+    const errors = [];
+
+    const resolved = compartments.map((compartment, index) => {
+      const entry = listed.get(compartment.id);
+
+      if (!entry) {
+        errors.push({
+          field: `config.compartments.${index}`,
+          code: "compartment_not_accessible",
+          params: { compartmentId: compartment.id },
+        });
+        return compartment;
+      }
+
+      return {
+        id: compartment.id,
+        number: entry.metadata.number,
+        lockerBank: {
+          id: entry.metadata.lockerBank.id,
+          name: entry.metadata.lockerBank.name,
+        },
+        outOfService: compartment.outOfService,
+      };
+    });
+
+    if (errors.length > 0) {
+      throw new ValidationError(errors);
+    }
+
+    return resolved;
   }
 
   /**
@@ -289,7 +346,11 @@ class OpenLockerAccessProvider extends AccessProvider {
    * @throws {ValidationError} `compartment_not_accessible` at `externalId`
    */
   validateAccessPoint(accessPoint, listedAccessPoint, listing = {}) {
-    if (listedAccessPoint || listing.asked === false) {
+    if (
+      accessPoint.type === AccessPointType.LOCKER ||
+      listedAccessPoint ||
+      listing.asked === false
+    ) {
       return;
     }
 
@@ -317,7 +378,39 @@ class OpenLockerAccessProvider extends AccessProvider {
       "listAccessPoints",
       "validateAccessPoint",
       "validateAccessPointWithoutListing",
+      "resolveCompartments",
     ];
+  }
+}
+
+/**
+ * A Schließfachanlage of Open Locker, before the listing: it opens remotely
+ * and carries its own list of Fächer (tickets#1037), so it needs no UUID of
+ * its own.
+ *
+ * @throws {ValidationError} `unsupported_mode` at `mode`, `required` at
+ *   `config.compartments`
+ */
+function validateLockerSystem(accessPoint) {
+  const errors = [];
+
+  if (accessPoint.mode !== AccessPointMode.REMOTE) {
+    errors.push({
+      field: "mode",
+      code: "unsupported_mode",
+      params: {
+        mode: accessPoint.mode,
+        supportedModes: [AccessPointMode.REMOTE],
+      },
+    });
+  }
+
+  if (!Array.isArray(accessPoint.config?.compartments)) {
+    errors.push({ field: "config.compartments", code: "required" });
+  }
+
+  if (errors.length > 0) {
+    throw new ValidationError(errors);
   }
 }
 
