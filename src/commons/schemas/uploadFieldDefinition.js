@@ -4,7 +4,6 @@ const {
   UPLOAD_FIELD_CATEGORIES,
   UPLOAD_FIELD_TIMINGS,
   MAX_RETENTION_DAYS,
-  MAX_FILES_PER_FIELD,
 } = require("../services/customer-upload/customer-upload-rules");
 
 /**
@@ -21,7 +20,6 @@ const uploadFieldDefinitionSchema = new Schema(
     hint: { type: String, default: "" },
     consentText: { type: String, default: "" },
     required: { type: Boolean, default: false },
-    maxFiles: { type: Number, default: 1, min: 1, max: MAX_FILES_PER_FIELD },
     formats: { type: [{ type: String, enum: CUSTOMER_UPLOAD_FORMATS }] },
     // Null is the limit of the instance.
     maxFileSizeMb: { type: Number, default: null },

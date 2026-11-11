@@ -23,7 +23,6 @@ const PROOF_FIELD = {
   id: "field-proof",
   label: "Vereinsausweis",
   required: true,
-  maxFiles: 1,
   formats: ["pdf"],
   timing: "afterConfirmation",
   deadlineDaysBeforeStart: 7,

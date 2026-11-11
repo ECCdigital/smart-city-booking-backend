@@ -203,12 +203,19 @@ describe("customer uploads: settings and upload fields", function () {
         hint: "",
         consentText: "",
         required: false,
-        maxFiles: 1,
         maxFileSizeMb: null,
         category: "normal",
         timing: "checkout",
         deadlineDaysBeforeStart: null,
       });
+    });
+
+    it("takes one file, whatever number is sent", function () {
+      const [stored] = normalizeUploadFieldDefinitions([
+        field({ maxFiles: 3 }),
+      ]);
+      expect(stored).to.not.have.property("maxFiles");
+      expect(refusal([stored])).to.equal(null);
     });
 
     it("keeps an id it already has", function () {
@@ -230,7 +237,6 @@ describe("customer uploads: settings and upload fields", function () {
             hint: "Vorder- und Rückseite",
             consentText: "Ich willige ein.",
             required: true,
-            maxFiles: 2,
             formats: ["pdf", "jpeg"],
             maxFileSizeMb: 5,
             category: "sensitive",
@@ -251,16 +257,6 @@ describe("customer uploads: settings and upload fields", function () {
         [field({ maxFileSizeMb: 11 })],
         {},
         "upload_field_max_size_above_instance",
-      ],
-      "no file at all": [
-        [field({ maxFiles: 0 })],
-        {},
-        "upload_field_max_files_out_of_range",
-      ],
-      "six files": [
-        [field({ maxFiles: 6 })],
-        {},
-        "upload_field_max_files_out_of_range",
       ],
       "no format": [[field({ formats: [] })], {}, "upload_field_formats_empty"],
       "no label": [[field({ label: " " })], {}, "upload_field_label_required"],

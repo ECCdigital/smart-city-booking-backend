@@ -50,7 +50,6 @@ const PROOF_FIELD = {
   id: "field-proof",
   label: "Vereinsausweis",
   required: true,
-  maxFiles: 2,
   formats: ["pdf"],
   timing: "afterConfirmation",
   deadlineDaysBeforeStart: 7,
@@ -60,7 +59,6 @@ const ID_FIELD = {
   id: "field-id",
   label: "Ausweis",
   required: false,
-  maxFiles: 1,
   formats: ["pdf"],
   category: "sensitive",
   timing: "afterConfirmation",
@@ -346,7 +344,7 @@ describe("customer uploads: the check by the staff", function () {
         kind: "rejected",
         reason: "Unleserlich",
       });
-      expect(field.remainingFiles).to.equal(2);
+      expect(field.remainingFiles).to.equal(1);
       expect(res.body.customerUploadState.state).to.equal("missing");
 
       expect(mails()).to.deep.equal([
@@ -476,14 +474,20 @@ describe("customer uploads: the check by the staff", function () {
     it("is the tenant owner's and the role holder's", async function () {
       const id = await booking();
       const one = await handIn(id);
-      const two = await handIn(id);
+      const two = await handIn(id, ID_FIELD.id);
 
       expect(
         (await review(id, one, { result: "accepted" }, { as: OWNER })).status,
       ).to.equal(200);
       expect(
-        (await review(id, two, { result: "accepted" }, { as: ROLE_HOLDER }))
-          .status,
+        (
+          await review(
+            id,
+            two,
+            { result: "accepted" },
+            { as: ROLE_HOLDER, field: ID_FIELD.id },
+          )
+        ).status,
       ).to.equal(200);
     });
   });
@@ -498,7 +502,6 @@ describe("customer uploads: a field from its notes", function () {
     id: "f",
     label: "Nachweis",
     required: true,
-    maxFiles: 2,
     formats: ["pdf"],
     timing: "afterConfirmation",
   };

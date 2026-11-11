@@ -60,7 +60,6 @@ const CHECKOUT_FIELD = {
   id: "field-checkout",
   label: "Vereinsausweis",
   required: true,
-  maxFiles: 1,
   formats: ["pdf"],
   timing: "checkout",
 };
@@ -70,7 +69,6 @@ const OTHER_CHECKOUT_FIELD = {
   id: "field-social",
   label: "Sozialpass",
   required: false,
-  maxFiles: 1,
   formats: ["pdf"],
   timing: "checkout",
 };
@@ -80,7 +78,6 @@ const LATER_FIELD = {
   id: "field-later",
   label: "Ausweis",
   required: true,
-  maxFiles: 1,
   formats: ["pdf"],
   timing: "afterConfirmation",
 };

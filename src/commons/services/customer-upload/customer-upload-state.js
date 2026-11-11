@@ -2,7 +2,10 @@ const {
   CUSTOMER_UPLOAD_REVIEW,
 } = require("../../schemas/customerUploadReferenceSchema");
 const { STATUS } = require("../booking-lifecycle/booking-state");
-const { UPLOAD_FIELD_TIMINGS } = require("./customer-upload-rules");
+const {
+  FILES_PER_FIELD,
+  UPLOAD_FIELD_TIMINGS,
+} = require("./customer-upload-rules");
 
 /**
  * The derived state of customer uploads: read
@@ -368,7 +371,7 @@ function deriveCustomerUploadState({
       consentText: field.consentText ?? "",
       required: Boolean(field.required),
       category: field.category ?? "normal",
-      maxFiles: field.maxFiles,
+      maxFiles: FILES_PER_FIELD,
       formats: field.formats,
       maxFileSizeMb: Math.min(
         field.maxFileSizeMb ?? limits.maxFileSizeMb,
@@ -382,7 +385,7 @@ function deriveCustomerUploadState({
       reopen: reopens.length ? reopens[reopens.length - 1] : null,
       // Room for more files: what waits for its check counts, what is
       // checked does not - its file is gone.
-      remainingFiles: Math.max(0, field.maxFiles - pending),
+      remainingFiles: Math.max(0, FILES_PER_FIELD - pending),
       uploads: own.map((r) => exportReference(r, options)),
       requests: ownRequests.map((r) => exportRequest(r, options)),
     };

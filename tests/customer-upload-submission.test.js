@@ -86,7 +86,6 @@ const PROOF_FIELD = {
   label: "Vereinsausweis",
   hint: "Vorder- und Rückseite",
   required: true,
-  maxFiles: 2,
   formats: ["pdf", "jpeg", "png"],
   timing: "afterConfirmation",
   deadlineDaysBeforeStart: 7,
@@ -96,7 +95,6 @@ const OPTIONAL_PDF_FIELD = {
   id: "field-optional",
   label: "Satzung",
   required: false,
-  maxFiles: 1,
   formats: ["pdf"],
   maxFileSizeMb: 1,
   timing: "afterConfirmation",
@@ -335,8 +333,8 @@ describe("customer uploads: handing in later", function () {
         state: "submitted",
         label: "Vereinsausweis",
         required: true,
-        maxFiles: 2,
-        remainingFiles: 1,
+        maxFiles: 1,
+        remainingFiles: 0,
         timing: "afterConfirmation",
       });
       expect(field.uploads).to.have.length(1);
@@ -439,17 +437,16 @@ describe("customer uploads: handing in later", function () {
       );
     });
 
-    it("for more files than the field takes", async function () {
+    it("for a second file in the field", async function () {
       const id = await booking();
       await upload(id, PDF, "vorne.pdf");
-      await upload(id, PDF, "hinten.pdf");
       const before = media.size;
 
-      const res = await upload(id, PDF, "dritte.pdf");
+      const res = await upload(id, PDF, "hinten.pdf");
 
       expect(res.status).to.equal(400);
       expect(res.body.code).to.equal("customer_upload_field_full");
-      expect(res.body.params.maxFiles).to.equal(2);
+      expect(res.body.params.maxFiles).to.equal(1);
       expect(media.size).to.equal(before);
     });
 
@@ -601,16 +598,14 @@ describe("customer uploads: handing in later", function () {
 
     it("replaces in a full field, the replaced file does not count", async function () {
       const id = await booking();
-      await upload(id, PDF, "vorne.pdf");
-      await upload(id, PDF, "hinten.pdf");
+      await upload(id, PDF, "alt.pdf");
       const [first] = references(id);
 
-      const res = await replace(id, first.mediaId, PDF, "vorne-neu.pdf");
+      const res = await replace(id, first.mediaId, PDF, "neu.pdf");
 
       expect(res.status, res.text).to.equal(200);
       expect(references(id).map((r) => r.originalFileName)).to.deep.equal([
-        "hinten.pdf",
-        "vorne-neu.pdf",
+        "neu.pdf",
       ]);
     });
 
@@ -754,8 +749,7 @@ describe("customer uploads: handing in later", function () {
       const id = await booking();
 
       const res = await submitAll(id, [
-        { data: PDF, name: "vorne.pdf" },
-        { data: await png(), name: "hinten.png" },
+        { data: await png(), name: "ausweis.png" },
         { field: OPTIONAL_PDF_FIELD.id, data: PDF, name: "satzung.pdf" },
       ]);
 
@@ -763,8 +757,7 @@ describe("customer uploads: handing in later", function () {
       expect(
         references(id).map((r) => [r.fieldId, r.originalFileName]),
       ).to.deep.equal([
-        [PROOF_FIELD.id, "vorne.pdf"],
-        [PROOF_FIELD.id, "hinten.png"],
+        [PROOF_FIELD.id, "ausweis.png"],
         [OPTIONAL_PDF_FIELD.id, "satzung.pdf"],
       ]);
       expect(fieldState(res.body).state).to.equal("submitted");
@@ -780,7 +773,7 @@ describe("customer uploads: handing in later", function () {
           `Zur Buchung\\s*<strong>${id}</strong>\\s*wurden folgende Nachweise eingereicht:\\s*</p>\\s*<ul>\\s*<li>Vereinsausweis</li>\\s*<li>Satzung</li>\\s*</ul>`,
         ),
       );
-      expect(mail.html).to.not.match(/vorne|hinten|satzung\.pdf/);
+      expect(mail.html).to.not.match(/ausweis\.png|satzung\.pdf/);
     });
 
     it("replaces an upload not checked yet in the same request", async function () {
@@ -791,13 +784,11 @@ describe("customer uploads: handing in later", function () {
 
       const res = await submitAll(id, [
         { replacing: old.mediaId, data: PDF, name: "neu.pdf" },
-        { data: PDF, name: "rueckseite.pdf" },
       ]);
 
       expect(res.status, res.text).to.equal(201);
       expect(references(id).map((r) => r.originalFileName)).to.deep.equal([
         "neu.pdf",
-        "rueckseite.pdf",
       ]);
       expect(media.has(old.mediaId)).to.equal(false);
       expect(h.takeEffects()).to.deep.equal([
@@ -880,16 +871,14 @@ describe("customer uploads: handing in later", function () {
       const res = await submitAll(id, [
         { data: PDF, name: "1.pdf" },
         { data: PDF, name: "2.pdf" },
-        { data: PDF, name: "3.pdf" },
       ]);
 
       expect(res.status, res.text).to.equal(201);
       expect(res.body.refused.map((r) => [r.index, r.code])).to.deep.equal([
-        [2, "customer_upload_field_full"],
+        [1, "customer_upload_field_full"],
       ]);
       expect(references(id).map((r) => r.originalFileName)).to.deep.equal([
         "1.pdf",
-        "2.pdf",
       ]);
     });
 
@@ -1044,7 +1033,6 @@ describe("customer uploads: the derived state", function () {
     id: "f",
     label: "Nachweis",
     required: true,
-    maxFiles: 1,
     formats: ["pdf"],
     timing: "afterConfirmation",
     deadlineDaysBeforeStart: 2,

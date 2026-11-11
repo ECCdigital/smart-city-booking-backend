@@ -32,8 +32,9 @@ const DEFAULT_REMINDER_DAYS = 3;
 const DEFAULT_REVIEW_REMINDER_DAYS = 3;
 // Roles that get the staff's notices of customer uploads, at most.
 const MAX_NOTIFY_ROLES = 10;
-const MIN_FILES_PER_FIELD = 1;
-const MAX_FILES_PER_FIELD = 5;
+// An upload field takes one file, never more: a field asking for several
+// documents is several fields.
+const FILES_PER_FIELD = 1;
 
 const DEFAULT_MAX_FILE_SIZE_MB = 10;
 const DEFAULT_MAX_FILES_PER_BOOKING = 20;
@@ -306,7 +307,8 @@ function normalizeUploadFieldDefinitions(definitions) {
     definition.hint ??= "";
     definition.consentText ??= "";
     definition.required ??= false;
-    definition.maxFiles ??= MIN_FILES_PER_FIELD;
+    // Not a setting: every field takes one file.
+    delete definition.maxFiles;
     definition.maxFileSizeMb ??= null;
     definition.category ??= UPLOAD_FIELD_CATEGORIES.NORMAL;
     definition.timing ??= UPLOAD_FIELD_TIMINGS.CHECKOUT;
@@ -366,20 +368,6 @@ function getUploadFieldDefinitionsError(
       });
     }
 
-    if (
-      !isIntegerIn(
-        definition.maxFiles,
-        MIN_FILES_PER_FIELD,
-        MAX_FILES_PER_FIELD,
-      )
-    ) {
-      return new BadRequestError("upload_field_max_files_out_of_range", {
-        ...params,
-        min: MIN_FILES_PER_FIELD,
-        max: MAX_FILES_PER_FIELD,
-      });
-    }
-
     const formatError = formatsError(
       definition.formats,
       settings.formats,
@@ -424,7 +412,7 @@ module.exports = {
   UPLOAD_FIELD_CATEGORIES,
   UPLOAD_FIELD_TIMINGS,
   MAX_RETENTION_DAYS,
-  MAX_FILES_PER_FIELD,
+  FILES_PER_FIELD,
   customerUploadCeilings,
   customerUploadLimits,
   defaultCustomerUploadSettings,

@@ -64,7 +64,6 @@ const CHECKOUT_FIELD = {
   hint: "Vorder- und Rückseite",
   consentText: "Ich willige ein.",
   required: true,
-  maxFiles: 2,
   formats: ["pdf", "jpeg"],
   timing: "checkout",
 };
@@ -73,7 +72,6 @@ const OPTIONAL_FIELD = {
   id: "field-optional",
   label: "Satzung",
   required: false,
-  maxFiles: 1,
   formats: ["pdf"],
   maxFileSizeMb: 1,
   timing: "checkout",
@@ -84,7 +82,6 @@ const LATER_FIELD = {
   id: "field-later",
   label: "Sozialpass",
   required: true,
-  maxFiles: 1,
   formats: ["pdf"],
   timing: "afterConfirmation",
 };
@@ -237,8 +234,7 @@ describe("customer uploads: with the checkout", function () {
   describe("a checkout with files", function () {
     it("stores the booking with a reference of each file, encrypted as booking documents", async function () {
       const res = await checkout([
-        { data: PDF, name: "vorne.pdf" },
-        { data: PDF, name: "hinten.pdf" },
+        { data: PDF, name: "ausweis.pdf" },
         { field: OPTIONAL_FIELD.id, data: PDF, name: "satzung.pdf" },
       ]);
 
@@ -249,8 +245,7 @@ describe("customer uploads: with the checkout", function () {
       expect(
         references.map((r) => [r.fieldId, r.originalFileName]),
       ).to.deep.equal([
-        [CHECKOUT_FIELD.id, "vorne.pdf"],
-        [CHECKOUT_FIELD.id, "hinten.pdf"],
+        [CHECKOUT_FIELD.id, "ausweis.pdf"],
         [OPTIONAL_FIELD.id, "satzung.pdf"],
       ]);
       for (const reference of references) {
@@ -263,7 +258,7 @@ describe("customer uploads: with the checkout", function () {
           decryptUpload(blobs.get(medium.storage.key)).equals(PDF),
         ).to.equal(true);
       }
-      expect(scanner.scans).to.equal(3);
+      expect(scanner.scans).to.equal(2);
     });
 
     it("encodes an image anew, without its EXIF", async function () {
@@ -319,7 +314,7 @@ describe("customer uploads: with the checkout", function () {
 
       const res = await checkout([
         { data: PDF, name: "1.pdf" },
-        { data: PDF, name: "2.pdf" },
+        { field: OPTIONAL_FIELD.id, data: PDF, name: "2.pdf" },
       ]);
 
       expectRefused(res, "customer_upload_booking_limit");
@@ -332,7 +327,7 @@ describe("customer uploads: with the checkout", function () {
 
       const res = await checkout([
         { data: PDF, name: "1.pdf" },
-        { data: PDF, name: "2.pdf" },
+        { field: OPTIONAL_FIELD.id, data: PDF, name: "2.pdf" },
       ]);
 
       expectRefused(res, "customer_upload_booking_limit");
@@ -347,8 +342,7 @@ describe("customer uploads: with the checkout", function () {
 
     it("names the fields handed in with the checkout, without a file, and no notice „Nachweis eingereicht“", async function () {
       const res = await checkout([
-        { data: PDF, name: "vorne-erika.pdf" },
-        { data: PDF, name: "hinten-erika.pdf" },
+        { data: PDF, name: "ausweis-erika.pdf" },
         { field: OPTIONAL_FIELD.id, data: PDF, name: "satzung-verein.pdf" },
       ]);
       expect(res.body.success, res.text).to.equal(true);
@@ -494,10 +488,9 @@ describe("customer uploads: with the checkout", function () {
       const res = await checkout([
         { data: PDF, name: "1.pdf" },
         { data: PDF, name: "2.pdf" },
-        { data: PDF, name: "3.pdf" },
       ]);
       expectRefused(res, "customer_upload_field_full");
-      expect(res.body.error.params.maxFiles).to.equal(2);
+      expect(res.body.error.params.maxFiles).to.equal(1);
       expectNothingStored();
     });
 
@@ -505,7 +498,7 @@ describe("customer uploads: with the checkout", function () {
       process.env.CUSTOMER_UPLOAD_MAX_FILES_PER_BOOKING = "1";
       const res = await checkout([
         { data: PDF, name: "1.pdf" },
-        { data: PDF, name: "2.pdf" },
+        { field: OPTIONAL_FIELD.id, data: PDF, name: "2.pdf" },
       ]);
       expectRefused(res, "customer_upload_booking_limit");
       expectNothingStored();
@@ -632,7 +625,7 @@ describe("customer uploads: with the checkout", function () {
           hint: "Vorder- und Rückseite",
           consentText: "Ich willige ein.",
           required: true,
-          maxFiles: 2,
+          maxFiles: 1,
           formats: ["pdf", "jpeg"],
           maxFileSizeMb: 10,
         },

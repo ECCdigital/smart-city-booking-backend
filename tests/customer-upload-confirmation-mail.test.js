@@ -46,7 +46,6 @@ const uploadField = (overrides = {}) => ({
   hint: "",
   consentText: "",
   required: true,
-  maxFiles: 1,
   formats: ["pdf"],
   category: "normal",
   timing: "afterConfirmation",

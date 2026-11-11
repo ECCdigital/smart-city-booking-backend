@@ -26,6 +26,7 @@ const {
   CUSTOMER_UPLOAD_REVIEW,
 } = require("../../schemas/customerUploadReferenceSchema");
 const {
+  FILES_PER_FIELD,
   UPLOAD_FIELD_TIMINGS,
   customerUploadLimits,
   effectiveCustomerUploadSettings,
@@ -507,10 +508,10 @@ class CustomerUploadService {
           r.fieldId === target.field.id &&
           r.mediaId !== replacing,
       );
-      if (pendingNow.length > target.field.maxFiles) {
+      if (pendingNow.length > FILES_PER_FIELD) {
         await CustomerUploadService._withdraw(tenantId, media, targets, added);
         throw new BadRequestError(R.FIELD_FULL, {
-          maxFiles: target.field.maxFiles,
+          maxFiles: FILES_PER_FIELD,
           ...(target.booking.id !== booking.id
             ? { bookingId: target.booking.id }
             : {}),
@@ -805,7 +806,7 @@ class CustomerUploadService {
       hint: field.hint ?? "",
       consentText: field.consentText ?? "",
       required: Boolean(field.required),
-      maxFiles: field.maxFiles,
+      maxFiles: FILES_PER_FIELD,
       formats: field.formats,
       maxFileSizeMb: Math.min(
         field.maxFileSizeMb ?? instance.maxFileSizeMb,
@@ -1568,10 +1569,10 @@ class CustomerUploadService {
     data,
     { at = {}, field, instance, inField, inBooking, bytesInBooking },
   ) {
-    if (inField >= field.maxFiles) {
+    if (inField >= FILES_PER_FIELD) {
       throw new BadRequestError(R.FIELD_FULL, {
         fieldId: field.id,
-        maxFiles: field.maxFiles,
+        maxFiles: FILES_PER_FIELD,
         ...at,
       });
     }
