@@ -2279,6 +2279,14 @@
     "instanceOwner": 200,
     "expiredToken": 401
   },
+  "GET /api/:tenant/accesspoints/:id/compartment-bookings": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200,
+    "expiredToken": 401
+  },
   "GET /api/:tenant/accesspoints/:id/qrcode": {
     "anonymous": 401,
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
