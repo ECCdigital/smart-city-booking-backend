@@ -390,4 +390,116 @@ describe("booking lifecycle pipeline", function () {
       ]);
     });
   });
+
+  describe("a guard", function () {
+    /** Steps that note where they ran: inside the guard or after it. */
+    function noting(adapters, entity, log, inside) {
+      const at = (name) => log.push(`${name}${inside() ? " guarded" : ""}`);
+      return [
+        step("persist", "store", "save", async () => {
+          at("save");
+          return adapters.store.save(entity, {
+            expectStatus: "confirmed",
+            transition: "amend",
+          });
+        }),
+        step("provision", "access", "allocate", async () => {
+          at("allocate");
+          return adapters.access.allocate(TENANT, "B-1");
+        }),
+        step("provision", "access", "update", async () => at("update")),
+        step("provision", "access", "hold", async () => at("hold"), {
+          when: () => false,
+        }),
+        step("notify", "workflow", "emit", async () => at("emit")),
+      ];
+    }
+
+    function guarding() {
+      const state = { inside: false, entered: 0 };
+      state.guard = async (work) => {
+        state.entered += 1;
+        state.inside = true;
+        try {
+          return await work();
+        } finally {
+          state.inside = false;
+        }
+      };
+      return state;
+    }
+
+    it("holds the persist writes and every step up to the last one that may abort and runs, and lets go before the rest", async function () {
+      const adapters = inMemoryAdapters({
+        bookings: [booking({ status: "confirmed" })],
+      });
+      const entity = await adapters.store.get(TENANT, "B-1");
+      const log = [];
+      const state = guarding();
+
+      const outcome = await runPipeline(
+        {
+          transition: "amend",
+          tenantId: TENANT,
+          bookingId: "B-1",
+          booking: entity,
+          store: adapters.store,
+        },
+        noting(adapters, entity, log, () => state.inside),
+        { guard: state.guard },
+      );
+
+      expect(state.entered).to.equal(1);
+      expect(log).to.deep.equal([
+        "save guarded",
+        "allocate guarded",
+        "update",
+        "emit",
+      ]);
+      expect(effectTable(outcome)).to.deep.equal([
+        "persist store.save ok",
+        "provision access.allocate ok",
+        "provision access.update ok",
+        "provision access.hold skipped",
+        "notify workflow.emit ok",
+      ]);
+    });
+
+    it("restores the persist writes inside the guard when a step aborts", async function () {
+      const adapters = inMemoryAdapters({
+        bookings: [booking({ status: "confirmed", name: "Erika Muster" })],
+        failOn: { access: ["allocate"] },
+      });
+      const entity = await adapters.store.get(TENANT, "B-1");
+      entity.name = "Erika M.";
+      const state = guarding();
+      const restore = adapters.store.restore;
+      const restoredInside = [];
+      adapters.store.restore = async (previous) => {
+        restoredInside.push(state.inside);
+        return restore(previous);
+      };
+
+      let error;
+      try {
+        await runPipeline(
+          {
+            transition: "amend",
+            tenantId: TENANT,
+            bookingId: "B-1",
+            booking: entity,
+            store: adapters.store,
+          },
+          noting(adapters, entity, [], () => state.inside),
+          { guard: state.guard },
+        );
+      } catch (err) {
+        error = err;
+      }
+
+      expect(error).to.be.instanceOf(LifecycleError);
+      expect(restoredInside).to.deep.equal([true]);
+      expect(adapters.store.rows.get("B-1").name).to.equal("Erika Muster");
+    });
+  });
 });

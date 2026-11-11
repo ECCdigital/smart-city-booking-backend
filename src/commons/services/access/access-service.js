@@ -873,6 +873,40 @@ class AccessService {
   }
 
   /**
+   * Runs `work` under the mutex of every Anlage with its own list that one
+   * of the bookings books or holds Fächer at - the lifecycle's guard around
+   * the save of an Änderung or a Wiederherstellung, its Zuteilung and the
+   * restore when that fails (tickets#1042): between the save and the
+   * restore the booking stands at its new period, and its old Fächer must
+   * not go to another Vormerkung meanwhile. Pass the booking as stored and
+   * as it is to be. The Zuteilung inside holds the same mutex again and
+   * runs straight through (`LockerSystemMutex` is re-entrant). Without
+   * such an Anlage `work` runs under no mutex.
+   *
+   * @template T
+   * @param {string} tenant Tenant ID
+   * @param {Object[]} bookings The bookings, as loaded or to be stored
+   * @param {() => Promise<T>} work
+   * @returns {Promise<T>} What `work` answers
+   */
+  static async holdLockerSystemsOf(tenant, bookings, work) {
+    const anlagen = [];
+    for (const booking of bookings) {
+      const sources = await this._loadAccessPointSources(tenant, booking);
+      const systems = this._resolveLockerSystems(tenant, booking, sources);
+      for (const system of systems.values()) {
+        if (carriesOwnCompartments(system.accessPoint)) {
+          anlagen.push(system.accessPoint);
+        }
+      }
+    }
+    if (anlagen.length === 0) {
+      return work();
+    }
+    return LockerSystemMutex.holdAll(anlagen, work);
+  }
+
+  /**
    * @private
    * The locker systems of the booking at which the platform assigns the
    * Fach - those carrying their own list, booked by a bookable of the

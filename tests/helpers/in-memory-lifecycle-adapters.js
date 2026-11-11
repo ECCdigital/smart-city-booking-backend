@@ -172,7 +172,7 @@ function inMemoryStore(seed = [], tenant = DEFAULT_TENANT, groups = []) {
 }
 
 function inMemoryAccess(options) {
-  return recordingAdapter(
+  const adapter = recordingAdapter(
     "access",
     ["hold", "allocate", "provision", "update", "revoke", "refreshHolds"],
     {
@@ -187,6 +187,14 @@ function inMemoryAccess(options) {
       },
     },
   );
+  // The guard of the Anlagen around a save and its Zuteilung: no mutex in
+  // memory, the bookings it was asked for noted apart from `calls`.
+  adapter.exclusives = [];
+  adapter.exclusive = async (tenantId, bookings, work) => {
+    adapter.exclusives.push(bookings.map((booking) => booking.id));
+    return work();
+  };
+  return adapter;
 }
 
 /**
