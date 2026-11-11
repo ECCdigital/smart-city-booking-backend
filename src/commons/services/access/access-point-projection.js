@@ -81,11 +81,13 @@ function uiCapabilities(provider) {
 /**
  * What the booking adds to an access point: when it may be used and whether it
  * is ready - a door once its access is set up, a compartment once it is
- * granted and not revoked. A compartment of a locker system is listed under
- * its own opaque id (`<accessPointId>:<authorizationId>`, `<accessPointId>:hold`
- * before the grant) and additionally carries the booking id the provider
- * knows it by and the compartment the person looks for - iFBS' box number -
- * where the provider names one.
+ * granted (or, assigned by the platform, provisioned) and not revoked. A
+ * compartment of a locker system is listed under its own opaque id
+ * (`<accessPointId>:<Fach UUID>` where the platform assigned the Fach,
+ * `<accessPointId>:<authorizationId>`, `<accessPointId>:hold` before the
+ * grant) and additionally carries the booking id the provider knows it by,
+ * the compartment the person looks for - iFBS' box number - where the
+ * provider names one, and the Fach the platform assigned.
  *
  * @param {Object} accessPoint The access point being projected
  * @param {Object} bookingContext The booking context it was resolved with
@@ -102,9 +104,32 @@ function bookingFields(accessPoint, bookingContext) {
   if (accessPoint.type === AccessPointType.LOCKER) {
     fields.externalBookingId = bookingContext.externalBookingId ?? null;
     fields.compartment = bookingContext.compartment ?? null;
+    fields.assignedCompartment = assignedCompartmentView(
+      bookingContext.assignedCompartment,
+    );
   }
 
   return fields;
+}
+
+/**
+ * The Fach the platform assigned, as the person looks for it: its number
+ * and the name of its Schließfachschrank - the Anlage's name is the
+ * `label`. Its UUID stays on the server like every external id.
+ *
+ * @param {Object|null|undefined} assigned The entry's `assignedCompartment`
+ * @returns {{ number: number|null, lockerBankName: string|null }|null}
+ *   `null` for a compartment the provider assigns
+ */
+function assignedCompartmentView(assigned) {
+  if (!assigned) {
+    return null;
+  }
+
+  return {
+    number: assigned.number ?? null,
+    lockerBankName: assigned.lockerBank?.name ?? null,
+  };
 }
 
 module.exports = {

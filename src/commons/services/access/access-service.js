@@ -1042,9 +1042,11 @@ class AccessService {
   /**
    * Sets up the access of a booking: the doors it confers and the
    * compartments of the locker systems it books. A door is provisioned as
-   * its mode says; a compartment is always provisioned through the grant,
-   * whatever mode its locker system opens in, consuming the hold where one
-   * was taken. Doors and compartments provisioned already are left alone.
+   * its mode says; a compartment is provisioned through the grant, whatever
+   * mode its locker system opens in, consuming the hold where one was
+   * taken - except a Fach the platform assigned (Open Locker), which is
+   * noted as provisioned without a call to the provider. Doors and
+   * compartments provisioned already are left alone.
    *
    * @param {string} tenant Tenant ID
    * @param {string} bookingId Booking ID
@@ -1231,7 +1233,8 @@ class AccessService {
    * created - and a provider that holds compartments takes one on the spot
    * where the hold lapsed or was never taken. Every grant is audited under
    * the compartment's id; a refused one is rethrown after the audit, like a
-   * door's.
+   * door's. A Fach the platform assigned needs no grant
+   * (`_provisionAssignedCompartment`).
    *
    * @param {string} tenant Tenant ID
    * @param {Object} booking The booking, written into
@@ -1248,6 +1251,16 @@ class AccessService {
     for (const entry of this._compartmentEntries(booking)) {
       const system = lockerSystems.get(String(entry.accessPointId));
       if (!system || entry.revokedAt || entry.grant) {
+        continue;
+      }
+
+      if (entry.assignedCompartment) {
+        await this._provisionAssignedCompartment(
+          tenant,
+          booking,
+          system,
+          entry,
+        );
         continue;
       }
 
@@ -1321,9 +1334,48 @@ class AccessService {
   }
 
   /**
+   * @private
+   * Provisions a Fach the platform assigned (an Anlage with its own list):
+   * Open Locker knows no grant, so the Fach is provisioned by being noted
+   * as such, like a door in mode `remote` - no call to the provider. The
+   * Fach of the Vormerkung is the Fach of the booking.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {Object} booking The booking, written into
+   * @param {Object} system The Anlage, as the resolver answers it
+   * @param {Object} entry The entry with its `assignedCompartment`
+   */
+  static async _provisionAssignedCompartment(tenant, booking, system, entry) {
+    if (entry.isProvisioned) {
+      return;
+    }
+
+    Object.assign(entry, {
+      isProvisioned: true,
+      provisionedAt: Date.now(),
+      revokedAt: null,
+    });
+
+    await this._log({
+      tenantId: tenant,
+      accessPoint: this._compartmentAccessPoint(system, entry),
+      bookingId: booking.id,
+      action: "provision",
+      result: "success",
+      payload: {
+        mode: AccessPointMode.REMOTE,
+        compartment: entry.assignedCompartment,
+      },
+      actor: { source: "system" },
+    });
+  }
+
+  /**
    * Takes the access of a booking back: the grants at its doors and the
-   * compartments granted to it. A compartment only held is left alone -
-   * the hold lapses by itself. The entries stay, marked revoked.
+   * compartments granted to it, and the provisioned Fächer the platform
+   * assigned, those without a call to the provider. A compartment only
+   * held is left alone - the hold lapses by itself, a Fach the platform
+   * holds with the booking's state. The entries stay, marked revoked.
    *
    * @param {string} tenant Tenant ID
    * @param {string} bookingId Booking ID
@@ -1342,8 +1394,10 @@ class AccessService {
   /**
    * @private
    * Revokes every granted, unrevoked compartment of the booking at its
-   * provider. A revoke the provider refuses is audited and left for the
-   * next attempt, like a door's; the entry then stays granted.
+   * provider, and marks every provisioned Fach the platform assigned as
+   * revoked (`_revokeAssignedCompartment`). A revoke the provider refuses is
+   * audited and left for the next attempt, like a door's; the entry then
+   * stays granted.
    *
    * @param {string} tenant Tenant ID
    * @param {Object} booking The booking, written into
@@ -1353,6 +1407,10 @@ class AccessService {
   static async _revokeCompartments(tenant, booking, lockerSystems) {
     for (const entry of this._compartmentEntries(booking)) {
       const system = lockerSystems?.get(String(entry.accessPointId));
+      if (entry.assignedCompartment && !entry.grant) {
+        await this._revokeAssignedCompartment(tenant, booking, system, entry);
+        continue;
+      }
       if (!entry.grant || entry.revokedAt) {
         continue;
       }
@@ -1408,6 +1466,49 @@ class AccessService {
         });
       }
     }
+  }
+
+  /**
+   * @private
+   * Takes back a Fach the platform assigned and provisioned: the entry is
+   * marked revoked, without a call to the provider, since Open Locker
+   * holds no grant to take back. The entry keeps its `assignedCompartment`
+   * as the record; revoked, it no longer occupies the Fach. A Fach only
+   * held is left alone, like a held compartment of any provider - an
+   * unpaid change holds before it revokes, and a cancelled booking frees
+   * it by its state.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {Object} booking The booking, written into
+   * @param {Object|undefined} system The Anlage, where it is still there
+   * @param {Object} entry The entry with its `assignedCompartment`
+   */
+  static async _revokeAssignedCompartment(tenant, booking, system, entry) {
+    if (!entry.isProvisioned || entry.revokedAt) {
+      return;
+    }
+
+    Object.assign(entry, { isProvisioned: false, revokedAt: Date.now() });
+
+    await this._log({
+      tenantId: tenant,
+      accessPoint: system
+        ? this._compartmentAccessPoint(system, entry)
+        : {
+            id: this._compartmentId(entry),
+            type: AccessPointType.LOCKER,
+            provider: entry.provider,
+            externalId: String(entry.assignedCompartment.id),
+          },
+      bookingId: booking.id,
+      action: "revoke",
+      result: "success",
+      payload: {
+        mode: AccessPointMode.REMOTE,
+        compartment: entry.assignedCompartment,
+      },
+      actor: { source: "system" },
+    });
   }
 
   static async _revokeResolvedDoors(tenant, booking, doors) {
@@ -1589,7 +1690,10 @@ class AccessService {
    * be within its (buffered) time window - the assigned access points should
    * be visible at any time as long as the booking is valid (committed, paid
    * if priced, not rejected) and the user has a role at it: the owner or
-   * someone with the manage-bookings permission.
+   * someone with the manage-bookings permission. A booking holding a Fach the
+   * platform assigned is visible from the Vormerkung on, before the payment
+   * too, as long as it is not rejected, cancelled or withdrawn - the person
+   * learns which Fach awaits them; opening still waits for the access.
    */
   static async canView(userId, tenant, bookingId, scope) {
     const booking = await BookingManager.getBooking(bookingId, tenant, DOMAIN);
@@ -1598,8 +1702,21 @@ class AccessService {
       return false;
     }
 
-    return decide(booking, [], { userId, canManage: managesUnder(scope) })
-      .canView;
+    const decision = decide(booking, [], {
+      userId,
+      canManage: managesUnder(scope),
+    });
+    if (decision.canView) {
+      return true;
+    }
+
+    return (
+      decision.accessRole !== null &&
+      !booking.isRejected &&
+      this._compartmentEntries(booking).some(
+        (entry) => entry.assignedCompartment && !entry.revokedAt,
+      )
+    );
   }
 
   /**
@@ -1789,9 +1906,10 @@ class AccessService {
    *
    * This reads the stored flag, which `_upsertAccessInfo` maintains for doors
    * and compartments alike. It is not the same question as
-   * `_compartmentContext`, which recomputes `isProvisioned` from the grant:
-   * that one judges one compartment for the access decision, where a grant is
-   * the only way to be provisioned, and would call a `remote` door unprovisioned.
+   * `_compartmentContext`, which recomputes `isProvisioned` from the grant
+   * (or, for a Fach the platform assigned, from this flag): that one judges
+   * one compartment for the access decision, and would call a `remote` door
+   * unprovisioned.
    *
    * Bookings whose period has passed are left out: their access is over, so
    * the deletion takes nothing from them. A booking without an end never ends
@@ -2601,11 +2719,20 @@ class AccessService {
    * @private
    * The compartment as an access point: the locker system's row under the
    * compartment's own id. What a provider reads - `tenantId`, `externalId`,
-   * `provider` - is the row's; what the decision and the projection read -
-   * `id`, `type`, `mode`, `validationRules` - names the compartment.
+   * `provider` - is the row's, except that a Fach the platform assigned is
+   * addressed by its own UUID as `externalId` (the Anlage has none); what
+   * the decision and the projection read - `id`, `type`, `mode`,
+   * `validationRules` - names the compartment.
    */
   static _compartmentAccessPoint(system, entry) {
-    return { ...system.accessPoint, id: this._compartmentId(entry) };
+    const accessPoint = {
+      ...system.accessPoint,
+      id: this._compartmentId(entry),
+    };
+    if (entry.assignedCompartment?.id) {
+      accessPoint.externalId = String(entry.assignedCompartment.id);
+    }
+    return accessPoint;
   }
 
   /**
@@ -2632,8 +2759,14 @@ class AccessService {
       compartment: entry.compartment ?? null,
       externalBookingId: entry.grant?.authorizationId ?? null,
       grant: entry.grant || null,
+      assignedCompartment: entry.assignedCompartment || null,
       // Provisioned is the grant, not the existence: granted and not revoked.
-      isProvisioned: Boolean(entry.grant?.authorizationId) && !entry.revokedAt,
+      // A Fach the platform assigned has no grant; it is provisioned by the
+      // Bereitstellung noting it, like a remote door.
+      isProvisioned:
+        (entry.assignedCompartment
+          ? entry.isProvisioned === true
+          : Boolean(entry.grant?.authorizationId)) && !entry.revokedAt,
       provisionedAt: entry.provisionedAt || null,
       revokedAt: entry.revokedAt || null,
       principalRemovedAt: entry.principalRemovedAt || null,
@@ -3257,7 +3390,9 @@ class AccessService {
    *   assignedCompartment: { id, number, lockerBank: { id, name } }
    *     - the Fach the platform assigned at an Anlage with its own list
    *       (`compartment-allocation.js`): its UUID at the provider, its
-   *       number and Schließfachschrank, copied from the Anlage's list
+   *       number and Schließfachschrank, copied from the Anlage's list;
+   *       without a grant, `isProvisioned`/`revokedAt` alone say whether
+   *       its access runs (set by the Bereitstellung and the Rücknahme)
    *
    * @param {Object} booking The booking to write into
    * @param {Object} accessPoint The access point the entry is for

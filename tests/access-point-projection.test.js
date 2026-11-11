@@ -263,6 +263,59 @@ describe("Access point projection", () => {
         isProvisioned: true,
         externalBookingId: "BK-99182",
         compartment: "62100103",
+        assignedCompartment: null,
+      });
+    });
+
+    it("names the Fach the platform assigned - Anlage, Schließfachschrank and number", () => {
+      const view = projectAccessPoint(
+        compartment({
+          id: "anlage-1:uuid-3",
+          provider: "open-locker",
+          externalId: "uuid-3",
+          label: "Fächer Bahnhof",
+        }),
+        {
+          bookingContext: {
+            externalBookingId: null,
+            compartment: null,
+            isProvisioned: false,
+            assignedCompartment: {
+              id: "uuid-3",
+              number: 3,
+              lockerBank: { id: "bank-1", name: "Quartiersschrank Hafen" },
+            },
+          },
+        },
+      );
+
+      expect(view).to.include({
+        id: "anlage-1:uuid-3",
+        label: "Fächer Bahnhof",
+        isProvisioned: false,
+        compartment: null,
+      });
+      expect(view.assignedCompartment).to.deep.equal({
+        number: 3,
+        lockerBankName: "Quartiersschrank Hafen",
+      });
+      expect(view).to.not.have.property("externalId");
+      expect(JSON.stringify(view)).to.not.include("bank-1");
+    });
+
+    it("answers a Fach without a known Schließfachschrank with its number alone", () => {
+      const view = projectAccessPoint(
+        compartment({ id: "anlage-1:uuid-3", provider: "open-locker" }),
+        {
+          bookingContext: {
+            assignedCompartment: { id: "uuid-3", number: 3, lockerBank: null },
+          },
+        },
+      );
+
+      expect(view.assignedCompartment).to.deep.equal({
+        number: 3,
+        lockerBankName: null,
       });
     });
 
@@ -312,6 +365,7 @@ describe("Access point projection", () => {
         "isProvisioned",
         "externalBookingId",
         "compartment",
+        "assignedCompartment",
       );
     });
   });
