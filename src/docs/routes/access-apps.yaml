@@ -19,6 +19,15 @@
       Opener `auto` alone, an unknown device type all five). Providers
       without the notion leave the field out.
 
+      Open Locker (`open-locker`) lists the compartments the tenant's
+      technical account holds a permission on - on an instance several
+      tenants share, only the tenant's own -, each a door in mode `remote`
+      with the compartment's UUID as `id` and `externalId`, its locker bank
+      as `locationId` and the label `<locker bank> · Fach <number>`, e.g.
+      „Labor Fachbank 1 · Fach 2“. `metadata` carries Open Locker's
+      compartment with `number` and `lockerBank` (`id`, `name`,
+      `locationDescription`).
+
       Requires `accessApp.read` in the tenant. A provider the tenant has no
       active application for answers `404 <provider>_application_not_found`
       (e.g. `salto_ks_application_not_found`). A provider that does not list

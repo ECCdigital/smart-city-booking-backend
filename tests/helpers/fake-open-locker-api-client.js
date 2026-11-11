@@ -5,11 +5,21 @@
  * the token, signing in again after a `401` and repeating the call once -
  * stays production code.
  *
+ * One instance serves several tenants, each through a technical account
+ * of its own (role `user`), and every account holds a permission on its
+ * tenant's compartments only - the setup of one instance for the whole
+ * KielRegion. The client signs in as the first account; the others are the
+ * neighbours whose compartments it must never see.
+ *
  * What the fake models of Open Locker, as far as the platform uses it:
- * - `POST /api/login` answers a Sanctum token for the right e-mail and
- *   password, `422` otherwise.
+ * - `POST /api/login` answers a Sanctum token for an account's e-mail and
+ *   password, `422` otherwise. The token stands for that account.
  * - `GET /api/user` answers the account, with whether it accepted the
  *   current terms and verified its e-mail address.
+ * - `GET /api/compartments/accessible` answers the locker banks with the
+ *   compartments the account holds a permission on, ordered by name and
+ *   number; a locker bank without one is left out. Like every reading
+ *   route it passes for an account blocked for terms not accepted.
  * - `POST /api/compartments/{uuid}/open` answers `202` with a `command_id`
  *   for a compartment the account may open, `403` with `state: denied` and a
  *   `command_id` for one it may not, `404` for one Open Locker does not
@@ -34,8 +44,59 @@ const {
 const FAKE_SERVER_URL = "https://locker.example.test";
 const FAKE_EMAIL = "biletado@example.test";
 const FAKE_PASSWORD = "secret";
+const NEIGHBOUR_EMAIL = "nachbarort@example.test";
+const NEIGHBOUR_PASSWORD = "nachbar-secret";
+const LOCKER_BANK_ID = "4e5f6a7b-8c9d-4e0f-a1b2-c3d4e5f6a7b8";
+const SECOND_LOCKER_BANK_ID = "5f6a7b8c-9d0e-4f1a-b2c3-d4e5f6a7b8c9";
+/** The tenant's compartment: „Labor Fachbank 1“, number 1. */
 const COMPARTMENT_ID = "9b2f6c1e-3d4a-4f5b-8c7d-1e2f3a4b5c6d";
+/** The neighbour's compartment in the same locker bank, number 2. */
 const OTHER_COMPARTMENT_ID = "0c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
+/** The tenant's compartment in a second locker bank, number 3. */
+const SECOND_COMPARTMENT_ID = "1d2e3f4a-5b6c-4d7e-9f8a-0b1c2d3e4f5a";
+
+/**
+ * The locker banks of the instance and every compartment they hold, as
+ * Open Locker keeps them - whoever may open them.
+ */
+function defaultLockerBanks() {
+  return [
+    {
+      id: LOCKER_BANK_ID,
+      name: "Labor Fachbank 1",
+      location_description: "Labor, Regal links",
+      compartments: [
+        { id: COMPARTMENT_ID, number: 1 },
+        { id: OTHER_COMPARTMENT_ID, number: 2 },
+      ],
+    },
+    {
+      id: SECOND_LOCKER_BANK_ID,
+      name: "Quartiersschrank Hafen",
+      location_description: null,
+      compartments: [{ id: SECOND_COMPARTMENT_ID, number: 3 }],
+    },
+  ];
+}
+
+/**
+ * The technical accounts of the instance, the tenant's first: each with
+ * the compartments it holds a permission on.
+ */
+function defaultAccounts() {
+  return [
+    {
+      email: FAKE_EMAIL,
+      password: FAKE_PASSWORD,
+      compartments: [COMPARTMENT_ID, SECOND_COMPARTMENT_ID],
+    },
+    {
+      email: NEIGHBOUR_EMAIL,
+      password: NEIGHBOUR_PASSWORD,
+      compartments: [OTHER_COMPARTMENT_ID],
+    },
+  ];
+}
 
 /** An error the way axios raises one for an HTTP answer outside 2xx. */
 function openLockerHttpError(status, data = {}) {
@@ -56,35 +117,45 @@ function openLockerNetworkError(code = "ECONNREFUSED") {
 class FakeOpenLockerApiClient extends OpenLockerApiClient {
   /**
    * @param {Object} [options]
-   * @param {string[]} [options.compartments] Compartments the account may
-   *   open, by UUID
-   * @param {string[]} [options.foreignCompartments] Compartments Open Locker
-   *   knows but the account may not open
+   * @param {Object[]} [options.lockerBanks] The locker banks of the
+   *   instance, each with `id`, `name`, `location_description` and its
+   *   `compartments` (`id`, `number`)
+   * @param {Object[]} [options.accounts] The technical accounts, each with
+   *   `email`, `password` and the `compartments` it holds a permission on,
+   *   by UUID; the client signs in as the first
    * @param {Object} [options.credentials] What the client signs in with
-   *   (`serverUrl`, `email`, `password`)
+   *   (`serverUrl`, `email`, `password`), the first account's by default
    */
   constructor({
-    compartments = [COMPARTMENT_ID],
-    foreignCompartments = [OTHER_COMPARTMENT_ID],
+    lockerBanks = defaultLockerBanks(),
+    accounts = defaultAccounts(),
     credentials = {},
   } = {}) {
     super(
       credentials.serverUrl ?? FAKE_SERVER_URL,
-      credentials.email ?? FAKE_EMAIL,
-      credentials.password ?? FAKE_PASSWORD,
+      credentials.email ?? accounts[0].email,
+      credentials.password ?? accounts[0].password,
     );
-    this.account = {
-      email: FAKE_EMAIL,
-      password: FAKE_PASSWORD,
-      termsAccepted: true,
-      emailVerified: true,
-    };
-    this.compartments = new Set(compartments);
-    this.foreignCompartments = new Set(foreignCompartments);
+    this.lockerBanks = lockerBanks;
+    /** @type {Map<string, Object>} e-mail -> account */
+    this.accounts = new Map(
+      accounts.map((account) => [
+        account.email,
+        {
+          email: account.email,
+          password: account.password,
+          termsAccepted: true,
+          emailVerified: true,
+          permissions: new Set(account.compartments),
+        },
+      ]),
+    );
+    /** The tenant's account, the one the client signs in as. */
+    this.account = this.accounts.get(accounts[0].email);
     /** @type {Map<string, Object>} command_id -> open request */
     this.openRequests = new Map();
-    /** Tokens the instance knows. */
-    this.validTokens = new Set();
+    /** @type {Map<string, string>} token -> e-mail of its account */
+    this.tokens = new Map();
     /** Every login the instance answered, successful or not. */
     this.logins = [];
     /** Every request that reached the instance, as `METHOD path`. */
@@ -92,9 +163,14 @@ class FakeOpenLockerApiClient extends OpenLockerApiClient {
     this._nextId = 1;
   }
 
+  /** Takes the account's permission on a compartment away. */
+  revokePermission(compartmentId, email = this.account.email) {
+    this.accounts.get(email).permissions.delete(compartmentId);
+  }
+
   /** Forgets every token, as an expiry or a revocation would. */
   expireTokens() {
-    this.validTokens.clear();
+    this.tokens.clear();
   }
 
   /** Moves an open request on to `state`, as the locker would report it. */
@@ -117,7 +193,8 @@ class FakeOpenLockerApiClient extends OpenLockerApiClient {
       return this._answerLogin(data);
     }
 
-    if (!this.validTokens.has(token)) {
+    const account = this.accounts.get(this.tokens.get(token));
+    if (!account) {
       throw openLockerHttpError(401, { message: "Unauthenticated" });
     }
 
@@ -126,28 +203,32 @@ class FakeOpenLockerApiClient extends OpenLockerApiClient {
     if (route === "GET /api/user") {
       return {
         id: 1,
-        email: this.account.email,
-        email_verified_at: this.account.emailVerified
+        email: account.email,
+        email_verified_at: account.emailVerified
           ? "2026-10-01T10:00:00.000000Z"
           : null,
         is_admin: false,
         terms_current_version: 2,
-        terms_current_accepted: this.account.termsAccepted,
+        terms_current_accepted: account.termsAccepted,
       };
+    }
+
+    if (route === "GET /api/compartments/accessible") {
+      return this._accessible(account);
     }
 
     if (
       method === "post" &&
       (match = path.match(/^\/api\/compartments\/([^/]+)\/open$/))
     ) {
-      return this._open(match[1]);
+      return this._open(account, match[1]);
     }
 
     if (
       method === "get" &&
       (match = path.match(/^\/api\/compartments\/open-requests\/([^/]+)$/))
     ) {
-      return this._openStatus(match[1]);
+      return this._openStatus(account, match[1]);
     }
 
     throw new Error(`fake-open-locker-api-client: unexpected request ${route}`);
@@ -155,7 +236,8 @@ class FakeOpenLockerApiClient extends OpenLockerApiClient {
 
   _answerLogin({ email, password } = {}) {
     this.logins.push({ email });
-    if (email !== this.account.email || password !== this.account.password) {
+    const account = this.accounts.get(email);
+    if (!account || password !== account.password) {
       throw openLockerHttpError(422, {
         message: "The provided credentials are incorrect.",
         errors: { email: ["The provided credentials are incorrect."] },
@@ -163,19 +245,50 @@ class FakeOpenLockerApiClient extends OpenLockerApiClient {
     }
 
     const token = `${this._nextId++}|fake-token`;
-    this.validTokens.add(token);
+    this.tokens.set(token, email);
     return { token, first_name: "Biletado", last_name: null, verified: true };
   }
 
-  _open(compartmentId) {
-    if (
-      !this.compartments.has(compartmentId) &&
-      !this.foreignCompartments.has(compartmentId)
-    ) {
+  _accessible(account) {
+    const lockerBanks = [...this.lockerBanks]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((lockerBank) => ({
+        id: lockerBank.id,
+        name: lockerBank.name,
+        location_description: lockerBank.location_description,
+        last_compartment_state_change_at: null,
+        compartments: lockerBank.compartments
+          .filter((compartment) => account.permissions.has(compartment.id))
+          .sort((a, b) => a.number - b.number)
+          .map((compartment) => ({
+            id: compartment.id,
+            number: compartment.number,
+            door_state: "closed",
+            door_state_changed_at: null,
+            content_note: null,
+            content_note_updated_at: null,
+            content_note_updated_by_user_id: null,
+          })),
+      }))
+      .filter((lockerBank) => lockerBank.compartments.length > 0);
+
+    return { status: true, locker_banks: lockerBanks };
+  }
+
+  _knows(compartmentId) {
+    return this.lockerBanks.some((lockerBank) =>
+      lockerBank.compartments.some(
+        (compartment) => compartment.id === compartmentId,
+      ),
+    );
+  }
+
+  _open(account, compartmentId) {
+    if (!this._knows(compartmentId)) {
       throw openLockerHttpError(404, { message: "Not Found" });
     }
 
-    if (!this.account.termsAccepted) {
+    if (!account.termsAccepted) {
       throw openLockerHttpError(403, {
         message: "You must accept the latest terms before continuing.",
         code: "terms_not_accepted",
@@ -183,7 +296,7 @@ class FakeOpenLockerApiClient extends OpenLockerApiClient {
       });
     }
 
-    if (!this.account.emailVerified) {
+    if (!account.emailVerified) {
       throw openLockerHttpError(403, {
         status: false,
         message: "Please verify your email address before opening compartments",
@@ -191,8 +304,9 @@ class FakeOpenLockerApiClient extends OpenLockerApiClient {
     }
 
     const commandId = `cmd-${this._nextId++}`;
-    const authorized = this.compartments.has(compartmentId);
+    const authorized = account.permissions.has(compartmentId);
     this.openRequests.set(commandId, {
+      actor: account.email,
       command_id: commandId,
       compartment_id: compartmentId,
       state: authorized ? "requested" : "denied",
@@ -219,7 +333,7 @@ class FakeOpenLockerApiClient extends OpenLockerApiClient {
     };
   }
 
-  _openStatus(commandId) {
+  _openStatus(account, commandId) {
     const request = this.openRequests.get(commandId);
     if (!request) {
       throw openLockerHttpError(404, {
@@ -228,7 +342,15 @@ class FakeOpenLockerApiClient extends OpenLockerApiClient {
       });
     }
 
-    return { status: true, ...request };
+    const { actor, ...state } = request;
+    if (actor !== account.email) {
+      throw openLockerHttpError(403, {
+        status: false,
+        message: "You are not allowed to view this command",
+      });
+    }
+
+    return { status: true, ...state };
   }
 }
 
@@ -251,6 +373,11 @@ module.exports = {
   FAKE_SERVER_URL,
   FAKE_EMAIL,
   FAKE_PASSWORD,
+  NEIGHBOUR_EMAIL,
+  NEIGHBOUR_PASSWORD,
+  LOCKER_BANK_ID,
+  SECOND_LOCKER_BANK_ID,
   COMPARTMENT_ID,
   OTHER_COMPARTMENT_ID,
+  SECOND_COMPARTMENT_ID,
 };

@@ -70,12 +70,7 @@ class AccessInfoService {
    *   provider does not list the access point
    */
   static async findListedAccessPoint(accessPoint, tenantId) {
-    const capabilities = getAccessProviderCapabilities(accessPoint.provider);
-
-    if (
-      !capabilities.includes(LIST_ACCESS_POINTS_CAPABILITY) ||
-      !accessPoint.externalId
-    ) {
+    if (!AccessInfoService.asksListing(accessPoint)) {
       return null;
     }
 
@@ -91,6 +86,24 @@ class AccessInfoService {
           String(candidate.id) === externalId ||
           String(candidate.externalId) === externalId,
       ) || null
+    );
+  }
+
+  /**
+   * Whether the provider's listing is asked about the access point at all:
+   * only for a provider that lists, and only for an access point that names
+   * its `externalId`. Otherwise {@link findListedAccessPoint} answers `null`
+   * without asking.
+   *
+   * @param {Object} accessPoint The access point, read for `provider` and
+   *   `externalId`
+   * @returns {boolean}
+   */
+  static asksListing(accessPoint) {
+    return (
+      getAccessProviderCapabilities(accessPoint.provider).includes(
+        LIST_ACCESS_POINTS_CAPABILITY,
+      ) && Boolean(accessPoint.externalId)
     );
   }
 
@@ -145,10 +158,14 @@ class AccessInfoService {
    * @param {Object} accessPoint The access point as it would be stored
    * @param {Object|null} listedAccessPoint The provider's listed entry for
    *   it, `null` when the provider does not list it
+   * @param {Object} [listing] What the save knows of the listing
+   * @param {boolean} [listing.asked] `false` when the listing was not asked
+   *   - the tenant has not switched the provider on (tickets#311), or the
+   *   access point names no `externalId`
    * @returns {void}
    * @throws {ValidationError} What the provider will not store
    */
-  static validateAccessPoint(accessPoint, listedAccessPoint) {
+  static validateAccessPoint(accessPoint, listedAccessPoint, listing = {}) {
     const capabilities = getAccessProviderCapabilities(accessPoint.provider);
 
     if (!capabilities.includes(VALIDATE_ACCESS_POINT_CAPABILITY)) {
@@ -158,6 +175,7 @@ class AccessInfoService {
     getAccessProvider(accessPoint.provider).validateAccessPoint(
       accessPoint,
       listedAccessPoint,
+      listing,
     );
   }
 

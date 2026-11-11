@@ -93,7 +93,7 @@ _Avoid_: usedBy (als Feld — existiert nicht), Rückreferenz, Usage-Index
 ### Zugang
 
 **AccessPoint**:
-Ein physischer Zugangspunkt, den die Plattform über einen Provider (z.B. NUKI, Salto, iFBS, Pareva) einer Buchung zuordnet: eine Tür (geteilt, fest konfiguriert) oder eine Schließfachanlage (exklusiv, je Buchung ein Fach zugeteilt). Ein AccessPoint ohne Bedien-Capability ist zulässig — die Plattform muss ihn nicht öffnen können.
+Ein physischer Zugangspunkt, den die Plattform über einen Provider (z.B. NUKI, Salto, Open Locker, iFBS, Pareva) einer Buchung zuordnet: eine Tür (geteilt, fest konfiguriert; auch das Fach eines Schließfachschranks) oder eine Schließfachanlage (exklusiv, je Buchung ein Fach zugeteilt). Ein AccessPoint ohne Bedien-Capability ist zulässig — die Plattform muss ihn nicht öffnen können.
 _Avoid_: Tür (als Entity-Name), Door, Schloss, Lock, Locker
 
 **Schließfachanlage**:
@@ -101,8 +101,16 @@ Ein AccessPoint, dessen Provider je Buchung ein Fach zuteilt: bei iFBS ein Stand
 _Avoid_: Locker, Locker-Unit, Location (als Entity), Schließfach (unqualifiziert — das ist das Fach)
 
 **Fach**:
-Das einer Buchung zugeteilte Abteil einer Schließfachanlage. Lebt im Grant der Buchung für die Anlage; bei iFBS trägt es die Boxnummer, an der der Buchende seine Box erkennt.
-_Avoid_: Box (als Begriff — iFBS-Jargon), Unit, Locker
+Ein abschließbares Abteil mit eigener Tür. An einer Schließfachanlage teilt der Provider es einer Buchung zu, und es lebt im Grant der Buchung für die Anlage; bei iFBS trägt es die Boxnummer, an der der Buchende seine Box erkennt. An einem Schließfachschrank ist jedes Fach selbst ein AccessPoint, eine Tür, fest einem Bookable zugeordnet.
+_Avoid_: Box (als Begriff — iFBS-Jargon), Unit, Locker, Compartment (als Sprechbegriff)
+
+**Schließfachschrank**:
+Ein Schrank mit nummerierten Fächern, den Open Locker steuert. Nicht der Schrank ist ein AccessPoint, sondern jedes seiner Fächer; der Schrank gibt dem Fach Namen und Ort, etwa „Labor Fachbank 1 · Fach 2“.
+_Avoid_: Locker Bank (als Sprechbegriff), Fachbank (als Begriff), Schließfachanlage (die teilt je Buchung ein Fach zu), Quartiersschrank (ist ein Einsatzort, kein Typ)
+
+**Technisches Konto**:
+Das Konto eines Mandanten bei einem Provider, mit dem sich die Plattform dort anmeldet, ohne Person dahinter. Bei Open Locker ist es nur auf die Fächer seines Mandanten berechtigt, auch wenn sich mehrere Mandanten eine Instanz teilen.
+_Avoid_: Service-Account, Maschinenkonto, Admin-Konto
 
 **Vormerkung**:
 Der Anspruch einer noch unbezahlten Buchung auf ein Fach, vor dem Grant. Wird vom Provider gehalten (iFBS, befristet und erneuerbar) oder von der Plattform (Pareva, durch die gespeicherte Buchung selbst). Scheitert die Vormerkung im Checkout, entsteht die Buchung nicht; scheitert der Grant nach der Zahlung, bleibt die Buchung und der Fall geht an die Verwaltung.

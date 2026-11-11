@@ -8,6 +8,7 @@ const { BaseError, NotFoundError } = require("../src/errors/BaseError");
 const { TEST_GEO_RULE } = require("./helpers/test-validation-rule");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const SaltoKsAccessProvider = require("../src/commons/services/access/providers/salto-ks-access-provider");
+const OpenLockerAccessProvider = require("../src/commons/services/access/providers/open-locker-access-provider");
 const {
   registerAccessProvider,
 } = require("../src/commons/services/access/providers/access-provider-registry");
@@ -15,6 +16,11 @@ const {
   FakeSaltoKsApiClient,
   FAKE_SITE_ID,
 } = require("./helpers/fake-salto-ks-api-client");
+const {
+  FakeOpenLockerApiClient,
+  COMPARTMENT_ID,
+  OTHER_COMPARTMENT_ID,
+} = require("./helpers/fake-open-locker-api-client");
 const {
   SALTO_LOCK_ID,
   SALTO_IQ_ID,
@@ -40,6 +46,16 @@ function listedAccessPoint(supportedModes) {
     provider: "nuki",
     externalId: "lock-1",
     supportedModes,
+  };
+}
+
+/** The tenant's Open Locker compartment as its listing names it. */
+function listedCompartment() {
+  return {
+    id: COMPARTMENT_ID,
+    provider: "open-locker",
+    externalId: COMPARTMENT_ID,
+    supportedModes: ["remote"],
   };
 }
 
@@ -283,11 +299,12 @@ describe("AccessPointController", () => {
       });
 
       it("requires no qr scan at an Open Locker compartment when validationRules are omitted", async () => {
+        findListedAccessPoint.resolves(listedCompartment());
         request.body = {
           provider: "open-locker",
           type: "door",
           mode: "remote",
-          externalId: "9b2f6c1e-3d4a-4f5b-8c7d-1e2f3a4b5c6d",
+          externalId: COMPARTMENT_ID,
         };
 
         await AccessPointController.storeAccessPoint(request, response, next);
@@ -297,11 +314,12 @@ describe("AccessPointController", () => {
       });
 
       it("requires a qr scan at an Open Locker compartment that configures one", async () => {
+        findListedAccessPoint.resolves(listedCompartment());
         request.body = {
           provider: "open-locker",
           type: "door",
           mode: "remote",
-          externalId: "9b2f6c1e-3d4a-4f5b-8c7d-1e2f3a4b5c6d",
+          externalId: COMPARTMENT_ID,
           validationRules: [{ type: "qrScan" }],
         };
 
@@ -961,6 +979,105 @@ describe("AccessPointController", () => {
     });
 
     /**
+     * An Open Locker compartment is stored only where the tenant's technical
+     * account holds a permission on it - where its listing names it - so no
+     * compartment is set up that never opens (tickets#971). Open Locker runs
+     * over the fake instance, where a neighbour's account holds the other
+     * compartment.
+     */
+    describe("Open Locker compartment access", () => {
+      let openLocker;
+
+      after(() => {
+        registerAccessProvider("open-locker", OpenLockerAccessProvider);
+      });
+
+      beforeEach(() => {
+        findListedAccessPoint.restore();
+        openLocker = new FakeOpenLockerApiClient();
+        registerAccessProvider(
+          "open-locker",
+          class extends OpenLockerAccessProvider {
+            constructor() {
+              super({ client: openLocker });
+            }
+          },
+        );
+      });
+
+      function compartment(externalId) {
+        return {
+          provider: "open-locker",
+          type: "door",
+          mode: "remote",
+          label: "Fach",
+          externalId,
+        };
+      }
+
+      it("stores a compartment the account holds a permission on", async () => {
+        request.body = compartment(COMPARTMENT_ID);
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.called).to.be.false;
+        expect(storeAccessPoint.calledOnce).to.be.true;
+        expect(response.status.calledWith(201)).to.be.true;
+      });
+
+      it("refuses the compartment of another tenant's account", async () => {
+        request.body = compartment(OTHER_COMPARTMENT_ID);
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        const error = next.firstCall.args[0];
+        expect(error).to.be.instanceOf(ValidationError);
+        expect(error.statusCode).to.equal(400);
+        expect(error.errors).to.deep.equal([
+          {
+            field: "externalId",
+            code: "compartment_not_accessible",
+            params: { externalId: OTHER_COMPARTMENT_ID },
+          },
+        ]);
+        expect(storeAccessPoint.called).to.be.false;
+      });
+
+      it("refuses a compartment without a UUID, without asking Open Locker", async () => {
+        request.body = compartment("");
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        const error = next.firstCall.args[0];
+        expect(error).to.be.instanceOf(ValidationError);
+        expect(error.statusCode).to.equal(400);
+        expect(error.errors).to.deep.equal([
+          { field: "externalId", code: "required" },
+        ]);
+        expect(storeAccessPoint.called).to.be.false;
+        expect(openLocker.requests).to.deep.equal([]);
+      });
+
+      it("refuses to store a compartment again once the account lost its permission on it", async () => {
+        sandbox.stub(AccessPointManager, "getAccessPoint").resolves(
+          createAccessPoint({
+            ...compartment(COMPARTMENT_ID),
+            validationRules: [],
+          }),
+        );
+        openLocker.revokePermission(COMPARTMENT_ID);
+        request.body = { id: "point-1", label: "Fach 1" };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        const error = next.firstCall.args[0];
+        expect(error).to.be.instanceOf(ValidationError);
+        expect(error.errors[0].code).to.equal("compartment_not_accessible");
+        expect(storeAccessPoint.called).to.be.false;
+      });
+    });
+
+    /**
      * The Öffnungsart the save would leave behind, refused by the provider
      * that owns the vocabulary (spec § 3.1/§ 3.3). The controller asks every
      * provider that declares `validateAccessPoint` and names none of them.
@@ -1379,7 +1496,27 @@ describe("AccessPointController", () => {
       // for a tenant without its active application. That is no answer about
       // the lock, so the save goes through unchecked, to be checked on the
       // first save once the provider is active.
-      ["nuki", "ifbs", "salto-ks"].forEach((provider) => {
+      // A compartment without its UUID is refused all the same: that rule
+      // needs no listing.
+      it("refuses an Open Locker compartment without a UUID while the tenant's application is not active", async () => {
+        findListedAccessPoint.restore();
+        sandbox.stub(TenantManager, "getTenant").resolves({
+          id: "tenant-1",
+          applications: [{ type: "access", id: "open-locker", active: false }],
+        });
+        request.body = { provider: "open-locker", mode: "remote" };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        const error = next.firstCall.args[0];
+        expect(error).to.be.instanceOf(ValidationError);
+        expect(error.errors).to.deep.equal([
+          { field: "externalId", code: "required" },
+        ]);
+        expect(storeAccessPoint.called).to.be.false;
+      });
+
+      ["nuki", "ifbs", "salto-ks", "open-locker"].forEach((provider) => {
         it(`stores a ${provider} access point while the tenant's ${provider} application is not active`, async () => {
           findListedAccessPoint.restore();
           sandbox.stub(TenantManager, "getTenant").resolves({

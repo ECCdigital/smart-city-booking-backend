@@ -36,6 +36,7 @@ const {
   AccessPointMode,
 } = require("../src/commons/entities/access/access-point");
 const { AccessOpenError } = require("../src/errors/AccessOpenError");
+const { ValidationError } = require("../src/errors/ValidationError");
 const {
   FakeOpenLockerApiClient,
   brokenOpenLockerApiClient,
@@ -43,8 +44,13 @@ const {
   FAKE_SERVER_URL,
   FAKE_EMAIL,
   FAKE_PASSWORD,
+  NEIGHBOUR_EMAIL,
+  NEIGHBOUR_PASSWORD,
+  LOCKER_BANK_ID,
+  SECOND_LOCKER_BANK_ID,
   COMPARTMENT_ID,
   OTHER_COMPARTMENT_ID,
+  SECOND_COMPARTMENT_ID,
 } = require("./helpers/fake-open-locker-api-client");
 const {
   TENANT,
@@ -106,10 +112,16 @@ describe("Open Locker access provider", () => {
       ).to.be.instanceOf(OpenLockerAccessApplication);
     });
 
-    it("declares open and getOpenProgress, and neither grant, revoke nor hold", () => {
+    it("declares open, getOpenProgress, listAccessPoints and both save checks, and neither grant, revoke nor hold", () => {
       const capabilities = getAccessProviderCapabilities("open-locker");
 
-      expect(capabilities).to.include.members(["open", "getOpenProgress"]);
+      expect(capabilities).to.include.members([
+        "open",
+        "getOpenProgress",
+        "listAccessPoints",
+        "validateAccessPoint",
+        "validateAccessPointWithoutListing",
+      ]);
       for (const capability of [
         "grantAuthorization",
         "revokeAuthorization",
@@ -537,6 +549,147 @@ describe("Open Locker access provider", () => {
 
       expect(progress.confirmed).to.equal(null);
       expect(progress.errorMessage).to.be.a("string").and.not.empty;
+    });
+  });
+
+  describe("listAccessPoints", () => {
+    it("lists only the compartments the technical account holds a permission on, each with its locker bank and number", async () => {
+      const points = await provider.listAccessPoints(TENANT);
+
+      expect(
+        points.map(({ externalId, label, locationId }) => ({
+          externalId,
+          label,
+          locationId,
+        })),
+      ).to.deep.equal([
+        {
+          externalId: COMPARTMENT_ID,
+          label: "Labor Fachbank 1 · Fach 1",
+          locationId: LOCKER_BANK_ID,
+        },
+        {
+          externalId: SECOND_COMPARTMENT_ID,
+          label: "Quartiersschrank Hafen · Fach 3",
+          locationId: SECOND_LOCKER_BANK_ID,
+        },
+      ]);
+    });
+
+    it("lists a compartment as a door opened remotely, its UUID the id", async () => {
+      const [point] = await provider.listAccessPoints(TENANT);
+
+      expect(point).to.deep.include({
+        id: COMPARTMENT_ID,
+        type: "door",
+        provider: "open-locker",
+        externalId: COMPARTMENT_ID,
+        capabilities: ["remote"],
+        supportedModes: [AccessPointMode.REMOTE],
+      });
+      expect(point.metadata).to.deep.include({
+        number: 1,
+        lockerBank: {
+          id: LOCKER_BANK_ID,
+          name: "Labor Fachbank 1",
+          locationDescription: "Labor, Regal links",
+        },
+      });
+    });
+
+    it("lists the neighbour's compartments to the neighbour's account alone", async () => {
+      const neighbour = new OpenLockerAccessProvider({
+        client: new FakeOpenLockerApiClient({
+          credentials: { email: NEIGHBOUR_EMAIL, password: NEIGHBOUR_PASSWORD },
+        }),
+      });
+
+      const points = await neighbour.listAccessPoints(TENANT);
+
+      expect(points.map((point) => point.externalId)).to.deep.equal([
+        OTHER_COMPARTMENT_ID,
+      ]);
+    });
+
+    it("lists nothing for an account without a permission", async () => {
+      client.revokePermission(COMPARTMENT_ID);
+      client.revokePermission(SECOND_COMPARTMENT_ID);
+
+      expect(await provider.listAccessPoints(TENANT)).to.deep.equal([]);
+    });
+
+    it("lists the compartments of an account blocked for terms not accepted - reading stays open to it", async () => {
+      client.account.termsAccepted = false;
+
+      const points = await provider.listAccessPoints(TENANT);
+
+      expect(points).to.have.length(2);
+    });
+
+    it("signs in again after a 401 and lists once more", async () => {
+      await provider.listAccessPoints(TENANT);
+      client.expireTokens();
+
+      const points = await provider.listAccessPoints(TENANT);
+
+      expect(points).to.have.length(2);
+      expect(client.logins).to.have.length(2);
+    });
+  });
+
+  describe("validateAccessPointWithoutListing", () => {
+    it("refuses a compartment without a UUID", () => {
+      for (const externalId of [undefined, null, ""]) {
+        expect(() =>
+          provider.validateAccessPointWithoutListing({
+            ...COMPARTMENT,
+            externalId,
+          }),
+        )
+          .to.throw(ValidationError)
+          .with.property("errors")
+          .that.deep.equals([{ field: "externalId", code: "required" }]);
+      }
+    });
+
+    it("lets a compartment with its UUID through to the listing", () => {
+      expect(() =>
+        provider.validateAccessPointWithoutListing(COMPARTMENT),
+      ).not.to.throw();
+    });
+  });
+
+  describe("validateAccessPoint", () => {
+    it("lets a compartment through that the listing names", async () => {
+      const points = await provider.listAccessPoints(TENANT);
+      const listed = points.find((p) => p.externalId === COMPARTMENT_ID);
+
+      expect(() =>
+        provider.validateAccessPoint(COMPARTMENT, listed, { asked: true }),
+      ).not.to.throw();
+    });
+
+    it("refuses a compartment the technical account holds no permission on", () => {
+      const neighbours = { ...COMPARTMENT, externalId: OTHER_COMPARTMENT_ID };
+
+      expect(() =>
+        provider.validateAccessPoint(neighbours, null, { asked: true }),
+      )
+        .to.throw(ValidationError)
+        .with.property("errors")
+        .that.deep.equals([
+          {
+            field: "externalId",
+            code: "compartment_not_accessible",
+            params: { externalId: OTHER_COMPARTMENT_ID },
+          },
+        ]);
+    });
+
+    it("lets a compartment through when Open Locker could not be asked - the tenant has not switched it on (tickets#311)", () => {
+      expect(() =>
+        provider.validateAccessPoint(COMPARTMENT, null, { asked: false }),
+      ).not.to.throw();
     });
   });
 

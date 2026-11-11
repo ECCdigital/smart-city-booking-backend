@@ -431,15 +431,25 @@ class AccessProvider {
    * checks read it. A `null` entry - a provider that does not list, an
    * access point without an `externalId`, a lock the provider does not know
    * - is the pass-through case: what cannot be asked about is not refused.
+   * A provider that lists only what the tenant's account may open refuses
+   * an access point it was asked about and does not list; `listing.asked`
+   * tells that apart from a listing that was not asked - the tenant has not
+   * switched the provider on (tickets#311), or the access point names no
+   * `externalId`.
    *
    * @param {Object} _accessPoint The access point as it would be stored
    * @param {ListedAccessPoint|null} _listedAccessPoint The provider's listed
    *   entry for it, `null` when the provider does not list it
+   * @param {Object} [_listing] What the save knows of the listing
+   * @param {boolean} [_listing.asked] `false` when the listing was not
+   *   asked - the tenant has not switched the provider on, or the access
+   *   point names no `externalId` - so a `null` entry says nothing about
+   *   the access point
    * @returns {void}
    * @throws {ValidationError} What the provider will not store, field by
    *   field; nothing else
    */
-  validateAccessPoint(_accessPoint, _listedAccessPoint) {}
+  validateAccessPoint(_accessPoint, _listedAccessPoint, _listing) {}
 
   /**
    * Refuse an access point by a rule that holds for every lock of the

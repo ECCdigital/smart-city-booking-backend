@@ -557,7 +557,9 @@ class NukiAccessProvider extends AccessProvider {
    *   an Öffnungsart, `unsupported_open_action` for one this device type
    *   cannot do
    */
-  validateAccessPoint(accessPoint, listedAccessPoint) {
+  // `_listing` keeps the parameter list of the base class; Nuki reads none.
+  // eslint-disable-next-line no-unused-vars
+  validateAccessPoint(accessPoint, listedAccessPoint, _listing) {
     const openAction = accessPoint?.config?.openAction;
 
     // A missing key - or an explicit `null`, which the open reads the same
