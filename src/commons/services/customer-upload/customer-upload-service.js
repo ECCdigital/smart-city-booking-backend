@@ -128,6 +128,7 @@ const referenceOf = (media, field, uploadedBy, sharedWith = []) => ({
   url: null,
   fieldId: field.id,
   fieldLabel: field.label,
+  category: field.category ?? "normal",
   originalFileName: media.originalFileName,
   mimeType: media.mimeType,
   size: media.size,

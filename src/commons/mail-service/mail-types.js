@@ -305,7 +305,7 @@ const MailType = Object.freeze({
     // guest's link holds for one booking: in a
     // group the guest gets one link per booking instead.
     templateData: (
-      { reason, fieldLabels = [], kind, fieldId },
+      { reason, fieldLabels = [], kind, fieldId, fileDeleted = false },
       { bookings },
     ) => {
       const guestGroup = bookings.length > 1 && isGuestBooking(bookings[0]);
@@ -313,6 +313,8 @@ const MailType = Object.freeze({
         customerUploadReason: reason,
         customerUploadFields: fieldLabels.join(", "),
         customerUploadRequestedAgain: kind === "requestedAgain",
+        // Only a sensitive upload loses its file with the check.
+        customerUploadFileDeleted: Boolean(fileDeleted),
         proofsUrl: guestGroup ? "" : customerUploadUrlOf(bookings[0], fieldId),
         proofLinks: guestGroup
           ? bookings

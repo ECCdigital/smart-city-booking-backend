@@ -138,7 +138,7 @@ describe("customer uploads: the check by the staff", function () {
         );
         if (!reference) return false;
         reference.review = review;
-        reference.originalFileName = "";
+        if (review.fileDeletedAt != null) reference.originalFileName = "";
         return true;
       });
     sinon
@@ -206,7 +206,7 @@ describe("customer uploads: the check by the staff", function () {
   const mails = () => h.effects.filter((row) => row.startsWith("mail."));
 
   describe("accepting", function () {
-    it("deletes the file, writes the note and mails nobody", async function () {
+    it("keeps a normal file with its name, writes the note and mails nobody", async function () {
       // The request carries the id alone; the name is the account's.
       UserManager.getUser.callsFake(async (userId) =>
         userId === ADMIN
@@ -220,11 +220,13 @@ describe("customer uploads: the check by the staff", function () {
       const res = await review(id, mediaId, { result: "accepted" });
 
       expect(res.status, res.text).to.equal(200);
-      expect(media.has(mediaId)).to.equal(false);
-      expect(blobs.has(key)).to.equal(false);
+      expect(media.has(mediaId)).to.equal(true);
+      expect(blobs.has(key)).to.equal(true);
+      expect(media.get(mediaId).bookingIds).to.include(id);
 
       const [reference] = h.store.get(id).customerUploads;
-      expect(reference.originalFileName).to.equal("");
+      expect(reference.category).to.equal("normal");
+      expect(reference.originalFileName).to.equal("ausweis-erika.pdf");
       expect(reference.fieldLabel).to.equal("Vereinsausweis");
       expect(reference.review).to.include({
         status: "accepted",
@@ -233,13 +235,13 @@ describe("customer uploads: the check by the staff", function () {
         autoDeleted: false,
       });
       expect(reference.review.reviewedAt).to.be.a("number");
-      expect(reference.review.fileDeletedAt).to.be.a("number");
+      expect(reference.review.fileDeletedAt).to.equal(null);
 
       const field = fieldOf(res.body);
       expect(field.state).to.equal("fulfilled");
       expect(field.uploads[0].review).to.include({
         status: "accepted",
-        fileDeleted: true,
+        fileDeleted: false,
         autoDeleted: false,
       });
       expect(field.uploads[0].review.reviewedByName).to.equal(
@@ -288,6 +290,15 @@ describe("customer uploads: the check by the staff", function () {
       expect(media.has(sensitive)).to.equal(false);
       expect(media.has(waiting)).to.equal(true);
       expect(fieldOf(res.body).state).to.equal("submitted");
+      const reference = h.store
+        .get(id)
+        .customerUploads.find((r) => r.mediaId === sensitive);
+      expect(reference.category).to.equal("sensitive");
+      expect(reference.originalFileName).to.equal("");
+      expect(reference.review.fileDeletedAt).to.be.a("number");
+      expect(
+        fieldOf(res.body, ID_FIELD.id).uploads[0].review.fileDeleted,
+      ).to.equal(true);
     });
   });
 
@@ -327,7 +338,22 @@ describe("customer uploads: the check by the staff", function () {
       expect(res.text).to.include("customer_upload_review_result_invalid");
     });
 
-    it("deletes the file, opens the field again and mails the customer the reason", async function () {
+    it("deletes a sensitive file", async function () {
+      const id = await booking();
+      const mediaId = await handIn(id, ID_FIELD.id);
+
+      const res = await review(
+        id,
+        mediaId,
+        { result: "rejected", reason: "Unleserlich" },
+        { field: ID_FIELD.id },
+      );
+
+      expect(res.status, res.text).to.equal(200);
+      expect(media.has(mediaId)).to.equal(false);
+    });
+
+    it("keeps a normal file, opens the field again and mails the customer the reason", async function () {
       const id = await booking();
       const mediaId = await handIn(id);
 
@@ -337,7 +363,7 @@ describe("customer uploads: the check by the staff", function () {
       });
 
       expect(res.status, res.text).to.equal(200);
-      expect(media.has(mediaId)).to.equal(false);
+      expect(media.has(mediaId)).to.equal(true);
       const field = fieldOf(res.body);
       expect(field.state).to.equal("rejected");
       expect(field.reopen).to.include({
@@ -399,6 +425,31 @@ describe("customer uploads: the check by the staff", function () {
         `https://store.example.test/account/proofs?booking=${id}&field=${PROOF_FIELD.id}`,
       );
       expect(mail.html).not.to.include("ausweis-erika");
+      // A normal file stays with the booking.
+      expect(mail.html).not.to.include("bereits gelöscht");
+    });
+
+    it("says the file is gone for a sensitive upload alone", async function () {
+      const sent = [];
+      const MailerService = require("../src/commons/mail-service/mail-service");
+      MailerService.send.callsFake(async (mail) => {
+        sent.push(mail);
+        return { status: "sent", transport: "instance" };
+      });
+      const id = await booking();
+      const mediaId = await handIn(id, ID_FIELD.id);
+
+      await review(
+        id,
+        mediaId,
+        { result: "rejected", reason: "Abgelaufen" },
+        { field: ID_FIELD.id },
+      );
+
+      const [mail] = sent.filter((m) => m.type === "CUSTOMER_UPLOAD_REOPENED");
+      expect(mail.html).to.include(
+        "Die geprüfte Datei haben wir bereits gelöscht.",
+      );
     });
   });
 

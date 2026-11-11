@@ -683,7 +683,10 @@ class BookingManager {
       {
         $set: {
           "customerUploads.$.review": review,
-          "customerUploads.$.originalFileName": "",
+          // The name goes with the file; a file kept keeps it.
+          ...(review.fileDeletedAt !== null
+            ? { "customerUploads.$.originalFileName": "" }
+            : {}),
         },
       },
     );
@@ -708,9 +711,10 @@ class BookingManager {
   }
 
   /**
-   * The bookings of every tenant with a customer upload whose file is still
-   * stored: what the deletion deadline of the job of customer uploads looks
-   * at.
+   * The bookings of every tenant with a sensitive customer upload whose
+   * file is still stored: what the deletion deadline of the job of customer
+   * uploads looks at. A normal upload stays with its booking. A reference
+   * without a category is from before and counts as sensitive.
    *
    * @returns {Promise<Booking[]>}
    */
@@ -720,6 +724,7 @@ class BookingManager {
         $elemMatch: {
           "review.status": "submitted",
           "review.fileDeletedAt": null,
+          category: { $ne: "normal" },
         },
       },
     });

@@ -23,6 +23,10 @@ const customerUploadReferenceSchema = new Schema(
     ...mediaReferenceSchemaDefinition,
     fieldId: { type: String, required: true },
     fieldLabel: { type: String, default: "" },
+    // The field's category at the upload: a sensitive upload is deleted
+    // after its check and by the deletion deadline, a normal one stays with
+    // the booking. No default: a reference from before counts as sensitive.
+    category: { type: String, enum: ["normal", "sensitive"] },
     originalFileName: { type: String, default: "" },
     mimeType: { type: String, default: "" },
     // Bytes as stored, after an image was encoded anew.
@@ -60,7 +64,8 @@ const customerUploadReferenceSchema = new Schema(
       reviewedByName: { type: String, default: "" },
       // The file was deleted by the deletion deadline, not by a check.
       autoDeleted: { type: Boolean, default: false },
-      // When the file was deleted; null while it is stored.
+      // When the file was deleted; null while it is stored - also after the
+      // check of a normal upload, which keeps its file.
       fileDeletedAt: { type: Double, default: null },
     },
   },

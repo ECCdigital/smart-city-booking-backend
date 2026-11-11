@@ -19,6 +19,7 @@ const {
   CUSTOMER_UPLOAD_REASONS,
   CustomerUploadService,
 } = require("./customer-upload-service");
+const { isSensitiveUpload } = require("./customer-upload-rules");
 const {
   FIELD_STATE,
   REOPEN_KIND,
@@ -148,6 +149,9 @@ class CustomerUploadReview {
     }
     const others = alsoFor === null ? holding : [...new Set(alsoFor)];
     const left = holding.filter((id) => !others.includes(id));
+    // A sensitive upload loses its file with the check, a normal one keeps
+    // it with its bookings.
+    const sensitive = isSensitiveUpload(reference);
 
     const note = {
       status: result,
@@ -156,7 +160,7 @@ class CustomerUploadReview {
       reviewedBy: user?.id ?? null,
       reviewedByName: await nameOf(user),
       autoDeleted: false,
-      fileDeletedAt: now,
+      fileDeletedAt: sensitive ? now : null,
     };
 
     // The booking of the request first: of two checks at once only the
@@ -184,26 +188,30 @@ class CustomerUploadReview {
       }
     }
 
-    // The file goes at once, whatever its category and whatever else at
-    // the booking still waits for its check - for the bookings checked: one
-    // of the group left out keeps it for its own check.
-    if (media && left.length === 0) {
+    // A sensitive file goes at once, whatever else at the booking still
+    // waits for its check - for the bookings checked: one of the group left
+    // out keeps it for its own check. A normal file stays.
+    if (sensitive && media && left.length === 0) {
       await MediaService.deleteMedia(media);
-    } else if (media) {
+    } else if (sensitive && media) {
       for (const id of reviewed) {
         await MediaManager.removeBookingReference(mediaId, tenantId, id);
       }
     }
 
+    const kept = !sensitive
+      ? "file kept"
+      : left.length
+        ? `kept for ${left.join(", ")}`
+        : "file deleted";
     logger.info(
-      `${tenantId} -- customer upload ${mediaId} ${result} for bookings ${reviewed.join(", ")}, ${
-        left.length ? `kept for ${left.join(", ")}` : "file deleted"
-      }`,
+      `${tenantId} -- customer upload ${mediaId} ${result} for bookings ${reviewed.join(", ")}, ${kept}`,
     );
 
     if (result === CUSTOMER_UPLOAD_REVIEW.REJECTED) {
       await CustomerUploadReview._tell(tenantId, reviewed, {
         kind: REOPEN_KIND.REJECTED,
+        fileDeleted: sensitive,
         reason: why,
         fieldLabels: [reference.fieldLabel].filter(Boolean),
         fieldId,
@@ -274,6 +282,12 @@ class CustomerUploadReview {
 
     await CustomerUploadReview._tell(tenantId, [bookingId], {
       kind: REOPEN_KIND.REQUESTED_AGAIN,
+      // The checked files are gone only where all were sensitive.
+      fileDeleted: references.every(
+        (r) =>
+          r.review?.fileDeletedAt !== null &&
+          r.review?.fileDeletedAt !== undefined,
+      ),
       reason: why,
       fieldLabels: [fieldLabel].filter(Boolean),
       fieldId,
@@ -320,7 +334,7 @@ class CustomerUploadReview {
   static async _tell(
     tenantId,
     bookingIds,
-    { kind, reason, fieldLabels, fieldId },
+    { kind, reason, fieldLabels, fieldId, fileDeleted = false },
   ) {
     const notices = [];
     const loose = [];
@@ -360,6 +374,7 @@ class CustomerUploadReview {
           reason,
           fieldLabels,
           fieldId,
+          fileDeleted,
         });
       } catch (error) {
         logger.error(

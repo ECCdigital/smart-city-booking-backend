@@ -50,7 +50,9 @@ const customerUploadSettingsSchema = new Schema(
       type: [{ type: String, enum: CUSTOMER_UPLOAD_FORMATS }],
       default: () => [...CUSTOMER_UPLOAD_FORMATS],
     },
-    // Days after the end of the booking; may only be shortened.
+    // Days after the end of the booking (of the event for a ticket, of the
+    // upload without either) a sensitive upload is deleted; may only be
+    // shortened.
     retentionDays: {
       type: Number,
       default: MAX_RETENTION_DAYS,
@@ -59,13 +61,6 @@ const customerUploadSettingsSchema = new Schema(
     },
     // To the booker, before the upload deadline of a missing required upload.
     reminderDaysBeforeDeadline: { type: Number, default: 3, min: 0 },
-    // To the staff, before the automatic deletion of an unchecked upload.
-    reviewReminderDaysBeforeDeletion: {
-      type: Number,
-      default: 3,
-      min: 0,
-      max: MAX_RETENTION_DAYS,
-    },
     // Independent of `notifyOnNewBooking`.
     notifyOnSubmitted: { type: Boolean, default: true },
     notifyOnOverdue: { type: Boolean, default: true },

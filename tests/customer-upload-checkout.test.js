@@ -110,7 +110,6 @@ describe("customer uploads: with the checkout", function () {
           formats: ["pdf", "jpeg", "png"],
           retentionDays: 30,
           reminderDaysBeforeDeadline: 3,
-          reviewReminderDaysBeforeDeletion: 3,
           notifyOnSubmitted: true,
           notifyOnOverdue: true,
         },

@@ -5,6 +5,7 @@ const { STATUS } = require("../booking-lifecycle/booking-state");
 const {
   FILES_PER_FIELD,
   UPLOAD_FIELD_TIMINGS,
+  isSensitiveUpload,
 } = require("./customer-upload-rules");
 
 /**
@@ -235,9 +236,8 @@ function exportReference(
     reason: reference.review?.reason ?? "",
     reviewedAt: timeOf(reference.review?.reviewedAt),
     autoDeleted: Boolean(reference.review?.autoDeleted),
-    fileDeleted:
-      reviewOf(reference) !== CUSTOMER_UPLOAD_REVIEW.SUBMITTED ||
-      timeOf(reference.review?.fileDeletedAt) !== null,
+    // A checked normal upload keeps its file.
+    fileDeleted: timeOf(reference.review?.fileDeletedAt) !== null,
   };
   if (withReviewer) {
     review.reviewedByName = reference.review?.reviewedByName ?? "";
@@ -245,6 +245,8 @@ function exportReference(
   const exported = {
     mediaId: reference.mediaId,
     fieldLabel: reference.fieldLabel,
+    // Whether the file goes with the check and by the deletion deadline.
+    category: isSensitiveUpload(reference) ? "sensitive" : "normal",
     originalFileName: reference.originalFileName,
     mimeType: reference.mimeType,
     size: reference.size,

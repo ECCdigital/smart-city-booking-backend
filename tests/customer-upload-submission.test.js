@@ -126,7 +126,6 @@ describe("customer uploads: handing in later", function () {
           formats: ["pdf", "jpeg", "png"],
           retentionDays: 30,
           reminderDaysBeforeDeadline: 3,
-          reviewReminderDaysBeforeDeletion: 3,
           notifyOnSubmitted: true,
           notifyOnOverdue: true,
         },

@@ -36,6 +36,7 @@ const {
 const BookingManager = require("../src/commons/data-managers/booking-manager");
 const MediaManager = require("../src/commons/data-managers/media-manager");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
+const EventManager = require("../src/commons/data-managers/event-manager");
 const MailerService = require("../src/commons/mail-service/mail-service");
 const storage = require("../src/commons/services/storage");
 const { Booking } = require("../src/commons/entities/booking/booking");
@@ -53,19 +54,23 @@ const PDF = Buffer.from(
   "%PDF-1.4\n%Vereinsausweis\n1 0 obj<<>>endobj\n%%EOF\n",
 );
 
+// „Besonders schutzwürdig“: the deletion deadline deletes it.
 const PROOF_FIELD = {
   id: "field-proof",
   label: "Vereinsausweis",
   required: true,
+  category: "sensitive",
   formats: ["pdf"],
   timing: "afterConfirmation",
   deadlineDaysBeforeStart: 7,
 };
 
+// A normal field: its upload stays with the booking.
 const OPTIONAL_FIELD = {
   id: "field-optional",
   label: "Satzung",
   required: false,
+  category: "normal",
   formats: ["pdf"],
   timing: "afterConfirmation",
 };
@@ -154,7 +159,11 @@ describe("customer uploads: the job of reminders, overdue and deletion", functio
       .stub(BookingManager, "getBookingsWithStoredCustomerUploads")
       .callsFake(async () =>
         [...h.store.values()]
-          .filter((doc) => (doc.customerUploads || []).some(waiting))
+          .filter((doc) =>
+            (doc.customerUploads || []).some(
+              (r) => waiting(r) && r.category !== "normal",
+            ),
+          )
           .map((doc) => new Booking(clone(doc))),
       );
 
@@ -176,7 +185,7 @@ describe("customer uploads: the job of reminders, overdue and deletion", functio
         );
         if (!reference) return false;
         reference.review = review;
-        reference.originalFileName = "";
+        if (review.fileDeletedAt != null) reference.originalFileName = "";
         return true;
       });
     sinon
@@ -484,6 +493,69 @@ describe("customer uploads: the job of reminders, overdue and deletion", functio
       expect(h.store.get(id).customerUploads[0].review.autoDeleted).to.equal(
         true,
       );
+    });
+
+    it("never deletes a normal upload: it stays with the booking", async function () {
+      await install();
+      const id = await booking();
+      const mediaId = await handIn(id, OPTIONAL_FIELD.id);
+
+      const outcome = await run(TIME_END + 365 * DAY);
+
+      expect(outcome.deleted).to.deep.equal([]);
+      expect(media.has(mediaId)).to.equal(true);
+      expect(h.store.get(id).customerUploads[0].review.fileDeletedAt == null).to
+        .be.true;
+    });
+
+    it("follows the end of the event for a ticket", async function () {
+      await install();
+      const id = await booking();
+      const mediaId = await handIn(id);
+      const eventEnd = TIME_END + 10 * DAY;
+      h.store.get(id).bookableItems[0]._bookableUsed = { eventId: "event-1" };
+      const getEvent = EventManager.getEvent.isSinonProxy
+        ? EventManager.getEvent
+        : sinon.stub(EventManager, "getEvent");
+      getEvent.resolves({
+        id: "event-1",
+        information: {
+          endDate: new Date(eventEnd).toISOString().slice(0, 10),
+          endTime: new Date(eventEnd).toTimeString().slice(0, 5),
+        },
+      });
+      const end = new Date(
+        `${new Date(eventEnd).toISOString().slice(0, 10)}T${new Date(eventEnd).toTimeString().slice(0, 5)}`,
+      ).getTime();
+
+      const early = await run(TIME_END + 30 * DAY + HOUR);
+      expect(early.deleted).to.deep.equal([]);
+
+      const outcome = await run(end + 30 * DAY + HOUR);
+
+      expect(outcome.deleted).to.deep.equal([mediaId]);
+      expect(getEvent.firstCall.args.slice(0, 2)).to.deep.equal([
+        "event-1",
+        TENANT,
+      ]);
+    });
+
+    it("follows the upload for a booking without a time", async function () {
+      await install({ retentionDays: 5 });
+      const id = await booking();
+      const before = Date.now();
+      const mediaId = await handIn(id);
+      const uploadedAt = h.store.get(id).customerUploads[0].uploadedAt;
+      expect(uploadedAt).to.be.at.least(before);
+      h.store.get(id).timeBegin = null;
+      h.store.get(id).timeEnd = null;
+
+      const early = await run(uploadedAt + 5 * DAY - HOUR);
+      expect(early.deleted).to.deep.equal([]);
+
+      const outcome = await run(uploadedAt + 5 * DAY + HOUR);
+
+      expect(outcome.deleted).to.deep.equal([mediaId]);
     });
   });
 });

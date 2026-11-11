@@ -5,6 +5,7 @@ const BookingManager = require("../../data-managers/booking-manager");
 const MediaManager = require("../../data-managers/media-manager");
 const TenantManager = require("../../data-managers/tenant-manager");
 const InstanceManager = require("../../data-managers/instance-manager");
+const EventManager = require("../../data-managers/event-manager");
 const MediaService = require("../media/media-service");
 const mailService = require("../../mail-service");
 const { DOMAIN } = require("../authorization");
@@ -15,6 +16,7 @@ const {
 const { LIVE_STATUSES } = require("../booking-lifecycle/booking-state");
 const {
   effectiveCustomerUploadSettings,
+  isSensitiveUpload,
   normalizeCustomerUploadSettings,
 } = require("./customer-upload-rules");
 const {
@@ -41,14 +43,40 @@ const timeOf = (value) => {
   return Number.isFinite(time) ? time : null;
 };
 
+/** The event a ticket booking is for, or null for any other booking. */
+const eventIdOf = (booking) =>
+  (booking.bookableItems || [])
+    .map((item) => item?._bookableUsed?.eventId)
+    .find((id) => typeof id === "string" && id !== "") ?? null;
+
 /**
- * The end of a booking for the deletion deadline of its customer uploads:
- * its end time, earlier where it was cancelled, withdrawn or rejected - the
- * moment the job first found it so. Null for a live booking without an end
- * time: it has not ended.
+ * The end of an event as a time: its end date and time, the start date
+ * without an end date, the end of that day without a time. Null for an
+ * event without dates.
  */
-function endOf(booking) {
-  const end = timeOf(booking.timeEnd);
+function eventEndOf(event) {
+  const info = event?.information;
+  const day = info?.endDate || info?.startDate;
+  if (!day) return null;
+  const time = new Date(`${day}T${info.endTime || "23:59"}`).getTime();
+  return Number.isFinite(time) ? time : null;
+}
+
+/**
+ * Where the deletion deadline of a customer upload starts, in stages: the
+ * end of the event for a ticket, else the end of the booking, else - a
+ * booking without a time - the upload itself. A cancellation, withdrawal or
+ * rejection ends it earlier: the moment the job first found it so. Null
+ * where none of them is known.
+ *
+ * @param {Object} booking
+ * @param {Object} [options]
+ * @param {?number} [options.eventEnd] The end of the ticket's event
+ * @param {?number} [options.uploadedAt] When the upload was handed in
+ * @returns {?number}
+ */
+function endOf(booking, { eventEnd = null, uploadedAt = null } = {}) {
+  const end = timeOf(eventEnd) ?? timeOf(booking.timeEnd) ?? timeOf(uploadedAt);
   if (LIVE.has(booking.status)) return end;
   const endedAt = timeOf(booking.customerUploadEndedAt);
   if (end === null) return endedAt;
@@ -65,10 +93,13 @@ function endOf(booking) {
  * - Overdue: the deadline of a required upload field passed and the field
  *   still missing → one notice „Nachweis überfällig“ to the tenant per
  *   booking, behind the tenant's switch.
- * - Deletion deadline: the end of the last booking a customer upload is
- *   handed in for, plus the tenant's deletion deadline, reached → the file
- *   is deleted, and every booking keeps the note „automatisch gelöscht“. A
- *   cancellation, withdrawal or rejection of the booking is its end.
+ * - Deletion deadline, for sensitive uploads alone - a normal one stays
+ *   with its booking: the latest start of the deadline over the bookings a
+ *   customer upload is handed in for (`endOf`: the end of the event for a
+ *   ticket, of the booking, or the upload), plus the tenant's deletion
+ *   deadline, reached → the file is deleted, and every booking keeps the
+ *   note „automatisch gelöscht“. A cancellation, withdrawal or rejection of
+ *   the booking is its end.
  *
  * The booking remembers what the job sent (`customerUploadNotices`), per
  * kind and upload field, noted atomically before the mail goes: of two
@@ -249,8 +280,9 @@ class CustomerUploadJobs {
   }
 
   /**
-   * The deletion deadline: every customer upload whose file is still
-   * stored, over all tenants - one switched off since keeps its deadline.
+   * The deletion deadline: every sensitive customer upload whose file is
+   * still stored, over all tenants - one switched off since keeps its
+   * deadline.
    */
   static async _deleteExpired(now, outcome) {
     const bookings =
@@ -270,24 +302,41 @@ class CustomerUploadJobs {
       ]),
     );
 
-    // The bookings each stored medium is handed in for.
+    const eventEnds = await CustomerUploadJobs._eventEnds(bookings);
+
+    // The bookings each stored sensitive medium is handed in for, with the
+    // start of its deadline at each.
     const byMedia = new Map();
     for (const booking of bookings) {
       for (const reference of booking.customerUploads || []) {
-        if (!isWaiting(reference)) continue;
+        if (!isWaiting(reference) || !isSensitiveUpload(reference)) continue;
         const key = `${booking.tenantId}\u0000${reference.mediaId}`;
         const entry = byMedia.get(key) ?? {
           tenantId: booking.tenantId,
           mediaId: reference.mediaId,
           bookings: [],
+          ends: [],
         };
+        const eventId = eventIdOf(booking);
         entry.bookings.push(booking);
+        entry.ends.push(
+          endOf(booking, {
+            eventEnd: eventId
+              ? eventEnds.get(`${booking.tenantId}\u0000${eventId}`)
+              : null,
+            uploadedAt: reference.uploadedAt,
+          }),
+        );
         byMedia.set(key, entry);
       }
     }
 
-    for (const { tenantId, mediaId, bookings: holders } of byMedia.values()) {
-      const ends = holders.map(endOf);
+    for (const {
+      tenantId,
+      mediaId,
+      bookings: holders,
+      ends,
+    } of byMedia.values()) {
       if (ends.some((end) => end === null)) continue;
       const retentionDays = retentionOf.get(tenantId);
       if (retentionDays === undefined) continue;
@@ -303,6 +352,38 @@ class CustomerUploadJobs {
         );
       }
     }
+  }
+
+  /**
+   * The ends of the events of the ticket bookings, read once per run, by
+   * tenant and event. An event not found has no end: its bookings fall
+   * back to their own end or the upload.
+   *
+   * @returns {Promise<Map<string, ?number>>}
+   */
+  static async _eventEnds(bookings) {
+    const ends = new Map();
+    for (const booking of bookings) {
+      const eventId = eventIdOf(booking);
+      if (!eventId) continue;
+      const key = `${booking.tenantId}\u0000${eventId}`;
+      if (ends.has(key)) continue;
+      try {
+        const event = await EventManager.getEvent(
+          eventId,
+          booking.tenantId,
+          DOMAIN,
+        );
+        ends.set(key, eventEndOf(event));
+      } catch (error) {
+        logger.error(
+          { err: error, tenantId: booking.tenantId, eventId },
+          "customer upload job: the event of a ticket could not be read",
+        );
+        ends.set(key, null);
+      }
+    }
+    return ends;
   }
 
   /**
@@ -361,4 +442,4 @@ class CustomerUploadJobs {
   }
 }
 
-module.exports = { CustomerUploadJobs, endOf };
+module.exports = { CustomerUploadJobs, endOf, eventEndOf };

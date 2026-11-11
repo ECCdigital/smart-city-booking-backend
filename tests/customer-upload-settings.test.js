@@ -72,7 +72,6 @@ describe("customer uploads: settings and upload fields", function () {
         formats: ["pdf", "jpeg", "png"],
         retentionDays: 30,
         reminderDaysBeforeDeadline: 3,
-        reviewReminderDaysBeforeDeletion: 3,
         notifyOnSubmitted: true,
         notifyOnOverdue: true,
         notifyRoleIds: [],
@@ -88,7 +87,6 @@ describe("customer uploads: settings and upload fields", function () {
           formats: ["pdf"],
           retentionDays: 7,
           reminderDaysBeforeDeadline: 3,
-          reviewReminderDaysBeforeDeletion: 3,
           notifyOnSubmitted: false,
           notifyOnOverdue: true,
         },
@@ -125,10 +123,20 @@ describe("customer uploads: settings and upload fields", function () {
         enabled: true,
         retentionDays: 14,
         reminderDaysBeforeDeadline: 3,
-        reviewReminderDaysBeforeDeletion: 3,
         notifyOnSubmitted: true,
       });
       expect(tenant.customerUploads.formats).to.deep.equal(["pdf", "png"]);
+    });
+
+    it("drops a reminder before the deletion: nobody is reminded any more", async function () {
+      const { tenant, res } = await update({
+        reviewReminderDaysBeforeDeletion: 31,
+      });
+
+      expect(res.status.calledWith(200)).to.equal(true);
+      expect(tenant.customerUploads).to.not.have.property(
+        "reviewReminderDaysBeforeDeletion",
+      );
     });
 
     it("stores the roles of the staff's notices, each once (ECCdigital/tickets#830)", async function () {
@@ -159,10 +167,6 @@ describe("customer uploads: settings and upload fields", function () {
       "a negative reminder": [
         { reminderDaysBeforeDeadline: -1 },
         "customer_upload_reminder_out_of_range",
-      ],
-      "a review reminder over 30 days": [
-        { reviewReminderDaysBeforeDeletion: 31 },
-        "customer_upload_review_reminder_out_of_range",
       ],
       "roles that are no list": [
         { notifyRoleIds: "role-pruefung" },

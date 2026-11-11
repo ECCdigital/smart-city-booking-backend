@@ -12,24 +12,39 @@ const { positiveNumber } = require("../media/media-config");
 const CUSTOMER_UPLOAD_FORMATS = Object.freeze(["pdf", "jpeg", "png"]);
 
 const UPLOAD_FIELD_CATEGORIES = Object.freeze({
+  // Stays with the booking, also after its check: it goes with the booking.
   NORMAL: "normal",
-  // Deleted right after its check, even while other checks are open.
+  // Deleted right after its check, even while other checks are open, and
+  // unchecked by the deletion deadline.
   SENSITIVE: "sensitive",
 });
+
+/**
+ * Whether the file of a customer upload is deleted after its check and by
+ * the deletion deadline: an upload of a „besonders schutzwürdig“ field. A
+ * reference from before the category was noted at the upload counts as
+ * sensitive - those were all deleted so.
+ *
+ * @param {Object} reference
+ * @returns {boolean}
+ */
+const isSensitiveUpload = (reference) =>
+  reference?.category !== UPLOAD_FIELD_CATEGORIES.NORMAL;
 
 const UPLOAD_FIELD_TIMINGS = Object.freeze({
   CHECKOUT: "checkout",
   AFTER_CONFIRMATION: "afterConfirmation",
 });
 
-/** Biletado keeps a customer upload at most this long after the booking. */
+/**
+ * Biletado keeps a sensitive customer upload at most this long after the
+ * end of the booking (of the event for a ticket, of the upload without
+ * either).
+ */
 const MAX_RETENTION_DAYS = 30;
 // Days before the upload deadline the booker is reminded of a missing
 // required upload.
 const DEFAULT_REMINDER_DAYS = 3;
-// Days before the automatic deletion the staff is reminded of an upload
-// nobody has checked yet.
-const DEFAULT_REVIEW_REMINDER_DAYS = 3;
 // Roles that get the staff's notices of customer uploads, at most.
 const MAX_NOTIFY_ROLES = 10;
 // An upload field takes one file, never more: a field asking for several
@@ -51,7 +66,6 @@ function defaultCustomerUploadSettings() {
     formats: [...CUSTOMER_UPLOAD_FORMATS],
     retentionDays: MAX_RETENTION_DAYS,
     reminderDaysBeforeDeadline: DEFAULT_REMINDER_DAYS,
-    reviewReminderDaysBeforeDeletion: DEFAULT_REVIEW_REMINDER_DAYS,
     notifyOnSubmitted: true,
     notifyOnOverdue: true,
     notifyRoleIds: [],
@@ -223,6 +237,8 @@ function normalizeCustomerUploadSettings(settings) {
   if (Array.isArray(normalized.notifyRoleIds)) {
     normalized.notifyRoleIds = [...new Set(normalized.notifyRoleIds)];
   }
+  // No setting any more: nobody is reminded before the deletion.
+  delete normalized.reviewReminderDaysBeforeDeletion;
   return normalized;
 }
 
@@ -272,17 +288,6 @@ function getCustomerUploadSettingsError(settings) {
   }
   if (!isIntegerIn(settings.reminderDaysBeforeDeadline, 0, 365)) {
     return new BadRequestError("customer_upload_reminder_out_of_range");
-  }
-  if (
-    !isIntegerIn(
-      settings.reviewReminderDaysBeforeDeletion,
-      0,
-      MAX_RETENTION_DAYS,
-    )
-  ) {
-    return new BadRequestError("customer_upload_review_reminder_out_of_range", {
-      max: MAX_RETENTION_DAYS,
-    });
   }
   return null;
 }
@@ -410,6 +415,7 @@ function getUploadFieldDefinitionsError(
 module.exports = {
   CUSTOMER_UPLOAD_FORMATS,
   UPLOAD_FIELD_CATEGORIES,
+  isSensitiveUpload,
   UPLOAD_FIELD_TIMINGS,
   MAX_RETENTION_DAYS,
   FILES_PER_FIELD,

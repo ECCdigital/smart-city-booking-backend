@@ -73,11 +73,15 @@ const OTHER_CHECKOUT_FIELD = {
   timing: "checkout",
 };
 
-/** The required upload field "after the confirmation". */
+/**
+ * The required upload field "after the confirmation", „besonders
+ * schutzwürdig“: its file goes with the check and by the deadline.
+ */
 const LATER_FIELD = {
   id: "field-later",
   label: "Ausweis",
   required: true,
+  category: "sensitive",
   formats: ["pdf"],
   timing: "afterConfirmation",
 };
@@ -204,7 +208,7 @@ describe("customer uploads: one proof for several bookings of a group", function
         );
         if (!reference) return false;
         reference.review = review;
-        reference.originalFileName = "";
+        if (review.fileDeletedAt != null) reference.originalFileName = "";
         return true;
       });
 
@@ -215,7 +219,11 @@ describe("customer uploads: one proof for several bookings of a group", function
       .stub(BookingManager, "getBookingsWithStoredCustomerUploads")
       .callsFake(async () =>
         [...h.store.values()]
-          .filter((doc) => (doc.customerUploads || []).some(waiting))
+          .filter((doc) =>
+            (doc.customerUploads || []).some(
+              (r) => waiting(r) && r.category !== "normal",
+            ),
+          )
           .map((doc) => new Booking(clone(doc))),
       );
     sinon
