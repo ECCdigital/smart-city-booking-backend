@@ -355,36 +355,22 @@ class AccessPointController {
    * its own list of Fächer is answered 404: see `getCompartmentQrCode`.
    */
   static async getQrCode(request, response, next) {
-    try {
-      const tenantId = request.params.tenant;
-      const format = request.query.format || AccessQrService.QR_FORMATS.SVG;
-
-      if (!Object.values(AccessQrService.QR_FORMATS).includes(format)) {
-        return response.status(400).send(`Unsupported format: ${format}`);
-      }
-
-      const accessPoint = await AccessPointManager.getAccessPoint(
-        request.params.id,
-        tenantId,
-      );
-
-      // An Anlage with its own list keeps its own code, never printed:
-      // only its Fächer have QR codes (tickets#1046).
-      if (!accessPoint || carriesOwnCompartments(accessPoint)) {
-        return response.sendStatus(404);
-      }
-
-      const rendered = await AccessQrService.render(accessPoint, format);
-
-      response.setHeader("Content-Type", rendered.contentType);
-      response.setHeader(
-        "Content-Disposition",
-        `inline; filename="${rendered.filename}"`,
-      );
-      return response.status(200).send(rendered.body);
-    } catch (err) {
-      return next(err);
-    }
+    return AccessPointController._sendQrCode(
+      request,
+      response,
+      next,
+      async (format) => {
+        const accessPoint = await AccessPointManager.getAccessPoint(
+          request.params.id,
+          request.params.tenant,
+        );
+        // An Anlage with its own list keeps its own code, never printed:
+        // only its Fächer have QR codes (tickets#1046).
+        return accessPoint && !carriesOwnCompartments(accessPoint)
+          ? AccessQrService.render(accessPoint, format)
+          : null;
+      },
+    );
   }
 
   /**
@@ -396,41 +382,23 @@ class AccessPointController {
    * the Anlage does not carry are answered 404.
    */
   static async getCompartmentQrCode(request, response, next) {
-    try {
-      const tenantId = request.params.tenant;
-      const format = request.query.format || AccessQrService.QR_FORMATS.SVG;
-
-      if (!Object.values(AccessQrService.QR_FORMATS).includes(format)) {
-        return response.status(400).send(`Unsupported format: ${format}`);
-      }
-
-      const anlage = await AccessPointManager.getAccessPoint(
-        request.params.id,
-        tenantId,
-      );
-      const compartment = compartmentsOf(anlage).find(
-        (entry) => entry.id === request.params.compartmentId,
-      );
-
-      if (!compartment) {
-        return response.sendStatus(404);
-      }
-
-      const rendered = await AccessQrService.renderCompartment(
-        anlage,
-        compartment,
-        format,
-      );
-
-      response.setHeader("Content-Type", rendered.contentType);
-      response.setHeader(
-        "Content-Disposition",
-        `inline; filename="${rendered.filename}"`,
-      );
-      return response.status(200).send(rendered.body);
-    } catch (err) {
-      return next(err);
-    }
+    return AccessPointController._sendQrCode(
+      request,
+      response,
+      next,
+      async (format) => {
+        const anlage = await AccessPointManager.getAccessPoint(
+          request.params.id,
+          request.params.tenant,
+        );
+        const compartment = compartmentsOf(anlage).find(
+          (entry) => entry.id === request.params.compartmentId,
+        );
+        return compartment
+          ? AccessQrService.renderCompartment(anlage, compartment, format)
+          : null;
+      },
+    );
   }
 
   /**
@@ -440,17 +408,49 @@ class AccessPointController {
    * Anlage without its own list (iFBS, Pareva) are answered 404.
    */
   static async getCompartmentQrSheet(request, response, next) {
-    try {
+    return AccessPointController._sendRendered(response, next, async () => {
       const anlage = await AccessPointManager.getAccessPoint(
         request.params.id,
         request.params.tenant,
       );
+      return carriesOwnCompartments(anlage)
+        ? AccessQrService.renderCompartmentSheet(anlage)
+        : null;
+    });
+  }
 
-      if (!carriesOwnCompartments(anlage)) {
+  /**
+   * @private
+   * Answer a QR code in the format `?format=svg|png|pdf` asks for, `svg` by
+   * default; 400 for another format, before anything is read.
+   *
+   * @param {(format: string) => Promise<Object|null>} render Renders the QR
+   *   code, `null` for nothing to render
+   */
+  static async _sendQrCode(request, response, next, render) {
+    const format = request.query.format || AccessQrService.QR_FORMATS.SVG;
+    if (!Object.values(AccessQrService.QR_FORMATS).includes(format)) {
+      return response.status(400).send(`Unsupported format: ${format}`);
+    }
+    return AccessPointController._sendRendered(response, next, () =>
+      render(format),
+    );
+  }
+
+  /**
+   * @private
+   * Answer what `render` rendered inline, named for download; 404 where it
+   * rendered nothing.
+   *
+   * @param {() => Promise<{ contentType: string, body: string|Buffer,
+   *   filename: string }|null>} render Renders, `null` for nothing to render
+   */
+  static async _sendRendered(response, next, render) {
+    try {
+      const rendered = await render();
+      if (!rendered) {
         return response.sendStatus(404);
       }
-
-      const rendered = await AccessQrService.renderCompartmentSheet(anlage);
 
       response.setHeader("Content-Type", rendered.contentType);
       response.setHeader(
