@@ -1,6 +1,7 @@
 const mock = require("mock-require");
 const { expect } = require("chai");
 const sinon = require("sinon");
+const QRCode = require("qrcode");
 
 const { AccessPoint } = require("../src/commons/entities/access/access-point");
 const { BaseError } = require("../src/errors/BaseError");
@@ -167,6 +168,134 @@ describe("AccessQrService", () => {
       }
 
       expect(error).to.be.an("error");
+    });
+  });
+
+  // tickets#1056: the QR code of one Fach of an Open Locker Anlage.
+  describe("renderCompartment", () => {
+    function anlage(overrides = {}) {
+      return createAccessPoint({
+        id: "anlage-1",
+        provider: "open-locker",
+        type: "locker",
+        externalId: null,
+        label: "Fahrradgarage Süd",
+        config: { compartments: [fach()] },
+        ...overrides,
+      });
+    }
+
+    function fach(overrides = {}) {
+      return {
+        id: "1b4e28ba-2fa1-11d2-883f-0016d3cca427",
+        number: 3,
+        lockerBank: { id: "bank-1", name: "Labor Fachbank 1" },
+        outOfService: false,
+        scanCode: "fach-code-3",
+        previousScanCodes: ["fach-code-old"],
+        ...overrides,
+      };
+    }
+
+    const FACH_URL =
+      "https://store.example.com/mobile-key/tenant-1/fach-code-3";
+
+    it("encodes the scan URL with the code of the Fach, not the Anlage's", async () => {
+      const result = await AccessQrService.renderCompartment(anlage(), fach());
+
+      expect(result.format).to.equal("svg");
+      expect(result.contentType).to.equal("image/svg+xml");
+      expect(result.body).to.equal(
+        await QRCode.toString(FACH_URL, { type: "svg" }),
+      );
+    });
+
+    it("renders the door's A4 page with the Anlage and „Schrank X · Fach N“ above the code", async () => {
+      const result = await AccessQrService.renderCompartment(
+        anlage(),
+        fach(),
+        "pdf",
+      );
+
+      expect(result.contentType).to.equal("application/pdf");
+      expect(Buffer.isBuffer(result.body)).to.be.true;
+      expect(PdfService.convertToPdf.calledOnce).to.be.true;
+      const html = PdfService.convertToPdf.firstCall.args[0];
+      expect(html).to.include("Fahrradgarage Süd");
+      expect(html).to.include("Schrank Labor Fachbank 1 · Fach 3");
+      expect(html).to.include("Zum Öffnen scannen");
+      // The template escapes the base64 padding (`=`), so it is left out.
+      const fachQr = await QRCode.toDataURL(FACH_URL, {
+        margin: 1,
+        width: 320,
+      });
+      expect(html).to.include(fachQr.replace(/=+$/, ""));
+      expect(html.indexOf("Schrank Labor Fachbank 1 · Fach 3")).to.be.below(
+        html.indexOf("data:image/png;base64,"),
+      );
+    });
+
+    it("leaves the door's page without a Fach line", async () => {
+      await AccessQrService.render(createAccessPoint(), "pdf");
+
+      const html = PdfService.convertToPdf.firstCall.args[0];
+      expect(html).to.not.include("Schrank");
+      expect(html).to.not.include('class="subtitle"');
+    });
+
+    it("names the file qr-<anlage>-schrank-<x>-fach-<nn>.<format>", async () => {
+      const names = [];
+      for (const format of ["svg", "png", "pdf"]) {
+        const result = await AccessQrService.renderCompartment(
+          anlage(),
+          fach(),
+          format,
+        );
+        names.push(result.filename);
+      }
+
+      expect(names).to.deep.equal([
+        "qr-fahrradgarage-sued-schrank-labor-fachbank-1-fach-03.svg",
+        "qr-fahrradgarage-sued-schrank-labor-fachbank-1-fach-03.png",
+        "qr-fahrradgarage-sued-schrank-labor-fachbank-1-fach-03.pdf",
+      ]);
+      expect(PdfService.convertToPdf.firstCall.args[1]).to.equal(
+        "qr-fahrradgarage-sued-schrank-labor-fachbank-1-fach-03.pdf",
+      );
+    });
+
+    it("keeps the file name ASCII whatever the labels hold", async () => {
+      const result = await AccessQrService.renderCompartment(
+        anlage({ label: "  Größe Straße / Ü-Halle  " }),
+        fach({ number: 12, lockerBank: { id: "b", name: 'Öst "A"' } }),
+      );
+
+      expect(result.filename).to.equal(
+        "qr-groesse-strasse-ue-halle-schrank-oest-a-fach-12.svg",
+      );
+    });
+
+    it("rejects an unknown format", async () => {
+      let error;
+      try {
+        await AccessQrService.renderCompartment(anlage(), fach(), "bmp");
+      } catch (err) {
+        error = err;
+      }
+
+      expect(error).to.be.an("error");
+    });
+
+    it("escapes the Schrank in the pdf template", async () => {
+      await AccessQrService.renderCompartment(
+        anlage(),
+        fach({ lockerBank: { id: "bank-1", name: "<b>Hof</b>" } }),
+        "pdf",
+      );
+
+      const html = PdfService.convertToPdf.firstCall.args[0];
+      expect(html).to.not.include("<b>Hof</b>");
+      expect(html).to.include("&lt;b&gt;Hof&lt;/b&gt;");
     });
   });
 

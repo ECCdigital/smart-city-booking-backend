@@ -45,6 +45,14 @@ router.get(
   AccessPointController.getQrCode,
 );
 
+// The QR code of one Fach of a Schließfachanlage (tickets#1056), with the
+// door's right: printing a sticker is writing the access point.
+router.get(
+  "/:id/compartments/:compartmentId/qrcode",
+  authorize("accessPoint", "write"),
+  AccessPointController.getCompartmentQrCode,
+);
+
 router.get(
   "/:id/location-prefill",
   authorize("accessPoint", "write"),
