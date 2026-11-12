@@ -21,11 +21,10 @@ const {
   bookingStatusUrl,
   cancellationUrl,
   customerUploadUrlOf,
+  hasStoreFront,
+  usesSignedLink,
   withdrawalUrl,
 } = require("./mail-links");
-const {
-  isGuestBooking,
-} = require("../services/customer-upload/customer-upload-link");
 const {
   getSnippetOverride,
   getSubjectOverride,
@@ -39,6 +38,7 @@ const Formatters = require("../utilities/formatters");
 const { withdrawalOffered } = require("../services/booking/booking-withdrawal");
 const {
   LIVE_STATUSES,
+  STATUS,
 } = require("../services/booking-lifecycle/booking-state");
 const {
   EVENT_FORMAT,
@@ -47,12 +47,14 @@ const {
   participationLinkForBooking,
 } = require("../entities/event/event-format");
 const {
+  UPLOAD_FIELD_TIMINGS,
   customerUploadLimits,
   effectiveCustomerUploadSettings,
 } = require("../services/customer-upload/customer-upload-rules");
 const {
   deriveCustomerUploadState,
   missingRequiredFieldsOf,
+  openOptionalFieldsOf,
   uploadFieldsOf,
 } = require("../services/customer-upload/customer-upload-state");
 
@@ -338,6 +340,13 @@ function renderShortBookingDetails({
  * answers carry; never a file, never a file name. Empty where nothing is
  * missing or the tenant has customer uploads off.
  *
+ * Without a storefront the optional ones that still take a file stand
+ * there too, after the required ones and marked „(optional)“; where no
+ * required proof is missing, they stand alone, with the button to the page
+ * of the Admin UI: a booker without an account has no other way to that
+ * page - the proofs before the release of a request, those of the
+ * checkout left out, those still open after the release.
+ *
  * @param {Object} params
  * @param {Object} params.tenant
  * @param {Object[]} params.bookings
@@ -366,34 +375,50 @@ function renderMissingProofs({
   );
   const limits = customerUploadLimits(customerUploads);
 
-  const missing = bookings.flatMap((booking) =>
-    missingRequiredFieldsOf(
-      deriveCustomerUploadState({
-        booking,
-        fields: uploadFieldsOf(booking, bookablesById),
-        settings,
-        limits,
-        now,
-      }),
-    ).map((field) => ({ booking, field })),
-  );
-  if (missing.length === 0) return "";
+  const states = bookings.map((booking) => ({
+    booking,
+    state: deriveCustomerUploadState({
+      booking,
+      fields: uploadFieldsOf(booking, bookablesById),
+      settings,
+      limits,
+      now,
+    }),
+  }));
+  const fieldsOf = (pick) =>
+    states.flatMap(({ booking, state }) =>
+      pick(state).map((field) => ({ booking, field })),
+    );
+  const missing = fieldsOf(missingRequiredFieldsOf);
+  const optional = hasStoreFront() ? [] : fieldsOf(openOptionalFieldsOf);
+  if (missing.length === 0) {
+    return renderOpenProofs({ optional, aggregated });
+  }
 
   const first = missing[0];
-  // A guest's link holds for one booking: in a
-  // group each line of a guest's booking carries the link of its own.
-  const guestGroup = aggregated && isGuestBooking(first.booking);
+  // A signed link holds for one booking: in a group of a guest, or of
+  // anyone without a storefront, each line carries the link of its own.
+  const linkPerBooking = aggregated && usesSignedLink(first.booking);
+  // The required proofs a request still needs before the tenant releases it.
+  const forRelease = missing.filter(
+    ({ booking, field }) =>
+      booking.status === STATUS.REQUESTED &&
+      field.timing === UPLOAD_FIELD_TIMINGS.BEFORE_RELEASE,
+  ).length;
   return renderSnippet("missing-proofs", {
-    missingProofs: missing.map(({ booking, field }) => ({
+    forRelease,
+    forReleaseOne: forRelease === 1,
+    missingProofs: [...missing, ...optional].map(({ booking, field }) => ({
       label: field.label,
       // A proof before the release has no deadline: it is due with the
-      // release.
+      // release. An optional one names none: nothing is due.
       deadline:
-        field.deadline === null
+        field.deadline === null || !field.required
           ? ""
           : Formatters.formatDateTime(field.deadline),
       bookingId: aggregated ? booking.id : "",
-      url: guestGroup ? customerUploadUrlOf(booking, field.fieldId) : "",
+      optional: !field.required,
+      url: linkPerBooking ? customerUploadUrlOf(booking, field.fieldId) : "",
     })),
     // One booking: the page opens at its most pressing field; a group:
     // at the first booking with a proof missing.
@@ -402,6 +427,32 @@ function renderMissingProofs({
       aggregated ? null : first.field.fieldId,
     ),
   });
+}
+
+/**
+ * The optional proofs that still take a file, with the button to the page
+ * „Nachweise einreichen“ of the Admin UI: for an instance without a
+ * storefront. Empty where none is open or no link holds.
+ *
+ * @param {Object} params
+ * @param {{booking: Object, field: Object}[]} params.optional
+ * @param {boolean} params.aggregated Each line names its booking
+ * @returns {string} HTML
+ */
+function renderOpenProofs({ optional, aggregated }) {
+  if (optional.length === 0) return "";
+  // A signed link holds for one booking: in a group each line carries the
+  // link of its own, one booking has the button.
+  const openProofs = optional.map(({ booking, field }) => ({
+    label: field.label,
+    bookingId: aggregated ? booking.id : "",
+    url: aggregated ? customerUploadUrlOf(booking, field.fieldId) : "",
+  }));
+  const proofsUrl = aggregated
+    ? ""
+    : customerUploadUrlOf(optional[0].booking, optional[0].field.fieldId);
+  if (!proofsUrl && !openProofs.some((line) => line.url)) return "";
+  return renderSnippet("open-proofs", { openProofs, proofsUrl });
 }
 
 /**

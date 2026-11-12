@@ -5,7 +5,8 @@
  * the guest reads that one booking, hands in, replaces and deletes a proof
  * until it is checked, and hands in anew after a rejection - nothing else.
  * The confirmation and the mail of a rejection carry the link; the rate
- * limits are those of a booking person.
+ * limits are those of a booking person. Without a storefront every
+ * customer gets the link, to the page of the Admin UI.
  *
  * Over the lifecycle harness: the real routers and the mail module, the
  * storage, the media records and clamd as fakes.
@@ -34,11 +35,15 @@ const {
   setVirusScanner,
 } = require("../src/commons/services/customer-upload/virus-scanner");
 const {
+  renderSnippet,
+} = require("../src/commons/mail-service/templates/template-loader");
+const {
   signCustomerUploadLink,
   verifyCustomerUploadLink,
 } = require("../src/commons/services/customer-upload/customer-upload-link");
 
 const STORE_FRONT_URL = "https://store.example.test";
+const FRONTEND_URL = "https://admin.example.test";
 
 const PDF = Buffer.from(
   "%PDF-1.4\n%Vereinsausweis\n1 0 obj<<>>endobj\n%%EOF\n",
@@ -54,6 +59,22 @@ const PROOF_FIELD = {
   formats: ["pdf"],
   timing: "afterConfirmation",
   deadlineDaysBeforeStart: 7,
+};
+
+const CHECKOUT_FIELD = {
+  id: "field-checkout",
+  label: "Ausweis",
+  required: false,
+  formats: ["pdf"],
+  timing: "checkout",
+};
+
+const BEFORE_RELEASE_FIELD = {
+  id: "field-before-release",
+  label: "Nutzungsvertrag",
+  required: false,
+  formats: ["pdf"],
+  timing: "beforeRelease",
 };
 
 /** The links of a mail as a client reads them, its entities decoded. */
@@ -73,10 +94,12 @@ describe("customer uploads: the signed link of a guest", function () {
   beforeEach(async function () {
     env = {
       STORE_FRONT_URL: process.env.STORE_FRONT_URL,
+      FRONTEND_URL: process.env.FRONTEND_URL,
       RATE_LIMIT_CUSTOMER_UPLOAD_PER_BOOKING:
         process.env.RATE_LIMIT_CUSTOMER_UPLOAD_PER_BOOKING,
     };
     process.env.STORE_FRONT_URL = STORE_FRONT_URL;
+    process.env.FRONTEND_URL = FRONTEND_URL;
 
     h = await installHarness({
       tenant: {
@@ -92,6 +115,24 @@ describe("customer uploads: the signed link of a guest", function () {
           title: "Halle mit Nachweis",
           autoCommitBooking: true,
           uploadFieldDefinitions: [PROOF_FIELD],
+        }),
+        // Released by hand, with optional proofs of the checkout and
+        // before the release.
+        "request-room": bookable({
+          id: "request-room",
+          title: "Halle auf Anfrage",
+          autoCommitBooking: false,
+          uploadFieldDefinitions: [CHECKOUT_FIELD, BEFORE_RELEASE_FIELD],
+        }),
+        // A required proof before the release beside an optional one.
+        "mixed-room": bookable({
+          id: "mixed-room",
+          title: "Halle mit Vertrag",
+          autoCommitBooking: false,
+          uploadFieldDefinitions: [
+            { ...BEFORE_RELEASE_FIELD, required: true },
+            CHECKOUT_FIELD,
+          ],
         }),
       },
     });
@@ -427,6 +468,198 @@ describe("customer uploads: the signed link of a guest", function () {
     });
   });
 
+  describe("without a storefront", function () {
+    beforeEach(function () {
+      delete process.env.STORE_FRONT_URL;
+    });
+
+    /** The link of the confirmation to the page of the Admin UI. */
+    async function adminLinkOf(id) {
+      sent.length = 0;
+      await mail.send("BOOKING_CONFIRMATION", {
+        tenantId: TENANT,
+        bookingIds: [id],
+      });
+      const [confirmation] = sent.filter((m) => m.to === CUSTOMER);
+      const links = linksOf(confirmation.html);
+      expect(links.some((l) => l.includes("/account/proofs"))).to.equal(false);
+      const [link] = links.filter((href) =>
+        href.startsWith(`${FRONTEND_URL}/booking/proofs?`),
+      );
+      expect(link, links.join(" ")).to.be.a("string");
+      return new URL(link).searchParams;
+    }
+
+    it("links a guest to the page of the Admin UI", async function () {
+      const id = await guestBooking();
+
+      const query = await adminLinkOf(id);
+
+      expect(query.get("field")).to.equal(PROOF_FIELD.id);
+      expect(verifyCustomerUploadLink(query.get("link"))).to.deep.equal({
+        tenantId: TENANT,
+        bookingId: id,
+      });
+    });
+
+    it("links a customer with an account there too, and the link opens the booking", async function () {
+      const id = await customerBooking();
+
+      const query = await adminLinkOf(id);
+      const res = await upload(id, PDF, { link: query.get("link") });
+
+      expect(res.status, res.text).to.equal(201);
+      expect(fieldOf(res.body.customerUploadState).state).to.equal("submitted");
+    });
+
+    /** A request of the signed-in customer, released by hand. */
+    async function requestBooking(bookableId = "request-room") {
+      const res = await h
+        .api()
+        .post(`/api/v2/${TENANT}/checkout`)
+        .set(h.as(CUSTOMER))
+        .send(checkoutBody(bookableId));
+      expect(res.status, res.text).to.equal(200);
+      h.clearEffects();
+      return res.body.data.booking.id;
+    }
+
+    /** The customer's mail of `type` for the booking. */
+    async function mailOf(type, id) {
+      sent.length = 0;
+      await mail.send(type, { tenantId: TENANT, bookingIds: [id] });
+      const [customerMail] = sent.filter((m) => m.to === CUSTOMER);
+      return customerMail;
+    }
+
+    const adminProofLinks = (html) =>
+      linksOf(html).filter((href) =>
+        href.startsWith(`${FRONTEND_URL}/booking/proofs?`),
+      );
+
+    it("offers the optional proofs of a request with the button", async function () {
+      const id = await requestBooking();
+      expect(h.store.get(id).status).to.equal("requested");
+
+      const request = await mailOf("BOOKING_REQUEST_CONFIRMATION", id);
+
+      expect(request.html).to.include("noch Nachweise einreichen");
+      expect(request.html).to.include("Ausweis");
+      expect(request.html).to.include("Nutzungsvertrag");
+      expect(request.html).to.include("Nachweise hochladen");
+      const [link] = adminProofLinks(request.html);
+      expect(
+        verifyCustomerUploadLink(new URL(link).searchParams.get("link")),
+      ).to.deep.equal({ tenantId: TENANT, bookingId: id });
+    });
+
+    it("lists the optional proofs after the required ones, marked optional", async function () {
+      const id = await requestBooking("mixed-room");
+
+      const request = await mailOf("BOOKING_REQUEST_CONFIRMATION", id);
+      const items = [...request.html.matchAll(/<li>([\s\S]*?)<\/li>/g)].map(
+        ([, item]) => item.replace(/\s+/g, " ").trim(),
+      );
+
+      expect(request.html).to.include("Nachweise fehlen noch");
+      expect(items).to.have.length(2);
+      expect(items[0]).to.match(/^Nutzungsvertrag(?! \(optional\))/);
+      expect(items[1]).to.match(/^Ausweis \(optional\)/);
+      // An optional proof names no deadline.
+      expect(items[1]).not.to.include("bis");
+      expect(request.html).to.include("Jetzt einreichen");
+      expect(request.html).not.to.include("Nachweise hochladen");
+      expect(request.html.replace(/\s+/g, " ")).to.include(
+        "Zur Freigabe der Buchung ist 1 Nachweis erforderlich.",
+      );
+    });
+
+    it("names several proofs for the release in the plural", function () {
+      const html = renderSnippet("missing-proofs", {
+        missingProofs: [{ label: "A" }, { label: "B" }],
+        forRelease: 2,
+        forReleaseOne: false,
+      }).replace(/\s+/g, " ");
+
+      expect(html).to.include(
+        "Zur Freigabe der Buchung sind 2 Nachweise erforderlich.",
+      );
+    });
+
+    it("names the proofs for the release only while the booking waits for it", async function () {
+      const id = await requestBooking("mixed-room");
+      h.store.get(id).status = "confirmed";
+
+      const confirmation = await mailOf("BOOKING_CONFIRMATION", id);
+
+      expect(confirmation.html).to.include("Nutzungsvertrag");
+      expect(confirmation.html).not.to.include("Zur Freigabe der Buchung");
+    });
+
+    it("offers the proofs still open after the release, none handed in", async function () {
+      const id = await requestBooking();
+      h.store.get(id).status = "confirmed";
+
+      const confirmation = await mailOf("BOOKING_CONFIRMATION", id);
+
+      expect(confirmation.html).to.include("Nachweise hochladen");
+      expect(adminProofLinks(confirmation.html)).to.have.length(1);
+    });
+
+    it("offers nothing once every optional proof is handed in", async function () {
+      const id = await requestBooking();
+      for (const field of [CHECKOUT_FIELD, BEFORE_RELEASE_FIELD]) {
+        const res = await h
+          .api()
+          .post(`${base(id)}/${field.id}`)
+          .set("X-Customer-Upload-Link", linkOf(id))
+          .attach("file", PDF, "nachweis.pdf");
+        expect(res.status, res.text).to.equal(201);
+      }
+
+      const request = await mailOf("BOOKING_REQUEST_CONFIRMATION", id);
+
+      expect(request.html).not.to.include("Nachweise hochladen");
+      expect(adminProofLinks(request.html)).to.deep.equal([]);
+    });
+
+    it("names no link where the Admin UI has no address either", async function () {
+      delete process.env.FRONTEND_URL;
+      const id = await guestBooking();
+      sent.length = 0;
+
+      await mail.send("BOOKING_CONFIRMATION", {
+        tenantId: TENANT,
+        bookingIds: [id],
+      });
+
+      const [confirmation] = sent.filter((m) => m.to === CUSTOMER);
+      expect(confirmation.html).to.include("Nachweise fehlen noch");
+      expect(
+        linksOf(confirmation.html).some((l) => l.includes("proofs")),
+      ).to.equal(false);
+    });
+  });
+
+  it("offers no optional proofs where a storefront runs", async function () {
+    const res = await h
+      .api()
+      .post(`/api/v2/${TENANT}/checkout`)
+      .set(h.as(CUSTOMER))
+      .send(checkoutBody("request-room"));
+    expect(res.status, res.text).to.equal(200);
+    sent.length = 0;
+
+    await mail.send("BOOKING_REQUEST_CONFIRMATION", {
+      tenantId: TENANT,
+      bookingIds: [res.body.data.booking.id],
+    });
+
+    const [request] = sent.filter((m) => m.to === CUSTOMER);
+    expect(request.html).not.to.include("Nachweise hochladen");
+    expect(request.html).not.to.include("(optional)");
+  });
+
   describe("a link refused", function () {
     it("after the end of the booking", async function () {
       const id = await guestBooking();
@@ -451,15 +684,6 @@ describe("customer uploads: the signed link of a guest", function () {
         expect(res.body.code).to.equal("customer_upload_link_invalid");
       }
       expect(references(theirs)).to.deep.equal([]);
-    });
-
-    it("for a booking of a customer with an account", async function () {
-      const id = await customerBooking();
-
-      const res = await upload(id);
-
-      expect(res.status, res.text).to.equal(403);
-      expect(res.body.code).to.equal("customer_upload_link_invalid");
     });
 
     it("without a link, or a forged one", async function () {

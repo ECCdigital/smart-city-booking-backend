@@ -502,6 +502,23 @@ function missingRequiredFieldsOf(state) {
   );
 }
 
+/**
+ * The optional upload fields of a derived state that still take a file:
+ * open, rejected or overdue - the customer may, need not, hand them in.
+ * None without a state.
+ *
+ * @param {{fields: Object[]}|null} state Of {@link deriveCustomerUploadState}
+ * @returns {Object[]} The derived fields, in their order
+ */
+function openOptionalFieldsOf(state) {
+  return (state?.fields || []).filter(
+    (field) =>
+      !field.required &&
+      MISSING_FIELD_STATES.has(field.state) &&
+      field.remainingFiles > 0,
+  );
+}
+
 module.exports = {
   BOOKING_STATE,
   FIELD_STATE,
@@ -513,5 +530,6 @@ module.exports = {
   isWaiting,
   keepBookedUploadFields,
   missingRequiredFieldsOf,
+  openOptionalFieldsOf,
   uploadFieldsOf,
 };

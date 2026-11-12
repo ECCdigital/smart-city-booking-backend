@@ -5,12 +5,22 @@
 <ul>
   {{#each missingProofs}}
     <li>
-      {{label}}{{#if deadline}} – bis {{deadline}}{{/if}}{{#if bookingId}}
+      {{label}}{{#if optional}} (optional){{/if}}{{#if deadline}}
+        – bis {{deadline}}{{/if}}{{#if bookingId}}
         (Buchung {{bookingId}}){{/if}}{{#if url}}
         – <a href="{{url}}">einreichen</a>{{/if}}
     </li>
   {{/each}}
 </ul>
+
+{{#if forRelease}}
+  <p>
+    {{#if forReleaseOne}}Zur Freigabe der Buchung ist 1 Nachweis erforderlich.{{else}}Zur
+      Freigabe der Buchung sind
+      {{forRelease}}
+      Nachweise erforderlich.{{/if}}
+  </p>
+{{/if}}
 
 {{#if proofsUrl}}
   <p>

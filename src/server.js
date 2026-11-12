@@ -74,7 +74,9 @@ app.use(function (req, res, next) {
   res.header("Access-Control-Allow-Methods", "GET,PUT,POST,DELETE,OPTIONS");
   res.header(
     "Access-Control-Allow-Headers",
-    "X-Requested-With, X-HTTP-Method-Override, Content-Type, Accept, Authorization",
+    // `X-Customer-Upload-Link`: the signed link of a booking, which the
+    // Admin UI's page „Nachweise einreichen“ sends from the browser.
+    "X-Requested-With, X-HTTP-Method-Override, Content-Type, Accept, Authorization, X-Customer-Upload-Link",
   );
   if ("OPTIONS" === req.method) {
     res.sendStatus(200);

@@ -68,10 +68,8 @@ const {
   adminGroupBookingUrl,
   adminTenantMembersUrl,
   customerUploadUrlOf,
+  usesSignedLink,
 } = require("./mail-links");
-const {
-  isGuestBooking,
-} = require("../services/customer-upload/customer-upload-link");
 const {
   normalizeCustomerUploadSettings,
 } = require("../services/customer-upload/customer-upload-rules");
@@ -302,13 +300,13 @@ const MailType = Object.freeze({
     sendBCC: false,
     addRejectionLink: false,
     // The button opens the page at the field of the (first) booking. A
-    // guest's link holds for one booking: in a
-    // group the guest gets one link per booking instead.
+    // signed link holds for one booking: in a group a guest - or anyone
+    // without a storefront - gets one link per booking instead.
     templateData: (
       { reason, fieldLabels = [], kind, fieldId, fileDeleted = false },
       { bookings },
     ) => {
-      const guestGroup = bookings.length > 1 && isGuestBooking(bookings[0]);
+      const guestGroup = bookings.length > 1 && usesSignedLink(bookings[0]);
       return {
         customerUploadReason: reason,
         customerUploadFields: fieldLabels.join(", "),

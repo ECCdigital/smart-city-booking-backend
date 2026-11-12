@@ -74,13 +74,31 @@ function adminTenantMembersUrl(tenantId) {
   return `${process.env.FRONTEND_URL}/tenant/members?tenant=${encodeURIComponent(tenantId)}`;
 }
 
+const storeFrontBase = () =>
+  (process.env.STORE_FRONT_URL || "").replace(/\/+$/, "");
+
+/** Whether the instance runs a storefront (`STORE_FRONT_URL`). */
+function hasStoreFront() {
+  return storeFrontBase() !== "";
+}
+
+/**
+ * Whether the customer of a booking hands proofs in with the booking's
+ * signed link: a guest always, everyone where the instance runs no
+ * storefront (no `STORE_FRONT_URL`) - there is no account page then, and
+ * the link opens the page of the Admin UI.
+ */
+function usesSignedLink(booking) {
+  return isGuestBooking(booking) || !hasStoreFront();
+}
+
 /**
  * The storefront's page „Nachweise einreichen“,
  * under the customer's account, opened at the upload field of the booking
  * where both are named; none without `STORE_FRONT_URL`.
  */
 function customerUploadProofsUrl(bookingId = null, fieldId = null) {
-  const base = (process.env.STORE_FRONT_URL || "").replace(/\/+$/, "");
+  const base = storeFrontBase();
   if (!base) return "";
   const url = `${base}/account/proofs`;
   if (!bookingId) return url;
@@ -96,18 +114,35 @@ function customerUploadProofsUrl(bookingId = null, fieldId = null) {
  * `STORE_FRONT_URL`, nor for a booking whose link no longer holds.
  */
 function customerUploadGuestUrl(booking, fieldId = null) {
-  const base = (process.env.STORE_FRONT_URL || "").replace(/\/+$/, "");
+  return signedProofsUrl(storeFrontBase(), "/proofs", booking, fieldId);
+}
+
+/**
+ * The page „Nachweise einreichen“ of the Admin UI (`FRONTEND_URL`), for an
+ * instance without a storefront: as the storefront's page of a guest, with
+ * the booking's signed link, without a sign-in - like the cancellation
+ * request. None without `FRONTEND_URL`, nor for a booking whose link no
+ * longer holds.
+ */
+function customerUploadAdminUrl(booking, fieldId = null) {
+  const base = (process.env.FRONTEND_URL || "").replace(/\/+$/, "");
+  return signedProofsUrl(base, "/booking/proofs", booking, fieldId);
+}
+
+function signedProofsUrl(base, path, booking, fieldId) {
   if (!base || !booking || !linkHolds(booking)) return "";
   const query = new URLSearchParams({ link: signCustomerUploadLink(booking) });
   if (fieldId) query.set("field", fieldId);
-  return `${base}/proofs?${query}`;
+  return `${base}${path}?${query}`;
 }
 
 /**
  * The way of a booking's customer to hand proofs in: a guest's signed link,
- * the page under the account for everyone else.
+ * the page under the account for everyone else. Without a storefront every
+ * customer gets the signed link to the page of the Admin UI.
  */
 function customerUploadUrlOf(booking, fieldId = null) {
+  if (!hasStoreFront()) return customerUploadAdminUrl(booking, fieldId);
   return isGuestBooking(booking)
     ? customerUploadGuestUrl(booking, fieldId)
     : customerUploadProofsUrl(booking?.id, fieldId);
@@ -136,6 +171,8 @@ module.exports = {
   customerUploadProofsUrl,
   customerUploadGuestUrl,
   customerUploadUrlOf,
+  hasStoreFront,
+  usesSignedLink,
   cancellationUrl,
   withdrawalUrl,
   adminDashboardUrl,

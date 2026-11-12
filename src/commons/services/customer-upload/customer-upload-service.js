@@ -40,7 +40,6 @@ const {
 } = require("./customer-upload-state");
 const { ScannerUnavailableError, virusScanner } = require("./virus-scanner");
 const {
-  isGuestBooking,
   linkHolds,
   verifyCustomerUploadLink,
 } = require("./customer-upload-link");
@@ -223,9 +222,11 @@ class CustomerUploadService {
   }
 
   /**
-   * The booking a guest's signed link names: the
-   * booking of the route, made without an account, not ended yet. The
-   * link stands in for the sign-in; nothing else of the tenant opens.
+   * The booking a signed link names: the booking of the route, not ended
+   * yet. The link stands in for the sign-in; nothing else of the tenant
+   * opens. Only a guest gets one where a storefront runs; without one,
+   * the customer of an account's booking gets one too (`usesSignedLink`),
+   * so the link is not refused for an account's booking.
    *
    * @param {Object} params
    * @param {string} params.tenantId
@@ -248,7 +249,7 @@ class CustomerUploadService {
       tenantId,
       DOMAIN,
     );
-    if (!booking || !isGuestBooking(booking)) {
+    if (!booking) {
       throw new ForbiddenError(R.LINK_INVALID);
     }
     if (!linkHolds(booking, now)) {
