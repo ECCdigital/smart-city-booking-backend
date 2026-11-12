@@ -533,6 +533,69 @@ describe("AccessPointController", () => {
       });
     });
 
+    // tickets#1045: an Anlage takes a location the way a door does - only
+    // kept, for the start view of the map.
+    describe("the location of an Anlage", () => {
+      const LOCATION = {
+        display_address: "Bahnhofstraße 1, 03172 Guben",
+        coordinates: { type: "Point", points: [14.7161, 51.9512] },
+      };
+
+      function anlage(overrides = {}) {
+        return {
+          type: "locker",
+          provider: "pareva",
+          externalId: "plant-1",
+          mode: "remote",
+          validationRules: [],
+          ...overrides,
+        };
+      }
+
+      it("stores the location of a new Anlage", async () => {
+        request.body = anlage({ location: LOCATION });
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.called).to.be.false;
+        const [created] = storeAccessPoint.firstCall.args;
+        expect(created.type).to.equal("locker");
+        expect(created.location).to.deep.equal(LOCATION);
+      });
+
+      describe("on an update", () => {
+        beforeEach(() => {
+          sandbox
+            .stub(AccessPointManager, "getAccessPoint")
+            .resolves(createAccessPoint(anlage({ location: { ...LOCATION } })));
+        });
+
+        it("stores a changed location", async () => {
+          const moved = {
+            display_address: "Gasstraße 4, 03172 Guben",
+            coordinates: { type: "Point", points: [14.714485, 51.950438] },
+          };
+          request.body = { id: "point-1", ...anlage({ location: moved }) };
+
+          await AccessPointController.storeAccessPoint(request, response, next);
+
+          expect(next.called).to.be.false;
+          const [updated] = storeAccessPoint.firstCall.args;
+          expect(updated.location).to.deep.equal(moved);
+        });
+
+        it("clears the location when none is submitted", async () => {
+          request.body = { id: "point-1", ...anlage({ location: null }) };
+
+          await AccessPointController.storeAccessPoint(request, response, next);
+
+          expect(next.called).to.be.false;
+          const [updated] = storeAccessPoint.firstCall.args;
+          expect(updated.location).to.equal(null);
+        });
+      });
+    });
+
     describe("mode support", () => {
       it("refuses a mode the provider does not report as supported", async () => {
         findListedAccessPoint.resolves(listedAccessPoint(["authorization"]));
@@ -1179,6 +1242,22 @@ describe("AccessPointController", () => {
             outOfService: true,
           },
         ]);
+      });
+
+      // tickets#1045: the location is the Anlage's, not one per Fach.
+      it("stores the location of the Anlage along with its Fächer", async () => {
+        const location = {
+          display_address: "Gasstraße 4, 03172 Guben",
+          coordinates: { type: "Point", points: [14.714485, 51.950438] },
+        };
+        request.body = lockerSystem([{ id: COMPARTMENT_ID }], { location });
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.called).to.be.false;
+        expect(storeAccessPoint.firstCall.args[0].location).to.deep.equal(
+          location,
+        );
       });
 
       it("takes a rename in Open Locker over on the next save of the Anlage", async () => {
