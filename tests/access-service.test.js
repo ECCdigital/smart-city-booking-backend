@@ -507,6 +507,9 @@ describe("One access point shape on both ways", () => {
       .stub(AccessPointManager, "getAccessPointByScanCode")
       .resolves(accessPoint);
     sandbox
+      .stub(AccessPointManager, "getLockerSystemsByCompartmentScanCode")
+      .resolves([]);
+    sandbox
       .stub(AccessPointManager, "getAccessPointsByIds")
       .resolves([accessPoint]);
     sandbox.stub(BookingManager, "getBooking").resolves(

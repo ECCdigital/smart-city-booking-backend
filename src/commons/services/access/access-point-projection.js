@@ -3,6 +3,7 @@ const {
 } = require("./providers/access-provider-registry");
 const { AccessPointType } = require("../../schemas/accessPointSchema");
 const { demandedEvidenceOf } = require("./access-decision");
+const { compartmentPointId } = require("./compartment-allocation");
 
 require("./providers/register-access-providers");
 
@@ -63,6 +64,35 @@ function projectAccessPoint(
   }
 
   return { ...view, ...bookingFields(accessPoint, bookingContext) };
+}
+
+/**
+ * A Fach of a Schließfachanlage as a resolved scan hands it out: the core
+ * fields of its Anlage - type, provider, mode, label and rules, because a
+ * Fach inherits them - under the id the Fach is opened and listed by
+ * (`<anlage>:<Fach UUID>`), plus the Anlage's id and the Fach as the person
+ * looks for it. The Fach's UUID and its codes stay on the server.
+ *
+ * `compartment` is an object here, unlike the box number string iFBS names in
+ * a booking's projection: a client tells the two apart by type.
+ *
+ * @param {Object} lockerSystem The Anlage, as stored
+ * @param {Object} compartment The Fach's entry in `config.compartments`
+ * @returns {Object} The Fach as the API hands it out
+ */
+function projectCompartment(lockerSystem, compartment) {
+  const { id, ...view } = projectAccessPoint(lockerSystem);
+
+  return {
+    id: compartmentPointId(id, compartment.id),
+    lockerSystemId: id,
+    ...view,
+    compartment: {
+      number: compartment.number ?? null,
+      lockerBankName: compartment.lockerBank?.name ?? null,
+      outOfService: compartment.outOfService === true,
+    },
+  };
 }
 
 /**
@@ -134,5 +164,6 @@ function assignedCompartmentView(assigned) {
 
 module.exports = {
   projectAccessPoint,
+  projectCompartment,
   assignedCompartmentView,
 };

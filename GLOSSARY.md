@@ -169,7 +169,7 @@ Eine pro AccessPoint konfigurierte Evidence-Anforderung, die der Server beim Öf
 _Avoid_: Validation Rule, Policy, Check
 
 **Scan-Landing-Page**:
-Die Frontend-Seite, die sich öffnet, wenn ein Nutzer den QR-Code an einem AccessPoint scannt; sie führt durch Login, Berechtigungsprüfung und Öffnen.
+Die Frontend-Seite, die sich öffnet, wenn ein Nutzer den QR-Code an einer Tür oder einem Fach einer Schließfachanlage scannt; sie führt durch Login, Berechtigungsprüfung und Öffnen.
 
 **Tenant-Owner**:
 Ein Nutzer, dessen Membership im Mandanten als Owner markiert ist; umgeht alle rollenbasierten Rechteprüfungen des Mandanten und trägt exklusiv die Schreibrechte an AccessPoints (Anlage, Bearbeitung, QR-Druck, Rotation).
