@@ -53,6 +53,14 @@ router.get(
   AccessPointController.getCompartmentQrCode,
 );
 
+// The Sammel-PDF of a Schließfachanlage (tickets#1062): the QR codes of all
+// its Fächer on an Etikettenbogen, with the right of the QR code above.
+router.get(
+  "/:id/compartments/qrcodes",
+  authorize("accessPoint", "write"),
+  AccessPointController.getCompartmentQrSheet,
+);
+
 router.get(
   "/:id/location-prefill",
   authorize("accessPoint", "write"),

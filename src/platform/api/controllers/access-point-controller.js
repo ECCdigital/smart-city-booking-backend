@@ -446,6 +446,36 @@ class AccessPointController {
   }
 
   /**
+   * Render the Sammel-PDF of a Schließfachanlage that carries its own list
+   * (tickets#1062): the QR codes of all its Fächer on an Etikettenbogen, every
+   * Schrank on a new page, Fächer out of service noted as such. A door and an
+   * Anlage without its own list (iFBS, Pareva) are answered 404.
+   */
+  static async getCompartmentQrSheet(request, response, next) {
+    try {
+      const anlage = await AccessPointManager.getAccessPoint(
+        request.params.id,
+        request.params.tenant,
+      );
+
+      if (!carriesOwnCompartments(anlage)) {
+        return response.sendStatus(404);
+      }
+
+      const rendered = await AccessQrService.renderCompartmentSheet(anlage);
+
+      response.setHeader("Content-Type", rendered.contentType);
+      response.setHeader(
+        "Content-Disposition",
+        `inline; filename="${rendered.filename}"`,
+      );
+      return response.status(200).send(rendered.body);
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  /**
    * Rotate the scan code of an access point: the current code is retired and a
    * fresh one takes its place, so old stickers stop resolving at once. Rotation
    * is the revocation mechanism; a reprint is simply rotate, then fetch the QR

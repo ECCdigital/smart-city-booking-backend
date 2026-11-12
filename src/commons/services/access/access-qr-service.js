@@ -4,6 +4,8 @@ const QRCode = require("qrcode");
 const Handlebars = require("handlebars");
 const PdfService = require("../../pdf-service/pdf-service");
 const { BaseError } = require("../../../errors/BaseError");
+const { compartmentsOf } = require("./locker-system-compartments");
+const { inAllocationOrder } = require("./compartment-allocation");
 
 /**
  * Renderable formats of an access point QR code. `svg` is the default: it
@@ -23,7 +25,19 @@ const PDF_TEMPLATE_PATH = path.join(
   "access-point-qr.temp.html",
 );
 
+const SHEET_INSTRUCTION_TEXT = "Scannen, um Ihr Fach zu öffnen";
+
+/** Labels on one Etikettenbogen: 2×4 of 105 × 74 mm (A7) on A4. */
+const LABELS_PER_SHEET = 8;
+
+const SHEET_TEMPLATE_PATH = path.join(
+  __dirname,
+  "templates",
+  "access-point-qr-sheet.temp.html",
+);
+
 let compiledPdfTemplate;
+let compiledSheetTemplate;
 
 /**
  * Turn a label into the ASCII part of a file name: lower case, umlauts
@@ -46,6 +60,37 @@ function loadPdfTemplate() {
     compiledPdfTemplate = Handlebars.compile(templateContent);
   }
   return compiledPdfTemplate;
+}
+
+/**
+ * Lay labels in Zuteilung order out on sheets: every Schrank starts a new
+ * one, so the sheets can be handed out per Schrank.
+ */
+function sheetPages(labels) {
+  const pages = [];
+  let previous;
+  for (const label of labels) {
+    const current = pages[pages.length - 1];
+    const sameBank =
+      previous &&
+      previous.lockerBankId === label.lockerBankId &&
+      previous.lockerBankName === label.lockerBankName;
+    if (!sameBank || current.labels.length === LABELS_PER_SHEET) {
+      pages.push({ labels: [label] });
+    } else {
+      current.labels.push(label);
+    }
+    previous = label;
+  }
+  return pages;
+}
+
+function loadSheetTemplate() {
+  if (!compiledSheetTemplate) {
+    const templateContent = fs.readFileSync(SHEET_TEMPLATE_PATH, "utf-8");
+    compiledSheetTemplate = Handlebars.compile(templateContent);
+  }
+  return compiledSheetTemplate;
 }
 
 /**
@@ -130,6 +175,46 @@ class AccessQrService {
         slug(compartment.number).padStart(2, "0"),
       ].join("-"),
     );
+  }
+
+  /**
+   * Render the Sammel-PDF of a Schließfachanlage that carries its own list
+   * (tickets#1062): the codes of all its Fächer on an Etikettenbogen.
+   *
+   * @param {import("../../entities/access/access-point").AccessPoint} anlage
+   *   The Schließfachanlage, with its Fächer in `config.compartments`
+   * @returns {Promise<{ format: string, contentType: string,
+   *   body: Buffer, filename: string }>} The rendered PDF
+   */
+  static async renderCompartmentSheet(anlage) {
+    const filename = `qr-${slug(anlage.label)}-alle-faecher.pdf`;
+    const labels = await Promise.all(
+      inAllocationOrder(compartmentsOf(anlage)).map(async (compartment) => ({
+        lockerBankId: compartment.lockerBank?.id ?? null,
+        lockerBankName: compartment.lockerBank?.name ?? "",
+        number: compartment.number,
+        outOfService: compartment.outOfService === true,
+        qrSvg: await QRCode.toString(
+          this.scanUrl(anlage.tenantId, compartment.scanCode),
+          { type: "svg", margin: 1 },
+        ),
+      })),
+    );
+    const html = loadSheetTemplate()({
+      label: anlage.label,
+      instruction: SHEET_INSTRUCTION_TEXT,
+      pages: sheetPages(labels),
+    });
+
+    const { buffer } = await PdfService.convertToPdf(html, filename, {
+      borderless: true,
+    });
+    return {
+      format: QR_FORMATS.PDF,
+      contentType: "application/pdf",
+      body: buffer,
+      filename,
+    };
   }
 
   /**

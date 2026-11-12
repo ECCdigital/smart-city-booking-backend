@@ -2831,6 +2831,134 @@ describe("AccessPointController", () => {
     });
   });
 
+  describe("getCompartmentQrSheet", () => {
+    let renderCompartmentSheet;
+
+    function anlage(compartments) {
+      return createAccessPoint({
+        id: "anlage-1",
+        provider: "open-locker",
+        type: "locker",
+        externalId: null,
+        label: "Fahrradgarage",
+        config: { compartments },
+      });
+    }
+
+    const FACH = {
+      id: "1b4e28ba-2fa1-11d2-883f-0016d3cca427",
+      number: 3,
+      lockerBank: { id: "bank-1", name: "Labor Fachbank 1" },
+      outOfService: false,
+      scanCode: "fach-code",
+      previousScanCodes: [],
+    };
+
+    beforeEach(() => {
+      request.params.id = "anlage-1";
+      renderCompartmentSheet = sandbox
+        .stub(AccessQrService, "renderCompartmentSheet")
+        .resolves({
+          format: "pdf",
+          contentType: "application/pdf",
+          body: Buffer.from("pdf"),
+          filename: "qr-fahrradgarage-alle-faecher.pdf",
+        });
+    });
+
+    it("renders the Sammel-PDF of the Anlage, named for download", async () => {
+      const stored = anlage([FACH]);
+      const getAccessPoint = sandbox
+        .stub(AccessPointManager, "getAccessPoint")
+        .resolves(stored);
+
+      await AccessPointController.getCompartmentQrSheet(
+        request,
+        response,
+        next,
+      );
+
+      expect(getAccessPoint.calledOnceWithExactly("anlage-1", "tenant-1")).to.be
+        .true;
+      expect(renderCompartmentSheet.calledOnceWithExactly(stored)).to.be.true;
+      expect(response.setHeader.calledWith("Content-Type", "application/pdf"))
+        .to.be.true;
+      expect(
+        response.setHeader.calledWith(
+          "Content-Disposition",
+          'inline; filename="qr-fahrradgarage-alle-faecher.pdf"',
+        ),
+      ).to.be.true;
+      expect(response.status.calledWith(200)).to.be.true;
+      expect(response.send.firstCall.args[0].toString()).to.equal("pdf");
+    });
+
+    it("answers 404 for an access point of another tenant", async () => {
+      sandbox.stub(AccessPointManager, "getAccessPoint").resolves(null);
+
+      await AccessPointController.getCompartmentQrSheet(
+        request,
+        response,
+        next,
+      );
+
+      expect(response.sendStatus.calledWith(404)).to.be.true;
+      expect(renderCompartmentSheet.called).to.be.false;
+    });
+
+    it("answers 404 for a door", async () => {
+      sandbox
+        .stub(AccessPointManager, "getAccessPoint")
+        .resolves(createAccessPoint());
+
+      await AccessPointController.getCompartmentQrSheet(
+        request,
+        response,
+        next,
+      );
+
+      expect(response.sendStatus.calledWith(404)).to.be.true;
+      expect(renderCompartmentSheet.called).to.be.false;
+    });
+
+    it("answers 404 for an Anlage without its own list of Fächer (iFBS, Pareva)", async () => {
+      sandbox.stub(AccessPointManager, "getAccessPoint").resolves(
+        createAccessPoint({
+          id: "anlage-1",
+          provider: "ifbs",
+          type: "locker",
+          externalId: "station-1",
+          config: {},
+        }),
+      );
+
+      await AccessPointController.getCompartmentQrSheet(
+        request,
+        response,
+        next,
+      );
+
+      expect(response.sendStatus.calledWith(404)).to.be.true;
+      expect(renderCompartmentSheet.called).to.be.false;
+    });
+
+    it("hands unexpected errors to the error handler", async () => {
+      const failure = new Error("Render Error");
+      sandbox
+        .stub(AccessPointManager, "getAccessPoint")
+        .resolves(anlage([FACH]));
+      renderCompartmentSheet.rejects(failure);
+
+      await AccessPointController.getCompartmentQrSheet(
+        request,
+        response,
+        next,
+      );
+
+      expect(next.calledOnceWithExactly(failure)).to.be.true;
+    });
+  });
+
   describe("rotateScanCode", () => {
     let storeAccessPoint;
 

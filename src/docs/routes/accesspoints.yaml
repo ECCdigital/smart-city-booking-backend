@@ -565,6 +565,68 @@
             schema:
               $ref: "#/components/schemas/StoreFrontUrlMissing"
 
+/api/{tenant}/accesspoints/{id}/compartments/qrcodes:
+  get:
+    tags:
+      - Access Points
+    summary: Render the Sammel-PDF of all Fächer of a locker system
+    description: |
+      Renders the QR codes of all compartments (Fächer) of a locker system that
+      carries its own list of compartments (Open Locker) as one PDF, the
+      Sammel-PDF: an Etikettenbogen of 2×4 labels of 105 × 74 mm (A7) on a
+      borderless A4 sheet (e.g. Zweckform 3427), with thin dashed cut lines for
+      plain paper. Each label carries the locker system's label, „Schrank X“,
+      the compartment's own QR code (52 mm), „FACH“ with its number and
+      „Scannen, um Ihr Fach zu öffnen“. Every locker bank (Schrank) starts a
+      new page; the order is that of the allocation: locker bank by name (by id
+      for the same name), then compartment number, numerically. Compartments
+      out of service are printed with the note „außer Betrieb“, their codes
+      stay valid.
+
+      Reserved for tenant owners (membership `owner: true`; instance owners are
+      allowed as well), like the door's QR code.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: id
+        in: path
+        required: true
+        description: Unique identifier of the locker system
+        schema:
+          type: string
+    responses:
+      "200":
+        description: The Sammel-PDF
+        headers:
+          Content-Disposition:
+            description: |
+              `inline; filename="qr-<locker system>-alle-faecher.pdf"` (the
+              label as ASCII slug)
+            schema:
+              type: string
+        content:
+          application/pdf:
+            schema:
+              type: string
+              format: binary
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not a tenant owner
+      "404":
+        description: |
+          The tenant has no access point with that id, or it is a door or a
+          locker system without its own list of compartments (iFBS, Pareva)
+      "503":
+        description: |
+          `store_front_url_missing`: the instance has no `STORE_FRONT_URL`, so
+          there is no address to encode.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreFrontUrlMissing"
+
 /api/{tenant}/accesspoints/{id}/location-prefill:
   get:
     tags:
