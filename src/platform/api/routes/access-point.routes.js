@@ -80,6 +80,14 @@ router.post(
   AccessPointController.rotateCompartmentScanCode,
 );
 
+// The rotation of all Fächer's codes at once (tickets#1063), with the door's
+// right.
+router.post(
+  "/:id/compartments/rotate-scan-codes",
+  authorize("accessPoint", "write"),
+  AccessPointController.rotateAllCompartmentScanCodes,
+);
+
 router.delete(
   "/:id",
   authorize("accessPoint", "write"),

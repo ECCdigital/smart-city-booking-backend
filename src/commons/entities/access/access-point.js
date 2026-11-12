@@ -191,6 +191,30 @@ class AccessPoint {
   }
 
   /**
+   * Rotate the scan codes of all Fächer of a Schließfachanlage that carries
+   * its own list (tickets#1063), each by the rule of one Fach (see
+   * {@link rotatedScanCodes}), so every printed sticker is void at once. The
+   * list is replaced, never written into, like for one Fach.
+   *
+   * @returns {boolean} Whether the Anlage carries its own list, so its codes
+   *   were rotated
+   */
+  rotateAllCompartmentScanCodes() {
+    const compartments = this.config?.compartments;
+    if (!Array.isArray(compartments)) {
+      return false;
+    }
+    this.config = {
+      ...this.config,
+      compartments: compartments.map((compartment) => ({
+        ...compartment,
+        ...rotatedScanCodes(compartment),
+      })),
+    };
+    return true;
+  }
+
+  /**
    * Validate the access point
    * @returns {boolean} True if valid
    */

@@ -556,6 +556,49 @@ class AccessPointController {
   }
 
   /**
+   * Rotate the scan codes of all Fächer of a Schließfachanlage that carries
+   * its own list (tickets#1063), after an incident that voids every sticker:
+   * each Fach by the rule of one Fach, the Anlage stored once. Like the
+   * rotation of one Fach it runs under the mutex of the Anlage and reads the
+   * Anlage again inside it. A door and an Anlage without its own list (iFBS,
+   * Pareva) are answered 404.
+   *
+   * The response carries neither the old nor the new scan codes.
+   */
+  static async rotateAllCompartmentScanCodes(request, response, next) {
+    try {
+      const tenantId = request.params.tenant;
+      const { id } = request.params;
+
+      const anlage = await AccessPointManager.getAccessPoint(id, tenantId);
+      if (!carriesOwnCompartments(anlage)) {
+        return response.sendStatus(404);
+      }
+
+      const rotated = await LockerSystemMutex.hold(anlage, async () => {
+        const current = await AccessPointManager.getAccessPoint(id, tenantId);
+        if (
+          !carriesOwnCompartments(current) ||
+          !current.rotateAllCompartmentScanCodes()
+        ) {
+          return null;
+        }
+        return AccessPointManager.storeAccessPoint(current, tenantId);
+      });
+
+      if (!rotated) {
+        return response.sendStatus(404);
+      }
+      logger.info(
+        `${tenantId} -- Scan codes of all ${compartmentsOf(rotated).length} Fächer of access point ${id} rotated by user ${request.user?.id}`,
+      );
+      return response.status(200).send(rotated.toResponse());
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  /**
    * Suggest the location of an access point from what its provider knows about
    * the physical lock, so an admin does not have to type coordinates twice.
    *
