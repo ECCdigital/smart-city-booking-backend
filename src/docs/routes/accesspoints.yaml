@@ -804,7 +804,10 @@ components:
       description: |
         A compartment of a locker system that carries its own list. On write
         only `id` and `outOfService` count while the provider is active;
-        `number` and `lockerBank` are taken from its listing.
+        `number` and `lockerBank` are taken from its listing. Each compartment
+        carries a scan code of its own, minted by the server when it joins
+        the list and kept while it stays in it, out of service included; a
+        scan code in the request is ignored, and no answer carries one.
       required: [id]
       properties:
         id:

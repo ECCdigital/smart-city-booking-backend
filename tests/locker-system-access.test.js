@@ -430,6 +430,92 @@ describe("Zugeteiltes Fach: provisioned, revoked, opened and projected", functio
     });
   });
 
+  /**
+   * The QR scan as evidence at a Fach (tickets#1055): the Anlage's rules
+   * apply to all its Fächer, but the code checked is the Fach's own, so a
+   * sticker opens its own Fach only.
+   */
+  describe("Fach öffnen with a QR scan", function () {
+    const FACH = `anlage-1:${COMPARTMENT_ID}`;
+
+    beforeEach(function () {
+      const [first, second] = accessPoints[0].config.compartments;
+      Object.assign(accessPoints[0], {
+        validationRules: [{ type: "qrScan" }],
+      });
+      Object.assign(first, {
+        scanCode: "code-fach-1",
+        previousScanCodes: ["earlier-code-fach-1"],
+      });
+      Object.assign(second, {
+        scanCode: "code-fach-3",
+        previousScanCodes: [],
+      });
+    });
+
+    function openWithScan(scanCode, userId = "user-1", options = {}) {
+      return AccessService.open(TENANT, "b1", FACH, userId, {
+        evidence: [{ type: "qrScan", scanCode }],
+        channel: "qrScan",
+        ...options,
+      });
+    }
+
+    it("opens the Fach with the code of the Fach", async function () {
+      await storeProvisioned("b1");
+
+      const outcome = await openWithScan("code-fach-1");
+
+      expect(outcome.success).to.equal(true);
+      expect(client.requests).to.include(
+        `POST /api/compartments/${COMPARTMENT_ID}/open`,
+      );
+      const [row] = logged("open");
+      expect(row).to.deep.include({
+        accessPointId: FACH,
+        result: "success",
+        evidenceBypassed: false,
+      });
+      expect(row.payload.validatedEvidence).to.deep.equal(["qrScan"]);
+    });
+
+    for (const [what, scanCode] of [
+      ["another Fach of the same Anlage", "code-fach-3"],
+      ["the Anlage itself", "code-anlage-1"],
+      ["an earlier code of the Fach", "earlier-code-fach-1"],
+    ]) {
+      it(`refuses the code of ${what} as invalid evidence`, async function () {
+        await storeProvisioned("b1");
+
+        const outcome = await openWithScan(scanCode);
+
+        expect(outcome).to.deep.equal({
+          success: false,
+          blockingReasons: ["evidence_invalid"],
+        });
+        expect(client.openRequests.size).to.equal(0);
+        const [row] = logged("open");
+        expect(row).to.deep.include({ accessPointId: FACH, result: "denied" });
+      });
+    }
+
+    it("lets the management open a booking not theirs without a scan, as before", async function () {
+      await storeProvisioned("b1");
+
+      const outcome = await AccessService.open(TENANT, "b1", FACH, "admin-1", {
+        scope: MANAGER,
+      });
+
+      expect(outcome.success).to.equal(true);
+      const [row] = logged("open");
+      expect(row).to.deep.include({
+        result: "success",
+        accessRole: "manager",
+        evidenceBypassed: true,
+      });
+    });
+  });
+
   describe("the Rücknahme", function () {
     it("marks the provisioned Fach revoked without a call to Open Locker", async function () {
       await storeProvisioned("b1");

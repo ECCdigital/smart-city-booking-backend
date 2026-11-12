@@ -129,7 +129,7 @@ Die optionale physische Verortung eines AccessPoints — Koordinaten, wahlweise 
 _Avoid_: Location (als Entity), Site
 
 **Scan-Code**:
-Ein opaker, rotierbarer Zufallswert eines AccessPoints, der in der QR-URL an der Tür steckt und beim Scan server-seitig zum AccessPoint aufgelöst wird. Rotation macht alle zuvor gedruckten Codes ungültig.
+Ein opaker, rotierbarer Zufallswert einer Tür oder eines Fachs einer Schließfachanlage, der in der QR-URL am Ort steckt und beim Scan server-seitig dazu aufgelöst wird. Rotation macht alle zuvor gedruckten Codes ungültig. Eine Schließfachanlage selbst hat keinen gedruckten Code.
 _Avoid_: Token, QR-ID
 
 **Evidence**:
