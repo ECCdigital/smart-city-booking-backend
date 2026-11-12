@@ -16,6 +16,16 @@
       in `previousScanCodes` returns `stale_scan_code` (the user is holding an
       outdated sticker); anything else returns `unknown_scan_code`.
 
+      The lookup covers the codes of doors and locker systems as well as the
+      codes of the compartments (Fächer) of every locker system of the tenant
+      that carries its own list (Open Locker). The code of a compartment
+      resolves to that compartment: `id` is `<lockerSystemId>:<compartment
+      UUID>` - the id it is opened by and listed under in `accessPointIds` of a
+      booking with `includeLockers` - and the answer adds `lockerSystemId` and
+      `compartment`; type, provider, mode, label and `validationRuleTypes` are
+      the locker system's. A compartment out of service resolves too. A code
+      carried more than once within the tenant answers `unknown_scan_code`.
+
       Failed resolutions are recorded in the access audit with
       `action: "scan"`. Successful resolutions are not audited.
     security:
@@ -636,7 +646,35 @@ components:
             - $ref: "#/components/schemas/AccessPoint"
           description: >
             The access point in the same projection the booking ways use. A
-            scan knows no booking, so only the core fields are carried.
+            scan knows no booking, so only the core fields are carried. For
+            the code of a compartment of a locker system, the compartment under
+            `<lockerSystemId>:<compartment UUID>` with `lockerSystemId` and
+            `compartment` added.
+          properties:
+            lockerSystemId:
+              type: string
+              description: >
+                Only for a compartment: the id of its locker system, at which
+                the bookings of the person are read with `includeLockers`.
+              example: anlage-1
+            compartment:
+              type: object
+              description: >
+                Only for a compartment: how the person finds it. An object
+                here, unlike the box number string iFBS names in a booking's
+                projection.
+              properties:
+                number:
+                  type: integer
+                  nullable: true
+                  example: 3
+                lockerBankName:
+                  type: string
+                  nullable: true
+                  example: Labor Fachbank 1
+                outOfService:
+                  type: boolean
+                  example: false
 
     ResolveScanFailure:
       type: object
@@ -653,14 +691,16 @@ components:
               enum: [stale_scan_code, unknown_scan_code]
               description: |
                 `stale_scan_code` — the code was replaced and belongs to a
-                known access point; `unknown_scan_code` — no access point of
-                the tenant carries this code.
+                known access point or compartment; `unknown_scan_code` — no
+                access point or compartment of the tenant carries this code,
+                or more than one does.
             accessPointId:
               type: string
               nullable: true
               description: |
-                The access point the stale code belongs to, or `null` when the
-                code is unknown.
+                The access point the stale code belongs to
+                (`<lockerSystemId>:<compartment UUID>` for a compartment), or
+                `null` when the code is unknown.
 
     OpenRequest:
       type: object

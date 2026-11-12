@@ -86,6 +86,33 @@ class AccessPointManager {
   }
 
   /**
+   * Get the Schließfachanlagen one of whose Fächer carries a scanned code,
+   * current or replaced (`config.compartments[].scanCode` /
+   * `.previousScanCodes`). Two at most: a caller only needs to tell one hit
+   * from more than one. Uses no index of its own - the tenant narrows the
+   * search, and a code of 192 random bits practically never repeats.
+   *
+   * @param {string} tenantId The tenant id
+   * @param {string} scanCode The scanned code
+   * @returns {Promise<AccessPoint[]>} Up to two Anlagen, none for a code no
+   *   Fach of the tenant carries
+   */
+  static async getLockerSystemsByCompartmentScanCode(tenantId, scanCode) {
+    const rawAccessPoints = await AccessPointModel.find(
+      {
+        tenantId: tenantId,
+        $or: [
+          { "config.compartments.scanCode": scanCode },
+          { "config.compartments.previousScanCodes": scanCode },
+        ],
+      },
+      null,
+      { limit: 2 },
+    );
+    return rawAccessPoints.map((doc) => doc.toEntity());
+  }
+
+  /**
    * Insert an access point into the database or update it.
    *
    * @param {AccessPoint|Object} accessPoint The access point to be stored
