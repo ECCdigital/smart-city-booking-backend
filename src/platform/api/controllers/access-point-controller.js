@@ -387,15 +387,15 @@ class AccessPointController {
       response,
       next,
       async (format) => {
-        const anlage = await AccessPointManager.getAccessPoint(
+        const lockerSystem = await AccessPointManager.getAccessPoint(
           request.params.id,
           request.params.tenant,
         );
-        const compartment = compartmentsOf(anlage).find(
+        const compartment = compartmentsOf(lockerSystem).find(
           (entry) => entry.id === request.params.compartmentId,
         );
         return compartment
-          ? AccessQrService.renderCompartment(anlage, compartment, format)
+          ? AccessQrService.renderCompartment(lockerSystem, compartment, format)
           : null;
       },
     );
@@ -409,12 +409,12 @@ class AccessPointController {
    */
   static async getCompartmentQrSheet(request, response, next) {
     return AccessPointController._sendRendered(response, next, async () => {
-      const anlage = await AccessPointManager.getAccessPoint(
+      const lockerSystem = await AccessPointManager.getAccessPoint(
         request.params.id,
         request.params.tenant,
       );
-      return carriesOwnCompartments(anlage)
-        ? AccessQrService.renderCompartmentSheet(anlage)
+      return carriesOwnCompartments(lockerSystem)
+        ? AccessQrService.renderCompartmentSheet(lockerSystem)
         : null;
     });
   }
@@ -525,7 +525,7 @@ class AccessPointController {
           compartmentId,
         ),
       () =>
-        `${tenantId} -- Scan code of Fach ${compartmentId} of access point ${id} rotated by user ${request.user?.id}`,
+        `${tenantId} -- Scan code of compartment ${compartmentId} of access point ${id} rotated by user ${request.user?.id}`,
     );
   }
 
@@ -547,7 +547,7 @@ class AccessPointController {
       () =>
         CompartmentScanCodeService.rotateAllCompartmentScanCodes(tenantId, id),
       (rotated) =>
-        `${tenantId} -- Scan codes of all ${compartmentsOf(rotated).length} Fächer of access point ${id} rotated by user ${request.user?.id}`,
+        `${tenantId} -- Scan codes of all ${compartmentsOf(rotated).length} compartments of access point ${id} rotated by user ${request.user?.id}`,
     );
   }
 

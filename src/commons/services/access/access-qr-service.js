@@ -149,7 +149,7 @@ class AccessQrService {
    * Anlage's label. The file is named after Anlage, Schrank and Fach:
    * `qr-<anlage>-schrank-<x>-fach-<nn>.<format>`.
    *
-   * @param {import("../../entities/access/access-point").AccessPoint} anlage
+   * @param {import("../../entities/access/access-point").AccessPoint} lockerSystem
    *   The Schließfachanlage the Fach belongs to
    * @param {Object} compartment Its entry in `config.compartments`
    * @param {string} [format=svg] One of `svg`, `png`, `pdf`
@@ -157,18 +157,22 @@ class AccessQrService {
    *   body: string|Buffer, filename: string }>} The rendered QR code
    * @throws {Error} If the format is not supported
    */
-  static async renderCompartment(anlage, compartment, format = QR_FORMATS.SVG) {
+  static async renderCompartment(
+    lockerSystem,
+    compartment,
+    format = QR_FORMATS.SVG,
+  ) {
     const lockerBankName = compartment.lockerBank?.name ?? "";
     return this._render(
-      this.scanUrl(anlage.tenantId, compartment.scanCode),
+      this.scanUrl(lockerSystem.tenantId, compartment.scanCode),
       format,
       {
-        label: anlage.label,
+        label: lockerSystem.label,
         subtitle: `Schrank ${lockerBankName} · Fach ${compartment.number}`,
       },
       [
         "qr",
-        slug(anlage.label),
+        slug(lockerSystem.label),
         "schrank",
         slug(lockerBankName),
         "fach",
@@ -181,27 +185,29 @@ class AccessQrService {
    * Render the Sammel-PDF of a Schließfachanlage that carries its own list
    * (tickets#1062): the codes of all its Fächer on an Etikettenbogen.
    *
-   * @param {import("../../entities/access/access-point").AccessPoint} anlage
+   * @param {import("../../entities/access/access-point").AccessPoint} lockerSystem
    *   The Schließfachanlage, with its Fächer in `config.compartments`
    * @returns {Promise<{ format: string, contentType: string,
    *   body: Buffer, filename: string }>} The rendered PDF
    */
-  static async renderCompartmentSheet(anlage) {
-    const filename = `qr-${slug(anlage.label)}-alle-faecher.pdf`;
+  static async renderCompartmentSheet(lockerSystem) {
+    const filename = `qr-${slug(lockerSystem.label)}-alle-faecher.pdf`;
     const labels = await Promise.all(
-      inAllocationOrder(compartmentsOf(anlage)).map(async (compartment) => ({
-        lockerBankId: compartment.lockerBank?.id ?? null,
-        lockerBankName: compartment.lockerBank?.name ?? "",
-        number: compartment.number,
-        outOfService: compartment.outOfService === true,
-        qrSvg: await QRCode.toString(
-          this.scanUrl(anlage.tenantId, compartment.scanCode),
-          { type: "svg", margin: 1 },
-        ),
-      })),
+      inAllocationOrder(compartmentsOf(lockerSystem)).map(
+        async (compartment) => ({
+          lockerBankId: compartment.lockerBank?.id ?? null,
+          lockerBankName: compartment.lockerBank?.name ?? "",
+          number: compartment.number,
+          outOfService: compartment.outOfService === true,
+          qrSvg: await QRCode.toString(
+            this.scanUrl(lockerSystem.tenantId, compartment.scanCode),
+            { type: "svg", margin: 1 },
+          ),
+        }),
+      ),
     );
     const html = loadSheetTemplate()({
-      label: anlage.label,
+      label: lockerSystem.label,
       instruction: SHEET_INSTRUCTION_TEXT,
       pages: sheetPages(labels),
     });

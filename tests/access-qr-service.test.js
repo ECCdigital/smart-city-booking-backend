@@ -326,7 +326,7 @@ describe("AccessQrService", () => {
             .find(".qr-label")
             .toArray()
             .map((el) => ({
-              anlage: text(el, ".anlage"),
+              lockerSystem: text(el, ".locker-system"),
               bank: text(el, ".bank"),
               nrlabel: text(el, ".nrlabel"),
               nr: text(el, ".nr"),
@@ -381,7 +381,7 @@ describe("AccessQrService", () => {
       );
 
       const [label] = labels(sheet());
-      expect(label.anlage).to.equal("Fahrradgarage Süd");
+      expect(label.lockerSystem).to.equal("Fahrradgarage Süd");
       expect(label.bank).to.equal("Schrank Labor Fachbank 1");
       expect(label.nrlabel).to.equal("FACH");
       expect(label.nr).to.equal("7");
@@ -459,7 +459,7 @@ describe("AccessQrService", () => {
       expect(html).to.not.include("<i>1</i>");
       expect(html).to.not.include("<script>x</script>");
       expect(labels(sheet())[0]).to.include({
-        anlage: "<script>x</script>",
+        lockerSystem: "<script>x</script>",
         bank: "Schrank <b>Hof</b>",
         nr: "<i>1</i>",
       });
