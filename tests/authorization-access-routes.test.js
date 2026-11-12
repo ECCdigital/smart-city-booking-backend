@@ -141,6 +141,21 @@ describe("authorization on the access, catalog and calendar routes", function ()
     expect((await post(OWNER)).status).to.equal(404);
   });
 
+  // tickets#1063: rotating the codes of all Fächer takes the door's right too.
+  it("puts the rotation of all Fächer's codes on the tenant owner, like the door's", async function () {
+    const path = `/accesspoints/${FIXTURE_ID}/compartments/rotate-scan-codes`;
+    const post = (userId) => call("post", path, userId);
+
+    expect((await post()).status).to.equal(401);
+
+    const customer = await post(CUSTOMER);
+    expect(customer.status).to.equal(403);
+    expect(customer.body).to.deep.equal(FORBIDDEN);
+
+    expect((await post(ROLE_HOLDER)).status).to.equal(403);
+    expect((await post(OWNER)).status).to.equal(404);
+  });
+
   it("puts the bookings of an access point on the booking reader, not the bookable reader", async function () {
     const path = `/accesspoints/${FIXTURE_ID}/bookings`;
 

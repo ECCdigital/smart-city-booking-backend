@@ -789,6 +789,56 @@
       "503":
         description: The locker system stayed held (`locker_system_busy`)
 
+/api/{tenant}/accesspoints/{id}/compartments/rotate-scan-codes:
+  post:
+    tags:
+      - Access Points
+    summary: Rotate the scan codes of all Fächer of a locker system
+    description: |
+      Rotates the scan code of every compartment (Fach) of a locker system
+      that carries its own list of compartments (Open Locker), out of service
+      included, each by the rule of one compartment: the current code is
+      pushed to the front of the compartment's `previousScanCodes` (capped at
+      five, the oldest fall off) and a new one takes its place. The locker
+      system is stored once. Every printed sticker resolves as stale
+      (`stale_scan_code`) from then on. The locker system's own code stays as
+      it is.
+
+      Runs under the mutex of the locker system, which every save of it holds
+      as well, so a concurrent save never writes the old codes back.
+
+      Reserved for tenant owners (membership `owner: true`; instance owners are
+      allowed as well), like the door's rotation.
+
+      The response carries neither the old nor the new scan codes.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: id
+        in: path
+        required: true
+        description: Unique identifier of the locker system
+        schema:
+          type: string
+    responses:
+      "200":
+        description: The locker system after rotation, without any scan codes
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManagedAccessPoint"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not a tenant owner
+      "404":
+        description: |
+          The tenant has no access point with that id, or it is a door or a
+          locker system without its own list of compartments (iFBS, Pareva)
+      "503":
+        description: The locker system stayed held (`locker_system_busy`)
+
 components:
   schemas:
     AccessPointBookings:
