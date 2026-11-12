@@ -40,6 +40,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # A tag must carry the version of package.json, as `npm version` writes it.
+      # Otherwise the image names one version and its app reports another.
+      - name: Check the tag against package.json
+        if: ${{ github.ref_type == 'tag' }}
+        run: |
+          version=$(sed -nE 's/^  "version": "([^"]+)",?$/\1/p' package.json)
+          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "::error title=Tag does not match package.json::Tag ${GITHUB_REF_NAME}, package.json ${version}. Tag with 'npm version <version>' on the version branch."
+            exit 1
+          fi
+
       # Install the cosign tool except on PR
       # https://github.com/sigstore/cosign-installer
       - name: Install cosign
