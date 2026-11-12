@@ -23,7 +23,10 @@ const AccessProvisionError = require("../../../errors/AccessProvisionError");
 const { customerViewOf } = require("../booking/booking-customer-view");
 const { DOMAIN } = require("../authorization/reach");
 const LockerSystemMutex = require("./locker-system-mutex");
-const { carriesOwnCompartments } = require("./locker-system-compartments");
+const {
+  carriesOwnCompartments,
+  compartmentsOf,
+} = require("./locker-system-compartments");
 const {
   accessBufferMs,
   claimOf,
@@ -3117,6 +3120,14 @@ class AccessService {
    * addressed by its own UUID as `externalId` (the Anlage has none); what
    * the decision and the projection read - `id`, `type`, `mode`,
    * `validationRules` - names the compartment.
+   *
+   * The rules are the Anlage's, for all its Fächer; the scan code they are
+   * checked against is not (tickets#1055). A Fach of an Anlage with its own
+   * list carries the `scanCode` and `previousScanCodes` of its entry in
+   * `config.compartments`, so a QR scan opens the Fach whose sticker it
+   * read, never another Fach of the Anlage nor with the Anlage's own code.
+   * A Fach the Anlage no longer lists has no code. Anlagen of iFBS and
+   * Pareva keep the Anlage's code.
    */
   static _compartmentAccessPoint(system, entry) {
     const accessPoint = {
@@ -3125,6 +3136,17 @@ class AccessService {
     };
     if (entry.assignedCompartment?.id) {
       accessPoint.externalId = String(entry.assignedCompartment.id);
+    }
+    if (carriesOwnCompartments(system.accessPoint)) {
+      const fachId = entry.assignedCompartment?.id;
+      const listed =
+        fachId == null
+          ? null
+          : compartmentsOf(system.accessPoint).find(
+              (compartment) => String(compartment.id) === String(fachId),
+            );
+      accessPoint.scanCode = listed?.scanCode ?? null;
+      accessPoint.previousScanCodes = listed?.previousScanCodes ?? [];
     }
     return accessPoint;
   }

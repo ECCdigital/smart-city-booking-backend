@@ -11,10 +11,13 @@ const AccessEvidenceService = require("../../../commons/services/access/access-e
 const AccessInfoService = require("../../../commons/services/access/access-info-service");
 const AccessService = require("../../../commons/services/access/access-service");
 const LockerSystemRedistribution = require("../../../commons/services/access/locker-system-redistribution");
+const LockerSystemMutex = require("../../../commons/services/access/locker-system-mutex");
 const LocationGuard = require("../../../commons/services/location/location-guard");
 const {
   carriesOwnCompartments,
+  compartmentsOf,
   requestedCompartments,
+  withScanCodes,
   assertCompartmentsUnclaimed,
 } = require("../../../commons/services/access/locker-system-compartments");
 const {
@@ -220,7 +223,7 @@ class AccessPointController {
     );
 
     const createdAccessPoint = await AccessPointManager.storeAccessPoint(
-      accessPoint,
+      AccessPointController._withCompartmentScanCodes(accessPoint, null),
       tenantId,
     );
 
@@ -294,12 +297,25 @@ class AccessPointController {
     );
 
     const { accessPoint: updatedAccessPoint, unmoved } =
-      await LockerSystemRedistribution.storeRedistributing(
-        tenantId,
-        before,
-        accessPoint,
-        () => AccessPointManager.storeAccessPoint(accessPoint, tenantId),
-        { userId: user?.id },
+      await AccessPointController._holdingOwnCompartments(accessPoint, () =>
+        LockerSystemRedistribution.storeRedistributing(
+          tenantId,
+          before,
+          accessPoint,
+          async () =>
+            AccessPointManager.storeAccessPoint(
+              AccessPointController._withCompartmentScanCodes(
+                accessPoint,
+                await AccessPointController._storedUnderHold(
+                  accessPoint,
+                  before,
+                  tenantId,
+                ),
+              ),
+              tenantId,
+            ),
+          { userId: user?.id },
+        ),
       );
 
     logger.info(
@@ -653,6 +669,72 @@ class AccessPointController {
     }
 
     accessPoint.config = { ...accessPoint.config, compartments };
+  }
+
+  /**
+   * Runs the store of an Anlage that carries its own list under the mutex
+   * of the Anlage (tickets#1055): a rotation of the codes of its Fächer
+   * runs under the same mutex, so a save never writes back a code rotated
+   * while it was under way. Every other access point is stored straight
+   * away. The mutex is re-entrant, so a store that moves bookings holds it
+   * once.
+   *
+   * @template T
+   * @param {AccessPoint} accessPoint The access point as it will be stored
+   * @param {() => Promise<T>} store Stores it
+   * @returns {Promise<T>} What the store answers
+   */
+  static async _holdingOwnCompartments(accessPoint, store) {
+    return carriesOwnCompartments(accessPoint)
+      ? LockerSystemMutex.hold(accessPoint, store)
+      : store();
+  }
+
+  /**
+   * The access point as stored right now, read again under the mutex of an
+   * Anlage that carries its own list, so its Fächer keep the codes they
+   * carry at this moment (see `_holdingOwnCompartments`). Every other
+   * access point, and one gone in between, answers what the save read
+   * first.
+   *
+   * @param {AccessPoint} accessPoint The access point as it will be stored
+   * @param {Object} before The access point as the save read it first
+   * @param {string} tenantId Tenant the access point belongs to
+   * @returns {Promise<Object>} The access point as stored
+   */
+  static async _storedUnderHold(accessPoint, before, tenantId) {
+    if (!carriesOwnCompartments(accessPoint)) {
+      return before;
+    }
+    return (
+      (await AccessPointManager.getAccessPoint(accessPoint.id, tenantId)) ??
+      before
+    );
+  }
+
+  /**
+   * The Anlage with a scan code on each of its Fächer (tickets#1055), see
+   * `withScanCodes`: kept from the stored Anlage, fresh for a Fach new to
+   * it. Only an Anlage that carries its own list has codes per Fach; every
+   * other access point is left as it is.
+   *
+   * @param {AccessPoint} accessPoint The access point as it will be stored,
+   *   written into
+   * @param {Object|null} stored The access point as stored before the
+   *   save, `null` on a create
+   * @returns {AccessPoint} The access point
+   */
+  static _withCompartmentScanCodes(accessPoint, stored) {
+    if (carriesOwnCompartments(accessPoint)) {
+      accessPoint.config = {
+        ...accessPoint.config,
+        compartments: withScanCodes(
+          accessPoint.config.compartments,
+          compartmentsOf(stored),
+        ),
+      };
+    }
+    return accessPoint;
   }
 
   /**

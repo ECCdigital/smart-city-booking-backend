@@ -279,6 +279,38 @@ describe("AccessPoint entity", () => {
       expect(response).to.not.have.property("previousScanCodes");
     });
 
+    it("hides the scan codes of the Fächer of a Schließfachanlage and keeps the rest of each Fach", () => {
+      const compartment = {
+        id: "fach-1",
+        number: 1,
+        lockerBank: { id: "schrank-1", name: "Labor Fachbank 1" },
+        outOfService: false,
+      };
+      const accessPoint = AccessPoint.create(
+        createParams({
+          provider: "open-locker",
+          type: AccessPointType.LOCKER,
+          externalId: "",
+          config: {
+            compartments: [
+              {
+                ...compartment,
+                scanCode: "code-fach-1",
+                previousScanCodes: ["earlier-code-fach-1"],
+              },
+            ],
+          },
+        }),
+      );
+
+      const response = accessPoint.toResponse();
+
+      expect(response.config).to.deep.equal({ compartments: [compartment] });
+      expect(accessPoint.config.compartments[0].scanCode).to.equal(
+        "code-fach-1",
+      );
+    });
+
     it("leaves the runtime metadata out", () => {
       const accessPoint = AccessPoint.create(createParams());
       accessPoint.metadata = { capabilities: ["remote"] };

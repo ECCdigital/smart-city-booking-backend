@@ -32,12 +32,40 @@ const FIELDS_HIDDEN_IN_RESPONSES = ["scanCode", "previousScanCodes"];
 
 /**
  * Create a scan code: an opaque, url-safe random value that identifies an
- * access point in the printed QR code.
+ * access point in the printed QR code - a door, or a Fach of a
+ * Schließfachanlage with its own list (`locker-system-compartments.js`).
  *
  * @returns {string} A new scan code
  */
 function generateScanCode() {
   return crypto.randomBytes(SCAN_CODE_BYTES).toString("base64url");
+}
+
+/**
+ * The scan codes after a rotation, of a door or of a Fach of a
+ * Schließfachanlage alike: the current code moves to the front of
+ * `previousScanCodes` (capped at {@link PREVIOUS_SCAN_CODES_CAP}, the
+ * oldest fall off) and a fresh code takes its place.
+ *
+ * @param {{scanCode: string, previousScanCodes?: string[]}} holder The
+ *   access point or Fach, only read
+ * @returns {{scanCode: string, previousScanCodes: string[]}} The new codes
+ */
+function rotatedScanCodes({ scanCode, previousScanCodes = [] }) {
+  return {
+    scanCode: generateScanCode(),
+    previousScanCodes: [scanCode, ...previousScanCodes].slice(
+      0,
+      PREVIOUS_SCAN_CODES_CAP,
+    ),
+  };
+}
+
+/** A copy of the access point or Fach without its scan codes. */
+function withoutScanCodes(holder) {
+  const copy = { ...holder };
+  FIELDS_HIDDEN_IN_RESPONSES.forEach((field) => delete copy[field]);
+  return copy;
 }
 
 function deriveSupportedModes(capabilities = []) {
@@ -102,13 +130,20 @@ class AccessPoint {
   /**
    * Export the access point for API responses. Scan codes never leave the
    * server: they are only meaningful on the printed QR code and are resolved
-   * server-side.
+   * server-side. That holds for the codes of the Fächer of a
+   * Schließfachanlage in `config.compartments` as well (tickets#1055).
    *
    * @returns {Object} Access point data without its scan codes
    */
   toResponse() {
-    const response = this.toDocument();
-    FIELDS_HIDDEN_IN_RESPONSES.forEach((field) => delete response[field]);
+    const response = withoutScanCodes(this.toDocument());
+
+    if (Array.isArray(response.config?.compartments)) {
+      response.config = {
+        ...response.config,
+        compartments: response.config.compartments.map(withoutScanCodes),
+      };
+    }
     return response;
   }
 
@@ -122,11 +157,7 @@ class AccessPoint {
    * @returns {AccessPoint} This access point, so callers can chain.
    */
   rotateScanCode() {
-    this.previousScanCodes = [this.scanCode, ...this.previousScanCodes].slice(
-      0,
-      PREVIOUS_SCAN_CODES_CAP,
-    );
-    this.scanCode = generateScanCode();
+    Object.assign(this, rotatedScanCodes(this));
     return this;
   }
 
@@ -164,5 +195,8 @@ module.exports = {
   AccessPointMode,
   AccessPointState,
   VALIDATION_RULE_TYPES,
+  PREVIOUS_SCAN_CODES_CAP,
   deriveSupportedModes,
+  generateScanCode,
+  rotatedScanCodes,
 };

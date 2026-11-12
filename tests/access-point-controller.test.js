@@ -1215,6 +1215,16 @@ describe("AccessPointController", () => {
         return storeAccessPoint.firstCall.args[0].config.compartments;
       }
 
+      /** The stored Fächer without their scan codes (tickets#1055). */
+      function storedCompartmentsWithoutScanCodes() {
+        return storedCompartments().map((compartment) => {
+          const rest = { ...compartment };
+          delete rest.scanCode;
+          delete rest.previousScanCodes;
+          return rest;
+        });
+      }
+
       it("stores the picked Fächer with their Schließfachschrank and number from Open Locker's listing", async () => {
         request.body = lockerSystem([
           { id: COMPARTMENT_ID },
@@ -1225,7 +1235,7 @@ describe("AccessPointController", () => {
 
         expect(next.called).to.be.false;
         expect(response.status.calledWith(201)).to.be.true;
-        expect(storedCompartments()).to.deep.equal([
+        expect(storedCompartmentsWithoutScanCodes()).to.deep.equal([
           {
             id: COMPARTMENT_ID,
             number: 1,
@@ -1380,7 +1390,7 @@ describe("AccessPointController", () => {
         await AccessPointController.storeAccessPoint(request, response, next);
 
         expect(next.called).to.be.false;
-        expect(storedCompartments()).to.deep.equal([named]);
+        expect(storedCompartmentsWithoutScanCodes()).to.deep.equal([named]);
       });
 
       it("answers 503 and stores nothing when Open Locker cannot be reached", async () => {
@@ -1555,6 +1565,290 @@ describe("AccessPointController", () => {
       });
 
       /**
+       * Every Fach of an Anlage with its own list carries a scan code of its
+       * own (tickets#1055): the server mints it on the save, a stored Fach
+       * keeps it, and no client writes or reads it.
+       */
+      describe("the scan code of a Fach", () => {
+        const SCAN_CODE = /^[A-Za-z0-9_-]{32}$/;
+
+        it("gives every Fach of a new Anlage a code of its own, minted like a door's", async () => {
+          request.body = lockerSystem([
+            { id: COMPARTMENT_ID },
+            { id: SECOND_COMPARTMENT_ID },
+          ]);
+
+          await AccessPointController.storeAccessPoint(request, response, next);
+
+          expect(next.called).to.be.false;
+          const [first, second] = storedCompartments();
+          expect(first.scanCode).to.match(SCAN_CODE);
+          expect(second.scanCode).to.match(SCAN_CODE);
+          expect(first.scanCode).to.not.equal(second.scanCode);
+          expect(first.previousScanCodes).to.deep.equal([]);
+          expect(second.previousScanCodes).to.deep.equal([]);
+        });
+
+        /** The Anlage as stored, its Fach with a code and an earlier one. */
+        function storedAnlage(compartmentOverrides = {}) {
+          const stored = createAccessPoint({
+            id: "anlage-1",
+            ...lockerSystem([
+              {
+                id: COMPARTMENT_ID,
+                number: 1,
+                lockerBank: { id: LOCKER_BANK_ID, name: "Labor Fachbank 1" },
+                outOfService: false,
+                scanCode: "code-fach-1",
+                previousScanCodes: ["earlier-code-fach-1"],
+                ...compartmentOverrides,
+              },
+            ]),
+            externalId: "",
+            validationRules: [],
+          });
+          // Each read answers a fresh row, as the manager does.
+          sandbox
+            .stub(AccessPointManager, "getAccessPoint")
+            .callsFake(
+              async () =>
+                new AccessPoint(
+                  JSON.parse(JSON.stringify(stored.toDocument())),
+                ),
+            );
+          return stored;
+        }
+
+        const byId = (id) =>
+          storedCompartments().find((compartment) => compartment.id === id);
+
+        it("lets a stored Fach keep its code and earlier codes, and gives a newly picked one a fresh code", async () => {
+          storedAnlage();
+          request.body = {
+            id: "anlage-1",
+            config: {
+              compartments: [
+                { id: SECOND_COMPARTMENT_ID },
+                { id: COMPARTMENT_ID },
+              ],
+            },
+          };
+
+          await AccessPointController.storeAccessPoint(request, response, next);
+
+          expect(next.called).to.be.false;
+          expect(byId(COMPARTMENT_ID)).to.include({
+            scanCode: "code-fach-1",
+          });
+          expect(byId(COMPARTMENT_ID).previousScanCodes).to.deep.equal([
+            "earlier-code-fach-1",
+          ]);
+          expect(byId(SECOND_COMPARTMENT_ID).scanCode).to.match(SCAN_CODE);
+          expect(byId(SECOND_COMPARTMENT_ID).previousScanCodes).to.deep.equal(
+            [],
+          );
+        });
+
+        it("keeps the codes on a save that names no Fächer", async () => {
+          storedAnlage();
+          request.body = { id: "anlage-1", label: "Fahrradgarage Nord" };
+
+          await AccessPointController.storeAccessPoint(request, response, next);
+
+          expect(next.called).to.be.false;
+          expect(byId(COMPARTMENT_ID).scanCode).to.equal("code-fach-1");
+        });
+
+        it("keeps the codes while the tenant's Open Locker is not active", async () => {
+          registerAccessProvider("open-locker", OpenLockerAccessProvider);
+          sandbox.stub(TenantManager, "getTenant").resolves({
+            id: "tenant-1",
+            applications: [],
+          });
+          storedAnlage();
+          request.body = {
+            id: "anlage-1",
+            config: { compartments: [{ id: COMPARTMENT_ID }] },
+          };
+
+          await AccessPointController.storeAccessPoint(request, response, next);
+
+          expect(next.called).to.be.false;
+          expect(byId(COMPARTMENT_ID).scanCode).to.equal("code-fach-1");
+        });
+
+        it("keeps the code of a Fach put out of service", async () => {
+          storedAnlage();
+          request.body = {
+            id: "anlage-1",
+            config: {
+              compartments: [{ id: COMPARTMENT_ID, outOfService: true }],
+            },
+          };
+
+          await AccessPointController.storeAccessPoint(request, response, next);
+
+          expect(next.called).to.be.false;
+          expect(byId(COMPARTMENT_ID)).to.include({
+            outOfService: true,
+            scanCode: "code-fach-1",
+          });
+        });
+
+        it("gives a Fach taken out of the Anlage and back in a new code", async () => {
+          const stored = storedAnlage();
+          request.body = {
+            id: "anlage-1",
+            config: { compartments: [{ id: SECOND_COMPARTMENT_ID }] },
+          };
+          await AccessPointController.storeAccessPoint(request, response, next);
+          stored.config = storeAccessPoint.firstCall.args[0].config;
+          storeAccessPoint.resetHistory();
+
+          request.body = {
+            id: "anlage-1",
+            config: {
+              compartments: [
+                { id: SECOND_COMPARTMENT_ID },
+                { id: COMPARTMENT_ID },
+              ],
+            },
+          };
+          await AccessPointController.storeAccessPoint(request, response, next);
+
+          expect(next.called).to.be.false;
+          expect(byId(COMPARTMENT_ID).scanCode)
+            .to.match(SCAN_CODE)
+            .and.not.equal("code-fach-1");
+          expect(byId(COMPARTMENT_ID).previousScanCodes).to.deep.equal([]);
+        });
+
+        // A rotation runs under the mutex of the Anlage (tickets#1061); a
+        // save that read the Anlage before it must not write the old code
+        // back, so the save takes the codes under the same mutex.
+        it("keeps a code rotated while the save waited for the mutex of the Anlage", async () => {
+          const stored = storedAnlage();
+          const rotated = createAccessPoint({
+            ...stored,
+            config: {
+              compartments: [
+                {
+                  ...stored.config.compartments[0],
+                  scanCode: "rotated-code-fach-1",
+                  previousScanCodes: ["code-fach-1", "earlier-code-fach-1"],
+                },
+              ],
+            },
+          });
+          let held = false;
+          LockerSystemMutex.hold.callsFake(async (lockerSystem, work) => {
+            held = true;
+            try {
+              return await work();
+            } finally {
+              held = false;
+            }
+          });
+          AccessPointManager.getAccessPoint.callsFake(async () =>
+            held ? rotated : stored,
+          );
+          request.body = { id: "anlage-1", label: "Fahrradgarage Nord" };
+
+          await AccessPointController.storeAccessPoint(request, response, next);
+
+          expect(next.called).to.be.false;
+          expect(LockerSystemMutex.hold.firstCall.args[0].id).to.equal(
+            "anlage-1",
+          );
+          expect(byId(COMPARTMENT_ID).scanCode).to.equal("rotated-code-fach-1");
+          expect(byId(COMPARTMENT_ID).previousScanCodes).to.deep.equal([
+            "code-fach-1",
+            "earlier-code-fach-1",
+          ]);
+        });
+
+        it("ignores the codes a request names, on a create and on an update", async () => {
+          request.body = lockerSystem([
+            {
+              id: COMPARTMENT_ID,
+              scanCode: "client-chosen-code",
+              previousScanCodes: ["client-chosen-earlier-code"],
+            },
+          ]);
+          await AccessPointController.storeAccessPoint(request, response, next);
+          const created = storedCompartments()[0];
+          storeAccessPoint.resetHistory();
+
+          storedAnlage();
+          request.body = {
+            id: "anlage-1",
+            config: {
+              compartments: [
+                {
+                  id: COMPARTMENT_ID,
+                  scanCode: "client-chosen-code",
+                  previousScanCodes: ["client-chosen-earlier-code"],
+                },
+              ],
+            },
+          };
+          await AccessPointController.storeAccessPoint(request, response, next);
+          const updated = storedCompartments()[0];
+
+          expect(next.called).to.be.false;
+          expect(created.scanCode).to.match(SCAN_CODE);
+          expect(created.previousScanCodes).to.deep.equal([]);
+          expect(updated.scanCode).to.equal("code-fach-1");
+          expect(updated.previousScanCodes).to.deep.equal([
+            "earlier-code-fach-1",
+          ]);
+        });
+
+        it("answers the create, the update and the reads without the codes of the Fächer", async () => {
+          request.body = lockerSystem([{ id: COMPARTMENT_ID }]);
+          await AccessPointController.storeAccessPoint(request, response, next);
+          const createdCode = storedCompartments()[0].scanCode;
+          const stored = storedAnlage();
+          request.body = {
+            id: "anlage-1",
+            config: { compartments: [{ id: COMPARTMENT_ID }] },
+          };
+          await AccessPointController.storeAccessPoint(request, response, next);
+          AccessPointManager.getAccessPoints.resolves([stored]);
+          request.params.id = "anlage-1";
+          await AccessPointController.getAccessPoint(request, response, next);
+          await AccessPointController.getAccessPoints(request, response, next);
+
+          expect(next.called).to.be.false;
+          const answers = response.send.args.map(([answer]) => answer);
+          expect(answers).to.have.length(4);
+          const serialized = JSON.stringify(answers);
+          expect(serialized).to.not.include(createdCode);
+          expect(serialized).to.not.include("code-fach-1");
+          expect(serialized).to.not.include("scanCode");
+          expect(serialized).to.not.include("previousScanCodes");
+          expect(answers[0].config.compartments[0].id).to.equal(COMPARTMENT_ID);
+        });
+
+        it("gives an Anlage of a provider that assigns the Fach itself no codes per Fach", async () => {
+          request.body = {
+            provider: "ifbs",
+            type: "locker",
+            mode: "remote",
+            externalId: "location-1",
+          };
+          sandbox
+            .stub(AccessInfoService, "findListedAccessPoint")
+            .resolves(null);
+
+          await AccessPointController.storeAccessPoint(request, response, next);
+
+          expect(next.called).to.be.false;
+          expect(storeAccessPoint.firstCall.args[0].config).to.deep.equal({});
+        });
+      });
+
+      /**
        * A Fach going out of service or out of the Anlage moves the future
        * bookings at it on the save; the answer names the ones that stay
        * (tickets#1043). Which bookings move is
@@ -1656,13 +1950,15 @@ describe("AccessPointController", () => {
           expect(BookingManager.storeBooking.called).to.be.false;
         });
 
-        it("answers a save that moves nothing without the mutex", async () => {
+        // The save still holds the mutex, for the scan codes of the Fächer
+        // (tickets#1055), but moves nothing.
+        it("answers a save that takes no Fach out with nothing moved", async () => {
           request.body = { id: "anlage-1", label: "Fahrradgarage Nord" };
 
           await AccessPointController.storeAccessPoint(request, response, next);
 
           expect(next.called).to.be.false;
-          expect(LockerSystemMutex.hold.called).to.be.false;
+          expect(BookingManager.storeBooking.called).to.be.false;
           expect(response.send.firstCall.args[0].unmovedBookings).to.deep.equal(
             [],
           );
