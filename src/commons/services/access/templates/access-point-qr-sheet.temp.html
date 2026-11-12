@@ -38,12 +38,14 @@
         page-break-after: auto;
         break-after: auto;
       }
-      /* Thin dashed cut lines between the labels, for plain paper. */
+      /* Thin dashed cut lines between the labels, for plain paper. Inside
+         the 74 mm: head ~6 mm + 2 mm, QR 52 mm, instruction 1 mm + ~3.2 mm,
+         measured in Chromium; the 4 mm padding leaves ~1.4 mm to spare. */
       .qr-label {
         display: flex;
         flex-direction: column;
         overflow: hidden;
-        padding: 5mm 6mm;
+        padding: 4mm 6mm;
         border-right: 0.2mm dashed #aaa;
         border-bottom: 0.2mm dashed #aaa;
       }
