@@ -25,6 +25,21 @@ const PDF_TEMPLATE_PATH = path.join(
 
 let compiledPdfTemplate;
 
+/**
+ * Turn a label into the ASCII part of a file name: lower case, umlauts
+ * spelled out, every other run of non-alphanumerics one dash.
+ */
+function slug(text) {
+  return String(text ?? "")
+    .toLowerCase()
+    .replace(/ä/g, "ae")
+    .replace(/ö/g, "oe")
+    .replace(/ü/g, "ue")
+    .replace(/ß/g, "ss")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 function loadPdfTemplate() {
   if (!compiledPdfTemplate) {
     const templateContent = fs.readFileSync(PDF_TEMPLATE_PATH, "utf-8");
@@ -74,29 +89,76 @@ class AccessQrService {
    * @throws {Error} If the format is not supported
    */
   static async render(accessPoint, format = QR_FORMATS.SVG) {
-    const url = this.scanUrl(accessPoint.tenantId, accessPoint.scanCode);
+    return this._render(
+      this.scanUrl(accessPoint.tenantId, accessPoint.scanCode),
+      format,
+      { label: accessPoint.label },
+      `access-point-${accessPoint.id}`,
+    );
+  }
 
+  /**
+   * Render the QR code of one Fach of a Schließfachanlage that carries its
+   * own list (tickets#1056). The code is the Fach's own scan code, never the
+   * Anlage's; the A4 page is the door's, with „Schrank X · Fach N“ under the
+   * Anlage's label. The file is named after Anlage, Schrank and Fach:
+   * `qr-<anlage>-schrank-<x>-fach-<nn>.<format>`.
+   *
+   * @param {import("../../entities/access/access-point").AccessPoint} anlage
+   *   The Schließfachanlage the Fach belongs to
+   * @param {Object} compartment Its entry in `config.compartments`
+   * @param {string} [format=svg] One of `svg`, `png`, `pdf`
+   * @returns {Promise<{ format: string, contentType: string,
+   *   body: string|Buffer, filename: string }>} The rendered QR code
+   * @throws {Error} If the format is not supported
+   */
+  static async renderCompartment(anlage, compartment, format = QR_FORMATS.SVG) {
+    const lockerBankName = compartment.lockerBank?.name ?? "";
+    return this._render(
+      this.scanUrl(anlage.tenantId, compartment.scanCode),
+      format,
+      {
+        label: anlage.label,
+        subtitle: `Schrank ${lockerBankName} · Fach ${compartment.number}`,
+      },
+      [
+        "qr",
+        slug(anlage.label),
+        "schrank",
+        slug(lockerBankName),
+        "fach",
+        slug(compartment.number).padStart(2, "0"),
+      ].join("-"),
+    );
+  }
+
+  /**
+   * @private
+   * Render `url` as a QR code in `format`; the PDF lays out `page` (label and
+   * optional subtitle) on the A4 print template.
+   */
+  static async _render(url, format, page, basename) {
     switch (format) {
       case QR_FORMATS.SVG:
         return {
           format: QR_FORMATS.SVG,
           contentType: "image/svg+xml",
           body: await QRCode.toString(url, { type: "svg" }),
-          filename: `access-point-${accessPoint.id}.svg`,
+          filename: `${basename}.svg`,
         };
       case QR_FORMATS.PNG:
         return {
           format: QR_FORMATS.PNG,
           contentType: "image/png",
           body: await QRCode.toBuffer(url),
-          filename: `access-point-${accessPoint.id}.png`,
+          filename: `${basename}.png`,
         };
       case QR_FORMATS.PDF:
         return {
           format: QR_FORMATS.PDF,
           contentType: "application/pdf",
-          body: await this._renderPdf(accessPoint, url),
-          filename: `access-point-${accessPoint.id}.pdf`,
+          body: await this._renderPdf(page, url, `${basename}.pdf`),
+          filename: `${basename}.pdf`,
         };
       default:
         throw new Error(`Unsupported QR code format: ${format}`);
@@ -105,21 +167,20 @@ class AccessQrService {
 
   /**
    * @private
-   * Render the A4 print template: the access point label, its QR code and a
-   * short instruction, laid out through the shared Playwright pdf-service.
+   * Render the A4 print template: the label, an optional subtitle, the QR
+   * code and a short instruction, laid out through the shared Playwright
+   * pdf-service.
    */
-  static async _renderPdf(accessPoint, url) {
+  static async _renderPdf({ label, subtitle }, url, filename) {
     const qrDataUrl = await QRCode.toDataURL(url, { margin: 1, width: 320 });
     const html = loadPdfTemplate()({
-      label: accessPoint.label,
+      label,
+      subtitle,
       qrDataUrl,
       instruction: INSTRUCTION_TEXT,
     });
 
-    const { buffer } = await PdfService.convertToPdf(
-      html,
-      `access-point-${accessPoint.id}.pdf`,
-    );
+    const { buffer } = await PdfService.convertToPdf(html, filename);
     return buffer;
   }
 }

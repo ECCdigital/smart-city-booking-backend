@@ -31,6 +31,11 @@
         margin-bottom: 24px;
         word-break: break-word;
       }
+      .subtitle {
+        font-size: 24px;
+        margin: -12px 0 24px;
+        word-break: break-word;
+      }
       .qr {
         width: 320px;
         height: 320px;
@@ -49,6 +54,9 @@
   <body>
     <div class="sheet">
       <div class="label">{{label}}</div>
+      {{#if subtitle}}
+      <div class="subtitle">{{subtitle}}</div>
+      {{/if}}
       <div class="qr">
         <img src="{{qrDataUrl}}" alt="QR-Code" />
       </div>

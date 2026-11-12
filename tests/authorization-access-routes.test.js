@@ -95,6 +95,22 @@ describe("authorization on the access, catalog and calendar routes", function ()
     ).to.equal(200);
   });
 
+  // tickets#1056: the QR code of a Fach takes the door's right. The world's
+  // access point is a door, so the tenant owner passes the right and meets the
+  // 404 for an access point without Fächer.
+  it("puts the QR code of a Fach on the tenant owner, like the door's", async function () {
+    const path = `/accesspoints/${FIXTURE_ID}/compartments/${FIXTURE_ID}/qrcode`;
+
+    expect((await get(path)).status).to.equal(401);
+
+    const customer = await get(path, CUSTOMER);
+    expect(customer.status).to.equal(403);
+    expect(customer.body).to.deep.equal(FORBIDDEN);
+
+    expect((await get(path, ROLE_HOLDER)).status).to.equal(403);
+    expect((await get(path, OWNER)).status).to.equal(404);
+  });
+
   it("puts the bookings of an access point on the booking reader, not the bookable reader", async function () {
     const path = `/accesspoints/${FIXTURE_ID}/bookings`;
 

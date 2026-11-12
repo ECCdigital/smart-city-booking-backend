@@ -478,6 +478,93 @@
             schema:
               $ref: "#/components/schemas/StoreFrontUrlMissing"
 
+/api/{tenant}/accesspoints/{id}/compartments/{compartmentId}/qrcode:
+  get:
+    tags:
+      - Access Points
+    summary: Render the QR code of one Fach of a locker system
+    description: |
+      Renders the printable QR code of one compartment (Fach) of a locker
+      system that carries its own list of compartments (Open Locker),
+      addressed by the locker system and the compartment's UUID. The code
+      encodes `https://<STORE_FRONT_URL>/mobile-key/<tenant>/<scanCode>` with
+      the compartment's own scan code, never the locker system's; the client
+      only ever receives the rendered image or PDF. A compartment out of
+      service is rendered as well, its code stays valid.
+
+      Reserved for tenant owners (membership `owner: true`; instance owners are
+      allowed as well), like the door's QR code.
+
+      `format=pdf` returns the door's A4 print template with the locker
+      system's label and „Schrank X · Fach N“ above the code. The file is
+      named `qr-<locker system>-schrank-<locker bank>-fach-<nn>.<format>`
+      (labels as ASCII slugs, the number at least two digits) in
+      `Content-Disposition`.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: id
+        in: path
+        required: true
+        description: Unique identifier of the locker system
+        schema:
+          type: string
+      - name: compartmentId
+        in: path
+        required: true
+        description: UUID of the compartment, its `id` in `config.compartments`
+        schema:
+          type: string
+      - name: format
+        in: query
+        required: false
+        description: The render format. Defaults to `svg`.
+        schema:
+          type: string
+          enum: [svg, png, pdf]
+          default: svg
+    responses:
+      "200":
+        description: The rendered QR code
+        headers:
+          Content-Disposition:
+            description: |
+              `inline; filename="qr-<locker system>-schrank-<locker bank>-fach-<nn>.<format>"`
+            schema:
+              type: string
+        content:
+          image/svg+xml:
+            schema:
+              type: string
+          image/png:
+            schema:
+              type: string
+              format: binary
+          application/pdf:
+            schema:
+              type: string
+              format: binary
+      "400":
+        description: Unsupported format
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not a tenant owner
+      "404":
+        description: |
+          The tenant has no access point with that id, it is a door or a locker
+          system without its own list of compartments (iFBS, Pareva), or it
+          carries no compartment with that UUID
+      "503":
+        description: |
+          `store_front_url_missing`: the instance has no `STORE_FRONT_URL`, so
+          there is no address to encode.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreFrontUrlMissing"
+
 /api/{tenant}/accesspoints/{id}/location-prefill:
   get:
     tags:
