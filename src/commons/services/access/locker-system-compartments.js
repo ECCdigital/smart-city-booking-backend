@@ -41,6 +41,17 @@ function carriesOwnCompartments(accessPoint) {
 }
 
 /**
+ * The name of the Schließfachschrank a Fach stands in, as its entry or an
+ * `assignedCompartment` carries it.
+ *
+ * @param {Object} compartment The Fach's entry
+ * @returns {string|null} The name, `null` where the entry names none
+ */
+function lockerBankNameOf(compartment) {
+  return compartment.lockerBank?.name ?? null;
+}
+
+/**
  * The Fächer of an Anlage that carries its own list, in their stored order;
  * none for every other access point.
  *
@@ -212,6 +223,7 @@ function refusal(field, compartmentId, claim) {
 module.exports = {
   carriesOwnCompartments,
   compartmentsOf,
+  lockerBankNameOf,
   requestedCompartments,
   withScanCodes,
   assertCompartmentsUnclaimed,

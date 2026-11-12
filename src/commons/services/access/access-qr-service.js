@@ -4,7 +4,10 @@ const QRCode = require("qrcode");
 const Handlebars = require("handlebars");
 const PdfService = require("../../pdf-service/pdf-service");
 const { BaseError } = require("../../../errors/BaseError");
-const { compartmentsOf } = require("./locker-system-compartments");
+const {
+  compartmentsOf,
+  lockerBankNameOf,
+} = require("./locker-system-compartments");
 const { inAllocationOrder } = require("./compartment-allocation");
 
 /**
@@ -162,7 +165,7 @@ class AccessQrService {
     compartment,
     format = QR_FORMATS.SVG,
   ) {
-    const lockerBankName = compartment.lockerBank?.name ?? "";
+    const lockerBankName = lockerBankNameOf(compartment) ?? "";
     return this._render(
       this.scanUrl(lockerSystem.tenantId, compartment.scanCode),
       format,
@@ -196,7 +199,7 @@ class AccessQrService {
       inAllocationOrder(compartmentsOf(lockerSystem)).map(
         async (compartment) => ({
           lockerBankId: compartment.lockerBank?.id ?? null,
-          lockerBankName: compartment.lockerBank?.name ?? "",
+          lockerBankName: lockerBankNameOf(compartment),
           number: compartment.number,
           outOfService: compartment.outOfService === true,
           qrSvg: await QRCode.toString(
@@ -225,10 +228,10 @@ class AccessQrService {
 
   /**
    * @private
-   * Render `url` as a QR code in `format`; the PDF lays out `page` (label and
-   * optional subtitle) on the A4 print template.
+   * Render `url` as a QR code in `format`; the PDF prints `heading` (label
+   * and optional subtitle) above the code on the A4 print template.
    */
-  static async _render(url, format, page, basename) {
+  static async _render(url, format, heading, basename) {
     switch (format) {
       case QR_FORMATS.SVG:
         return {
@@ -248,7 +251,7 @@ class AccessQrService {
         return {
           format: QR_FORMATS.PDF,
           contentType: "application/pdf",
-          body: await this._renderPdf(page, url, `${basename}.pdf`),
+          body: await this._renderPdf(heading, url, `${basename}.pdf`),
           filename: `${basename}.pdf`,
         };
       default:

@@ -4,6 +4,7 @@ const {
 const { AccessPointType } = require("../../schemas/accessPointSchema");
 const { demandedEvidenceOf } = require("./access-decision");
 const { compartmentPointId } = require("./compartment-allocation");
+const { lockerBankNameOf } = require("./locker-system-compartments");
 
 require("./providers/register-access-providers");
 
@@ -89,7 +90,7 @@ function projectCompartment(lockerSystem, compartment) {
     ...view,
     compartment: {
       number: compartment.number ?? null,
-      lockerBankName: compartment.lockerBank?.name ?? null,
+      lockerBankName: lockerBankNameOf(compartment),
       outOfService: compartment.outOfService === true,
     },
   };
@@ -158,7 +159,7 @@ function assignedCompartmentView(assigned) {
 
   return {
     number: assigned.number ?? null,
-    lockerBankName: assigned.lockerBank?.name ?? null,
+    lockerBankName: lockerBankNameOf(assigned),
   };
 }
 
