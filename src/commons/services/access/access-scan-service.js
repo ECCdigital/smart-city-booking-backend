@@ -217,7 +217,7 @@ class AccessScanService {
       }
 
       logger.info(
-        `${tenantId} -- user ${userId} scanned ${point.id}, a Fach they do not hold`,
+        `${tenantId} -- user ${userId} scanned ${point.id}, a compartment they do not hold`,
       );
 
       // Sorted by start: the first is the booking that began first.
@@ -240,7 +240,9 @@ class AccessScanService {
         errorCode: WRONG_COMPARTMENT,
       });
     } catch (err) {
-      logger.error(`Failed to note a scan at a Fach not held: ${err.message}`);
+      logger.error(
+        `Failed to note a scan at a compartment not held: ${err.message}`,
+      );
     }
   }
 
@@ -315,4 +317,3 @@ function carriesScanCode(compartment, scanCode) {
 
 module.exports = AccessScanService;
 module.exports.SCAN_FAILURE_REASONS = SCAN_FAILURE_REASONS;
-module.exports.WRONG_COMPARTMENT = WRONG_COMPARTMENT;

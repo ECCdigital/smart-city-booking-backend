@@ -467,7 +467,10 @@
       "403":
         description: Not a tenant owner
       "404":
-        description: The tenant has no access point with that id
+        description: |
+          The tenant has no access point with that id, or it is a locker
+          system with its own list of compartments: only its compartments
+          have QR codes
       "503":
         description: |
           `store_front_url_missing`: the instance has no `STORE_FRONT_URL`, so
@@ -730,7 +733,10 @@
       "403":
         description: Not a tenant owner
       "404":
-        description: The tenant has no access point with that id
+        description: |
+          The tenant has no access point with that id, or it is a locker
+          system with its own list of compartments: only the codes of its
+          compartments are rotated
 
 /api/{tenant}/accesspoints/{id}/compartments/{compartmentId}/rotate-scan-code:
   post:

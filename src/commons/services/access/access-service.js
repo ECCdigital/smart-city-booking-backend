@@ -3151,12 +3151,12 @@ class AccessService {
       accessPoint.externalId = String(entry.assignedCompartment.id);
     }
     if (carriesOwnCompartments(system.accessPoint)) {
-      const fachId = entry.assignedCompartment?.id;
+      const compartmentId = entry.assignedCompartment?.id;
       const listed =
-        fachId == null
+        compartmentId == null
           ? null
           : compartmentsOf(system.accessPoint).find(
-              (compartment) => String(compartment.id) === String(fachId),
+              (compartment) => String(compartment.id) === String(compartmentId),
             );
       accessPoint.scanCode = listed?.scanCode ?? null;
       accessPoint.previousScanCodes = listed?.previousScanCodes ?? [];

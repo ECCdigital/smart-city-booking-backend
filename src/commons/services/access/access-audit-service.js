@@ -320,10 +320,6 @@ class AccessAuditService {
     return CHANNEL_LABELS;
   }
 
-  static get ERROR_CODE_LABELS() {
-    return ERROR_CODE_LABELS;
-  }
-
   static get OPEN_ACTION_LABELS() {
     return OPEN_ACTION_LABELS;
   }
