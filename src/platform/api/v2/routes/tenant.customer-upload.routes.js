@@ -32,6 +32,13 @@ router.post(
   acceptSubmissionFiles(),
   CustomerUploadControllerV2.submit,
 );
+// „Nachweise anfordern“ from the release: before `/:fieldId`, which would
+// take the word for a field.
+router.post(
+  "/remind",
+  authorize("booking", "reviewCustomerUpload"),
+  CustomerUploadControllerV2.remind,
+);
 router.post(
   "/:fieldId",
   authorize("booking", "customerUpload"),

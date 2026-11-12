@@ -216,6 +216,36 @@ describe("mail: the missing proofs in the confirmation", function () {
     expect(sent[0].html).to.not.include(HEADING);
   });
 
+  it("names a field before the release in the confirmation of the request", async function () {
+    given({
+      status: "requested",
+      fields: [uploadField({ timing: "beforeRelease" })],
+    });
+    await mail.send("BOOKING_REQUEST_CONFIRMATION", single());
+    expect(sent[0].html).to.include(HEADING);
+    expect(sent[0].html).to.include("Vereinsausweis");
+    expect(sent[0].html).to.not.include(" – bis ");
+  });
+
+  it("„Nachweise anfordern“ names the missing proofs and why they are needed", async function () {
+    given({
+      status: "requested",
+      fields: [uploadField({ timing: "beforeRelease" })],
+    });
+    await mail.send("CUSTOMER_UPLOAD_REQUESTED", single());
+
+    expect(sent).to.have.length(1);
+    expect(sent[0].subject).to.include("Nachweise für Ihre Buchung bei");
+    const { html } = sent[0];
+    expect(html).to.include("um Ihre Buchung freizugeben");
+    expect(html).to.include(HEADING);
+    expect(html).to.include("Vereinsausweis");
+    expect(html).to.include("Jetzt einreichen");
+    // Due with the release: no date, not the start of the booking.
+    expect(html).to.not.include("bis 05.10.2026");
+    expect(html).to.not.include(" – bis ");
+  });
+
   it("names nothing in a notice that does not confirm, such as the cancellation", async function () {
     given({ status: "cancelled" });
     await mail.send("BOOKING_CANCEL", single({ reason: "Fällt aus" }));

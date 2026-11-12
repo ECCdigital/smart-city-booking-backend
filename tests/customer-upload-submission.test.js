@@ -1156,6 +1156,26 @@ describe("customer uploads: the derived state", function () {
     ).to.have.length(1);
     expect(derive({ status: "cancelled" }).fields).to.deep.equal([]);
   });
+
+  it("opens a field before the release with the request, without a deadline", function () {
+    const [open] = derive({
+      status: "requested",
+      fields: [field({ timing: "beforeRelease", deadlineDaysBeforeStart: 3 })],
+    }).fields;
+    expect(open.timing).to.equal("beforeRelease");
+    // Due with the release, which has no date: never overdue.
+    expect(open).to.include({ deadline: null, pastDeadline: false });
+    expect(
+      derive({
+        status: "requested",
+        fields: [field({ timing: "beforeRelease" })],
+        now: START + 1000,
+      }).fields[0],
+    ).to.include({ deadline: null, state: "open" });
+    expect(
+      derive({ fields: [field({ timing: "beforeRelease" })] }).fields,
+    ).to.have.length(1);
+  });
 });
 
 describe("customer uploads: clamd's answer", function () {

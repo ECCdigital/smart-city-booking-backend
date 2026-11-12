@@ -328,6 +328,20 @@ const MailType = Object.freeze({
     },
   },
 
+  // „Nachweise anfordern“ by the staff, from the release of a booking:
+  // the required proofs still missing with their deadlines and the button
+  // to hand them in, in the block of the missing proofs.
+  CUSTOMER_UPLOAD_REQUESTED: {
+    family: "booking",
+    templateName: "customer-upload-requested",
+    audience: "booker",
+    subject: (ctx) => `Nachweise für Ihre Buchung bei ${ctx.tenant.name}`,
+    includeQRCode: false,
+    sendBCC: false,
+    addRejectionLink: false,
+    showsMissingProofs: true,
+  },
+
   // The reminder before the deadline of a required upload field still
   // missing: one per booking, from the job of
   // customer uploads. The missing proofs with their deadlines and the

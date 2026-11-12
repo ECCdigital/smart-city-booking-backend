@@ -31,8 +31,13 @@ const UPLOAD_FIELD_CATEGORIES = Object.freeze({
 const isSensitiveUpload = (reference) =>
   reference?.category !== UPLOAD_FIELD_CATEGORIES.NORMAL;
 
+/**
+ * When a booker hands in the proof of a field: in the checkout, after the
+ * booking before its manual release (a request), or once it is released.
+ */
 const UPLOAD_FIELD_TIMINGS = Object.freeze({
   CHECKOUT: "checkout",
+  BEFORE_RELEASE: "beforeRelease",
   AFTER_CONFIRMATION: "afterConfirmation",
 });
 
@@ -317,7 +322,8 @@ function normalizeUploadFieldDefinitions(definitions) {
     definition.maxFileSizeMb ??= null;
     definition.category ??= UPLOAD_FIELD_CATEGORIES.NORMAL;
     definition.timing ??= UPLOAD_FIELD_TIMINGS.CHECKOUT;
-    if (definition.timing === UPLOAD_FIELD_TIMINGS.CHECKOUT) {
+    // Only a field after the release has days before the start.
+    if (definition.timing !== UPLOAD_FIELD_TIMINGS.AFTER_CONFIRMATION) {
       definition.deadlineDaysBeforeStart = null;
     } else {
       definition.deadlineDaysBeforeStart ??= null;

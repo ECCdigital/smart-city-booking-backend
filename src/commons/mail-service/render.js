@@ -386,6 +386,8 @@ function renderMissingProofs({
   return renderSnippet("missing-proofs", {
     missingProofs: missing.map(({ booking, field }) => ({
       label: field.label,
+      // A proof before the release has no deadline: it is due with the
+      // release.
       deadline:
         field.deadline === null
           ? ""

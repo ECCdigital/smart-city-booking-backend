@@ -25,6 +25,7 @@ const {
   REOPEN_KIND,
   fieldStateOf,
   isWaiting,
+  missingRequiredFieldsOf,
 } = require("./customer-upload-state");
 
 const logger = bunyan.createLogger({
@@ -40,6 +41,7 @@ const REVIEW_REASONS = Object.freeze({
   REASON_MISSING: "customer_upload_reason_missing",
   REASON_TOO_LONG: "customer_upload_reason_too_long",
   FIELD_NOT_REVIEWED: "customer_upload_field_not_reviewed",
+  NOTHING_MISSING: "customer_upload_nothing_missing",
 });
 
 const MAX_REASON_LENGTH = 500;
@@ -292,6 +294,36 @@ class CustomerUploadReview {
       fieldLabels: [fieldLabel].filter(Boolean),
       fieldId,
     });
+  }
+
+  /**
+   * „Nachweise anfordern“ from the release of a booking: a mail to the
+   * booker with the required proofs still missing, each with its deadline,
+   * and the button to hand them in. Sent each time the staff asks - unlike
+   * the reminder of the job, which goes once per field.
+   *
+   * @param {Object} params
+   * @param {string} params.tenantId
+   * @param {string} params.bookingId
+   * @returns {Promise<string[]>} The labels of the proofs asked for
+   */
+  static async remind({ tenantId, bookingId }) {
+    const booking = await CustomerUploadReview._booking(tenantId, bookingId);
+    const states = await CustomerUploadService.statesOf([booking]);
+    const missing = missingRequiredFieldsOf(states.get(booking.id));
+    if (missing.length === 0) {
+      throw new ConflictError(REVIEW_REASONS.NOTHING_MISSING, { bookingId });
+    }
+    const fieldLabels = missing.map((field) => field.label);
+    await mailService.notify("CUSTOMER_UPLOAD_REQUESTED", {
+      tenantId,
+      bookingIds: [bookingId],
+      fieldLabels,
+    });
+    logger.info(
+      `${tenantId} -- missing customer uploads of booking ${bookingId} asked for`,
+    );
+    return fieldLabels;
   }
 
   /**

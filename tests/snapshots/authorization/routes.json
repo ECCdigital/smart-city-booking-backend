@@ -1039,6 +1039,14 @@
     "instanceOwner": 404,
     "expiredToken": 401
   },
+  "POST /api/v2/:tenant/bookings/:id/customer-uploads/remind": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 409,
+    "tenantOwner": 409,
+    "instanceOwner": 409,
+    "expiredToken": 401
+  },
   "POST /api/v2/:tenant/bookings/:id/customer-uploads/:fieldId": {
     "anonymous": 401,
     "signedIn": 404,

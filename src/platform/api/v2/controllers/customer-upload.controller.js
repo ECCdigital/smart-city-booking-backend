@@ -189,6 +189,15 @@ class CustomerUploadControllerV2 {
     return CustomerUploadControllerV2._answerStaffState(req, res);
   }
 
+  /** „Nachweise anfordern“: a mail to the booker with what is missing. */
+  static async remind(req, res) {
+    const fieldLabels = await CustomerUploadReview.remind({
+      tenantId: req.params.tenant,
+      bookingId: req.params.id,
+    });
+    return res.status(200).json({ fieldLabels });
+  }
+
   static async _answerStaffState(req, res) {
     return res.status(200).json({
       customerUploadState: await CustomerUploadReview.stateOf(

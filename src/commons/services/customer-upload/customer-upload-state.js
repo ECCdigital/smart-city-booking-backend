@@ -65,10 +65,11 @@ const LIVE_STATES = new Set([
 
 /**
  * Whether an upload field takes uploads for a booking: a field of the
- * checkout from the booking on, a field "after the confirmation" once the
- * booking is confirmed, each until the booking has ended. A booking without
- * a request (`autoCommitBooking`) is never `requested`, so its fields are
- * open from the booking on.
+ * checkout and one "before the release" from the booking on, a field "after
+ * the confirmation" once the booking is confirmed, each until the booking
+ * has ended. A booking without a request (`autoCommitBooking`) is never
+ * `requested`, so its fields are open from the booking on - a field before
+ * the release then holds nothing back.
  *
  * @param {Object} field An upload field of a bookable
  * @param {Object} booking
@@ -87,13 +88,17 @@ function isFieldOpen(field, booking, now = Date.now()) {
 
 /**
  * The deadline of an upload field for a booking: its days before the start,
- * the start itself without them; null for a booking without a start.
+ * the start itself without them; null for a booking without a start. A
+ * field before the release has none: it is due with the release, which has
+ * no date - so it is never overdue and the job reminds of it never; the
+ * staff asks for it from the release („Nachweise anfordern“).
  *
  * @param {Object} field
  * @param {Object} booking
  * @returns {number|null} Epoch milliseconds
  */
 function deadlineOf(field, booking) {
+  if (field.timing === UPLOAD_FIELD_TIMINGS.BEFORE_RELEASE) return null;
   const begin = timeOf(booking.timeBegin);
   if (begin === null) return null;
   const days =

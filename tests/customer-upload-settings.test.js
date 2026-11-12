@@ -234,6 +234,15 @@ describe("customer uploads: settings and upload fields", function () {
       expect(stored.deadlineDaysBeforeStart).to.equal(null);
     });
 
+    it("has no deadline of its own before the release", function () {
+      const [stored] = normalizeUploadFieldDefinitions([
+        field({ timing: "beforeRelease", deadlineDaysBeforeStart: 5 }),
+      ]);
+      expect(stored.timing).to.equal("beforeRelease");
+      expect(stored.deadlineDaysBeforeStart).to.equal(null);
+      expect(refusal([stored])).to.equal(null);
+    });
+
     it("takes every property of the spec", function () {
       expect(
         refusal([

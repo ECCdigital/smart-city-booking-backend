@@ -498,6 +498,53 @@ describe("customer uploads: the check by the staff", function () {
     });
   });
 
+  describe("„Nachweise anfordern“", function () {
+    const remind = (id, { as = ADMIN } = {}) =>
+      h
+        .api()
+        .post(`${base(id)}/remind`)
+        .set(h.as(as))
+        .send({});
+
+    it("mails the customer the required proofs still missing", async function () {
+      const id = await booking();
+      h.clearEffects();
+
+      const res = await remind(id);
+
+      expect(res.status, res.text).to.equal(200);
+      expect(res.body.fieldLabels).to.deep.equal(["Vereinsausweis"]);
+      expect(mails()).to.deep.equal([
+        `mail.CUSTOMER_UPLOAD_REQUESTED ${CUSTOMER}`,
+      ]);
+      // Each time the staff asks, unlike the reminder of the job.
+      expect((await remind(id)).status).to.equal(200);
+    });
+
+    it("asks for nothing once every required proof is handed in", async function () {
+      const id = await booking();
+      await handIn(id);
+
+      const res = await remind(id);
+
+      expect(res.status).to.equal(409);
+      expect(res.text).to.include("customer_upload_nothing_missing");
+      expect(mails()).to.deep.equal([]);
+    });
+
+    it("is refused without the right to check", async function () {
+      const id = await booking();
+      h.clearEffects();
+
+      for (const who of [CUSTOMER, READ_OWN_HOLDER, INSTANCE_OWNER]) {
+        expect((await remind(id, { as: who })).status, who).to.be.oneOf([
+          403, 404,
+        ]);
+      }
+      expect(mails()).to.deep.equal([]);
+    });
+  });
+
   describe("the right to check", function () {
     it("is refused without the right to edit the booking", async function () {
       const id = await booking();
