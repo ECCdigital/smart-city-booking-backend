@@ -1,7 +1,12 @@
 const bunyan = require("bunyan");
 const AccessPointManager = require("../../data-managers/access-point-manager");
 const AccessLogService = require("./access-log-service");
-const { projectAccessPoint } = require("./access-point-projection");
+const {
+  projectAccessPoint,
+  projectCompartment,
+} = require("./access-point-projection");
+const { compartmentsOf } = require("./locker-system-compartments");
+const { compartmentPointId } = require("./compartment-allocation");
 
 const logger = bunyan.createLogger({
   name: "access-scan-service.js",
@@ -44,17 +49,28 @@ class AccessScanService {
    *   The access point as the API hands it out, or why the code did not resolve
    */
   static async resolveScanCode(tenantId, scanCode, userId = null) {
-    const accessPoint = await AccessPointManager.getAccessPointByScanCode(
-      tenantId,
-      scanCode,
-    );
+    const hits = await this._findScanCode(tenantId, scanCode);
 
-    if (!accessPoint) {
+    if (hits.length !== 1) {
+      if (hits.length > 1) {
+        logger.warn(
+          `${tenantId} -- scan code presented by user ${userId} is carried more than once, treated as unknown`,
+        );
+      }
       return this._fail(SCAN_FAILURE_REASONS.UNKNOWN_SCAN_CODE, {
         tenantId,
         scanCode,
         userId,
         accessPoint: null,
+      });
+    }
+
+    const [{ accessPoint, compartment }] = hits;
+
+    if (compartment) {
+      return this._resolveCompartment(tenantId, scanCode, userId, {
+        lockerSystem: accessPoint,
+        compartment,
       });
     }
 
@@ -70,6 +86,84 @@ class AccessScanService {
     return {
       success: true,
       data: projectAccessPoint(accessPoint),
+    };
+  }
+
+  /**
+   * @private
+   * Everything of the tenant that carries the code, current or replaced: a
+   * door or Anlage by its own code, and every Fach of an Anlage with its own
+   * list. More than one hit makes the code ambiguous - a sticker that could
+   * mean two places leads nowhere.
+   *
+   * @returns {Promise<Array<{ accessPoint: Object, compartment: Object|null }>>}
+   *   `compartment` is the Fach's entry for a hit at a Fach, `null` otherwise
+   */
+  static async _findScanCode(tenantId, scanCode) {
+    const [accessPoint, lockerSystems] = await Promise.all([
+      AccessPointManager.getAccessPointByScanCode(tenantId, scanCode),
+      AccessPointManager.getLockerSystemsByCompartmentScanCode(
+        tenantId,
+        scanCode,
+      ),
+    ]);
+
+    const hits = accessPoint ? [{ accessPoint, compartment: null }] : [];
+    for (const lockerSystem of lockerSystems) {
+      for (const compartment of compartmentsOf(lockerSystem)) {
+        if (carriesScanCode(compartment, scanCode)) {
+          hits.push({ accessPoint: lockerSystem, compartment });
+        }
+      }
+    }
+    return hits;
+  }
+
+  /**
+   * @private
+   * Resolve a code found at a Fach of a Schließfachanlage: a replaced code is
+   * stale like at a door, the current one answers with the Fach - out of
+   * service or not, the page in front of it decides nothing by that.
+   *
+   * @param {string} tenantId
+   * @param {string} scanCode
+   * @param {string|null} userId
+   * @param {{ lockerSystem: Object, compartment: Object }} hit The Anlage and
+   *   the Fach's entry in its list
+   */
+  static async _resolveCompartment(
+    tenantId,
+    scanCode,
+    userId,
+    { lockerSystem, compartment },
+  ) {
+    if (compartment.scanCode !== scanCode) {
+      return this._fail(SCAN_FAILURE_REASONS.STALE_SCAN_CODE, {
+        tenantId,
+        scanCode,
+        userId,
+        accessPoint: this._compartmentPoint(lockerSystem, compartment),
+      });
+    }
+
+    return {
+      success: true,
+      data: projectCompartment(lockerSystem, compartment),
+    };
+  }
+
+  /**
+   * @private
+   * A Fach as the access log names it, like opening it does: the Anlage's
+   * type and provider under `<anlage>:<Fach UUID>`, the UUID as its external
+   * id.
+   */
+  static _compartmentPoint(lockerSystem, compartment) {
+    return {
+      id: compartmentPointId(lockerSystem.id, compartment.id),
+      type: lockerSystem.type,
+      provider: lockerSystem.provider,
+      externalId: String(compartment.id),
     };
   }
 
@@ -110,6 +204,21 @@ class AccessScanService {
       data: { reason, accessPointId: accessPoint?.id || null },
     };
   }
+}
+
+/**
+ * Whether a Fach carries the code, as its current or a replaced one.
+ *
+ * @param {Object} compartment The Fach's entry in `config.compartments`
+ * @param {string} scanCode
+ * @returns {boolean}
+ */
+function carriesScanCode(compartment, scanCode) {
+  return (
+    compartment.scanCode === scanCode ||
+    (Array.isArray(compartment.previousScanCodes) &&
+      compartment.previousScanCodes.includes(scanCode))
+  );
 }
 
 module.exports = AccessScanService;

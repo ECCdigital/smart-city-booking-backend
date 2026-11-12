@@ -173,6 +173,44 @@ describe("AccessPointManager", () => {
     });
   });
 
+  describe("getLockerSystemsByCompartmentScanCode", () => {
+    it("matches the current and the previous scan codes of the Fächer within the tenant, two at most", async () => {
+      const find = sandbox.stub(AccessPointModel, "find").resolves([]);
+
+      await AccessPointManager.getLockerSystemsByCompartmentScanCode(
+        "tenant-1",
+        "code-1",
+      );
+
+      expect(
+        find.calledOnceWithExactly(
+          {
+            tenantId: "tenant-1",
+            $or: [
+              { "config.compartments.scanCode": "code-1" },
+              { "config.compartments.previousScanCodes": "code-1" },
+            ],
+          },
+          null,
+          { limit: 2 },
+        ),
+      ).to.be.true;
+    });
+
+    it("returns access point entities", async () => {
+      const expected = createAccessPoint({ type: "locker" });
+      sandbox.stub(AccessPointModel, "find").resolves([fakeDocument(expected)]);
+
+      const accessPoints =
+        await AccessPointManager.getLockerSystemsByCompartmentScanCode(
+          "tenant-1",
+          "code-1",
+        );
+
+      expect(accessPoints).to.deep.equal([expected]);
+    });
+  });
+
   describe("removeAccessPoint", () => {
     it("only deletes within the given tenant", async () => {
       const deleteOne = sandbox
