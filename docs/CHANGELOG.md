@@ -18,6 +18,7 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ### Added
 
+- Proofs as of the time of booking: a booking is asked for the upload fields its offers had when booked, as the item's snapshot `_bookableUsed` keeps them. A field added to an offer later, or made required later, is not asked of bookings made before; a booking from before upload fields has none. An admin edit keeps the fields of the offers booked before
 - „Nachweise anfordern“: `POST /api/v2/:tenant/bookings/:id/customer-uploads/remind` (right to check proofs) mails the booker the new notice `CUSTOMER_UPLOAD_REQUESTED` with the required proofs still missing and the button to hand them in, each time it is asked; `customer_upload_nothing_missing` (409) where none is missing. Answers the labels asked for
 - Upload timing `beforeRelease` („Vor Freigabe der Buchung“): an upload field open from the booking on - a request included - until its end, outside the checkout, without a deadline - it is due with the release, so it is never overdue and the job reminds of it never; the confirmation of a request names it among the missing proofs. Like a field of the checkout it has no days before the start
 - `customerUploadState` of a booking names `retentionDays`, the tenant's deletion deadline for sensitive uploads (null where it has none), for the notice before such a file is downloaded in the Admin UI

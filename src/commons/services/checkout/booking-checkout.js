@@ -24,6 +24,9 @@ const checkoutPolicy = require("./checkout-policy");
 const { CheckoutPolicy } = checkoutPolicy;
 const { BookedVia, bookedViaOf } = require("./booked-via");
 const { isBusinessOf } = require("./business-booking");
+const {
+  keepBookedUploadFields,
+} = require("../customer-upload/customer-upload-state");
 const { CustomFieldService } = require("../custom-field/custom-field-service");
 const BlacklistService = require("../blacklist/blacklist-service");
 const InstanceManager = require("../../data-managers/instance-manager");
@@ -923,6 +926,8 @@ async function updateBooking(
   } else if (typeof oldBooking.isBusiness === "boolean") {
     booking.isBusiness = oldBooking.isBusiness;
   }
+  // The proofs asked of the booking stay those of the time it was booked.
+  keepBookedUploadFields(oldBooking, booking);
 
   if (onUnreject) {
     // The reinstatement keeps price, positions and coupon of before the

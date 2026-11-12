@@ -48,6 +48,8 @@ const {
 } = require("../src/commons/services/customer-upload/customer-upload-crypto");
 const {
   deriveCustomerUploadState,
+  keepBookedUploadFields,
+  uploadFieldsOf,
 } = require("../src/commons/services/customer-upload/customer-upload-state");
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -706,6 +708,34 @@ describe("customer uploads: handing in later", function () {
       expect(fieldState(res.body[0]).deadline).to.be.a("number");
     });
 
+    it("asks for the proofs of the time of booking, not for one added or made required later", async function () {
+      const id = await booking();
+      const room = h.bookables["proof-room"];
+      room.uploadFieldDefinitions = [
+        PROOF_FIELD,
+        { ...OPTIONAL_PDF_FIELD, required: true },
+        { ...OPTIONAL_PDF_FIELD, id: "field-added", label: "Neu" },
+      ];
+
+      const res = await h
+        .api()
+        .get(`/api/bookings/assigned`)
+        .set(h.as(CUSTOMER));
+
+      expect(
+        res.body[0].customerUploadState.fields.map((f) => [
+          f.fieldId,
+          f.required,
+        ]),
+      ).to.deep.equal([
+        [PROOF_FIELD.id, true],
+        [OPTIONAL_PDF_FIELD.id, false],
+      ]);
+      const added = await upload(id, PDF, "neu.pdf", { field: "field-added" });
+      expect(added.status).to.equal(404);
+      expect(added.body.code).to.equal("customer_upload_field_not_found");
+    });
+
     it("is empty while the tenant has customer uploads switched off", async function () {
       await booking();
       h.tenant.customerUploads = { enabled: false };
@@ -1022,6 +1052,86 @@ describe("customer uploads: handing in later", function () {
 
       expect(h.takeEffects()).to.deep.equal(toReviewers);
     });
+  });
+});
+
+describe("customer uploads: the fields of a booking", function () {
+  const field = (id, overrides = {}) => ({
+    id,
+    label: id,
+    required: true,
+    formats: ["pdf"],
+    timing: "checkout",
+    ...overrides,
+  });
+  const ids = (fields) => fields.map((f) => f.id);
+
+  it("are those of the offer when it was booked, not its current ones", function () {
+    const booking = {
+      bookableItems: [
+        {
+          bookableId: "a",
+          _bookableUsed: { uploadFieldDefinitions: [field("booked")] },
+        },
+      ],
+    };
+    const current = {
+      a: { uploadFieldDefinitions: [field("booked"), field("added")] },
+    };
+
+    expect(ids(uploadFieldsOf(booking, current))).to.deep.equal(["booked"]);
+  });
+
+  it("are none for a snapshot from before upload fields", function () {
+    const booking = {
+      bookableItems: [{ bookableId: "a", _bookableUsed: { title: "A" } }],
+    };
+    const current = { a: { uploadFieldDefinitions: [field("added")] } };
+
+    expect(uploadFieldsOf(booking, current)).to.deep.equal([]);
+  });
+
+  it("are the current ones for an item without a snapshot", function () {
+    const booking = { bookableItems: [{ bookableId: "a" }] };
+    const current = new Map([
+      ["a", { uploadFieldDefinitions: [field("current")] }],
+    ]);
+
+    expect(ids(uploadFieldsOf(booking, current))).to.deep.equal(["current"]);
+  });
+
+  it("stay through an edit for an offer booked before; a new offer brings its own", function () {
+    const before = {
+      bookableItems: [
+        {
+          bookableId: "a",
+          _bookableUsed: { uploadFieldDefinitions: [field("booked")] },
+        },
+        { bookableId: "old", _bookableUsed: { title: "Alt" } },
+      ],
+    };
+    const edited = {
+      bookableItems: [
+        {
+          bookableId: "a",
+          _bookableUsed: {
+            uploadFieldDefinitions: [field("booked"), field("added")],
+          },
+        },
+        {
+          bookableId: "old",
+          _bookableUsed: { uploadFieldDefinitions: [field("added-old")] },
+        },
+        {
+          bookableId: "b",
+          _bookableUsed: { uploadFieldDefinitions: [field("b")] },
+        },
+      ],
+    };
+
+    keepBookedUploadFields(before, edited);
+
+    expect(ids(uploadFieldsOf(edited, {}))).to.deep.equal(["booked", "b"]);
   });
 });
 

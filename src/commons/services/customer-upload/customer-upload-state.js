@@ -303,7 +303,12 @@ function exportRequest(request, { withReviewer = false } = {}) {
 }
 
 /**
- * The upload fields of the booked offers, each once.
+ * The upload fields of the booked offers, each once: those the offer had
+ * when it was booked, as the item's snapshot (`_bookableUsed`) keeps them.
+ * A field added to the offer later is not asked of the booking, one changed
+ * or deleted later counts as it was. A snapshot without upload fields - a
+ * booking from before them - has none. Only an item without a snapshot
+ * reads the current offer.
  *
  * @param {Object} booking
  * @param {Map<string, Object>|Object} bookablesById The current bookables
@@ -314,14 +319,42 @@ function uploadFieldsOf(booking, bookablesById) {
     bookablesById instanceof Map ? bookablesById.get(id) : bookablesById[id];
   const fields = new Map();
   for (const item of booking.bookableItems || []) {
-    const bookable = get(item.bookableId);
-    for (const field of bookable?.uploadFieldDefinitions || []) {
+    const definitions = item._bookableUsed
+      ? item._bookableUsed.uploadFieldDefinitions
+      : get(item.bookableId)?.uploadFieldDefinitions;
+    for (const field of definitions || []) {
       if (field?.id && !fields.has(field.id)) {
         fields.set(field.id, field);
       }
     }
   }
   return [...fields.values()];
+}
+
+/**
+ * An edit of a booking keeps, for each offer booked before, the upload
+ * fields it had when it was booked: the edit takes the offer anew, the
+ * fields asked of the booking stay. An offer new to the booking brings its
+ * current ones.
+ *
+ * @param {Object} oldBooking The booking before the edit
+ * @param {Object} booking The edited booking, changed in place
+ */
+function keepBookedUploadFields(oldBooking, booking) {
+  const booked = new Map();
+  for (const item of oldBooking.bookableItems || []) {
+    if (item?._bookableUsed && !booked.has(item.bookableId)) {
+      booked.set(
+        item.bookableId,
+        item._bookableUsed.uploadFieldDefinitions ?? [],
+      );
+    }
+  }
+  for (const item of booking.bookableItems || []) {
+    if (item?._bookableUsed && booked.has(item.bookableId)) {
+      item._bookableUsed.uploadFieldDefinitions = booked.get(item.bookableId);
+    }
+  }
 }
 
 /**
@@ -478,6 +511,7 @@ module.exports = {
   fieldStateOf,
   isFieldOpen,
   isWaiting,
+  keepBookedUploadFields,
   missingRequiredFieldsOf,
   uploadFieldsOf,
 };
