@@ -12,6 +12,9 @@ const logger = bunyan.createLogger({
   level: process.env.LOG_LEVEL,
 });
 
+/** How many bookables `getPeriodOccupancies` checks at once. */
+const PERIOD_CHECK_CONCURRENCY = 5;
+
 /**
  * The BookableService class provides methods for determining the availability
  * and occupancy of bookable items within a specific time range.
@@ -74,6 +77,111 @@ class BookableService {
         checkoutService.cleanup();
         checkoutService = null;
       }
+    }
+  }
+
+  /**
+   * The occupancy of many bookables in one period, each with the price of
+   * that period where it is available - what the storefront's search with a
+   * period asks, in one request instead of two per bookable. Each
+   * bookable is checked as `getOccupancy` checks it; the price is the one `validateItem` answers for one unit.
+   *
+   * @param {Object} params
+   * @param {string[]} params.bookableIds - Ids the route already found within the reach of the request.
+   * @param {string} params.tenantId
+   * @param {number} params.timeBegin
+   * @param {number} params.timeEnd
+   * @param {string|null} [params.userId=null]
+   * @return {Promise<Object[]>} One entry per bookable found.
+   */
+  static async getPeriodOccupancies({
+    bookableIds,
+    tenantId,
+    timeBegin,
+    timeEnd,
+    userId = null,
+  }) {
+    // As `getOccupancy`: the checkout reads the whole bookable.
+    const bookables = await BookableManager.getBookablesByIds(
+      tenantId,
+      bookableIds,
+      DOMAIN,
+    );
+    const results = [];
+    for (let i = 0; i < bookables.length; i += PERIOD_CHECK_CONCURRENCY) {
+      const chunk = bookables.slice(i, i + PERIOD_CHECK_CONCURRENCY);
+      results.push(
+        ...(await Promise.all(
+          chunk.map((bookable) =>
+            this._getPeriodOccupancy({
+              bookable,
+              tenantId,
+              timeBegin,
+              timeEnd,
+              userId,
+            }),
+          ),
+        )),
+      );
+    }
+    return results;
+  }
+
+  static async _getPeriodOccupancy({
+    bookable,
+    tenantId,
+    timeBegin,
+    timeEnd,
+    userId,
+  }) {
+    let checkoutService = null;
+    try {
+      checkoutService = new ItemCheckoutService({
+        user: userId,
+        tenantId,
+        timeBegin,
+        timeEnd,
+        bookableId: bookable.id,
+        amount: 1,
+        bookWithoutDiscount: false,
+      });
+      await checkoutService.init(bookable);
+
+      const occupancy = await this._performAvailabilityCheck(checkoutService);
+
+      return {
+        bookableId: bookable.id,
+        title: bookable.title,
+        ...occupancy,
+        price: occupancy.isAvailable
+          ? await this._periodPrice(checkoutService)
+          : null,
+      };
+    } catch (error) {
+      logger.error(error);
+      return { ...this._createErrorResponse(bookable.id), price: null };
+    } finally {
+      if (checkoutService) {
+        checkoutService.cleanup();
+        checkoutService = null;
+      }
+    }
+  }
+
+  /** The price of one unit in the period, as `validateItem` answers it; null where none can be found. */
+  static async _periodPrice(checkoutService) {
+    try {
+      return {
+        regularPriceEur: await checkoutService.regularPriceEur(),
+        userPriceEur: await checkoutService.userPriceEur(),
+        regularGrossPriceEur: await checkoutService.regularGrossPriceEur(),
+        userGrossPriceEur: await checkoutService.userGrossPriceEur(),
+        freeBookingAllowed: await checkoutService.freeBookingAllowed(),
+        bookingDiscountPercent: await checkoutService.bookingDiscountPercent(),
+      };
+    } catch (error) {
+      logger.warn(error);
+      return null;
     }
   }
 
