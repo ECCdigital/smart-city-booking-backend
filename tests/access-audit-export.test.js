@@ -257,6 +257,24 @@ describe("AccessAuditService export", () => {
       expect(entry.errorCode).to.equal("stale_scan_code");
     });
 
+    it("names a scan at a Fach not held „Fremdes Fach“", async () => {
+      query.resolves([
+        createLog({
+          action: "scan",
+          result: "denied",
+          payload: {
+            presentedScanCode: "abc-123",
+            heldAccessPointIds: ["anlage-1:fach-1"],
+          },
+          errorCode: "wrong_compartment",
+        }),
+      ]);
+
+      const [entry] = await AccessAuditService.getAuditEntries("tenant-1");
+
+      expect(entry.errorCode).to.equal("Fremdes Fach");
+    });
+
     it("keeps the presented scan code readable while redacting real secrets", async () => {
       query.resolves([
         createLog({

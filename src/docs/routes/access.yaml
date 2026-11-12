@@ -27,7 +27,15 @@
       carried more than once within the tenant answers `unknown_scan_code`.
 
       Failed resolutions are recorded in the access audit with
-      `action: "scan"`. Successful resolutions are not audited.
+      `action: "scan"`. Successful resolutions are not audited, with one
+      exception: the code of a compartment the signed-in user does not hold,
+      while an active booking of theirs in this tenant (access window with
+      its buffer covering now) holds another compartment of the same locker
+      system, is recorded as `result: "denied"`, `errorCode:
+      "wrong_compartment"` at the scanned compartment, with the first such
+      booking by start as `bookingId` and `payload: { presentedScanCode,
+      heldAccessPointIds }`. The answer is still the compartment; deciding
+      what the page shows stays with the client.
     security:
       - bearerAuth: []
     parameters:
