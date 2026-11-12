@@ -73,6 +73,13 @@ router.post(
   AccessPointController.rotateScanCode,
 );
 
+// The rotation of one Fach's code (tickets#1061), with the door's right.
+router.post(
+  "/:id/compartments/:compartmentId/rotate-scan-code",
+  authorize("accessPoint", "write"),
+  AccessPointController.rotateCompartmentScanCode,
+);
+
 router.delete(
   "/:id",
   authorize("accessPoint", "write"),
