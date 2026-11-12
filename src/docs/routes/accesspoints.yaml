@@ -670,6 +670,63 @@
       "404":
         description: The tenant has no access point with that id
 
+/api/{tenant}/accesspoints/{id}/compartments/{compartmentId}/rotate-scan-code:
+  post:
+    tags:
+      - Access Points
+    summary: Rotate the scan code of one Fach of a locker system
+    description: |
+      Rotates the scan code of one compartment (Fach) of a locker system that
+      carries its own list of compartments (Open Locker), addressed by the
+      locker system and the compartment's UUID, by the door's rule: the
+      current code is pushed to the front of the compartment's
+      `previousScanCodes` (capped at five, the oldest fall off) and a new
+      one takes its place. The old sticker resolves as stale
+      (`stale_scan_code`) from then on. The other compartments and the
+      locker system's own code stay as they are.
+
+      Runs under the mutex of the locker system, which every save of it holds
+      as well, so a concurrent save never writes the old code back.
+
+      Reserved for tenant owners (membership `owner: true`; instance owners are
+      allowed as well), like the door's rotation.
+
+      The response carries neither the old nor the new scan code.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: id
+        in: path
+        required: true
+        description: Unique identifier of the locker system
+        schema:
+          type: string
+      - name: compartmentId
+        in: path
+        required: true
+        description: UUID of the compartment at Open Locker
+        schema:
+          type: string
+    responses:
+      "200":
+        description: The locker system after rotation, without any scan codes
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManagedAccessPoint"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not a tenant owner
+      "404":
+        description: |
+          The tenant has no access point with that id, it is a door or a
+          locker system without its own list of compartments (iFBS, Pareva),
+          or the locker system carries no compartment with that UUID
+      "503":
+        description: The locker system stayed held (`locker_system_busy`)
+
 components:
   schemas:
     AccessPointBookings:

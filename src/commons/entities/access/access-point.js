@@ -162,6 +162,35 @@ class AccessPoint {
   }
 
   /**
+   * Rotate the scan code of one Fach of a Schließfachanlage that carries its
+   * own list (tickets#1061), by the door's rule (see {@link rotatedScanCodes}).
+   * The list is replaced, never written into, since `toDocument` shares
+   * `config` by reference.
+   *
+   * @param {string} compartmentId The UUID of the Fach
+   * @returns {boolean} Whether the Anlage carries that Fach, so its code was
+   *   rotated
+   */
+  rotateCompartmentScanCode(compartmentId) {
+    const compartments = this.config?.compartments;
+    if (
+      !Array.isArray(compartments) ||
+      !compartments.some((compartment) => compartment.id === compartmentId)
+    ) {
+      return false;
+    }
+    this.config = {
+      ...this.config,
+      compartments: compartments.map((compartment) =>
+        compartment.id === compartmentId
+          ? { ...compartment, ...rotatedScanCodes(compartment) }
+          : compartment,
+      ),
+    };
+    return true;
+  }
+
+  /**
    * Validate the access point
    * @returns {boolean} True if valid
    */

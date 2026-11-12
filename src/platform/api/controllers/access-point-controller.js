@@ -482,6 +482,50 @@ class AccessPointController {
   }
 
   /**
+   * Rotate the scan code of one Fach of a Schließfachanlage that carries its
+   * own list (tickets#1061), addressed by the Anlage and the Fach's UUID, by
+   * the door's rule. It runs under the mutex of the Anlage, which every save
+   * of the Anlage holds too, and reads the Anlage again inside it: a save
+   * never writes the old code back, and the rotation never writes back what
+   * a save changed. A door, an Anlage without its own list (iFBS, Pareva)
+   * and a Fach the Anlage does not carry are answered 404.
+   *
+   * The response carries neither the old nor the new scan code.
+   */
+  static async rotateCompartmentScanCode(request, response, next) {
+    try {
+      const tenantId = request.params.tenant;
+      const { id, compartmentId } = request.params;
+
+      const anlage = await AccessPointManager.getAccessPoint(id, tenantId);
+      if (!carriesOwnCompartments(anlage)) {
+        return response.sendStatus(404);
+      }
+
+      const rotated = await LockerSystemMutex.hold(anlage, async () => {
+        const current = await AccessPointManager.getAccessPoint(id, tenantId);
+        if (
+          !carriesOwnCompartments(current) ||
+          !current.rotateCompartmentScanCode(compartmentId)
+        ) {
+          return null;
+        }
+        return AccessPointManager.storeAccessPoint(current, tenantId);
+      });
+
+      if (!rotated) {
+        return response.sendStatus(404);
+      }
+      logger.info(
+        `${tenantId} -- Scan code of Fach ${compartmentId} of access point ${id} rotated by user ${request.user?.id}`,
+      );
+      return response.status(200).send(rotated.toResponse());
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  /**
    * Suggest the location of an access point from what its provider knows about
    * the physical lock, so an admin does not have to type coordinates twice.
    *

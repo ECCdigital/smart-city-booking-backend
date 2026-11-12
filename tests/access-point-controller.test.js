@@ -37,6 +37,9 @@ const {
   saltoIq,
   tenantWithSaltoApp,
 } = require("./helpers/access-provider-fixtures");
+const {
+  installInMemoryLockerSystemHolds,
+} = require("./helpers/in-memory-locker-system-holds");
 
 function createAccessPoint(overrides = {}) {
   return AccessPoint.create({
@@ -2885,6 +2888,257 @@ describe("AccessPointController", () => {
       sandbox.stub(AccessPointManager, "getAccessPoint").rejects(failure);
 
       await AccessPointController.rotateScanCode(request, response, next);
+
+      expect(next.calledOnceWithExactly(failure)).to.be.true;
+    });
+  });
+
+  /**
+   * The scan code of one Fach of an Anlage that carries its own list
+   * (tickets#1061), rotated like a door's, under the mutex of the Anlage.
+   * The manager answers the row of an in-memory store: each read a fresh
+   * copy, each store a write of it.
+   */
+  describe("rotateCompartmentScanCode", () => {
+    const FACH_ID = "1b4e28ba-2fa1-11d2-883f-0016d3cca427";
+    const OTHER_FACH_ID = "6fa459ea-ee8a-3ca4-894e-db77e160355e";
+    let row;
+    let holds;
+    let storeAccessPoint;
+
+    function fach(overrides = {}) {
+      return {
+        id: FACH_ID,
+        number: 3,
+        lockerBank: { id: "bank-1", name: "Labor Fachbank 1" },
+        outOfService: false,
+        scanCode: "code-fach-3",
+        previousScanCodes: ["earlier-code-fach-3"],
+        ...overrides,
+      };
+    }
+
+    function anlage(compartments) {
+      return createAccessPoint({
+        id: "anlage-1",
+        provider: "open-locker",
+        type: "locker",
+        externalId: null,
+        label: "Fahrradgarage",
+        config: { compartments },
+      }).toDocument();
+    }
+
+    const copy = (document) => JSON.parse(JSON.stringify(document));
+    const storedFach = (id = FACH_ID) =>
+      row.config.compartments.find((compartment) => compartment.id === id);
+
+    beforeEach(() => {
+      // The real mutex, over holds in memory (restored by sinon.restore).
+      holds = installInMemoryLockerSystemHolds();
+      request.params.id = "anlage-1";
+      request.params.compartmentId = FACH_ID;
+      row = anlage([fach(), fach({ id: OTHER_FACH_ID, number: 4 })]);
+      sandbox
+        .stub(AccessPointManager, "getAccessPoint")
+        .callsFake(async (id, tenantId) =>
+          row && id === row.id && tenantId === row.tenantId
+            ? new AccessPoint(copy(row))
+            : null,
+        );
+      storeAccessPoint = sandbox
+        .stub(AccessPointManager, "storeAccessPoint")
+        .callsFake(async (accessPoint) => {
+          row = copy(accessPoint.toDocument());
+          return new AccessPoint(copy(row));
+        });
+    });
+
+    afterEach(() => {
+      sinon.restore();
+    });
+
+    it("rotates the Fach's code: the old one moves to the front of the earlier codes", async () => {
+      await AccessPointController.rotateCompartmentScanCode(
+        request,
+        response,
+        next,
+      );
+
+      expect(next.called).to.be.false;
+      expect(response.status.calledWith(200)).to.be.true;
+      expect(storeAccessPoint.calledOnce).to.be.true;
+      expect(storeAccessPoint.firstCall.args[1]).to.equal("tenant-1");
+      expect(storedFach().scanCode)
+        .to.match(/^[A-Za-z0-9_-]{32}$/)
+        .and.not.equal("code-fach-3");
+      expect(storedFach().previousScanCodes).to.deep.equal([
+        "code-fach-3",
+        "earlier-code-fach-3",
+      ]);
+    });
+
+    it("keeps at most 5 earlier codes, the oldest fall off", async () => {
+      row = anlage([
+        fach({
+          scanCode: "code-6",
+          previousScanCodes: ["code-5", "code-4", "code-3", "code-2", "code-1"],
+        }),
+      ]);
+
+      await AccessPointController.rotateCompartmentScanCode(
+        request,
+        response,
+        next,
+      );
+
+      expect(storedFach().previousScanCodes).to.deep.equal([
+        "code-6",
+        "code-5",
+        "code-4",
+        "code-3",
+        "code-2",
+      ]);
+    });
+
+    it("leaves the other Fächer and the Anlage's own code as they are", async () => {
+      const anlageCode = row.scanCode;
+
+      await AccessPointController.rotateCompartmentScanCode(
+        request,
+        response,
+        next,
+      );
+
+      expect(storedFach(OTHER_FACH_ID)).to.deep.equal(
+        fach({ id: OTHER_FACH_ID, number: 4 }),
+      );
+      expect(row.scanCode).to.equal(anlageCode);
+      expect(row.previousScanCodes).to.deep.equal([]);
+    });
+
+    it("returns neither the old nor the new code", async () => {
+      await AccessPointController.rotateCompartmentScanCode(
+        request,
+        response,
+        next,
+      );
+
+      const serialized = JSON.stringify(response.send.firstCall.args[0]);
+      expect(serialized).to.include(FACH_ID);
+      expect(serialized).to.not.include("code-fach-3");
+      expect(serialized).to.not.include(storedFach().scanCode);
+      expect(serialized).to.not.include("scanCode");
+    });
+
+    // A save of the Anlage holds the same mutex and takes the codes it
+    // stores under it (tickets#1055), so it keeps a code rotated before.
+    // The other way round: a rotation that came while a save held the
+    // Anlage waits, and rotates what the save stored.
+    it("waits for a save holding the Anlage and rotates what that save stored", async () => {
+      let finishSave;
+      const save = LockerSystemMutex.hold(
+        { tenantId: "tenant-1", id: "anlage-1" },
+        () =>
+          new Promise((resolve) => {
+            finishSave = resolve;
+          }).then(() => {
+            // The save stores the Anlage with a new label.
+            row = { ...copy(row), label: "Fahrradgarage Nord" };
+          }),
+      );
+      while (!holds.has("tenant-1:anlage-1")) {
+        await Promise.resolve();
+      }
+      let rotated = false;
+      const rotation = AccessPointController.rotateCompartmentScanCode(
+        request,
+        response,
+        next,
+      ).then(() => {
+        rotated = true;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(rotated).to.be.false;
+
+      finishSave();
+      await save;
+      await rotation;
+
+      expect(next.called).to.be.false;
+      expect(row.label).to.equal("Fahrradgarage Nord");
+      expect(storedFach().previousScanCodes[0]).to.equal("code-fach-3");
+    });
+
+    it("answers 404 for an access point of another tenant", async () => {
+      request.params.tenant = "tenant-2";
+
+      await AccessPointController.rotateCompartmentScanCode(
+        request,
+        response,
+        next,
+      );
+
+      expect(response.sendStatus.calledWith(404)).to.be.true;
+      expect(storeAccessPoint.called).to.be.false;
+    });
+
+    it("answers 404 for a door", async () => {
+      row = createAccessPoint({ id: "anlage-1" }).toDocument();
+
+      await AccessPointController.rotateCompartmentScanCode(
+        request,
+        response,
+        next,
+      );
+
+      expect(response.sendStatus.calledWith(404)).to.be.true;
+      expect(storeAccessPoint.called).to.be.false;
+    });
+
+    it("answers 404 for an Anlage without its own list of Fächer (iFBS, Pareva)", async () => {
+      row = createAccessPoint({
+        id: "anlage-1",
+        provider: "ifbs",
+        type: "locker",
+        externalId: "station-1",
+        config: {},
+      }).toDocument();
+
+      await AccessPointController.rotateCompartmentScanCode(
+        request,
+        response,
+        next,
+      );
+
+      expect(response.sendStatus.calledWith(404)).to.be.true;
+      expect(storeAccessPoint.called).to.be.false;
+    });
+
+    it("answers 404 for a Fach the Anlage does not carry, and changes no code", async () => {
+      request.params.compartmentId = "another-fach";
+      const before = copy(row);
+
+      await AccessPointController.rotateCompartmentScanCode(
+        request,
+        response,
+        next,
+      );
+
+      expect(response.sendStatus.calledWith(404)).to.be.true;
+      expect(storeAccessPoint.called).to.be.false;
+      expect(row).to.deep.equal(before);
+    });
+
+    it("hands unexpected errors to the error handler", async () => {
+      const failure = new Error("Database Error");
+      storeAccessPoint.rejects(failure);
+
+      await AccessPointController.rotateCompartmentScanCode(
+        request,
+        response,
+        next,
+      );
 
       expect(next.calledOnceWithExactly(failure)).to.be.true;
     });
