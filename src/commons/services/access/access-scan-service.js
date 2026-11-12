@@ -317,4 +317,3 @@ function carriesScanCode(compartment, scanCode) {
 
 module.exports = AccessScanService;
 module.exports.SCAN_FAILURE_REASONS = SCAN_FAILURE_REASONS;
-module.exports.WRONG_COMPARTMENT = WRONG_COMPARTMENT;

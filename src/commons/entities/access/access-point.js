@@ -172,22 +172,15 @@ class AccessPoint {
    *   rotated
    */
   rotateCompartmentScanCode(compartmentId) {
-    const compartments = this.config?.compartments;
-    if (
-      !Array.isArray(compartments) ||
-      !compartments.some((compartment) => compartment.id === compartmentId)
-    ) {
-      return false;
-    }
-    this.config = {
-      ...this.config,
-      compartments: compartments.map((compartment) =>
-        compartment.id === compartmentId
-          ? { ...compartment, ...rotatedScanCodes(compartment) }
-          : compartment,
-      ),
-    };
-    return true;
+    return (
+      Array.isArray(this.config?.compartments) &&
+      this.config.compartments.some(
+        (compartment) => compartment.id === compartmentId,
+      ) &&
+      this._rotateCompartmentScanCodes(
+        (compartment) => compartment.id === compartmentId,
+      )
+    );
   }
 
   /**
@@ -200,16 +193,30 @@ class AccessPoint {
    *   were rotated
    */
   rotateAllCompartmentScanCodes() {
+    return this._rotateCompartmentScanCodes(() => true);
+  }
+
+  /**
+   * @private
+   * Replace the list of Fächer with one where each Fach `rotates` picks has
+   * its codes rotated by {@link rotatedScanCodes}; the others stay as they
+   * are.
+   *
+   * @param {(compartment: Object) => boolean} rotates Picks the Fächer
+   * @returns {boolean} Whether the access point carries a list of Fächer
+   */
+  _rotateCompartmentScanCodes(rotates) {
     const compartments = this.config?.compartments;
     if (!Array.isArray(compartments)) {
       return false;
     }
     this.config = {
       ...this.config,
-      compartments: compartments.map((compartment) => ({
-        ...compartment,
-        ...rotatedScanCodes(compartment),
-      })),
+      compartments: compartments.map((compartment) =>
+        rotates(compartment)
+          ? { ...compartment, ...rotatedScanCodes(compartment) }
+          : compartment,
+      ),
     };
     return true;
   }
@@ -248,8 +255,6 @@ module.exports = {
   AccessPointMode,
   AccessPointState,
   VALIDATION_RULE_TYPES,
-  PREVIOUS_SCAN_CODES_CAP,
   deriveSupportedModes,
   generateScanCode,
-  rotatedScanCodes,
 };
