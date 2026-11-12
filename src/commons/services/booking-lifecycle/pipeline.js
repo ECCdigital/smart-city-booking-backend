@@ -13,14 +13,22 @@
  * The failure policy belongs to the adapter operation (glossary
  * "Fehlerpolitik"): `POLICY_TABLE` says for every operation whether its
  * failure aborts the transition or is recorded; a transition never chooses.
- * Only the store write and the hold abort. An abort restores every persist
- * write of the run from the snapshot the conditional write answered, in
- * reverse order, and throws a `LifecycleError` with the partial outcome.
+ * Only the store write, the hold and the Zuteilung of a Fach abort. An
+ * abort restores every persist write of the run from the snapshot the
+ * conditional write answered, in reverse order, and throws a
+ * `LifecycleError` with the partial outcome.
  * There is no undo register: provision, document and notify run after the
  * persist phase and only ever record, so there is nothing else to take
  * back. A guard that fires inside the conditional write (`ConflictError
  * invalid_transition`) is thrown as itself after the restore: it is the
  * transition table's answer, not a failed effect.
+ *
+ * A transition may hand a `guard` that the persist writes, every step that
+ * may abort them and their restore run inside: the mutex of the
+ * Schließfachanlagen around the save of an Änderung and its Zuteilung, so
+ * no other Zuteilung sees the booking between its new content and the
+ * restore of the old (tickets#1042). The guard is let go after the last
+ * step with abort policy that runs; what follows can no longer undo a write.
  */
 
 const bunyan = require("bunyan");
@@ -62,6 +70,7 @@ const EFFECT_STATUS = Object.freeze({
 const POLICY_TABLE = Object.freeze({
   "store.save": POLICY.ABORT,
   "access.hold": POLICY.ABORT,
+  "access.allocate": POLICY.ABORT,
   "access.provision": POLICY.RECORD,
   "access.update": POLICY.RECORD,
   "access.revoke": POLICY.RECORD,
@@ -266,13 +275,17 @@ function isSnapshotStep(s) {
  * @param {{ get: Function, getMany: Function, restore: Function }} ctx.store
  *   The store adapter, for the restore of an abort
  * @param {Object[]} steps The declared steps
+ * @param {Object} [options]
+ * @param {(work: () => Promise<void>) => Promise<void>} [options.guard]
+ *   Runs the steps up to the last one with abort policy whose condition
+ *   holds, the restore of an abort included
  * @returns {Promise<Outcome>}
  * @throws {LifecycleError} When a step with abort policy fails
  * @throws {ConflictError} When the conditional write of a persist step
  *   finds the booking in another state
  */
-async function runPipeline(ctx, steps) {
-  const { transition, tenantId, bookingId, bookingIds } = ctx;
+async function runPipeline(ctx, steps, { guard } = {}) {
+  const { transition, bookingId, bookingIds } = ctx;
   assertPhaseOrder(transition, steps);
 
   const outcome = {
@@ -284,6 +297,44 @@ async function runPipeline(ctx, steps) {
     failure: null,
   };
   const snapshots = [];
+
+  if (guard) {
+    const guarded = lastAborting(ctx, steps, outcome) + 1;
+    await guard(() =>
+      runSteps(ctx, steps.slice(0, guarded), outcome, snapshots),
+    );
+    await runSteps(ctx, steps.slice(guarded), outcome, snapshots);
+  } else {
+    await runSteps(ctx, steps, outcome, snapshots);
+  }
+
+  outcome.booking = ctx.booking ?? null;
+  if (bookingIds) {
+    outcome.bookings = ctx.bookings ?? [];
+    outcome.status = sharedStatus(outcome.bookings);
+  } else {
+    outcome.status = ctx.booking?.status ?? null;
+  }
+  return outcome;
+}
+
+/** The index of the last step with abort policy whose condition holds. */
+function lastAborting(ctx, steps, outcome) {
+  let last = -1;
+  steps.forEach((s, index) => {
+    if (s.policy === POLICY.ABORT && s.when(ctx, outcome)) {
+      last = index;
+    }
+  });
+  return last;
+}
+
+/**
+ * Runs the steps into the outcome; an abort restores the snapshots and
+ * throws.
+ */
+async function runSteps(ctx, steps, outcome, snapshots) {
+  const { transition, tenantId, bookingId, bookingIds } = ctx;
 
   for (const s of steps) {
     const effect = {
@@ -347,15 +398,6 @@ async function runPipeline(ctx, steps) {
       throw new LifecycleError(transition, failed, outcome, err);
     }
   }
-
-  outcome.booking = ctx.booking ?? null;
-  if (bookingIds) {
-    outcome.bookings = ctx.bookings ?? [];
-    outcome.status = sharedStatus(outcome.bookings);
-  } else {
-    outcome.status = ctx.booking?.status ?? null;
-  }
-  return outcome;
 }
 
 /** The state every member is in, or null where they differ. */

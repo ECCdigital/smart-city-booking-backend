@@ -832,6 +832,7 @@ describe("booking lifecycle: reinstate", function () {
     expect(effectTable(outcome)).to.deep.equal([
       "persist store.save ok",
       "provision access.hold skipped",
+      "provision access.allocate ok",
       "provision access.provision ok",
       "notify mail.ACCESS_PROVISION_FAILED skipped",
     ]);
@@ -858,6 +859,7 @@ describe("booking lifecycle: reinstate", function () {
       { op: "save", args: ["B-1", "cancelled", ["cancellationRefund"]] },
     ]);
     expect(adapters.access.calls).to.deep.equal([
+      { op: "allocate", args: [TENANT, "B-1"] },
       { op: "provision", args: [TENANT, "B-1"] },
     ]);
     expect(adapters.documents.calls).to.deep.equal([]);
@@ -884,6 +886,7 @@ describe("booking lifecycle: reinstate", function () {
     expect(effectTable(outcome)).to.deep.equal([
       "persist store.save ok",
       "provision access.hold ok",
+      "provision access.allocate skipped",
       "provision access.provision skipped",
       "notify mail.ACCESS_PROVISION_FAILED skipped",
     ]);
@@ -917,6 +920,7 @@ describe("booking lifecycle: reinstate", function () {
     expect(effectTable(outcome)).to.deep.equal([
       "persist store.save ok",
       "provision access.hold ok",
+      "provision access.allocate skipped",
       "provision access.provision skipped",
       "notify mail.ACCESS_PROVISION_FAILED skipped",
     ]);

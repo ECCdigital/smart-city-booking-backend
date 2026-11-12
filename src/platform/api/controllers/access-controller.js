@@ -6,7 +6,10 @@ const {
 const AccessService = require("../../../commons/services/access/access-service");
 const AccessScanService = require("../../../commons/services/access/access-scan-service");
 const ApiResponse = require("../../../commons/utilities/api-response");
-const { ForbiddenError } = require("../../../errors/BaseError");
+const {
+  BadRequestError,
+  ForbiddenError,
+} = require("../../../errors/BaseError");
 const { AccessOpenError } = require("../../../errors/AccessOpenError");
 const { LockBusyError } = require("../../../errors/LockBusyError");
 const {
@@ -306,6 +309,65 @@ class AccessController {
 
       logger.error(err);
       return ApiResponse.error(response, "Could not get access point status");
+    }
+  }
+
+  /**
+   * GET /:tenant/access/:accessPointId/free-compartments?bookingId=123
+   *
+   * The Fächer the booking's zugeteiltes Fach can be moved to (Umsetzen,
+   * tickets#1044): those of the same Anlage free for its period with the
+   * buffers and in service. `404 compartment_not_in_booking` when the
+   * booking holds no such Fach.
+   */
+  static async getFreeCompartments(request, response, next) {
+    try {
+      const { tenant, accessPointId } = request.params;
+      const { bookingId } = request.query;
+
+      const compartments = await AccessService.freeCompartmentsToReassign(
+        tenant,
+        bookingId,
+        accessPointId,
+        { scope: scopeOf(request) },
+      );
+      return ApiResponse.ok(response, { data: compartments });
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  /**
+   * POST /:tenant/access/:accessPointId/reassign?bookingId=123
+   * Body: `{ to: "<anlageId>:<UUID>" }`, a Fach `free-compartments` named.
+   *
+   * Moves the booking's zugeteiltes Fach (Umsetzen, tickets#1044) and
+   * answers the id it is listed by now. `409 compartment_taken` when the
+   * Fach is no longer free or in service; `503 locker_system_busy` when the
+   * Anlage stayed held.
+   */
+  static async reassign(request, response, next) {
+    try {
+      const { tenant, accessPointId } = request.params;
+      const { bookingId } = request.query;
+      const to = request.body?.to;
+      if (typeof to !== "string" || to.length === 0) {
+        return next(new BadRequestError("compartment_required"));
+      }
+
+      const moved = await AccessService.reassignCompartment(
+        tenant,
+        bookingId,
+        accessPointId,
+        to,
+        { userId: request.user.id, scope: scopeOf(request) },
+      );
+      logger.info(
+        `${tenant} -- user ${request.user.id} moved ${accessPointId} of booking ${bookingId} to ${moved.id}`,
+      );
+      return ApiResponse.ok(response, { data: moved });
+    } catch (err) {
+      return next(err);
     }
   }
 

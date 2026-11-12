@@ -7,6 +7,10 @@ const { ValidationError } = require("../src/errors/ValidationError");
 const { BaseError, NotFoundError } = require("../src/errors/BaseError");
 const { TEST_GEO_RULE } = require("./helpers/test-validation-rule");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
+const BookingManager = require("../src/commons/data-managers/booking-manager");
+const LockerSystemMutex = require("../src/commons/services/access/locker-system-mutex");
+const LockerSystemRedistribution = require("../src/commons/services/access/locker-system-redistribution");
+const { Booking } = require("../src/commons/entities/booking/booking");
 const SaltoKsAccessProvider = require("../src/commons/services/access/providers/salto-ks-access-provider");
 const OpenLockerAccessProvider = require("../src/commons/services/access/providers/open-locker-access-provider");
 const {
@@ -18,8 +22,13 @@ const {
 } = require("./helpers/fake-salto-ks-api-client");
 const {
   FakeOpenLockerApiClient,
+  brokenOpenLockerApiClient,
+  openLockerHttpError,
   COMPARTMENT_ID,
   OTHER_COMPARTMENT_ID,
+  SECOND_COMPARTMENT_ID,
+  LOCKER_BANK_ID,
+  SECOND_LOCKER_BANK_ID,
 } = require("./helpers/fake-open-locker-api-client");
 const {
   SALTO_LOCK_ID,
@@ -208,6 +217,9 @@ describe("AccessPointController", () => {
       findListedAccessPoint = sandbox
         .stub(AccessInfoService, "findListedAccessPoint")
         .resolves(null);
+      // The tenant's other access points, read where a Fach may already be
+      // held by one of them (tickets#1037).
+      sandbox.stub(AccessPointManager, "getAccessPoints").resolves([]);
     });
 
     describe("create", () => {
@@ -1078,6 +1090,508 @@ describe("AccessPointController", () => {
     });
 
     /**
+     * An Open Locker Schließfachanlage is a `locker` in mode `remote` that
+     * carries its own list of Fächer, picked from Open Locker's listing
+     * (tickets#1037). The save copies each Fach's Schließfachschrank and
+     * number from the listing, and keeps one Fach in at most one Anlage and
+     * out of the fixed Fächer, across the tenant.
+     */
+    describe("Open Locker locker system", () => {
+      let openLocker;
+      let tenantAccessPoints;
+      let bookingsHolding;
+
+      after(() => {
+        registerAccessProvider("open-locker", OpenLockerAccessProvider);
+      });
+
+      beforeEach(() => {
+        findListedAccessPoint.restore();
+        openLocker = new FakeOpenLockerApiClient();
+        registerOpenLocker(() => openLocker);
+        tenantAccessPoints = [];
+        AccessPointManager.getAccessPoints.callsFake(
+          async () => tenantAccessPoints,
+        );
+        // A Fach leaving the Anlage moves the bookings at it, under the
+        // mutex of the Anlage (tickets#1043): none hang at it here.
+        bookingsHolding = [];
+        sandbox
+          .stub(BookingManager, "getBookingsHoldingCompartments")
+          .callsFake(async () => bookingsHolding);
+        sandbox.stub(BookingManager, "storeBooking").callsFake(async (b) => b);
+        sandbox.stub(BookableManager, "getBookablesByIds").resolves([]);
+        sandbox
+          .stub(LockerSystemMutex, "hold")
+          .callsFake(async (lockerSystem, work) => work());
+      });
+
+      function registerOpenLocker(client) {
+        registerAccessProvider(
+          "open-locker",
+          class extends OpenLockerAccessProvider {
+            constructor() {
+              super({ client: client() });
+            }
+          },
+        );
+      }
+
+      function lockerSystem(compartments, overrides = {}) {
+        return {
+          provider: "open-locker",
+          type: "locker",
+          mode: "remote",
+          label: "Fahrradgarage",
+          config: { compartments },
+          ...overrides,
+        };
+      }
+
+      function storedCompartments() {
+        return storeAccessPoint.firstCall.args[0].config.compartments;
+      }
+
+      it("stores the picked Fächer with their Schließfachschrank and number from Open Locker's listing", async () => {
+        request.body = lockerSystem([
+          { id: COMPARTMENT_ID },
+          { id: SECOND_COMPARTMENT_ID, outOfService: true },
+        ]);
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.called).to.be.false;
+        expect(response.status.calledWith(201)).to.be.true;
+        expect(storedCompartments()).to.deep.equal([
+          {
+            id: COMPARTMENT_ID,
+            number: 1,
+            lockerBank: { id: LOCKER_BANK_ID, name: "Labor Fachbank 1" },
+            outOfService: false,
+          },
+          {
+            id: SECOND_COMPARTMENT_ID,
+            number: 3,
+            lockerBank: {
+              id: SECOND_LOCKER_BANK_ID,
+              name: "Quartiersschrank Hafen",
+            },
+            outOfService: true,
+          },
+        ]);
+      });
+
+      it("takes a rename in Open Locker over on the next save of the Anlage", async () => {
+        sandbox.stub(AccessPointManager, "getAccessPoint").resolves(
+          createAccessPoint({
+            ...lockerSystem([
+              {
+                id: COMPARTMENT_ID,
+                number: 1,
+                lockerBank: { id: LOCKER_BANK_ID, name: "Alter Name" },
+                outOfService: false,
+              },
+            ]),
+            externalId: "",
+            validationRules: [],
+          }),
+        );
+        openLocker.lockerBanks[0].name = "Labor Fachbank Nord";
+        request.body = { id: "point-1", label: "Fahrradgarage Nord" };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.called).to.be.false;
+        expect(storedCompartments()[0].lockerBank).to.deep.equal({
+          id: LOCKER_BANK_ID,
+          name: "Labor Fachbank Nord",
+        });
+      });
+
+      it("needs no UUID of its own and asks Open Locker only for the listing", async () => {
+        request.body = lockerSystem([{ id: COMPARTMENT_ID }], {
+          externalId: "",
+        });
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.called).to.be.false;
+        expect(
+          openLocker.requests.filter((r) => r !== "POST /api/login"),
+        ).to.deep.equal(["GET /api/compartments/accessible"]);
+      });
+
+      it("refuses a Fach the technical account holds no permission on, at that Fach", async () => {
+        request.body = lockerSystem([
+          { id: COMPARTMENT_ID },
+          { id: OTHER_COMPARTMENT_ID },
+        ]);
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        const error = next.firstCall.args[0];
+        expect(error).to.be.instanceOf(ValidationError);
+        expect(error.errors).to.deep.equal([
+          {
+            field: "config.compartments.1",
+            code: "compartment_not_accessible",
+            params: { compartmentId: OTHER_COMPARTMENT_ID },
+          },
+        ]);
+        expect(storeAccessPoint.called).to.be.false;
+      });
+
+      it("refuses a Fach named twice in the list", async () => {
+        request.body = lockerSystem([
+          { id: COMPARTMENT_ID },
+          { id: COMPARTMENT_ID },
+        ]);
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.firstCall.args[0].errors).to.deep.equal([
+          {
+            field: "config.compartments.1",
+            code: "duplicate_compartment",
+            params: { compartmentId: COMPARTMENT_ID },
+          },
+        ]);
+        expect(storeAccessPoint.called).to.be.false;
+      });
+
+      it("refuses an Anlage without its list of Fächer", async () => {
+        request.body = lockerSystem(undefined, { config: {} });
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.firstCall.args[0].errors).to.deep.equal([
+          { field: "config.compartments", code: "required" },
+        ]);
+        expect(storeAccessPoint.called).to.be.false;
+      });
+
+      it("refuses an Anlage in another mode than remote", async () => {
+        request.body = lockerSystem([], { mode: "authorization" });
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.firstCall.args[0].errors).to.deep.equal([
+          {
+            field: "mode",
+            code: "unsupported_mode",
+            params: { mode: "authorization", supportedModes: ["remote"] },
+          },
+        ]);
+      });
+
+      it("stores the Fächer as the request names them while the tenant's Open Locker is not active", async () => {
+        registerAccessProvider("open-locker", OpenLockerAccessProvider);
+        sandbox.stub(TenantManager, "getTenant").resolves({
+          id: "tenant-1",
+          applications: [{ type: "access", id: "open-locker", active: false }],
+        });
+        const named = {
+          id: OTHER_COMPARTMENT_ID,
+          number: 2,
+          lockerBank: { id: LOCKER_BANK_ID, name: "Labor Fachbank 1" },
+          outOfService: true,
+        };
+        request.body = lockerSystem([named]);
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.called).to.be.false;
+        expect(storedCompartments()).to.deep.equal([named]);
+      });
+
+      it("answers 503 and stores nothing when Open Locker cannot be reached", async () => {
+        registerOpenLocker(() =>
+          brokenOpenLockerApiClient(openLockerHttpError(500)),
+        );
+        request.body = lockerSystem([{ id: COMPARTMENT_ID }]);
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.firstCall.args[0].code).to.equal(
+          "access_provider_unreachable",
+        );
+        expect(storeAccessPoint.called).to.be.false;
+      });
+
+      it("refuses a Fach that already stands in another Anlage of the tenant", async () => {
+        tenantAccessPoints = [
+          createAccessPoint({
+            id: "anlage-2",
+            ...lockerSystem([{ id: SECOND_COMPARTMENT_ID }]),
+            label: "Paketstation",
+          }),
+        ];
+        request.body = lockerSystem([
+          { id: COMPARTMENT_ID },
+          { id: SECOND_COMPARTMENT_ID },
+        ]);
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        const error = next.firstCall.args[0];
+        expect(error).to.be.instanceOf(ValidationError);
+        expect(error.errors).to.deep.equal([
+          {
+            field: "config.compartments.1",
+            code: "compartment_in_locker_system",
+            params: {
+              compartmentId: SECOND_COMPARTMENT_ID,
+              accessPointId: "anlage-2",
+              label: "Paketstation",
+            },
+          },
+        ]);
+        expect(storeAccessPoint.called).to.be.false;
+      });
+
+      it("refuses a Fach that is a fixed Fach of the tenant", async () => {
+        tenantAccessPoints = [
+          createAccessPoint({
+            id: "fach-1",
+            provider: "open-locker",
+            type: "door",
+            mode: "remote",
+            externalId: COMPARTMENT_ID,
+            label: "Labor Fachbank 1 · Fach 1",
+          }),
+        ];
+        request.body = lockerSystem([{ id: COMPARTMENT_ID }]);
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.firstCall.args[0].errors).to.deep.equal([
+          {
+            field: "config.compartments.0",
+            code: "compartment_is_fixed",
+            params: {
+              compartmentId: COMPARTMENT_ID,
+              accessPointId: "fach-1",
+              label: "Labor Fachbank 1 · Fach 1",
+            },
+          },
+        ]);
+        expect(storeAccessPoint.called).to.be.false;
+      });
+
+      it("checks the Fächer also while the tenant's Open Locker is not active", async () => {
+        registerAccessProvider("open-locker", OpenLockerAccessProvider);
+        sandbox.stub(TenantManager, "getTenant").resolves({
+          id: "tenant-1",
+          applications: [],
+        });
+        tenantAccessPoints = [
+          createAccessPoint({
+            id: "anlage-2",
+            ...lockerSystem([{ id: COMPARTMENT_ID }]),
+          }),
+        ];
+        request.body = lockerSystem([{ id: COMPARTMENT_ID }]);
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.firstCall.args[0].errors[0].code).to.equal(
+          "compartment_in_locker_system",
+        );
+      });
+
+      it("lets an Anlage keep its own Fächer on an update", async () => {
+        const stored = createAccessPoint({
+          id: "anlage-1",
+          ...lockerSystem([{ id: COMPARTMENT_ID }]),
+          externalId: "",
+          validationRules: [],
+        });
+        tenantAccessPoints = [stored];
+        sandbox.stub(AccessPointManager, "getAccessPoint").resolves(stored);
+        request.body = {
+          id: "anlage-1",
+          config: {
+            compartments: [{ id: COMPARTMENT_ID, outOfService: true }],
+          },
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.called).to.be.false;
+        expect(storedCompartments()[0].outOfService).to.be.true;
+      });
+
+      it("refuses a fixed Fach that already stands in an Anlage", async () => {
+        tenantAccessPoints = [
+          createAccessPoint({
+            id: "anlage-2",
+            ...lockerSystem([{ id: COMPARTMENT_ID }]),
+            label: "Paketstation",
+          }),
+        ];
+        request.body = {
+          provider: "open-locker",
+          type: "door",
+          mode: "remote",
+          label: "Fach 1",
+          externalId: COMPARTMENT_ID,
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.firstCall.args[0].errors).to.deep.equal([
+          {
+            field: "externalId",
+            code: "compartment_in_locker_system",
+            params: {
+              compartmentId: COMPARTMENT_ID,
+              accessPointId: "anlage-2",
+              label: "Paketstation",
+            },
+          },
+        ]);
+        expect(storeAccessPoint.called).to.be.false;
+      });
+
+      it("refuses a list of Fächer on an Anlage whose provider assigns the Fach itself", async () => {
+        sandbox.stub(AccessInfoService, "findListedAccessPoint").resolves(null);
+        request.body = {
+          provider: "ifbs",
+          type: "locker",
+          mode: "remote",
+          externalId: "location-1",
+          config: { compartments: [{ id: COMPARTMENT_ID }] },
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.firstCall.args[0].errors).to.deep.equal([
+          {
+            field: "config.compartments",
+            code: "unsupported_by_provider",
+            params: { provider: "ifbs" },
+          },
+        ]);
+        expect(storeAccessPoint.called).to.be.false;
+      });
+
+      /**
+       * A Fach going out of service or out of the Anlage moves the future
+       * bookings at it on the save; the answer names the ones that stay
+       * (tickets#1043). Which bookings move is
+       * `locker-system-redistribution.test.js`'s.
+       */
+      describe("a Fach leaving the Zuteilung", () => {
+        const HOUR = 60 * 60 * 1000;
+        let stored;
+
+        beforeEach(() => {
+          stored = createAccessPoint({
+            id: "anlage-1",
+            ...lockerSystem([
+              {
+                id: COMPARTMENT_ID,
+                number: 1,
+                lockerBank: { id: LOCKER_BANK_ID, name: "Labor Fachbank 1" },
+                outOfService: false,
+              },
+            ]),
+            externalId: "",
+            validationRules: [],
+          });
+          sandbox.stub(AccessPointManager, "getAccessPoint").resolves(stored);
+          bookingsHolding = [
+            new Booking({
+              id: "booking-1",
+              tenantId: "tenant-1",
+              name: "Erika Mustermann",
+              mail: "erika@example.test",
+              status: "confirmed",
+              timeBegin: Date.now() + HOUR,
+              timeEnd: Date.now() + 2 * HOUR,
+              bookableItems: [{ bookableId: "faecher", amount: 1 }],
+              accessInfo: [
+                {
+                  accessPointId: "anlage-1",
+                  accessPointType: "locker",
+                  provider: "open-locker",
+                  bookableId: "faecher",
+                  assignedCompartment: { id: COMPARTMENT_ID, number: 1 },
+                  revokedAt: null,
+                },
+              ],
+            }),
+          ];
+        });
+
+        it("stores the Anlage under its mutex and moves the future booking to a free Fach in service", async () => {
+          request.body = {
+            id: "anlage-1",
+            config: {
+              compartments: [
+                { id: COMPARTMENT_ID, outOfService: true },
+                { id: SECOND_COMPARTMENT_ID },
+              ],
+            },
+          };
+
+          await AccessPointController.storeAccessPoint(request, response, next);
+
+          expect(next.called).to.be.false;
+          expect(LockerSystemMutex.hold.firstCall.args[0].id).to.equal(
+            "anlage-1",
+          );
+          expect(
+            BookingManager.storeBooking.firstCall.args[0].accessInfo[0]
+              .assignedCompartment.id,
+          ).to.equal(SECOND_COMPARTMENT_ID);
+          expect(response.status.calledWith(200)).to.be.true;
+          expect(response.send.firstCall.args[0].unmovedBookings).to.deep.equal(
+            [],
+          );
+        });
+
+        it("names the future bookings no Fach was free for in its answer", async () => {
+          request.body = {
+            id: "anlage-1",
+            config: {
+              compartments: [{ id: COMPARTMENT_ID, outOfService: true }],
+            },
+          };
+
+          await AccessPointController.storeAccessPoint(request, response, next);
+
+          expect(next.called).to.be.false;
+          const answer = response.send.firstCall.args[0];
+          expect(answer.id).to.equal("anlage-1");
+          expect(answer.unmovedBookings).to.deep.equal([
+            {
+              id: "booking-1",
+              name: "Erika Mustermann",
+              mail: "erika@example.test",
+              timeBegin: bookingsHolding[0].timeBegin,
+              timeEnd: bookingsHolding[0].timeEnd,
+              compartment: { id: COMPARTMENT_ID, number: 1 },
+            },
+          ]);
+          expect(BookingManager.storeBooking.called).to.be.false;
+        });
+
+        it("answers a save that moves nothing without the mutex", async () => {
+          request.body = { id: "anlage-1", label: "Fahrradgarage Nord" };
+
+          await AccessPointController.storeAccessPoint(request, response, next);
+
+          expect(next.called).to.be.false;
+          expect(LockerSystemMutex.hold.called).to.be.false;
+          expect(response.send.firstCall.args[0].unmovedBookings).to.deep.equal(
+            [],
+          );
+        });
+      });
+    });
+
+    /**
      * The Öffnungsart the save would leave behind, refused by the provider
      * that owns the vocabulary (spec § 3.1/§ 3.3). The controller asks every
      * provider that declares `validateAccessPoint` and names none of them.
@@ -1542,6 +2056,75 @@ describe("AccessPointController", () => {
 
       expect(response.sendStatus.calledWith(404)).to.be.true;
       expect(storeAccessPoint.called).to.be.false;
+    });
+  });
+
+  /**
+   * What the administration reads before a Fach leaves its Anlage
+   * (tickets#1043): the running and future bookings at the Fächer. Which
+   * ones those are is `locker-system-redistribution.test.js`'s.
+   */
+  describe("getCompartmentBookings", () => {
+    let bookingsAt;
+
+    beforeEach(() => {
+      bookingsAt = sandbox
+        .stub(LockerSystemRedistribution, "bookingsAt")
+        .resolves({ total: 0, bookings: [] });
+      request.params.id = "anlage-1";
+    });
+
+    it("asks for the Fächer the query names, at the Anlage of the path, capped like the booking list", async () => {
+      const anlage = createAccessPoint({ id: "anlage-1", type: "locker" });
+      sandbox.stub(AccessPointManager, "getAccessPoint").resolves(anlage);
+      request.query = { compartmentIds: "uuid-1,uuid-2" };
+      bookingsAt.resolves({ total: 1, bookings: [{ id: "booking-1" }] });
+
+      await AccessPointController.getCompartmentBookings(
+        request,
+        response,
+        next,
+      );
+
+      expect(bookingsAt.firstCall.args.slice(0, 3)).to.deep.equal([
+        "tenant-1",
+        anlage,
+        ["uuid-1", "uuid-2"],
+      ]);
+      expect(bookingsAt.firstCall.args[3]).to.deep.include({ limit: 10 });
+      expect(response.status.calledWith(200)).to.be.true;
+      expect(response.json.firstCall.args[0]).to.deep.equal({
+        total: 1,
+        bookings: [{ id: "booking-1" }],
+      });
+    });
+
+    it("takes the Fächer as a repeated parameter too", async () => {
+      sandbox
+        .stub(AccessPointManager, "getAccessPoint")
+        .resolves(createAccessPoint({ id: "anlage-1" }));
+      request.query = { compartmentIds: ["uuid-1", "uuid-2"] };
+
+      await AccessPointController.getCompartmentBookings(
+        request,
+        response,
+        next,
+      );
+
+      expect(bookingsAt.firstCall.args[2]).to.deep.equal(["uuid-1", "uuid-2"]);
+    });
+
+    it("answers 404 for an access point the tenant does not have", async () => {
+      sandbox.stub(AccessPointManager, "getAccessPoint").resolves(null);
+
+      await AccessPointController.getCompartmentBookings(
+        request,
+        response,
+        next,
+      );
+
+      expect(response.sendStatus.calledWith(404)).to.be.true;
+      expect(bookingsAt.called).to.be.false;
     });
   });
 

@@ -10,7 +10,13 @@ const AccessLocationService = require("../../../commons/services/access/access-l
 const AccessEvidenceService = require("../../../commons/services/access/access-evidence-service");
 const AccessInfoService = require("../../../commons/services/access/access-info-service");
 const AccessService = require("../../../commons/services/access/access-service");
+const LockerSystemRedistribution = require("../../../commons/services/access/locker-system-redistribution");
 const LocationGuard = require("../../../commons/services/location/location-guard");
+const {
+  carriesOwnCompartments,
+  requestedCompartments,
+  assertCompartmentsUnclaimed,
+} = require("../../../commons/services/access/locker-system-compartments");
 const {
   getAccessProvider,
   hasAccessProvider,
@@ -116,6 +122,49 @@ class AccessPointController {
   }
 
   /**
+   * The running and future bookings at Fächer of a Schließfachanlage
+   * (`?compartmentIds=<uuid>,<uuid>`), for the administration to see before
+   * it takes them out of service or out of the Anlage (tickets#1043) - which
+   * ones those are is `LockerSystemRedistribution.bookingsAt`. Capped like
+   * the booking list, with the whole `total` next to it.
+   */
+  static async getCompartmentBookings(request, response, next) {
+    try {
+      const tenantId = request.params.tenant;
+
+      const accessPoint = await AccessPointManager.getAccessPoint(
+        request.params.id,
+        tenantId,
+      );
+
+      if (!accessPoint) {
+        return response.sendStatus(404);
+      }
+
+      const result = await LockerSystemRedistribution.bookingsAt(
+        tenantId,
+        accessPoint,
+        AccessPointController._listParam(request.query.compartmentIds),
+        { limit: LIVE_ACCESS_BOOKING_LIMIT },
+      );
+
+      return response.status(200).json(result);
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  /** A query parameter given comma-separated or repeated, as a list. */
+  static _listParam(value) {
+    return [value]
+      .flat()
+      .filter((part) => typeof part === "string")
+      .flatMap((part) => part.split(","))
+      .map((part) => part.trim())
+      .filter(Boolean);
+  }
+
+  /**
    * Upsert an access point: an `id` in the body updates that access point,
    * a body without `id` creates a new one with a server-side id. An `id` the
    * tenant does not know is answered with 404 rather than created, so ids
@@ -164,6 +213,11 @@ class AccessPointController {
     AccessInfoService.validateAccessPoint(accessPoint, listedAccessPoint, {
       asked,
     });
+    await AccessPointController._resolveOwnCompartments(accessPoint, tenantId);
+    await AccessPointController._assertCompartmentsUnclaimed(
+      accessPoint,
+      tenantId,
+    );
 
     const createdAccessPoint = await AccessPointManager.storeAccessPoint(
       accessPoint,
@@ -211,6 +265,7 @@ class AccessPointController {
     }
 
     const storedLocation = accessPoint.location;
+    const before = { ...accessPoint };
     Object.assign(
       accessPoint,
       AccessPointController._writableFields(request.body),
@@ -232,16 +287,33 @@ class AccessPointController {
     AccessInfoService.validateAccessPoint(accessPoint, listedAccessPoint, {
       asked,
     });
-
-    const updatedAccessPoint = await AccessPointManager.storeAccessPoint(
+    await AccessPointController._resolveOwnCompartments(accessPoint, tenantId);
+    await AccessPointController._assertCompartmentsUnclaimed(
       accessPoint,
       tenantId,
     );
 
+    const { accessPoint: updatedAccessPoint, unmoved } =
+      await LockerSystemRedistribution.storeRedistributing(
+        tenantId,
+        before,
+        accessPoint,
+        () => AccessPointManager.storeAccessPoint(accessPoint, tenantId),
+        { userId: user?.id },
+      );
+
     logger.info(
       `${tenantId} -- Access point ${updatedAccessPoint.id} updated by user ${user?.id}`,
     );
-    return response.status(200).send(updatedAccessPoint.toResponse());
+    if (!carriesOwnCompartments(updatedAccessPoint)) {
+      return response.status(200).send(updatedAccessPoint.toResponse());
+    }
+    // A Fach that left the Zuteilung moved the future bookings at it
+    // (tickets#1043); the ones no Fach was free for stay there, and the
+    // answer names them for the administration to solve by hand.
+    return response
+      .status(200)
+      .send({ ...updatedAccessPoint.toResponse(), unmovedBookings: unmoved });
   }
 
   /**
@@ -490,26 +562,125 @@ class AccessPointController {
         asked: true,
       };
     } catch (err) {
-      if (err instanceof NotFoundError) {
-        logger.info(
-          `${tenantId} -- Provider ${accessPoint.provider} is not active, access point stored without its listing: ${err.code}`,
-        );
-        return { entry: null, asked: false };
-      }
-
-      const status = err?.response?.status;
-      const params = { provider: accessPoint.provider };
-
-      logger.warn(
-        `${tenantId} -- Provider ${accessPoint.provider} did not list its access points: ${err?.message || err}`,
-      );
-
-      if (status === 401 || status === 403) {
-        throw new BaseError("access_provider_rejected", 502, params);
-      }
-
-      throw new BaseError("access_provider_unreachable", 503, params);
+      AccessPointController._answerListingFailure(err, accessPoint, tenantId);
+      return { entry: null, asked: false };
     }
+  }
+
+  /**
+   * What a failed listing means for the save: returns for a provider the
+   * tenant has not switched on (`NotFoundError`), so the save goes on
+   * unchecked, and throws the provider failure otherwise - see
+   * `_fetchListedAccessPoint`.
+   *
+   * @param {Error} err What the listing threw
+   * @param {AccessPoint} accessPoint The access point being saved
+   * @param {string} tenantId Tenant the access point belongs to
+   * @returns {void} When the provider is not active
+   * @throws {BaseError} `access_provider_rejected` (502) or
+   *   `access_provider_unreachable` (503)
+   */
+  static _answerListingFailure(err, accessPoint, tenantId) {
+    if (err instanceof NotFoundError) {
+      logger.info(
+        `${tenantId} -- Provider ${accessPoint.provider} is not active, access point stored without its listing: ${err.code}`,
+      );
+      return;
+    }
+
+    const status = err?.response?.status;
+    const params = { provider: accessPoint.provider };
+
+    logger.warn(
+      `${tenantId} -- Provider ${accessPoint.provider} did not list its access points: ${err?.message || err}`,
+    );
+
+    if (status === 401 || status === 403) {
+      throw new BaseError("access_provider_rejected", 502, params);
+    }
+
+    throw new BaseError("access_provider_unreachable", 503, params);
+  }
+
+  /**
+   * The Fächer of a Schließfachanlage that carries its own list, written
+   * back into its `config` as they are stored (tickets#1037): Schrank and
+   * number from the provider's listing, so a rename at the provider takes
+   * effect on the next save. A provider the tenant has not switched on is
+   * not asked, and the Fächer are stored as the request names them, like a
+   * fixed Fach (tickets#311, #971). A provider whose Anlagen carry no list
+   * of their own refuses one.
+   *
+   * @param {AccessPoint} accessPoint The access point as it would be stored
+   * @param {string} tenantId Tenant the access point belongs to
+   * @returns {Promise<void>}
+   * @throws {ValidationError} The list's shape, a provider without such
+   *   lists, or a Fach the provider does not list
+   * @throws {BaseError} When the provider cannot be asked
+   */
+  static async _resolveOwnCompartments(accessPoint, tenantId) {
+    if (!carriesOwnCompartments(accessPoint)) {
+      return;
+    }
+
+    if (!AccessInfoService.resolvesCompartments(accessPoint.provider)) {
+      throw new ValidationError([
+        {
+          field: "config.compartments",
+          code: "unsupported_by_provider",
+          params: { provider: accessPoint.provider },
+        },
+      ]);
+    }
+
+    let compartments = requestedCompartments(accessPoint.config.compartments);
+
+    try {
+      const listing = await AccessInfoService.getAccessPoints(
+        tenantId,
+        accessPoint.provider,
+      );
+      compartments = AccessInfoService.resolveCompartments(
+        accessPoint,
+        compartments,
+        listing,
+      );
+    } catch (err) {
+      if (err instanceof ValidationError) {
+        throw err;
+      }
+      AccessPointController._answerListingFailure(err, accessPoint, tenantId);
+    }
+
+    accessPoint.config = { ...accessPoint.config, compartments };
+  }
+
+  /**
+   * Refuses a Fach another access point of the tenant already holds - see
+   * `assertCompartmentsUnclaimed`. Asked only where it can matter: for an
+   * Anlage that carries its own list, and for a fixed Fach of a provider
+   * whose Anlagen do.
+   *
+   * @param {AccessPoint} accessPoint The access point as it would be stored
+   * @param {string} tenantId Tenant the access point belongs to
+   * @returns {Promise<void>}
+   * @throws {ValidationError} At the Fach another access point holds
+   */
+  static async _assertCompartmentsUnclaimed(accessPoint, tenantId) {
+    if (
+      !carriesOwnCompartments(accessPoint) &&
+      !(
+        accessPoint.externalId &&
+        AccessInfoService.resolvesCompartments(accessPoint.provider)
+      )
+    ) {
+      return;
+    }
+
+    assertCompartmentsUnclaimed(
+      accessPoint,
+      await AccessPointManager.getAccessPoints(tenantId),
+    );
   }
 
   /**

@@ -97,23 +97,31 @@ Ein physischer Zugangspunkt, den die Plattform über einen Provider (z.B. NUKI, 
 _Avoid_: Tür (als Entity-Name), Door, Schloss, Lock, Locker
 
 **Schließfachanlage**:
-Ein AccessPoint, dessen Provider je Buchung ein Fach zuteilt: bei iFBS ein Standort mit Fahrradboxen (genau ein Fach je Buchung, iFBS wählt es), bei Pareva ein Produkt (Produkt-ID, die 24-stellige Hex-ID des Produkts bei Pareva) einer Schließfachanlage (mehrere Fächer je Buchung, Pareva gibt den Zugangscode selbst an den Buchenden). Die Plattform kennt vor der Buchung nur die Anlage, nie das Fach. Kapazität ist Sache des Bookables, nicht der Anlage: `amount` ist die Obergrenze gleichzeitiger Buchungen des Bookables insgesamt, leer heißt unbegrenzt; eine Zahl je Anlage gibt es nicht. Jede Anlage des Bookables gibt einer Buchung so viele Fächer, wie deren Position Einheiten bucht - bei mehreren Anlagen jede für sich, hingenommen. Den Bestand eines Pareva-Produkts kennt nur Pareva: die Verfügbarkeit des Produkts fragt der Checkout live bei Pareva ab (`rental/available`, ein Eintrag je freies Fach im Zeitraum, gebraucht werden so viele wie die Position bucht), zusätzlich zur eigenen Zählung gegen `amount` - beide müssen passen, bei unbegrenztem `amount` allein Pareva; antwortet Pareva nicht, entscheidet die eigene Zählung allein.
+Ein AccessPoint, dessen Provider je Buchung ein Fach zuteilt: bei iFBS ein Standort mit Fahrradboxen (genau ein Fach je Buchung, iFBS wählt es), bei Pareva ein Produkt (Produkt-ID, die 24-stellige Hex-ID des Produkts bei Pareva) einer Schließfachanlage (mehrere Fächer je Buchung, Pareva gibt den Zugangscode selbst an den Buchenden). Bei iFBS und Pareva kennt die Plattform vor der Buchung nur die Anlage, nie das Fach. Bei Open Locker teilt die Plattform zu, aus den Fächern, die die Verwaltung der Anlage gegeben hat (ihre eigene Liste von Fächern, gewählt aus der Liste von Open Locker, auch aus mehreren Schließfachschränken), und prüft die Belegung selbst; eine solche Anlage gehört zu genau einem Bookable und begrenzt dessen Verfügbarkeit auf die Zahl ihrer Fächer in Betrieb. Ob die Plattform zuteilt, hängt daran, ob die Anlage eine eigene Liste von Fächern trägt, nicht am Namen des Providers. Kapazität ist Sache des Bookables, nicht der Anlage: `amount` ist die Obergrenze gleichzeitiger Buchungen des Bookables insgesamt, leer heißt unbegrenzt; eine Zahl je Anlage gibt es nicht. Jede Anlage des Bookables gibt einer Buchung so viele Fächer, wie deren Position Einheiten bucht - bei mehreren Anlagen jede für sich, hingenommen. Den Bestand eines Pareva-Produkts kennt nur Pareva: die Verfügbarkeit des Produkts fragt der Checkout live bei Pareva ab (`rental/available`, ein Eintrag je freies Fach im Zeitraum, gebraucht werden so viele wie die Position bucht), zusätzlich zur eigenen Zählung gegen `amount` - beide müssen passen, bei unbegrenztem `amount` allein Pareva; antwortet Pareva nicht, entscheidet die eigene Zählung allein.
 _Avoid_: Locker, Locker-Unit, Location (als Entity), Schließfach (unqualifiziert — das ist das Fach)
 
 **Fach**:
-Ein abschließbares Abteil mit eigener Tür. An einer Schließfachanlage teilt der Provider es einer Buchung zu, und es lebt im Grant der Buchung für die Anlage; bei iFBS trägt es die Boxnummer, an der der Buchende seine Box erkennt. An einem Schließfachschrank ist jedes Fach selbst ein AccessPoint, eine Tür, fest einem Bookable zugeordnet.
+Ein abschließbares Abteil mit eigener Tür. An einer Schließfachanlage teilt der Provider es einer Buchung zu, und es lebt im Grant der Buchung für die Anlage; bei iFBS trägt es die Boxnummer, an der der Buchende seine Box erkennt. Ein Fach von Open Locker steht in höchstens einer Schließfachanlage oder ist ein festes Fach (ein AccessPoint vom Typ Tür, fest einem Bookable zugeordnet), nie beides; die Plattform prüft das beim Speichern über alle AccessPoints des Mandanten. In einer Anlage merkt sie sich je Fach die UUID bei Open Locker, die Fachnummer, den Schließfachschrank und ob es außer Betrieb ist. Ein zugeteiltes Fach einer solchen Anlage lebt ohne Grant im Fach-Eintrag der Buchung: Es gilt mit der Bereitstellung als bereitgestellt und mit der Rücknahme als zurückgenommen, beides ohne Aufruf bei Open Locker, und geöffnet wird es über seine UUID. Die buchende Person und die Verwaltung sehen es als „{Anlage} — Schrank {Name}, Fach {Nummer}“; das feste Fach heißt weiter nach seinem Label.
 _Avoid_: Box (als Begriff — iFBS-Jargon), Unit, Locker, Compartment (als Sprechbegriff)
 
 **Schließfachschrank**:
-Ein Schrank mit nummerierten Fächern, den Open Locker steuert. Nicht der Schrank ist ein AccessPoint, sondern jedes seiner Fächer; der Schrank gibt dem Fach Namen und Ort, etwa „Labor Fachbank 1 · Fach 2“.
-_Avoid_: Locker Bank (als Sprechbegriff), Fachbank (als Begriff), Schließfachanlage (die teilt je Buchung ein Fach zu), Quartiersschrank (ist ein Einsatzort, kein Typ)
+Ein Schrank mit nummerierten Fächern, den Open Locker steuert. Nicht der Schrank ist ein AccessPoint; seine Fächer stehen in Schließfachanlagen oder sind feste Fächer. Der Schrank gibt dem Fach Namen und Ort, etwa „Labor Fachbank 1 · Fach 2“; Name und Nummer übernimmt die Plattform beim Speichern aus der Liste von Open Locker.
+_Avoid_: Locker Bank (als Sprechbegriff), Fachbank (als Begriff), Schließfachanlage (die teilt je Buchung ein Fach zu, auch über mehrere Schränke), Quartiersschrank (ist ein Einsatzort, kein Typ)
+
+**Außer Betrieb (Fach)**:
+Ein Fach einer Schließfachanlage, das die Verwaltung von Hand aus der Zuteilung nimmt, etwa weil es kaputt ist. Es bekommt keine neue Buchung und zählt nicht zur Verfügbarkeit, laufende Buchungen behalten es. Die Plattform setzt es nie von selbst, auch nicht nach `door_jammed`.
+_Avoid_: gesperrt, Sperre (das ist die Sperre eines Users), defekt
+
+**Umsetzen (Fach)**:
+Die Verwaltung tauscht das zugeteilte Fach einer Buchung von Hand gegen ein anderes Fach derselben Schließfachanlage, das im Zeitraum samt Puffer frei und in Betrieb ist, auch bei einer laufenden Buchung, etwa wenn das Fach klemmt. Die Plattform prüft die Belegung dabei unter der Sperre der Anlage erneut. Nur das Fach wechselt: Was vorgemerkt war, bleibt vorgemerkt, was bereitgestellt war, bleibt bereitgestellt; „Fach öffnen“ und der Mobile Key öffnen danach das neue Fach. Recht: Buchung bearbeiten. Das Umsetzen steht im Zugangsprotokoll und löst keine Mail aus.
+_Avoid_: Tauschen, Verschieben (das ist die Änderung des Zeitraums), Wandern (das tun künftige Buchungen beim Außer-Betrieb-Nehmen von selbst)
 
 **Technisches Konto**:
 Das Konto eines Mandanten bei einem Provider, mit dem sich die Plattform dort anmeldet, ohne Person dahinter. Bei Open Locker ist es nur auf die Fächer seines Mandanten berechtigt, auch wenn sich mehrere Mandanten eine Instanz teilen.
 _Avoid_: Service-Account, Maschinenkonto, Admin-Konto
 
 **Vormerkung**:
-Der Anspruch einer noch unbezahlten Buchung auf ein Fach, vor dem Grant. Wird vom Provider gehalten (iFBS, befristet und erneuerbar) oder von der Plattform (Pareva, durch die gespeicherte Buchung selbst). Scheitert die Vormerkung im Checkout, entsteht die Buchung nicht; scheitert der Grant nach der Zahlung, bleibt die Buchung und der Fall geht an die Verwaltung.
+Der Anspruch einer noch unbezahlten Buchung auf ein Fach, vor dem Grant. Wird vom Provider gehalten (iFBS, befristet und erneuerbar) oder von der Plattform (Pareva, durch die gespeicherte Buchung selbst). Bei Open Locker hält die Plattform und teilt das Fach dabei schon endgültig zu: je gebuchter Einheit das erste freie Fach in Betrieb der Schließfachanlage, nach Schließfachschrank (Name, dann id) und Fachnummer. Open Locker kennt keinen Grant, das Fach der Vormerkung ist das Fach der Buchung; es gilt ohne Frist, auch für unbezahlte Buchungen. Belegt ist ein Fach, solange eine andere Buchung, die nicht abgelehnt, storniert oder widerrufen ist, es hält und sich ihre Zugangsfenster oder der Zeitraum mit dem Buchungspuffer der anderen überschneiden, über alle Anlagen des Mandanten. Ist kein Fach frei, entsteht die Buchung nicht. Scheitert die Vormerkung im Checkout, entsteht die Buchung nicht; scheitert der Grant nach der Zahlung, bleibt die Buchung und der Fall geht an die Verwaltung.
 _Avoid_: Hold (als Sprechbegriff), Pre-Reservation, Reservierung (das ist die Buchung)
 
 **Standort**:
@@ -258,7 +266,7 @@ Der vom Buchenden geäußerte Wunsch, eine Buchung zu stornieren, der erst mit s
 _Avoid_: Reject-Hook (das ist die Speicherform), Kündigung, Stornierung (das ist der Übergang danach)
 
 **Wiederherstellung (einer Buchung)**:
-Der Lebenszyklus-Übergang, der eine abgelehnte oder stornierte Buchung in den Zustand zurückholt, den sie vor dem Storno hatte, mit Preis und Positionen von damals; die Erstattung fällt weg, der Zugang wird neu gewährt. Der Zustand vor dem Storno wird beim Storno festgehalten.
+Der Lebenszyklus-Übergang, der eine abgelehnte oder stornierte Buchung in den Zustand zurückholt, den sie vor dem Storno hatte, mit Preis und Positionen von damals; die Erstattung fällt weg, der Zugang wird neu gewährt. Der Zustand vor dem Storno wird beim Storno festgehalten. An einer Schließfachanlage von Open Locker bekommt die Buchung ihr altes Fach zurück, wenn es frei und in Betrieb ist, sonst das erste freie; ist keins frei, findet die Wiederherstellung nicht statt, und die Buchung bleibt storniert. Ein Storno gibt das Fach sofort frei.
 _Avoid_: Unreject, Reaktivierung, Rücknahme des Stornos (das ist die Handlung, nicht der Übergang)
 
 **Widerruf (einer Buchung)**:
@@ -270,7 +278,7 @@ Der Vermerk an einer stornierten oder widerrufenen Buchung, ob das Geld schon zu
 _Avoid_: Rückerstattungsstatus, Refund-Status, erstattet (als Buchungszustand)
 
 **Änderung (einer Buchung)**:
-Der Lebenszyklus-Übergang, der den Inhalt einer Buchung ändert — Zeiten, Positionen, Kontaktdaten, Preis —, ohne ihren Zustand zu wechseln: die neue Buchung wird im Zustand der gespeicherten geschrieben, und der Zugang folgt dem Inhalt (bei _bestätigt_ verschoben, bei _angefragt_ oder _Zahlung offen_ neu vorgemerkt). Der Admin-PUT ist ein Plan: erst die Änderung, dann die Übergänge, die die Flags verlangen, jeder für sich und ohne Rücknahme über Übergangsgrenzen.
+Der Lebenszyklus-Übergang, der den Inhalt einer Buchung ändert — Zeiten, Positionen, Kontaktdaten, Preis —, ohne ihren Zustand zu wechseln: die neue Buchung wird im Zustand der gespeicherten geschrieben, und der Zugang folgt dem Inhalt (bei _bestätigt_ verschoben, bei _angefragt_ oder _Zahlung offen_ neu vorgemerkt). An einer Schließfachanlage von Open Locker behält die Buchung ihr Fach, solange es im neuen Zeitraum frei (die Buchung selbst nicht mitgezählt) und in Betrieb ist, sonst bekommt sie das erste freie; mehr Einheiten bekommen zusätzliche Fächer, bei weniger werden die zuletzt zugeteilten frei. Fehlt ein Fach, findet die Änderung nicht statt, in jedem Buchungszustand, und die Buchung bleibt samt Fach, wie sie war. Der Admin-PUT ist ein Plan: erst die Änderung, dann die Übergänge, die die Flags verlangen, jeder für sich und ohne Rücknahme über Übergangsgrenzen.
 _Avoid_: Update (als Übergangsname), Bearbeiten, Flag-Kombination speichern
 
 **Gruppenzustand**:
@@ -278,7 +286,7 @@ Der Buchungszustand, den alle Mitglieder einer Gruppenbuchung teilen; die Gruppe
 _Avoid_: Gruppenstatus (als gespeicherter Wert — den gibt es nicht), allCommitted/allPaid (das sind Ableitungen über die Flags), Sammelstatus
 
 **Fehlerpolitik (eines Effekts)**:
-Was ein gescheiterter Effekt mit seinem Lebenszyklus-Übergang macht: _abbrechen_ (der Übergang findet nicht statt, schon Geschriebenes wird zurückgenommen) oder _protokollieren_ (der Übergang gilt, der Fehler steht im Ergebnis und im Log). Am Effekt festgelegt, für jeden Übergang gleich, nie vom Aufrufer gewählt. Nur das Speichern und die Vormerkung brechen ab; Zugang, Dokument und Mitteilungen werden protokolliert.
+Was ein gescheiterter Effekt mit seinem Lebenszyklus-Übergang macht: _abbrechen_ (der Übergang findet nicht statt, schon Geschriebenes wird zurückgenommen) oder _protokollieren_ (der Übergang gilt, der Fehler steht im Ergebnis und im Log). Am Effekt festgelegt, für jeden Übergang gleich, nie vom Aufrufer gewählt. Nur das Speichern, die Vormerkung und die Zuteilung eines Fachs (Open Locker, bei _bestätigt_) brechen ab; Zugang, Dokument und Mitteilungen werden protokolliert.
 _Avoid_: onFailure (als Sprechbegriff), Verschlucken, Rollback (das ist die Handlung beim Abbrechen, nicht die Politik), Retry (gibt es nicht)
 
 **Ausstellung (eines Buchungsdokuments)**:

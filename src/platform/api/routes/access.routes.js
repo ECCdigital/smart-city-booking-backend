@@ -44,6 +44,21 @@ router.get(
   AccessController.getStatus,
 );
 
+// Umsetzen (tickets#1044): moving a booking's zugeteiltes Fach to another
+// free Fach of its Schließfachanlage is a change of the booking, so the
+// right is the one that changes it.
+router.get(
+  "/:accessPointId/free-compartments",
+  authorize("booking", "update"),
+  AccessController.getFreeCompartments,
+);
+
+router.post(
+  "/:accessPointId/reassign",
+  authorize("booking", "update"),
+  AccessController.reassign,
+);
+
 router.get(
   "/",
   authorize("booking", "operate"),

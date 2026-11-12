@@ -22,6 +22,9 @@
  * the finished mail: its type, its recipient and the names of its
  * attachments.
  *
+ * An access call told to find no free Fach (`noFreeFach`) throws the
+ * `ConflictError compartments_unavailable` of an Anlage with its own list.
+ *
  * The rows are the effect table of a transition (spec part 1, 4.3):
  *
  *   store.save B1 payment_due [receipt]     a store write, state and documents
@@ -78,6 +81,7 @@ const WorkflowService = require("../../src/commons/services/workflow/workflow-se
 const MailerService = require("../../src/commons/mail-service/mail-service");
 const AccessService = require("../../src/commons/services/access/access-service");
 const AccessLogService = require("../../src/commons/services/access/access-log-service");
+const { ConflictError } = require("../../src/errors/BaseError");
 const ReceiptService = require("../../src/commons/services/payment/receipt-service");
 const CancellationService = require("../../src/commons/services/payment/cancellation-service");
 const WithdrawalService = require("../../src/commons/services/payment/withdrawal-service");
@@ -487,6 +491,12 @@ async function installHarness({
   const effects = [];
   /** Effect names that throw when called, e.g. "access.provision". */
   const failing = new Set();
+  /**
+   * Access effect names that find no free Fach, e.g. "access.allocate":
+   * they throw `ConflictError compartments_unavailable`, as an Anlage with
+   * its own list answers.
+   */
+  const noFreeFach = new Set();
   const counters = { receipt: 0, cancellation: 0, invoice: 0, withdrawal: 0 };
   const catalogue = { ...defaultBookables(), ...(bookables || {}) };
   const tenantRecord = tenant(tenantOverrides);
@@ -517,6 +527,13 @@ async function installHarness({
     if (shouldFail(name, detail)) {
       effects.push(`${row} FAILED`);
       throw new Error(`${name} failed`);
+    }
+    if (noFreeFach.has(name)) {
+      effects.push(`${row} FAILED`);
+      throw new ConflictError("compartments_unavailable", {
+        needed: 1,
+        free: 0,
+      });
     }
     effects.push(row);
   }
@@ -909,6 +926,7 @@ async function installHarness({
 
   for (const op of [
     "holdForBooking",
+    "allocateForBooking",
     "provisionForBooking",
     "revokeForBooking",
   ]) {
@@ -923,6 +941,10 @@ async function installHarness({
       record("access.update", label(newBooking.id));
       return [];
     });
+  // The guard of the Anlagen around a save and its Zuteilung: no mutex here.
+  sinon
+    .stub(AccessService, "holdLockerSystemsOf")
+    .callsFake(async (tenantId, bookings, work) => work());
   sinon
     .stub(AccessService, "refreshHolds")
     .callsFake(async (tenantId, bookingIds) => {
@@ -1102,6 +1124,7 @@ async function installHarness({
     groups,
     effects,
     failing,
+    noFreeFach,
     /** Whether `PaymentUtils.getPaymentService` finds a provider. */
     payment: paymentSettings,
     tenant: tenantRecord,

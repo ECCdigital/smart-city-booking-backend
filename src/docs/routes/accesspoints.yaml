@@ -90,6 +90,41 @@
       `externalId`, without asking Open Locker, so also while the listing is
       not available.
 
+      An Open Locker locker system (`type: locker`, mode `remote`) carries
+      its own compartments in `config.compartments` and needs no
+      `externalId`; without the list it is refused with `required` at
+      `config.compartments`, in another mode with `unsupported_mode`. Each
+      compartment named by its `id` (the UUID) is stored with `number` and
+      `lockerBank` (`id`, `name`) from the listing, whatever the request
+      says, and its `outOfService` as sent; one the listing does not name is
+      refused with `compartment_not_accessible` at
+      `config.compartments.<i>`, carrying `compartmentId`. While the tenant's
+      Open Locker application is not active the compartments are stored as
+      the request names them. One compartment stands in at most one locker
+      system and is then no fixed compartment, across all access points of
+      the tenant: a compartment another locker system holds is refused with
+      `compartment_in_locker_system`, a fixed compartment with
+      `compartment_is_fixed`, both at `config.compartments.<i>` with
+      `compartmentId` and the holder's `accessPointId` and `label`; a fixed
+      compartment a locker system holds is refused with
+      `compartment_in_locker_system` at `externalId`. A compartment named
+      twice is refused with `duplicate_compartment`, a list on the locker of
+      a provider that assigns the compartment itself with
+      `unsupported_by_provider` at `config.compartments`.
+
+      A compartment that leaves the assignment of a locker system with the
+      save - removed from its list, or `outOfService` now and in service
+      before - moves the future bookings at it: those whose access window
+      (period with the bookable's access buffer) has not begun, unpaid ones
+      included, get the first free compartment in service of the locker
+      system. Running bookings keep theirs. The locker system is stored and
+      the bookings moved under its mutex; a mutex held too long is answered
+      with `503 locker_system_busy` and nothing is stored. The answer of an
+      update of a locker system carries `unmovedBookings`: the future
+      bookings no compartment was free for, which stay at the old one. Read
+      the bookings at the compartments beforehand with
+      `GET /api/{tenant}/accesspoints/{id}/compartment-bookings`.
+
       `location` is checked like the location of a bookable or an event
       (glossary „Standort“): a new or changed location with an address, a
       display text or an addition needs a point, a point alone is enough, and
@@ -131,11 +166,25 @@
             $ref: "#/components/schemas/AccessPointWrite"
     responses:
       "200":
-        description: The updated access point
+        description: |
+          The updated access point; for a locker system that carries its own
+          compartments, with `unmovedBookings`
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ManagedAccessPoint"
+              allOf:
+                - $ref: "#/components/schemas/ManagedAccessPoint"
+                - type: object
+                  properties:
+                    unmovedBookings:
+                      type: array
+                      description: |
+                        The future bookings at a compartment leaving the
+                        assignment that no free compartment was found for;
+                        they stay at it. Only for a locker system that
+                        carries its own compartments.
+                      items:
+                        $ref: "#/components/schemas/CompartmentBooking"
       "201":
         description: The created access point
         content:
@@ -284,6 +333,77 @@
           application/json:
             schema:
               $ref: "#/components/schemas/AccessPointBookings"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not allowed to read the bookings of the tenant
+      "404":
+        description: The tenant has no access point with that id
+
+/api/{tenant}/accesspoints/{id}/compartment-bookings:
+  get:
+    tags:
+      - Access Points
+    summary: List the running and future bookings at compartments of a locker system
+    description: |
+      Returns the bookings of the tenant at the given compartments of this
+      locker system, for the administration to see before it takes them out
+      of service or out of the locker system with
+      `PUT /api/{tenant}/accesspoints`. A booking counts when it holds one of
+      the compartments in an entry at this locker system that is not taken
+      back, is not rejected, cancelled or withdrawn, and its access window
+      (period with the bookable's access buffer) is not over. It is
+      `running` once the access window has begun - it keeps its compartment
+      on the save - and `future` before - it moves. A booking without a
+      period is running.
+
+      Requires `readAny` on `manageBookings`, like the booking list of an
+      access point. The list names at most ten, earliest first, one per
+      compartment held; `total` counts all of them.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: id
+        in: path
+        required: true
+        description: Unique identifier of the locker system
+        schema:
+          type: string
+      - name: compartmentIds
+        in: query
+        required: true
+        description: UUIDs of the compartments, comma-separated or repeated
+        schema:
+          type: array
+          items:
+            type: string
+        style: form
+        explode: false
+    responses:
+      "200":
+        description: The running and future bookings at the compartments
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                total:
+                  type: integer
+                  example: 3
+                bookings:
+                  type: array
+                  items:
+                    allOf:
+                      - $ref: "#/components/schemas/CompartmentBooking"
+                      - type: object
+                        properties:
+                          state:
+                            type: string
+                            enum: [running, future]
+              required:
+                - total
+                - bookings
       "401":
         description: Not authenticated
       "403":
@@ -513,6 +633,32 @@ components:
           description: End of the booking period, in epoch milliseconds
           example: 1700003600000
 
+    CompartmentBooking:
+      type: object
+      description: |
+        A booking at a compartment of a locker system, in the little the
+        administration needs to name it, with the compartment it holds.
+      allOf:
+        - $ref: "#/components/schemas/AccessPointBooking"
+      properties:
+        compartment:
+          type: object
+          properties:
+            id:
+              type: string
+              description: UUID of the compartment
+            number:
+              type: integer
+              nullable: true
+            lockerBank:
+              type: object
+              nullable: true
+              properties:
+                id:
+                  type: string
+                name:
+                  type: string
+
     AccessPointOpenAction:
       type: string
       enum: [auto, unlock, unlatch, lock_n_go, lock_n_go_unlatch]
@@ -553,7 +699,9 @@ components:
             iFBS location or a Pareva product - whose provider assigns a
             compartment per booking; `externalId` is the location or size,
             `providerLocationId` the iFBS location or the Pareva locker
-            system. Capacity is the bookable's `amount`, never the row's.
+            system. An Open Locker locker system instead carries its own
+            compartments (`config.compartments`) and the platform assigns
+            them. Capacity is the bookable's `amount`, never the row's.
           example: door
         provider:
           type: string
@@ -582,6 +730,14 @@ components:
           properties:
             openAction:
               $ref: "#/components/schemas/AccessPointOpenAction"
+            compartments:
+              type: array
+              description: |
+                The compartments of an Open Locker locker system, in their
+                stored order. Only on a `locker` whose provider lets it carry
+                its own list.
+              items:
+                $ref: "#/components/schemas/LockerSystemCompartment"
           additionalProperties: true
         location:
           allOf:
@@ -625,6 +781,14 @@ components:
           properties:
             openAction:
               $ref: "#/components/schemas/AccessPointOpenAction"
+            compartments:
+              type: array
+              description: |
+                The compartments of an Open Locker locker system, in their
+                stored order. Only on a `locker` whose provider lets it carry
+                its own list.
+              items:
+                $ref: "#/components/schemas/LockerSystemCompartment"
           additionalProperties: true
         location:
           allOf:
@@ -634,6 +798,36 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AccessPointValidationRule"
+
+    LockerSystemCompartment:
+      type: object
+      description: |
+        A compartment of a locker system that carries its own list. On write
+        only `id` and `outOfService` count while the provider is active;
+        `number` and `lockerBank` are taken from its listing.
+      required: [id]
+      properties:
+        id:
+          type: string
+          description: UUID of the compartment at Open Locker
+          example: "9b2f6c1e-3d4a-4f5b-8c7d-1e2f3a4b5c6d"
+        number:
+          type: integer
+          nullable: true
+          example: 1
+        lockerBank:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+              example: Labor Fachbank 1
+        outOfService:
+          type: boolean
+          description: Taken out of the assignment by hand
+          default: false
 
     AccessPointLocation:
       type: object

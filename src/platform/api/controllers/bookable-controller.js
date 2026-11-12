@@ -18,6 +18,9 @@ const BookableService = require("../../../commons/services/bookable-service");
 const MediaReferenceGuard = require("../../../commons/services/media/media-reference-guard");
 const LocationGuard = require("../../../commons/services/location/location-guard");
 const {
+  assertLockerSystemsUnshared,
+} = require("../../../commons/services/access/locker-system-bookable");
+const {
   withLockerDetails,
 } = require("../../../commons/services/access/bookable-locker-details");
 const ReviewService = require("../../../commons/services/supervision/review-service");
@@ -417,11 +420,13 @@ class BookableController {
   /**
    * Validates that every referenced access point exists for the tenant. A
    * bookable may only point at access points of its own tenant, and a dangling
-   * reference would silently be a door that never opens.
+   * reference would silently be a door that never opens. A Schließfachanlage
+   * with its own Fächer may hang at no other bookable.
    *
    * @param {Bookable} bookable The bookable to be stored
    * @param {string} tenant The tenant of the request
-   * @throws {ValidationError} If the tenant has no access point for an id
+   * @throws {ValidationError} If the tenant has no access point for an id,
+   *   or an Anlage with its own Fächer hangs at another bookable
    */
   static async _validateAccessPointIds(bookable, tenant) {
     const accessPointIds = bookable.accessPointDetails?.accessPointIds || [];
@@ -449,6 +454,8 @@ class BookableController {
     if (errors.length > 0) {
       throw new ValidationError(errors);
     }
+
+    await assertLockerSystemsUnshared(bookable, accessPoints);
   }
 
   /**

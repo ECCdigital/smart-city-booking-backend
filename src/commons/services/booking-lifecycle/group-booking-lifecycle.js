@@ -595,25 +595,34 @@ function createGroupBookingLifecycle(adapters) {
     const notice = noticeOf(tenantId, group);
     const reinstated = { ...group, bookingIds: members.map((b) => b.id) };
 
-    return runPipeline(ctxOf(transition, tenantId, reinstated, members), [
-      ...members.map((booking) =>
-        step(
-          PHASE.PERSIST,
-          "store",
-          "save",
-          () =>
-            store.save(booking, {
-              expectStatus: from.get(booking.id),
-              transition,
-              unset: ["cancellationRefund"],
-            }),
-          { bookingId: booking.id },
+    return runPipeline(
+      ctxOf(transition, tenantId, reinstated, members),
+      [
+        ...members.map((booking) =>
+          step(
+            PHASE.PERSIST,
+            "store",
+            "save",
+            () =>
+              store.save(booking, {
+                expectStatus: from.get(booking.id),
+                transition,
+                unset: ["cancellationRefund"],
+              }),
+            { bookingId: booking.id },
+          ),
         ),
-      ),
-      ...accessEach(members, "hold", (booking) => !confirmed(booking)),
-      ...accessEach(members, "provision", confirmed),
-      provisionFailureNotice(notice),
-    ]);
+        ...accessEach(members, "hold", (booking) => !confirmed(booking)),
+        ...accessEach(members, "allocate", confirmed),
+        ...accessEach(members, "provision", confirmed),
+        provisionFailureNotice(notice),
+      ],
+      {
+        // The Anlagen of the members stay held from the saves until their
+        // Zuteilung or its restore (tickets#1042).
+        guard: (work) => access.exclusive(tenantId, members, work),
+      },
+    );
   }
 
   return { admit, confirm, pay, cancel, reinstate };

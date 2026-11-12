@@ -466,6 +466,26 @@ class AccessProvider {
   validateAccessPointWithoutListing(_accessPoint) {}
 
   /**
+   * The Fächer of a Schließfachanlage that carries its own list, as they are
+   * stored: each requested Fach with its Schließfachschrank and number taken
+   * from the provider's listing, so a rename at the provider takes effect on
+   * the next save. Optional capability: only a provider whose Anlagen carry
+   * their own list declares it, and is asked only when its listing was
+   * fetched. A Fach the listing does not name is refused at that Fach.
+   *
+   * @param {Object[]} _compartments The requested Fächer in the stored shape
+   *   (`id`, `number`, `lockerBank`, `outOfService`)
+   * @param {ListedAccessPoint[]} _listedAccessPoints The provider's listing
+   * @returns {Object[]} The Fächer as they are stored, in the requested order
+   * @throws {ValidationError} What the provider will not store, at the Fach
+   */
+  resolveCompartments(_compartments, _listedAccessPoints) {
+    throw new Error(
+      `resolveCompartments() is not supported by ${this.constructor.name}`,
+    );
+  }
+
+  /**
    * Where the physical lock stands, as far as the provider knows it. Optional
    * capability: only providers that declare `getLocation` are asked, and even
    * they may answer `null`. The result is a prefill suggestion - it is never

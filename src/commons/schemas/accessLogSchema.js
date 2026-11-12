@@ -35,6 +35,8 @@ const accessLogSchemaDefinition = {
       "unlatch",
       "close",
       "hold",
+      // A Fach of a booking moved to another one by hand (Umsetzen).
+      "reassign",
       "provision",
       "revoke",
       "status",

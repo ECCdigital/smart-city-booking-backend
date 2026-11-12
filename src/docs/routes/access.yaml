@@ -309,6 +309,129 @@
             schema:
               $ref: "#/components/schemas/ErrorResponse"
 
+/api/{tenant}/access/{accessPointId}/free-compartments:
+  get:
+    tags:
+      - Access
+    summary: The Fächer a booking's assigned Fach can be moved to
+    description: |
+      Umsetzen (tickets#1044): the Fächer of the same Schließfachanlage that
+      are free for the booking's period, with the booking and access buffers,
+      and in service - the booking's own Fächer left out - in the order the
+      platform assigns them. Each is named by the id the booking's entry is
+      listed by after the move. Right: changing the booking.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: accessPointId
+        in: path
+        required: true
+        description: The assigned Fach as the booking lists it, `<anlageId>:<UUID>`
+        schema:
+          type: string
+      - $ref: "#/components/parameters/BookingIdQueryParam"
+    responses:
+      "200":
+        description: The free Fächer
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: true
+                data:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/FreeCompartment"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Forbidden
+      "404":
+        description: |
+          `compartment_not_in_booking`: the booking holds no such assigned
+          Fach (or is cancelled)
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ErrorResponse"
+
+/api/{tenant}/access/{accessPointId}/reassign:
+  post:
+    tags:
+      - Access
+    summary: Move a booking's assigned Fach to another free Fach
+    description: |
+      Umsetzen (tickets#1044): moves the booking's assigned Fach to one that
+      `free-compartments` named, a running booking too. Under the mutex of
+      the Schließfachanlage the occupancy is checked anew. Only the Fach
+      changes - the entry stays held or provisioned - so "Fach öffnen" and
+      the Mobile Key open the new Fach under its new id from now on; a
+      client holding the old id refetches the access points. Writes one
+      access log row (`action: reassign`) at the new Fach; sends no mail.
+      Right: changing the booking.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: accessPointId
+        in: path
+        required: true
+        description: The assigned Fach as the booking lists it, `<anlageId>:<UUID>`
+        schema:
+          type: string
+      - $ref: "#/components/parameters/BookingIdQueryParam"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - to
+            properties:
+              to:
+                type: string
+                description: The `id` of a Fach from `free-compartments`
+    responses:
+      "200":
+        description: The Fach is moved
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: true
+                data:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      description: The id the Fach is listed by now
+                    previousId:
+                      type: string
+                    assignedCompartment:
+                      $ref: "#/components/schemas/FreeCompartment"
+      "400":
+        description: "`compartment_required`: no `to` in the body"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Forbidden
+      "404":
+        description: "`compartment_not_in_booking`"
+      "409":
+        description: |
+          `compartment_taken`: the Fach is no longer free for the booking or
+          not in service; nothing changed
+      "503":
+        description: "`locker_system_busy`: the Schließfachanlage stayed held"
+
 /api/access/bookings:
   get:
     tags:
@@ -826,6 +949,18 @@ components:
               format: int64
               example: 1717250400000
 
+    FreeCompartment:
+      type: object
+      properties:
+        id:
+          type: string
+          description: "`<anlageId>:<UUID>`; absent on `assignedCompartment`"
+        number:
+          type: integer
+          nullable: true
+        lockerBankName:
+          type: string
+          nullable: true
     ErrorResponse:
       type: object
       properties:
