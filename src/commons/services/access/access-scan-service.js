@@ -1,6 +1,7 @@
 const bunyan = require("bunyan");
 const AccessPointManager = require("../../data-managers/access-point-manager");
 const AccessLogService = require("./access-log-service");
+const AccessService = require("./access-service");
 const {
   projectAccessPoint,
   projectCompartment,
@@ -17,6 +18,13 @@ const SCAN_FAILURE_REASONS = Object.freeze({
   STALE_SCAN_CODE: "stale_scan_code",
   UNKNOWN_SCAN_CODE: "unknown_scan_code",
 });
+
+/**
+ * The error code of a scan at a Fach the person does not hold while an active
+ * booking of theirs holds another Fach of the Anlage. The scan still
+ * resolves - it is noted, not refused.
+ */
+const WRONG_COMPARTMENT = "wrong_compartment";
 
 /**
  * Turns the code on a printed sticker into the access point it identifies.
@@ -123,7 +131,9 @@ class AccessScanService {
    * @private
    * Resolve a code found at a Fach of a Schließfachanlage: a replaced code is
    * stale like at a door, the current one answers with the Fach - out of
-   * service or not, the page in front of it decides nothing by that.
+   * service or not, the page in front of it decides nothing by that. A scan
+   * at a Fach that is not the person's own is noted on the way
+   * ({@link _noteWrongCompartment}); the answer stays the Fach.
    *
    * @param {string} tenantId
    * @param {string} scanCode
@@ -146,10 +156,92 @@ class AccessScanService {
       });
     }
 
+    await this._noteWrongCompartment(tenantId, scanCode, userId, {
+      lockerSystem,
+      compartment,
+    });
+
     return {
       success: true,
       data: projectCompartment(lockerSystem, compartment),
     };
+  }
+
+  /**
+   * @private
+   * Note in the access log a scan at a Fach the person does not hold, while
+   * an active booking of theirs - its access window with the buffer covers
+   * now - holds another Fach of the same Anlage. The bookings are read the
+   * way the Mobile Key reads them at the Anlage, in the tenant of the scan
+   * only, and a Fach counts only while the booking holds it: not revoked.
+   *
+   * Nothing is noted without such a booking: no booking at the Anlage, only
+   * one that has not begun or has ended, or one holding the scanned Fach
+   * itself. The management is no exception - without a booking of its own
+   * it has no Fach to be at the wrong one of.
+   *
+   * The server writes this, never a client, so the row cannot be forged or
+   * suppressed. Like {@link _fail}, a lookup or a write that fails is logged
+   * and swallowed: the person in front of the Fach still gets their answer.
+   */
+  static async _noteWrongCompartment(
+    tenantId,
+    scanCode,
+    userId,
+    { lockerSystem, compartment },
+  ) {
+    if (!userId) {
+      return;
+    }
+
+    try {
+      const point = this._compartmentPoint(lockerSystem, compartment);
+      const active = (
+        await AccessService.getUserBookingsForAccessPoint(
+          userId,
+          lockerSystem.id,
+          {
+            state: "active",
+            includeLockers: true,
+            includeBuffer: true,
+            onlyHeld: true,
+          },
+        )
+      ).filter((booking) => booking.tenantId === tenantId);
+
+      if (
+        active.length === 0 ||
+        active.some((booking) => booking.accessPointIds.includes(point.id))
+      ) {
+        return;
+      }
+
+      logger.info(
+        `${tenantId} -- user ${userId} scanned ${point.id}, a Fach they do not hold`,
+      );
+
+      // Sorted by start: the first is the booking that began first.
+      await AccessLogService.log({
+        tenantId,
+        accessPointId: point.id,
+        accessPointType: point.type,
+        provider: point.provider,
+        externalId: point.externalId,
+        bookingId: active[0].id,
+        action: "scan",
+        actor: { userId, source: "user" },
+        result: "denied",
+        payload: {
+          presentedScanCode: scanCode,
+          heldAccessPointIds: [
+            ...new Set(active.flatMap((booking) => booking.accessPointIds)),
+          ],
+        },
+        errorCode: WRONG_COMPARTMENT,
+      });
+    } catch (err) {
+      logger.error(`Failed to note a scan at a Fach not held: ${err.message}`);
+    }
   }
 
   /**
@@ -223,3 +315,4 @@ function carriesScanCode(compartment, scanCode) {
 
 module.exports = AccessScanService;
 module.exports.SCAN_FAILURE_REASONS = SCAN_FAILURE_REASONS;
+module.exports.WRONG_COMPARTMENT = WRONG_COMPARTMENT;

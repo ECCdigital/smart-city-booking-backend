@@ -4,6 +4,7 @@ const sinon = require("sinon");
 const AccessScanService = require("../src/commons/services/access/access-scan-service");
 const AccessPointManager = require("../src/commons/data-managers/access-point-manager");
 const AccessLogService = require("../src/commons/services/access/access-log-service");
+const BookingManager = require("../src/commons/data-managers/booking-manager");
 const { AccessPoint } = require("../src/commons/entities/access/access-point");
 
 function createAccessPoint(overrides = {}) {
@@ -58,6 +59,9 @@ describe("AccessScanService", () => {
     lockerSystemsByCode = sandbox
       .stub(AccessPointManager, "getLockerSystemsByCompartmentScanCode")
       .resolves([]);
+    // The person holds nothing: a scan at a Fach is noted in the access log
+    // only for a person with a booking there (locker-system-access.test.js).
+    sandbox.stub(BookingManager, "getUserBookingsFiltered").resolves([]);
   });
 
   afterEach(() => {

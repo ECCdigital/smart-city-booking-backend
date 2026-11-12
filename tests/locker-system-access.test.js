@@ -20,6 +20,7 @@ process.env.CRYPTO_SECRET =
   process.env.CRYPTO_SECRET || "0123456789abcdef0123456789abcdef";
 
 const AccessService = require("../src/commons/services/access/access-service");
+const AccessScanService = require("../src/commons/services/access/access-scan-service");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
 const {
   BookableManager,
@@ -970,6 +971,264 @@ describe("Zugeteiltes Fach: provisioned, revoked, opened and projected", functio
       expect(entries("b1")[0].assignedCompartment.id).to.equal(
         OTHER_COMPARTMENT_ID,
       );
+    });
+  });
+  /**
+   * The scan at a Fach the person does not hold (tickets#1058): resolve-scan
+   * still answers with the Fach, but where an active booking of the person
+   * holds another Fach of the Anlage and none this one, the server notes the
+   * attempt in the access log. Bookings are read like the Mobile Key reads
+   * them, from the in-memory store, so what "holds" and "active" mean is the
+   * service's own.
+   */
+  describe("Scan am fremden Fach", function () {
+    const C1 = `anlage-1:${COMPARTMENT_ID}`;
+    const C2 = `anlage-1:${OTHER_COMPARTMENT_ID}`;
+    const C3 = `anlage-1:${SECOND_COMPARTMENT_ID}`;
+
+    beforeEach(function () {
+      accessPoints[0].config.compartments = [
+        {
+          id: COMPARTMENT_ID,
+          number: 1,
+          lockerBank: LABOR,
+          scanCode: "code-fach-1",
+          previousScanCodes: [],
+        },
+        {
+          id: OTHER_COMPARTMENT_ID,
+          number: 2,
+          lockerBank: LABOR,
+          scanCode: "code-fach-2",
+          previousScanCodes: [],
+        },
+        {
+          id: SECOND_COMPARTMENT_ID,
+          number: 3,
+          lockerBank: HAFEN,
+          scanCode: "code-fach-3",
+          previousScanCodes: [],
+        },
+      ];
+      sinon.stub(AccessPointManager, "getAccessPointByScanCode").resolves(null);
+      sinon
+        .stub(AccessPointManager, "getLockerSystemsByCompartmentScanCode")
+        .callsFake(async (tenantId, scanCode) =>
+          accessPoints.filter(
+            (row) =>
+              row.tenantId === tenantId &&
+              (row.config?.compartments || []).some(
+                (compartment) => compartment.scanCode === scanCode,
+              ),
+          ),
+        );
+      // The bookings of the user across all tenants, as the manager reads
+      // them for the Mobile Key.
+      sinon
+        .stub(BookingManager, "getUserBookingsFiltered")
+        .callsFake(async (tenantId, userId) =>
+          [...store.values()]
+            .filter(
+              (row) =>
+                row.assignedUserId === userId &&
+                (tenantId == null || row.tenantId === tenantId),
+            )
+            .map((row) => new Booking(clone(row))),
+        );
+      sinon
+        .stub(BookableManager, "getBookablesByAccessPointId")
+        .callsFake(async (tenantId, accessPointId) =>
+          Object.values(bookables).filter((bookable) =>
+            bookable.accessPointDetails.accessPointIds.includes(accessPointId),
+          ),
+        );
+      sinon.stub(TenantManager, "getTenantsByIds").resolves([]);
+    });
+
+    function scan(scanCode, userId = "user-1") {
+      return AccessScanService.resolveScanCode(TENANT, scanCode, userId);
+    }
+
+    const scanned = () => logged("scan");
+
+    it("notes the scan of another Fach in the access log, at the scanned Fach", async function () {
+      await storeProvisioned("b1");
+
+      await scan("code-fach-3");
+
+      expect(scanned()).to.deep.equal([
+        {
+          tenantId: TENANT,
+          accessPointId: C3,
+          accessPointType: "locker",
+          provider: "open-locker",
+          externalId: SECOND_COMPARTMENT_ID,
+          bookingId: "b1",
+          action: "scan",
+          actor: { userId: "user-1", source: "user" },
+          result: "denied",
+          payload: {
+            presentedScanCode: "code-fach-3",
+            heldAccessPointIds: [C1],
+          },
+          errorCode: "wrong_compartment",
+        },
+      ]);
+    });
+
+    it("still answers with the scanned Fach", async function () {
+      await storeProvisioned("b1");
+
+      const outcome = await scan("code-fach-3");
+
+      expect(outcome.success).to.equal(true);
+      expect(outcome.data).to.deep.include({
+        id: C3,
+        lockerSystemId: "anlage-1",
+        compartment: {
+          number: 3,
+          lockerBankName: "Quartiersschrank Hafen",
+          outOfService: false,
+        },
+      });
+    });
+
+    it("answers with the scanned Fach when the access log cannot be written", async function () {
+      await storeProvisioned("b1");
+      AccessLogService.log.rejects(new Error("database down"));
+
+      const outcome = await scan("code-fach-3");
+
+      expect(outcome.success).to.equal(true);
+      expect(outcome.data.id).to.equal(C3);
+    });
+
+    it("answers with the scanned Fach when the bookings cannot be read", async function () {
+      BookingManager.getUserBookingsFiltered.rejects(
+        new Error("database down"),
+      );
+
+      const outcome = await scan("code-fach-3");
+
+      expect(outcome.success).to.equal(true);
+      expect(scanned()).to.deep.equal([]);
+    });
+
+    it("names every Fach the person holds and the booking that begins first", async function () {
+      bookables.faecher.amount = 1;
+      await storeProvisioned("b1");
+      await storeProvisioned("b2", 1, { timeBegin: now - 30 * MINUTE });
+
+      await scan("code-fach-3");
+
+      const [row] = scanned();
+      expect(row.bookingId).to.equal("b2");
+      expect(row.payload.heldAccessPointIds).to.deep.equal([C2, C1]);
+    });
+
+    it("counts a booking whose access buffer has begun as active", async function () {
+      bookables.faecher.accessPointDetails.accessBuffer = {
+        before: 30,
+        after: 0,
+      };
+      await storeProvisioned("b1", 1, {
+        timeBegin: now + 20 * MINUTE,
+        timeEnd: now + HOUR,
+      });
+
+      await scan("code-fach-3");
+
+      expect(scanned()).to.have.length(1);
+    });
+
+    it("notes nothing at the person's own Fach", async function () {
+      await storeProvisioned("b1");
+
+      await scan("code-fach-1");
+
+      expect(scanned()).to.deep.equal([]);
+    });
+
+    it("notes nothing where one active booking holds the scanned Fach and another one a different Fach", async function () {
+      bookables.faecher.amount = 1;
+      await storeProvisioned("b1");
+      await storeProvisioned("b2");
+
+      await scan("code-fach-2");
+
+      expect(scanned()).to.deep.equal([]);
+    });
+
+    it("notes nothing without a booking in the Anlage", async function () {
+      storeBooking("f1", "fixed");
+
+      await scan("code-fach-3");
+
+      expect(scanned()).to.deep.equal([]);
+    });
+
+    it("notes nothing with a booking that has not begun yet", async function () {
+      await storeProvisioned("b1", 1, {
+        timeBegin: now + 2 * HOUR,
+        timeEnd: now + 3 * HOUR,
+      });
+
+      await scan("code-fach-3");
+
+      expect(scanned()).to.deep.equal([]);
+    });
+
+    it("notes nothing with a booking that has ended", async function () {
+      await storeProvisioned("b1", 1, {
+        timeBegin: now - 3 * HOUR,
+        timeEnd: now - 2 * HOUR,
+      });
+
+      await scan("code-fach-3");
+
+      expect(scanned()).to.deep.equal([]);
+    });
+
+    it("notes nothing for the management without a booking of its own", async function () {
+      await storeProvisioned("b1");
+
+      await scan("code-fach-3", "admin-1");
+
+      expect(scanned()).to.deep.equal([]);
+    });
+
+    it("notes nothing for a scan without a signed-in person", async function () {
+      await storeProvisioned("b1");
+
+      await scan("code-fach-3", null);
+
+      expect(scanned()).to.deep.equal([]);
+    });
+
+    it("does not count a Fach whose access was revoked as held", async function () {
+      await storeProvisioned("b1", 2);
+      const row = store.get("b1");
+      const revoked = row.accessInfo.find(
+        (entry) => entry.assignedCompartment?.id === COMPARTMENT_ID,
+      );
+      Object.assign(revoked, { isProvisioned: false, revokedAt: now });
+      store.set("b1", row);
+
+      await scan("code-fach-1");
+
+      const [logRow] = scanned();
+      expect(logRow.errorCode).to.equal("wrong_compartment");
+      expect(logRow.payload.heldAccessPointIds).to.deep.equal([C2]);
+    });
+
+    it("counts only the bookings of the tenant the code was scanned in", async function () {
+      await storeProvisioned("b1");
+      const row = store.get("b1");
+      store.set("b1", { ...row, tenantId: "tenant-2" });
+
+      await scan("code-fach-3");
+
+      expect(scanned()).to.deep.equal([]);
     });
   });
 });

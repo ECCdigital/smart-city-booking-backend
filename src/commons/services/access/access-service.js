@@ -2214,6 +2214,10 @@ class AccessService {
    * @param {string} userId Assigned user ID
    * @param {string} accessPointId Access point ID
    * @param {Object} [opts] See {@link getUserBookingsWithAccess}
+   * @param {boolean} [opts.onlyHeld=false] Answer only the compartments the
+   *   booking holds: a Fach assigned or granted and not revoked. Without it
+   *   a revoked compartment and one only held before its grant are listed
+   *   too, as the Mobile Key shows them.
    * @returns {Promise<Object[]>} Matching bookings (sensitive data stripped)
    */
   static async getUserBookingsForAccessPoint(
@@ -2224,6 +2228,7 @@ class AccessService {
       capability = null,
       includeAccessPoints = false,
       includeLockers = false,
+      onlyHeld = false,
       includeBuffer = false,
       includeEligibility = false,
       canManageIn = async () => false,
@@ -2281,7 +2286,7 @@ class AccessService {
           booking,
           accessPointId,
           { mode, type },
-          { triggerIds, capability, includeLockers },
+          { triggerIds, capability, includeLockers, onlyHeld },
         );
       },
     });
@@ -2784,7 +2789,7 @@ class AccessService {
     booking,
     accessPointId,
     kind,
-    { triggerIds, capability, includeLockers },
+    { triggerIds, capability, includeLockers, onlyHeld },
   ) {
     const directIds = this._getBookableIds(booking);
     const matchesBookable =
@@ -2798,6 +2803,7 @@ class AccessService {
       accessPointIds: this._conferredIds(booking, String(accessPointId), kind, {
         capability,
         includeLockers,
+        onlyHeld,
       }),
     };
   }
@@ -2810,7 +2816,9 @@ class AccessService {
    * @param {Object} booking The booking
    * @param {string} accessPointId The stored access point's id
    * @param {{ mode: string, type: string }} kind Its mode and type
-   * @param {Object} filters `capability` and `includeLockers`
+   * @param {Object} filters `capability`, `includeLockers` and `onlyHeld`
+   *   (only the compartments the booking holds: assigned or granted, not
+   *   revoked)
    * @returns {string[]} The conferred ids, empty where the filters keep the
    *   access point out
    */
@@ -2818,7 +2826,7 @@ class AccessService {
     booking,
     accessPointId,
     { mode, type },
-    { capability, includeLockers },
+    { capability, includeLockers, onlyHeld = false },
   ) {
     const onlyAuthorization = capability === "authorization";
 
@@ -2828,6 +2836,11 @@ class AccessService {
       }
       return this._compartmentEntries(booking)
         .filter((entry) => String(entry.accessPointId) === accessPointId)
+        .filter(
+          (entry) =>
+            !onlyHeld ||
+            (!entry.revokedAt && (entry.assignedCompartment || entry.grant)),
+        )
         .map((entry) => this._compartmentId(entry));
     }
 
