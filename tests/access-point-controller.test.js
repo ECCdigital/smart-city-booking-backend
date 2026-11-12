@@ -2671,6 +2671,166 @@ describe("AccessPointController", () => {
     });
   });
 
+  // tickets#1056: the QR code of one Fach, addressed by Anlage and Fach UUID.
+  describe("getCompartmentQrCode", () => {
+    const FACH_ID = "1b4e28ba-2fa1-11d2-883f-0016d3cca427";
+    let renderCompartment;
+
+    function anlage(compartments) {
+      return createAccessPoint({
+        id: "anlage-1",
+        provider: "open-locker",
+        type: "locker",
+        externalId: null,
+        label: "Fahrradgarage",
+        config: { compartments },
+      });
+    }
+
+    function fach(overrides = {}) {
+      return {
+        id: FACH_ID,
+        number: 3,
+        lockerBank: { id: "bank-1", name: "Labor Fachbank 1" },
+        outOfService: false,
+        scanCode: "fach-code",
+        previousScanCodes: [],
+        ...overrides,
+      };
+    }
+
+    beforeEach(() => {
+      request.params.id = "anlage-1";
+      request.params.compartmentId = FACH_ID;
+      renderCompartment = sandbox
+        .stub(AccessQrService, "renderCompartment")
+        .resolves({
+          format: "svg",
+          contentType: "image/svg+xml",
+          body: "<svg></svg>",
+          filename: "qr-fahrradgarage-schrank-labor-fachbank-1-fach-03.svg",
+        });
+    });
+
+    it("renders the Fach's QR code as svg by default, named for download", async () => {
+      const entry = fach();
+      const stored = anlage([fach({ id: "other", number: 1 }), entry]);
+      const getAccessPoint = sandbox
+        .stub(AccessPointManager, "getAccessPoint")
+        .resolves(stored);
+
+      await AccessPointController.getCompartmentQrCode(request, response, next);
+
+      expect(getAccessPoint.calledOnceWithExactly("anlage-1", "tenant-1")).to.be
+        .true;
+      expect(renderCompartment.calledOnceWithExactly(stored, entry, "svg")).to
+        .be.true;
+      expect(response.setHeader.calledWith("Content-Type", "image/svg+xml")).to
+        .be.true;
+      expect(
+        response.setHeader.calledWith(
+          "Content-Disposition",
+          'inline; filename="qr-fahrradgarage-schrank-labor-fachbank-1-fach-03.svg"',
+        ),
+      ).to.be.true;
+      expect(response.status.calledWith(200)).to.be.true;
+      expect(response.send.calledWith("<svg></svg>")).to.be.true;
+    });
+
+    it("passes the requested format through", async () => {
+      sandbox
+        .stub(AccessPointManager, "getAccessPoint")
+        .resolves(anlage([fach()]));
+      request.query.format = "pdf";
+
+      await AccessPointController.getCompartmentQrCode(request, response, next);
+
+      expect(renderCompartment.firstCall.args[2]).to.equal("pdf");
+    });
+
+    it("renders a Fach out of service as well: its code stays valid", async () => {
+      sandbox
+        .stub(AccessPointManager, "getAccessPoint")
+        .resolves(anlage([fach({ outOfService: true })]));
+
+      await AccessPointController.getCompartmentQrCode(request, response, next);
+
+      expect(renderCompartment.calledOnce).to.be.true;
+      expect(response.status.calledWith(200)).to.be.true;
+    });
+
+    it("answers 400 for an unsupported format", async () => {
+      const getAccessPoint = sandbox.stub(AccessPointManager, "getAccessPoint");
+      request.query.format = "bmp";
+
+      await AccessPointController.getCompartmentQrCode(request, response, next);
+
+      expect(response.status.calledWith(400)).to.be.true;
+      expect(getAccessPoint.called).to.be.false;
+      expect(renderCompartment.called).to.be.false;
+    });
+
+    it("answers 404 for an access point of another tenant", async () => {
+      sandbox.stub(AccessPointManager, "getAccessPoint").resolves(null);
+
+      await AccessPointController.getCompartmentQrCode(request, response, next);
+
+      expect(response.sendStatus.calledWith(404)).to.be.true;
+      expect(renderCompartment.called).to.be.false;
+    });
+
+    it("answers 404 for a door", async () => {
+      sandbox
+        .stub(AccessPointManager, "getAccessPoint")
+        .resolves(createAccessPoint());
+
+      await AccessPointController.getCompartmentQrCode(request, response, next);
+
+      expect(response.sendStatus.calledWith(404)).to.be.true;
+      expect(renderCompartment.called).to.be.false;
+    });
+
+    it("answers 404 for an Anlage without its own list of Fächer (iFBS, Pareva)", async () => {
+      sandbox.stub(AccessPointManager, "getAccessPoint").resolves(
+        createAccessPoint({
+          id: "anlage-1",
+          provider: "ifbs",
+          type: "locker",
+          externalId: "station-1",
+          config: {},
+        }),
+      );
+
+      await AccessPointController.getCompartmentQrCode(request, response, next);
+
+      expect(response.sendStatus.calledWith(404)).to.be.true;
+      expect(renderCompartment.called).to.be.false;
+    });
+
+    it("answers 404 for a Fach the Anlage does not carry", async () => {
+      sandbox
+        .stub(AccessPointManager, "getAccessPoint")
+        .resolves(anlage([fach({ id: "another-fach" })]));
+
+      await AccessPointController.getCompartmentQrCode(request, response, next);
+
+      expect(response.sendStatus.calledWith(404)).to.be.true;
+      expect(renderCompartment.called).to.be.false;
+    });
+
+    it("hands unexpected errors to the error handler", async () => {
+      const failure = new Error("Render Error");
+      sandbox
+        .stub(AccessPointManager, "getAccessPoint")
+        .resolves(anlage([fach()]));
+      renderCompartment.rejects(failure);
+
+      await AccessPointController.getCompartmentQrCode(request, response, next);
+
+      expect(next.calledOnceWithExactly(failure)).to.be.true;
+    });
+  });
+
   describe("rotateScanCode", () => {
     let storeAccessPoint;
 

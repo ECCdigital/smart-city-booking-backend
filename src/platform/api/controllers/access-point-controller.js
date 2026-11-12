@@ -400,6 +400,52 @@ class AccessPointController {
   }
 
   /**
+   * Render the printable QR code of one Fach of a Schließfachanlage that
+   * carries its own list (tickets#1056), addressed by the Anlage and the
+   * Fach's UUID. Like the door's: the code inside is the Fach's own scan code,
+   * a client only receives the image or PDF, `?format=svg|png|pdf` defaults to
+   * `svg`. A door, an Anlage without its own list (iFBS, Pareva) and a Fach
+   * the Anlage does not carry are answered 404.
+   */
+  static async getCompartmentQrCode(request, response, next) {
+    try {
+      const tenantId = request.params.tenant;
+      const format = request.query.format || AccessQrService.QR_FORMATS.SVG;
+
+      if (!Object.values(AccessQrService.QR_FORMATS).includes(format)) {
+        return response.status(400).send(`Unsupported format: ${format}`);
+      }
+
+      const anlage = await AccessPointManager.getAccessPoint(
+        request.params.id,
+        tenantId,
+      );
+      const compartment = compartmentsOf(anlage).find(
+        (entry) => entry.id === request.params.compartmentId,
+      );
+
+      if (!compartment) {
+        return response.sendStatus(404);
+      }
+
+      const rendered = await AccessQrService.renderCompartment(
+        anlage,
+        compartment,
+        format,
+      );
+
+      response.setHeader("Content-Type", rendered.contentType);
+      response.setHeader(
+        "Content-Disposition",
+        `inline; filename="${rendered.filename}"`,
+      );
+      return response.status(200).send(rendered.body);
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  /**
    * Rotate the scan code of an access point: the current code is retired and a
    * fresh one takes its place, so old stickers stop resolving at once. Rotation
    * is the revocation mechanism; a reprint is simply rotate, then fetch the QR
