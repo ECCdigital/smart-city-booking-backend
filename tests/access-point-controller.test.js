@@ -52,6 +52,32 @@ function createAccessPoint(overrides = {}) {
   });
 }
 
+/**
+ * An Open Locker Anlage with its own list: its own code is never printed and
+ * never rotated, only the codes of its Fächer are (tickets#1046).
+ */
+function createOwnListAnlage() {
+  return createAccessPoint({
+    id: "point-1",
+    provider: "open-locker",
+    type: "locker",
+    externalId: null,
+    label: "Fahrradgarage",
+    config: {
+      compartments: [
+        {
+          id: "1b4e28ba-2fa1-11d2-883f-0016d3cca427",
+          number: 3,
+          lockerBank: { id: "bank-1", name: "Labor Fachbank 1" },
+          outOfService: false,
+          scanCode: "code-fach-3",
+          previousScanCodes: [],
+        },
+      ],
+    },
+  });
+}
+
 function listedAccessPoint(supportedModes) {
   return {
     id: "lock-1",
@@ -2594,6 +2620,17 @@ describe("AccessPointController", () => {
       expect(render.called).to.be.false;
     });
 
+    it("answers 404 for an Anlage with its own list of Fächer: its own code is never printed", async () => {
+      sandbox
+        .stub(AccessPointManager, "getAccessPoint")
+        .resolves(createOwnListAnlage());
+
+      await AccessPointController.getQrCode(request, response, next);
+
+      expect(response.sendStatus.calledWith(404)).to.be.true;
+      expect(render.called).to.be.false;
+    });
+
     it("renders an svg by default", async () => {
       const accessPoint = createAccessPoint();
       sandbox.stub(AccessPointManager, "getAccessPoint").resolves(accessPoint);
@@ -2974,6 +3011,17 @@ describe("AccessPointController", () => {
 
     it("answers 404 for an access point of another tenant", async () => {
       sandbox.stub(AccessPointManager, "getAccessPoint").resolves(null);
+
+      await AccessPointController.rotateScanCode(request, response, next);
+
+      expect(response.sendStatus.calledWith(404)).to.be.true;
+      expect(storeAccessPoint.called).to.be.false;
+    });
+
+    it("answers 404 for an Anlage with its own list of Fächer and stores nothing: its own code is never rotated", async () => {
+      sandbox
+        .stub(AccessPointManager, "getAccessPoint")
+        .resolves(createOwnListAnlage());
 
       await AccessPointController.rotateScanCode(request, response, next);
 

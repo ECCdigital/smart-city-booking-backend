@@ -366,7 +366,8 @@ class AccessPointController {
    * Render the printable QR code of an access point. The code encodes the
    * store-front URL with the current scan code; a client only ever receives
    * the rendered image or PDF, never the scan code inside it. The format is
-   * chosen with `?format=svg|png|pdf` and defaults to `svg`.
+   * chosen with `?format=svg|png|pdf` and defaults to `svg`. An Anlage with
+   * its own list of Fächer is answered 404: see `getCompartmentQrCode`.
    */
   static async getQrCode(request, response, next) {
     try {
@@ -382,7 +383,9 @@ class AccessPointController {
         tenantId,
       );
 
-      if (!accessPoint) {
+      // An Anlage with its own list keeps its own code, never printed:
+      // only its Fächer have QR codes (tickets#1046).
+      if (!accessPoint || carriesOwnCompartments(accessPoint)) {
         return response.sendStatus(404);
       }
 
@@ -482,7 +485,8 @@ class AccessPointController {
    * code again.
    *
    * The response carries neither the old nor the new scan code - both stay
-   * server knowledge.
+   * server knowledge. An Anlage with its own list of Fächer is answered 404:
+   * see `rotateCompartmentScanCode`.
    */
   static async rotateScanCode(request, response, next) {
     try {
@@ -492,7 +496,9 @@ class AccessPointController {
 
       const accessPoint = await AccessPointManager.getAccessPoint(id, tenantId);
 
-      if (!accessPoint) {
+      // An Anlage with its own list keeps its own code, never rotated: only
+      // the codes of its Fächer are (tickets#1046).
+      if (!accessPoint || carriesOwnCompartments(accessPoint)) {
         return response.sendStatus(404);
       }
 
