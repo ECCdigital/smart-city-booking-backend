@@ -11,13 +11,12 @@ const AccessEvidenceService = require("../../../commons/services/access/access-e
 const AccessInfoService = require("../../../commons/services/access/access-info-service");
 const AccessService = require("../../../commons/services/access/access-service");
 const LockerSystemRedistribution = require("../../../commons/services/access/locker-system-redistribution");
-const LockerSystemMutex = require("../../../commons/services/access/locker-system-mutex");
+const CompartmentScanCodeService = require("../../../commons/services/access/compartment-scan-code-service");
 const LocationGuard = require("../../../commons/services/location/location-guard");
 const {
   carriesOwnCompartments,
   compartmentsOf,
   requestedCompartments,
-  withScanCodes,
   assertCompartmentsUnclaimed,
 } = require("../../../commons/services/access/locker-system-compartments");
 const {
@@ -222,8 +221,8 @@ class AccessPointController {
       tenantId,
     );
 
-    const createdAccessPoint = await AccessPointManager.storeAccessPoint(
-      AccessPointController._withCompartmentScanCodes(accessPoint, null),
+    const createdAccessPoint = await CompartmentScanCodeService.storeCreated(
+      accessPoint,
       tenantId,
     );
 
@@ -297,25 +296,11 @@ class AccessPointController {
     );
 
     const { accessPoint: updatedAccessPoint, unmoved } =
-      await AccessPointController._holdingOwnCompartments(accessPoint, () =>
-        LockerSystemRedistribution.storeRedistributing(
-          tenantId,
-          before,
-          accessPoint,
-          async () =>
-            AccessPointManager.storeAccessPoint(
-              AccessPointController._withCompartmentScanCodes(
-                accessPoint,
-                await AccessPointController._storedUnderHold(
-                  accessPoint,
-                  before,
-                  tenantId,
-                ),
-              ),
-              tenantId,
-            ),
-          { userId: user?.id },
-        ),
+      await CompartmentScanCodeService.storeUpdated(
+        tenantId,
+        before,
+        accessPoint,
+        { userId: user?.id },
       );
 
     logger.info(
@@ -529,36 +514,19 @@ class AccessPointController {
    * The response carries neither the old nor the new scan code.
    */
   static async rotateCompartmentScanCode(request, response, next) {
-    try {
-      const tenantId = request.params.tenant;
-      const { id, compartmentId } = request.params;
-
-      const anlage = await AccessPointManager.getAccessPoint(id, tenantId);
-      if (!carriesOwnCompartments(anlage)) {
-        return response.sendStatus(404);
-      }
-
-      const rotated = await LockerSystemMutex.hold(anlage, async () => {
-        const current = await AccessPointManager.getAccessPoint(id, tenantId);
-        if (
-          !carriesOwnCompartments(current) ||
-          !current.rotateCompartmentScanCode(compartmentId)
-        ) {
-          return null;
-        }
-        return AccessPointManager.storeAccessPoint(current, tenantId);
-      });
-
-      if (!rotated) {
-        return response.sendStatus(404);
-      }
-      logger.info(
+    const { tenant: tenantId, id, compartmentId } = request.params;
+    return AccessPointController._sendRotatedCompartments(
+      response,
+      next,
+      () =>
+        CompartmentScanCodeService.rotateCompartmentScanCode(
+          tenantId,
+          id,
+          compartmentId,
+        ),
+      () =>
         `${tenantId} -- Scan code of Fach ${compartmentId} of access point ${id} rotated by user ${request.user?.id}`,
-      );
-      return response.status(200).send(rotated.toResponse());
-    } catch (err) {
-      return next(err);
-    }
+    );
   }
 
   /**
@@ -572,32 +540,32 @@ class AccessPointController {
    * The response carries neither the old nor the new scan codes.
    */
   static async rotateAllCompartmentScanCodes(request, response, next) {
+    const { tenant: tenantId, id } = request.params;
+    return AccessPointController._sendRotatedCompartments(
+      response,
+      next,
+      () =>
+        CompartmentScanCodeService.rotateAllCompartmentScanCodes(tenantId, id),
+      (rotated) =>
+        `${tenantId} -- Scan codes of all ${compartmentsOf(rotated).length} Fächer of access point ${id} rotated by user ${request.user?.id}`,
+    );
+  }
+
+  /**
+   * @private
+   * Answer a rotation of codes of the Fächer of an Anlage: 404 where
+   * `rotate` rotated nothing, else the Anlage without any code.
+   *
+   * @param {() => Promise<AccessPoint|null>} rotate Rotates and stores
+   * @param {(rotated: AccessPoint) => string} logMessage What to log
+   */
+  static async _sendRotatedCompartments(response, next, rotate, logMessage) {
     try {
-      const tenantId = request.params.tenant;
-      const { id } = request.params;
-
-      const anlage = await AccessPointManager.getAccessPoint(id, tenantId);
-      if (!carriesOwnCompartments(anlage)) {
-        return response.sendStatus(404);
-      }
-
-      const rotated = await LockerSystemMutex.hold(anlage, async () => {
-        const current = await AccessPointManager.getAccessPoint(id, tenantId);
-        if (
-          !carriesOwnCompartments(current) ||
-          !current.rotateAllCompartmentScanCodes()
-        ) {
-          return null;
-        }
-        return AccessPointManager.storeAccessPoint(current, tenantId);
-      });
-
+      const rotated = await rotate();
       if (!rotated) {
         return response.sendStatus(404);
       }
-      logger.info(
-        `${tenantId} -- Scan codes of all ${compartmentsOf(rotated).length} Fächer of access point ${id} rotated by user ${request.user?.id}`,
-      );
+      logger.info(logMessage(rotated));
       return response.status(200).send(rotated.toResponse());
     } catch (err) {
       return next(err);
@@ -838,72 +806,6 @@ class AccessPointController {
     }
 
     accessPoint.config = { ...accessPoint.config, compartments };
-  }
-
-  /**
-   * Runs the store of an Anlage that carries its own list under the mutex
-   * of the Anlage (tickets#1055): a rotation of the codes of its Fächer
-   * runs under the same mutex, so a save never writes back a code rotated
-   * while it was under way. Every other access point is stored straight
-   * away. The mutex is re-entrant, so a store that moves bookings holds it
-   * once.
-   *
-   * @template T
-   * @param {AccessPoint} accessPoint The access point as it will be stored
-   * @param {() => Promise<T>} store Stores it
-   * @returns {Promise<T>} What the store answers
-   */
-  static async _holdingOwnCompartments(accessPoint, store) {
-    return carriesOwnCompartments(accessPoint)
-      ? LockerSystemMutex.hold(accessPoint, store)
-      : store();
-  }
-
-  /**
-   * The access point as stored right now, read again under the mutex of an
-   * Anlage that carries its own list, so its Fächer keep the codes they
-   * carry at this moment (see `_holdingOwnCompartments`). Every other
-   * access point, and one gone in between, answers what the save read
-   * first.
-   *
-   * @param {AccessPoint} accessPoint The access point as it will be stored
-   * @param {Object} before The access point as the save read it first
-   * @param {string} tenantId Tenant the access point belongs to
-   * @returns {Promise<Object>} The access point as stored
-   */
-  static async _storedUnderHold(accessPoint, before, tenantId) {
-    if (!carriesOwnCompartments(accessPoint)) {
-      return before;
-    }
-    return (
-      (await AccessPointManager.getAccessPoint(accessPoint.id, tenantId)) ??
-      before
-    );
-  }
-
-  /**
-   * The Anlage with a scan code on each of its Fächer (tickets#1055), see
-   * `withScanCodes`: kept from the stored Anlage, fresh for a Fach new to
-   * it. Only an Anlage that carries its own list has codes per Fach; every
-   * other access point is left as it is.
-   *
-   * @param {AccessPoint} accessPoint The access point as it will be stored,
-   *   written into
-   * @param {Object|null} stored The access point as stored before the
-   *   save, `null` on a create
-   * @returns {AccessPoint} The access point
-   */
-  static _withCompartmentScanCodes(accessPoint, stored) {
-    if (carriesOwnCompartments(accessPoint)) {
-      accessPoint.config = {
-        ...accessPoint.config,
-        compartments: withScanCodes(
-          accessPoint.config.compartments,
-          compartmentsOf(stored),
-        ),
-      };
-    }
-    return accessPoint;
   }
 
   /**
