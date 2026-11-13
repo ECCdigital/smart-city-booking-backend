@@ -866,8 +866,8 @@
       with the reach of `PUT /api/{tenant}/bookables`: with `updateOwn`
       alone the bookables the user owns. A bookable that does not change is
       not asked about, so a list that keeps a bookable out of reach goes
-      through. A Schließfachanlage with its own Fächer (Open Locker) hangs at
-      one bookable at most.
+      through. A locker system with its own compartments (Open Locker) hangs
+      at one bookable at most.
     security:
       - bearerAuth: []
     parameters:
@@ -915,8 +915,8 @@
         description: |
           `invalid_bookable_ids` - `bookableIds` is no list of ids.
           `unknown_bookable` - the tenant has no bookable of that id
-          (`params.bookableId`). `locker_system_one_bookable` - a
-          Schließfachanlage with its own Fächer is to hang at more than one
+          (`params.bookableId`). `locker_system_one_bookable` - a locker
+          system with its own compartments is to hang at more than one
           bookable (`params.accessPointId`, `params.label`). Nothing is
           stored.
         content:

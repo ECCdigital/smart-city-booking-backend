@@ -40,7 +40,7 @@ const DOOR = "door-1";
 const OTHER_DOOR = "door-2";
 const ANLAGE = "anlage-1";
 
-/** The access points of the tenant: two doors and an Anlage with its own Fächer. */
+/** The access points of the tenant: two doors and a locker system with its own compartments. */
 const ACCESS_POINTS = {
   [DOOR]: { id: DOOR, type: "door", provider: "nuki", label: "Haupteingang" },
   [OTHER_DOOR]: {
@@ -297,7 +297,7 @@ describe("assignment of an access point to bookables over HTTP", function () {
       expect(writes).to.deep.equal([]);
     });
 
-    it("hangs a Schließfachanlage with its own Fächer at one bookable at most", async function () {
+    it("hangs a locker system with its own compartments at one bookable at most", async function () {
       const res = await assign(ANLAGE, OWNER, {
         bookableIds: ["saal", "foyer"],
       });
@@ -314,7 +314,7 @@ describe("assignment of an access point to bookables over HTTP", function () {
     });
   });
 
-  it("moves a Schließfachanlage with its own Fächer from one bookable to another", async function () {
+  it("moves a locker system with its own compartments from one bookable to another", async function () {
     linked("foyer", [ANLAGE]);
 
     const res = await assign(ANLAGE, OWNER, { bookableIds: ["saal"] });
