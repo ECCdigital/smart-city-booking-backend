@@ -593,6 +593,31 @@ class BookableController {
     }
   }
 
+  static async getFlags(request, response, next) {
+    try {
+      const tenant = request.params.tenant;
+      const user = request.user;
+
+      // As the tags: the flags of the bookables within the reach, each once.
+      const bookables = await BookableManager.getBookables(
+        tenant,
+        scopeOf(request),
+      );
+      const flags = [...new Set(bookables.flatMap((b) => b.flags || []))];
+
+      logger.info(
+        `${tenant} -- Returning ${flags.length} flags to user ${user?.id}`,
+      );
+      response.status(200).send(flags);
+    } catch (err) {
+      if (err instanceof BaseError) {
+        return next(err);
+      }
+      logger.error(err);
+      response.status(500).send("Could not get flags");
+    }
+  }
+
   /**
    * This method is used to get the opening hours of a specific bookable object.
    * It first checks if the bookable id is provided in the request.

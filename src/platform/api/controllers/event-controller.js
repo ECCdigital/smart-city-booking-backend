@@ -252,6 +252,31 @@ class EventController {
       response.status(500).send("could not get tags");
     }
   }
+
+  static async getFlags(request, response, next) {
+    try {
+      const tenant = request.params.tenant;
+      const user = request.user;
+
+      // As the tags: the flags of the events within the reach, each once.
+      const events = await EventManager.getEvents(tenant, scopeOf(request));
+      const flags = [
+        ...new Set(events.flatMap((e) => e.information?.flags || [])),
+      ];
+
+      logger.info(
+        `${tenant} -- sending ${flags.length} flags to user ${user?.id}`,
+      );
+      response.status(200).send(flags);
+    } catch (err) {
+      if (err instanceof BaseError) {
+        return next(err);
+      }
+      logger.error(err);
+      response.status(500).send("could not get flags");
+    }
+  }
+
   static async countCheck(request, response) {
     try {
       const tenant = request.params.tenant;

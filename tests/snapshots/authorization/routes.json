@@ -1303,6 +1303,14 @@
     "instanceOwner": 200,
     "expiredToken": 401
   },
+  "GET /api/:tenant/bookables/_meta/flags": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200,
+    "expiredToken": 401
+  },
   "GET /api/:tenant/bookables/count/check": {
     "anonymous": 200,
     "signedIn": 200,
@@ -1376,6 +1384,14 @@
     "expiredToken": 401
   },
   "GET /api/:tenant/events/_meta/tags": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200,
+    "expiredToken": 401
+  },
+  "GET /api/:tenant/events/_meta/flags": {
     "anonymous": 200,
     "signedIn": 200,
     "roleHolder": 200,
