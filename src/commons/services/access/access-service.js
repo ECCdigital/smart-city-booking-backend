@@ -23,7 +23,10 @@ const AccessProvisionError = require("../../../errors/AccessProvisionError");
 const { customerViewOf } = require("../booking/booking-customer-view");
 const { DOMAIN } = require("../authorization/reach");
 const LockerSystemMutex = require("./locker-system-mutex");
-const { carriesOwnCompartments } = require("./locker-system-compartments");
+const {
+  carriesOwnCompartments,
+  compartmentsOf,
+} = require("./locker-system-compartments");
 const {
   accessBufferMs,
   claimOf,
@@ -2211,6 +2214,10 @@ class AccessService {
    * @param {string} userId Assigned user ID
    * @param {string} accessPointId Access point ID
    * @param {Object} [opts] See {@link getUserBookingsWithAccess}
+   * @param {boolean} [opts.onlyHeld=false] Answer only the compartments the
+   *   booking holds: a Fach assigned or granted and not revoked. Without it
+   *   a revoked compartment and one only held before its grant are listed
+   *   too, as the Mobile Key shows them.
    * @returns {Promise<Object[]>} Matching bookings (sensitive data stripped)
    */
   static async getUserBookingsForAccessPoint(
@@ -2221,6 +2228,7 @@ class AccessService {
       capability = null,
       includeAccessPoints = false,
       includeLockers = false,
+      onlyHeld = false,
       includeBuffer = false,
       includeEligibility = false,
       canManageIn = async () => false,
@@ -2278,7 +2286,7 @@ class AccessService {
           booking,
           accessPointId,
           { mode, type },
-          { triggerIds, capability, includeLockers },
+          { triggerIds, capability, includeLockers, onlyHeld },
         );
       },
     });
@@ -2781,7 +2789,7 @@ class AccessService {
     booking,
     accessPointId,
     kind,
-    { triggerIds, capability, includeLockers },
+    { triggerIds, capability, includeLockers, onlyHeld },
   ) {
     const directIds = this._getBookableIds(booking);
     const matchesBookable =
@@ -2795,6 +2803,7 @@ class AccessService {
       accessPointIds: this._conferredIds(booking, String(accessPointId), kind, {
         capability,
         includeLockers,
+        onlyHeld,
       }),
     };
   }
@@ -2807,7 +2816,9 @@ class AccessService {
    * @param {Object} booking The booking
    * @param {string} accessPointId The stored access point's id
    * @param {{ mode: string, type: string }} kind Its mode and type
-   * @param {Object} filters `capability` and `includeLockers`
+   * @param {Object} filters `capability`, `includeLockers` and `onlyHeld`
+   *   (only the compartments the booking holds: assigned or granted, not
+   *   revoked)
    * @returns {string[]} The conferred ids, empty where the filters keep the
    *   access point out
    */
@@ -2815,7 +2826,7 @@ class AccessService {
     booking,
     accessPointId,
     { mode, type },
-    { capability, includeLockers },
+    { capability, includeLockers, onlyHeld = false },
   ) {
     const onlyAuthorization = capability === "authorization";
 
@@ -2825,6 +2836,11 @@ class AccessService {
       }
       return this._compartmentEntries(booking)
         .filter((entry) => String(entry.accessPointId) === accessPointId)
+        .filter(
+          (entry) =>
+            !onlyHeld ||
+            (!entry.revokedAt && (entry.assignedCompartment || entry.grant)),
+        )
         .map((entry) => this._compartmentId(entry));
     }
 
@@ -3117,6 +3133,14 @@ class AccessService {
    * addressed by its own UUID as `externalId` (the Anlage has none); what
    * the decision and the projection read - `id`, `type`, `mode`,
    * `validationRules` - names the compartment.
+   *
+   * The rules are the Anlage's, for all its Fächer; the scan code they are
+   * checked against is not (tickets#1055). A Fach of an Anlage with its own
+   * list carries the `scanCode` and `previousScanCodes` of its entry in
+   * `config.compartments`, so a QR scan opens the Fach whose sticker it
+   * read, never another Fach of the Anlage nor with the Anlage's own code.
+   * A Fach the Anlage no longer lists has no code. Anlagen of iFBS and
+   * Pareva keep the Anlage's code.
    */
   static _compartmentAccessPoint(system, entry) {
     const accessPoint = {
@@ -3125,6 +3149,17 @@ class AccessService {
     };
     if (entry.assignedCompartment?.id) {
       accessPoint.externalId = String(entry.assignedCompartment.id);
+    }
+    if (carriesOwnCompartments(system.accessPoint)) {
+      const compartmentId = entry.assignedCompartment?.id;
+      const listed =
+        compartmentId == null
+          ? null
+          : compartmentsOf(system.accessPoint).find(
+              (compartment) => String(compartment.id) === String(compartmentId),
+            );
+      accessPoint.scanCode = listed?.scanCode ?? null;
+      accessPoint.previousScanCodes = listed?.previousScanCodes ?? [];
     }
     return accessPoint;
   }

@@ -228,8 +228,15 @@ class PdfService {
    * header/footer mechanism, so it repeats on every page and supports the
    * special `pageNumber` / `totalPages` / `date` / `title` span classes.
    * Documents without these elements render exactly as before.
+   *
+   * `borderless` drops the 10 mm print margin, for a document that lays out
+   * the whole A4 sheet itself (the Sammel-PDF's Etikettenbogen).
+   *
+   * @param {string} html The full HTML document
+   * @param {string} filename The name of the PDF, for the log
+   * @param {{ borderless?: boolean }} [options]
    */
-  static async convertToPdf(html, filename) {
+  static async convertToPdf(html, filename, { borderless = false } = {}) {
     const { documentHtml, headerTemplate, footerTemplate } =
       PdfService._prepareDocument(html);
 
@@ -253,12 +260,14 @@ class PdfService {
         const pdfOptions = {
           format: "A4",
           printBackground: true,
-          margin: {
-            top: headerTemplate ? HEADER_MARGIN : BASE_MARGIN,
-            bottom: footerTemplate ? FOOTER_MARGIN : BASE_MARGIN,
-            left: BASE_MARGIN,
-            right: BASE_MARGIN,
-          },
+          margin: borderless
+            ? { top: "0", bottom: "0", left: "0", right: "0" }
+            : {
+                top: headerTemplate ? HEADER_MARGIN : BASE_MARGIN,
+                bottom: footerTemplate ? FOOTER_MARGIN : BASE_MARGIN,
+                left: BASE_MARGIN,
+                right: BASE_MARGIN,
+              },
         };
 
         if (headerTemplate || footerTemplate) {

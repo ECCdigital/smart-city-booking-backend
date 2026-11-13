@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const Handlebars = require("../src/commons/pdf-service/pdf-handlebars");
 const PdfService = require("../src/commons/pdf-service/pdf-service");
+const lazyBrowser = require("../src/commons/pdf-service/LazyBrowser");
 const formatters = require("../src/commons/pdf-service/pdf-formatters");
 const {
   buildSampleData,
@@ -134,6 +135,66 @@ describe("PdfService._prepareDocument", () => {
     assert.ok(footerTemplate.includes("font-size: 10px"));
     assert.strictEqual(headerTemplate, null);
     assert.ok(!documentHtml.includes("data-pdf-footer"));
+  });
+});
+
+describe("PdfService.convertToPdf page options", () => {
+  let pdfOptions;
+
+  beforeEach(() => {
+    pdfOptions = null;
+    const page = {
+      setContent: sinon.stub().resolves(),
+      evaluate: sinon.stub().resolves(),
+      pdf: sinon.stub().callsFake(async (options) => {
+        pdfOptions = options;
+        return Buffer.from("pdf");
+      }),
+    };
+    const browser = {
+      newContext: sinon.stub().resolves({
+        newPage: sinon.stub().resolves(page),
+        close: sinon.stub().resolves(),
+      }),
+    };
+    sinon.stub(lazyBrowser, "execute").callsFake((work) => work(browser));
+  });
+
+  afterEach(() => {
+    sinon.restore();
+  });
+
+  const DOCUMENT =
+    "<!DOCTYPE html><html><head></head><body><p>x</p></body></html>";
+
+  it("prints on A4 with the 10 mm margin by default", async () => {
+    await PdfService.convertToPdf(DOCUMENT, "receipt.pdf");
+
+    assert.strictEqual(pdfOptions.format, "A4");
+    assert.deepStrictEqual(pdfOptions.margin, {
+      top: "10mm",
+      bottom: "10mm",
+      left: "10mm",
+      right: "10mm",
+    });
+  });
+
+  it("prints on A4 without any margin when asked to be borderless", async () => {
+    const { buffer, name } = await PdfService.convertToPdf(
+      DOCUMENT,
+      "sheet.pdf",
+      { borderless: true },
+    );
+
+    assert.strictEqual(pdfOptions.format, "A4");
+    assert.deepStrictEqual(pdfOptions.margin, {
+      top: "0",
+      bottom: "0",
+      left: "0",
+      right: "0",
+    });
+    assert.strictEqual(buffer.toString(), "pdf");
+    assert.strictEqual(name, "sheet.pdf");
   });
 });
 

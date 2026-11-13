@@ -11,9 +11,11 @@ const AccessEvidenceService = require("../../../commons/services/access/access-e
 const AccessInfoService = require("../../../commons/services/access/access-info-service");
 const AccessService = require("../../../commons/services/access/access-service");
 const LockerSystemRedistribution = require("../../../commons/services/access/locker-system-redistribution");
+const CompartmentScanCodeService = require("../../../commons/services/access/compartment-scan-code-service");
 const LocationGuard = require("../../../commons/services/location/location-guard");
 const {
   carriesOwnCompartments,
+  compartmentsOf,
   requestedCompartments,
   assertCompartmentsUnclaimed,
 } = require("../../../commons/services/access/locker-system-compartments");
@@ -219,7 +221,7 @@ class AccessPointController {
       tenantId,
     );
 
-    const createdAccessPoint = await AccessPointManager.storeAccessPoint(
+    const createdAccessPoint = await CompartmentScanCodeService.storeCreated(
       accessPoint,
       tenantId,
     );
@@ -294,11 +296,10 @@ class AccessPointController {
     );
 
     const { accessPoint: updatedAccessPoint, unmoved } =
-      await LockerSystemRedistribution.storeRedistributing(
+      await CompartmentScanCodeService.storeUpdated(
         tenantId,
         before,
         accessPoint,
-        () => AccessPointManager.storeAccessPoint(accessPoint, tenantId),
         { userId: user?.id },
       );
 
@@ -350,27 +351,106 @@ class AccessPointController {
    * Render the printable QR code of an access point. The code encodes the
    * store-front URL with the current scan code; a client only ever receives
    * the rendered image or PDF, never the scan code inside it. The format is
-   * chosen with `?format=svg|png|pdf` and defaults to `svg`.
+   * chosen with `?format=svg|png|pdf` and defaults to `svg`. An Anlage with
+   * its own list of Fächer is answered 404: see `getCompartmentQrCode`.
    */
   static async getQrCode(request, response, next) {
-    try {
-      const tenantId = request.params.tenant;
-      const format = request.query.format || AccessQrService.QR_FORMATS.SVG;
+    return AccessPointController._sendQrCode(
+      request,
+      response,
+      next,
+      async (format) => {
+        const accessPoint = await AccessPointManager.getAccessPoint(
+          request.params.id,
+          request.params.tenant,
+        );
+        // An Anlage with its own list keeps its own code, never printed:
+        // only its Fächer have QR codes (tickets#1046).
+        return accessPoint && !carriesOwnCompartments(accessPoint)
+          ? AccessQrService.render(accessPoint, format)
+          : null;
+      },
+    );
+  }
 
-      if (!Object.values(AccessQrService.QR_FORMATS).includes(format)) {
-        return response.status(400).send(`Unsupported format: ${format}`);
-      }
+  /**
+   * Render the printable QR code of one Fach of a Schließfachanlage that
+   * carries its own list (tickets#1056), addressed by the Anlage and the
+   * Fach's UUID. Like the door's: the code inside is the Fach's own scan code,
+   * a client only receives the image or PDF, `?format=svg|png|pdf` defaults to
+   * `svg`. A door, an Anlage without its own list (iFBS, Pareva) and a Fach
+   * the Anlage does not carry are answered 404.
+   */
+  static async getCompartmentQrCode(request, response, next) {
+    return AccessPointController._sendQrCode(
+      request,
+      response,
+      next,
+      async (format) => {
+        const lockerSystem = await AccessPointManager.getAccessPoint(
+          request.params.id,
+          request.params.tenant,
+        );
+        const compartment = compartmentsOf(lockerSystem).find(
+          (entry) => entry.id === request.params.compartmentId,
+        );
+        return compartment
+          ? AccessQrService.renderCompartment(lockerSystem, compartment, format)
+          : null;
+      },
+    );
+  }
 
-      const accessPoint = await AccessPointManager.getAccessPoint(
+  /**
+   * Render the Sammel-PDF of a Schließfachanlage that carries its own list
+   * (tickets#1062): the QR codes of all its Fächer on an Etikettenbogen, every
+   * Schrank on a new page, Fächer out of service noted as such. A door and an
+   * Anlage without its own list (iFBS, Pareva) are answered 404.
+   */
+  static async getCompartmentQrSheet(request, response, next) {
+    return AccessPointController._sendRendered(response, next, async () => {
+      const lockerSystem = await AccessPointManager.getAccessPoint(
         request.params.id,
-        tenantId,
+        request.params.tenant,
       );
+      return carriesOwnCompartments(lockerSystem)
+        ? AccessQrService.renderCompartmentSheet(lockerSystem)
+        : null;
+    });
+  }
 
-      if (!accessPoint) {
+  /**
+   * @private
+   * Answer a QR code in the format `?format=svg|png|pdf` asks for, `svg` by
+   * default; 400 for another format, before anything is read.
+   *
+   * @param {(format: string) => Promise<Object|null>} render Renders the QR
+   *   code, `null` for nothing to render
+   */
+  static async _sendQrCode(request, response, next, render) {
+    const format = request.query.format || AccessQrService.QR_FORMATS.SVG;
+    if (!Object.values(AccessQrService.QR_FORMATS).includes(format)) {
+      return response.status(400).send(`Unsupported format: ${format}`);
+    }
+    return AccessPointController._sendRendered(response, next, () =>
+      render(format),
+    );
+  }
+
+  /**
+   * @private
+   * Answer what `render` rendered inline, named for download; 404 where it
+   * rendered nothing.
+   *
+   * @param {() => Promise<{ contentType: string, body: string|Buffer,
+   *   filename: string }|null>} render Renders, `null` for nothing to render
+   */
+  static async _sendRendered(response, next, render) {
+    try {
+      const rendered = await render();
+      if (!rendered) {
         return response.sendStatus(404);
       }
-
-      const rendered = await AccessQrService.render(accessPoint, format);
 
       response.setHeader("Content-Type", rendered.contentType);
       response.setHeader(
@@ -390,7 +470,8 @@ class AccessPointController {
    * code again.
    *
    * The response carries neither the old nor the new scan code - both stay
-   * server knowledge.
+   * server knowledge. An Anlage with its own list of Fächer is answered 404:
+   * see `rotateCompartmentScanCode`.
    */
   static async rotateScanCode(request, response, next) {
     try {
@@ -400,7 +481,9 @@ class AccessPointController {
 
       const accessPoint = await AccessPointManager.getAccessPoint(id, tenantId);
 
-      if (!accessPoint) {
+      // An Anlage with its own list keeps its own code, never rotated: only
+      // the codes of its Fächer are (tickets#1046).
+      if (!accessPoint || carriesOwnCompartments(accessPoint)) {
         return response.sendStatus(404);
       }
 
@@ -413,6 +496,76 @@ class AccessPointController {
       logger.info(
         `${tenantId} -- Scan code of access point ${id} rotated by user ${user?.id}`,
       );
+      return response.status(200).send(rotated.toResponse());
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  /**
+   * Rotate the scan code of one Fach of a Schließfachanlage that carries its
+   * own list (tickets#1061), addressed by the Anlage and the Fach's UUID, by
+   * the door's rule. It runs under the mutex of the Anlage, which every save
+   * of the Anlage holds too, and reads the Anlage again inside it: a save
+   * never writes the old code back, and the rotation never writes back what
+   * a save changed. A door, an Anlage without its own list (iFBS, Pareva)
+   * and a Fach the Anlage does not carry are answered 404.
+   *
+   * The response carries neither the old nor the new scan code.
+   */
+  static async rotateCompartmentScanCode(request, response, next) {
+    const { tenant: tenantId, id, compartmentId } = request.params;
+    return AccessPointController._sendRotatedCompartments(
+      response,
+      next,
+      () =>
+        CompartmentScanCodeService.rotateCompartmentScanCode(
+          tenantId,
+          id,
+          compartmentId,
+        ),
+      () =>
+        `${tenantId} -- Scan code of compartment ${compartmentId} of access point ${id} rotated by user ${request.user?.id}`,
+    );
+  }
+
+  /**
+   * Rotate the scan codes of all Fächer of a Schließfachanlage that carries
+   * its own list (tickets#1063), after an incident that voids every sticker:
+   * each Fach by the rule of one Fach, the Anlage stored once. Like the
+   * rotation of one Fach it runs under the mutex of the Anlage and reads the
+   * Anlage again inside it. A door and an Anlage without its own list (iFBS,
+   * Pareva) are answered 404.
+   *
+   * The response carries neither the old nor the new scan codes.
+   */
+  static async rotateAllCompartmentScanCodes(request, response, next) {
+    const { tenant: tenantId, id } = request.params;
+    return AccessPointController._sendRotatedCompartments(
+      response,
+      next,
+      () =>
+        CompartmentScanCodeService.rotateAllCompartmentScanCodes(tenantId, id),
+      (rotated) =>
+        `${tenantId} -- Scan codes of all ${compartmentsOf(rotated).length} compartments of access point ${id} rotated by user ${request.user?.id}`,
+    );
+  }
+
+  /**
+   * @private
+   * Answer a rotation of codes of the Fächer of an Anlage: 404 where
+   * `rotate` rotated nothing, else the Anlage without any code.
+   *
+   * @param {() => Promise<AccessPoint|null>} rotate Rotates and stores
+   * @param {(rotated: AccessPoint) => string} logMessage What to log
+   */
+  static async _sendRotatedCompartments(response, next, rotate, logMessage) {
+    try {
+      const rotated = await rotate();
+      if (!rotated) {
+        return response.sendStatus(404);
+      }
+      logger.info(logMessage(rotated));
       return response.status(200).send(rotated.toResponse());
     } catch (err) {
       return next(err);

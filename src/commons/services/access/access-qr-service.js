@@ -4,6 +4,11 @@ const QRCode = require("qrcode");
 const Handlebars = require("handlebars");
 const PdfService = require("../../pdf-service/pdf-service");
 const { BaseError } = require("../../../errors/BaseError");
+const {
+  compartmentsOf,
+  lockerBankNameOf,
+} = require("./locker-system-compartments");
+const { inAllocationOrder } = require("./compartment-allocation");
 
 /**
  * Renderable formats of an access point QR code. `svg` is the default: it
@@ -23,7 +28,34 @@ const PDF_TEMPLATE_PATH = path.join(
   "access-point-qr.temp.html",
 );
 
+const SHEET_INSTRUCTION_TEXT = "Scannen, um Ihr Fach zu öffnen";
+
+/** Labels on one Etikettenbogen: 2×4 of 105 × 74 mm (A7) on A4. */
+const LABELS_PER_SHEET = 8;
+
+const SHEET_TEMPLATE_PATH = path.join(
+  __dirname,
+  "templates",
+  "access-point-qr-sheet.temp.html",
+);
+
 let compiledPdfTemplate;
+let compiledSheetTemplate;
+
+/**
+ * Turn a label into the ASCII part of a file name: lower case, umlauts
+ * spelled out, every other run of non-alphanumerics one dash.
+ */
+function slug(text) {
+  return String(text ?? "")
+    .toLowerCase()
+    .replace(/ä/g, "ae")
+    .replace(/ö/g, "oe")
+    .replace(/ü/g, "ue")
+    .replace(/ß/g, "ss")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
 
 function loadPdfTemplate() {
   if (!compiledPdfTemplate) {
@@ -31,6 +63,37 @@ function loadPdfTemplate() {
     compiledPdfTemplate = Handlebars.compile(templateContent);
   }
   return compiledPdfTemplate;
+}
+
+/**
+ * Lay labels in Zuteilung order out on sheets: every Schrank starts a new
+ * one, so the sheets can be handed out per Schrank.
+ */
+function sheetPages(labels) {
+  const pages = [];
+  let previous;
+  for (const label of labels) {
+    const current = pages[pages.length - 1];
+    const sameBank =
+      previous &&
+      previous.lockerBankId === label.lockerBankId &&
+      previous.lockerBankName === label.lockerBankName;
+    if (!sameBank || current.labels.length === LABELS_PER_SHEET) {
+      pages.push({ labels: [label] });
+    } else {
+      current.labels.push(label);
+    }
+    previous = label;
+  }
+  return pages;
+}
+
+function loadSheetTemplate() {
+  if (!compiledSheetTemplate) {
+    const templateContent = fs.readFileSync(SHEET_TEMPLATE_PATH, "utf-8");
+    compiledSheetTemplate = Handlebars.compile(templateContent);
+  }
+  return compiledSheetTemplate;
 }
 
 /**
@@ -74,29 +137,122 @@ class AccessQrService {
    * @throws {Error} If the format is not supported
    */
   static async render(accessPoint, format = QR_FORMATS.SVG) {
-    const url = this.scanUrl(accessPoint.tenantId, accessPoint.scanCode);
+    return this._render(
+      this.scanUrl(accessPoint.tenantId, accessPoint.scanCode),
+      format,
+      { label: accessPoint.label },
+      `access-point-${accessPoint.id}`,
+    );
+  }
 
+  /**
+   * Render the QR code of one Fach of a Schließfachanlage that carries its
+   * own list (tickets#1056). The code is the Fach's own scan code, never the
+   * Anlage's; the A4 page is the door's, with „Schrank X · Fach N“ under the
+   * Anlage's label. The file is named after Anlage, Schrank and Fach:
+   * `qr-<anlage>-schrank-<x>-fach-<nn>.<format>`.
+   *
+   * @param {import("../../entities/access/access-point").AccessPoint} lockerSystem
+   *   The Schließfachanlage the Fach belongs to
+   * @param {Object} compartment Its entry in `config.compartments`
+   * @param {string} [format=svg] One of `svg`, `png`, `pdf`
+   * @returns {Promise<{ format: string, contentType: string,
+   *   body: string|Buffer, filename: string }>} The rendered QR code
+   * @throws {Error} If the format is not supported
+   */
+  static async renderCompartment(
+    lockerSystem,
+    compartment,
+    format = QR_FORMATS.SVG,
+  ) {
+    const lockerBankName = lockerBankNameOf(compartment) ?? "";
+    return this._render(
+      this.scanUrl(lockerSystem.tenantId, compartment.scanCode),
+      format,
+      {
+        label: lockerSystem.label,
+        subtitle: `Schrank ${lockerBankName} · Fach ${compartment.number}`,
+      },
+      [
+        "qr",
+        slug(lockerSystem.label),
+        "schrank",
+        slug(lockerBankName),
+        "fach",
+        slug(compartment.number).padStart(2, "0"),
+      ].join("-"),
+    );
+  }
+
+  /**
+   * Render the Sammel-PDF of a Schließfachanlage that carries its own list
+   * (tickets#1062): the codes of all its Fächer on an Etikettenbogen.
+   *
+   * @param {import("../../entities/access/access-point").AccessPoint} lockerSystem
+   *   The Schließfachanlage, with its Fächer in `config.compartments`
+   * @returns {Promise<{ format: string, contentType: string,
+   *   body: Buffer, filename: string }>} The rendered PDF
+   */
+  static async renderCompartmentSheet(lockerSystem) {
+    const filename = `qr-${slug(lockerSystem.label)}-alle-faecher.pdf`;
+    const labels = await Promise.all(
+      inAllocationOrder(compartmentsOf(lockerSystem)).map(
+        async (compartment) => ({
+          lockerBankId: compartment.lockerBank?.id ?? null,
+          lockerBankName: lockerBankNameOf(compartment),
+          number: compartment.number,
+          outOfService: compartment.outOfService === true,
+          qrSvg: await QRCode.toString(
+            this.scanUrl(lockerSystem.tenantId, compartment.scanCode),
+            { type: "svg", margin: 1 },
+          ),
+        }),
+      ),
+    );
+    const html = loadSheetTemplate()({
+      label: lockerSystem.label,
+      instruction: SHEET_INSTRUCTION_TEXT,
+      pages: sheetPages(labels),
+    });
+
+    const { buffer } = await PdfService.convertToPdf(html, filename, {
+      borderless: true,
+    });
+    return {
+      format: QR_FORMATS.PDF,
+      contentType: "application/pdf",
+      body: buffer,
+      filename,
+    };
+  }
+
+  /**
+   * @private
+   * Render `url` as a QR code in `format`; the PDF prints `heading` (label
+   * and optional subtitle) above the code on the A4 print template.
+   */
+  static async _render(url, format, heading, basename) {
     switch (format) {
       case QR_FORMATS.SVG:
         return {
           format: QR_FORMATS.SVG,
           contentType: "image/svg+xml",
           body: await QRCode.toString(url, { type: "svg" }),
-          filename: `access-point-${accessPoint.id}.svg`,
+          filename: `${basename}.svg`,
         };
       case QR_FORMATS.PNG:
         return {
           format: QR_FORMATS.PNG,
           contentType: "image/png",
           body: await QRCode.toBuffer(url),
-          filename: `access-point-${accessPoint.id}.png`,
+          filename: `${basename}.png`,
         };
       case QR_FORMATS.PDF:
         return {
           format: QR_FORMATS.PDF,
           contentType: "application/pdf",
-          body: await this._renderPdf(accessPoint, url),
-          filename: `access-point-${accessPoint.id}.pdf`,
+          body: await this._renderPdf(heading, url, `${basename}.pdf`),
+          filename: `${basename}.pdf`,
         };
       default:
         throw new Error(`Unsupported QR code format: ${format}`);
@@ -105,21 +261,20 @@ class AccessQrService {
 
   /**
    * @private
-   * Render the A4 print template: the access point label, its QR code and a
-   * short instruction, laid out through the shared Playwright pdf-service.
+   * Render the A4 print template: the label, an optional subtitle, the QR
+   * code and a short instruction, laid out through the shared Playwright
+   * pdf-service.
    */
-  static async _renderPdf(accessPoint, url) {
+  static async _renderPdf({ label, subtitle }, url, filename) {
     const qrDataUrl = await QRCode.toDataURL(url, { margin: 1, width: 320 });
     const html = loadPdfTemplate()({
-      label: accessPoint.label,
+      label,
+      subtitle,
       qrDataUrl,
       instruction: INSTRUCTION_TEXT,
     });
 
-    const { buffer } = await PdfService.convertToPdf(
-      html,
-      `access-point-${accessPoint.id}.pdf`,
-    );
+    const { buffer } = await PdfService.convertToPdf(html, filename);
     return buffer;
   }
 }

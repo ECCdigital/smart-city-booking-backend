@@ -467,12 +467,164 @@
       "403":
         description: Not a tenant owner
       "404":
-        description: The tenant has no access point with that id
+        description: |
+          The tenant has no access point with that id, or it is a locker
+          system with its own list of compartments: only its compartments
+          have QR codes
       "503":
         description: |
           `store_front_url_missing`: the instance has no `STORE_FRONT_URL`, so
           there is no address to encode. A configuration of the instance, not a
           failure of the request.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreFrontUrlMissing"
+
+/api/{tenant}/accesspoints/{id}/compartments/{compartmentId}/qrcode:
+  get:
+    tags:
+      - Access Points
+    summary: Render the QR code of one Fach of a locker system
+    description: |
+      Renders the printable QR code of one compartment (Fach) of a locker
+      system that carries its own list of compartments (Open Locker),
+      addressed by the locker system and the compartment's UUID. The code
+      encodes `https://<STORE_FRONT_URL>/mobile-key/<tenant>/<scanCode>` with
+      the compartment's own scan code, never the locker system's; the client
+      only ever receives the rendered image or PDF. A compartment out of
+      service is rendered as well, its code stays valid.
+
+      Reserved for tenant owners (membership `owner: true`; instance owners are
+      allowed as well), like the door's QR code.
+
+      `format=pdf` returns the door's A4 print template with the locker
+      system's label and „Schrank X · Fach N“ above the code. The file is
+      named `qr-<locker system>-schrank-<locker bank>-fach-<nn>.<format>`
+      (labels as ASCII slugs, the number at least two digits) in
+      `Content-Disposition`.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: id
+        in: path
+        required: true
+        description: Unique identifier of the locker system
+        schema:
+          type: string
+      - name: compartmentId
+        in: path
+        required: true
+        description: UUID of the compartment, its `id` in `config.compartments`
+        schema:
+          type: string
+      - name: format
+        in: query
+        required: false
+        description: The render format. Defaults to `svg`.
+        schema:
+          type: string
+          enum: [svg, png, pdf]
+          default: svg
+    responses:
+      "200":
+        description: The rendered QR code
+        headers:
+          Content-Disposition:
+            description: |
+              `inline; filename="qr-<locker system>-schrank-<locker bank>-fach-<nn>.<format>"`
+            schema:
+              type: string
+        content:
+          image/svg+xml:
+            schema:
+              type: string
+          image/png:
+            schema:
+              type: string
+              format: binary
+          application/pdf:
+            schema:
+              type: string
+              format: binary
+      "400":
+        description: Unsupported format
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not a tenant owner
+      "404":
+        description: |
+          The tenant has no access point with that id, it is a door or a locker
+          system without its own list of compartments (iFBS, Pareva), or it
+          carries no compartment with that UUID
+      "503":
+        description: |
+          `store_front_url_missing`: the instance has no `STORE_FRONT_URL`, so
+          there is no address to encode.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreFrontUrlMissing"
+
+/api/{tenant}/accesspoints/{id}/compartments/qrcodes:
+  get:
+    tags:
+      - Access Points
+    summary: Render the Sammel-PDF of all Fächer of a locker system
+    description: |
+      Renders the QR codes of all compartments (Fächer) of a locker system that
+      carries its own list of compartments (Open Locker) as one PDF, the
+      Sammel-PDF: an Etikettenbogen of 2×4 labels of 105 × 74 mm (A7) on a
+      borderless A4 sheet (e.g. Zweckform 3427), with thin dashed cut lines for
+      plain paper. Each label carries the locker system's label, „Schrank X“,
+      the compartment's own QR code (52 mm), „FACH“ with its number and
+      „Scannen, um Ihr Fach zu öffnen“. Every locker bank (Schrank) starts a
+      new page; the order is that of the allocation: locker bank by name (by id
+      for the same name), then compartment number, numerically. Compartments
+      out of service are printed with the note „außer Betrieb“, their codes
+      stay valid.
+
+      Reserved for tenant owners (membership `owner: true`; instance owners are
+      allowed as well), like the door's QR code.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: id
+        in: path
+        required: true
+        description: Unique identifier of the locker system
+        schema:
+          type: string
+    responses:
+      "200":
+        description: The Sammel-PDF
+        headers:
+          Content-Disposition:
+            description: |
+              `inline; filename="qr-<locker system>-alle-faecher.pdf"` (the
+              label as ASCII slug)
+            schema:
+              type: string
+        content:
+          application/pdf:
+            schema:
+              type: string
+              format: binary
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not a tenant owner
+      "404":
+        description: |
+          The tenant has no access point with that id, or it is a door or a
+          locker system without its own list of compartments (iFBS, Pareva)
+      "503":
+        description: |
+          `store_front_url_missing`: the instance has no `STORE_FRONT_URL`, so
+          there is no address to encode.
         content:
           application/json:
             schema:
@@ -581,7 +733,117 @@
       "403":
         description: Not a tenant owner
       "404":
-        description: The tenant has no access point with that id
+        description: |
+          The tenant has no access point with that id, or it is a locker
+          system with its own list of compartments: only the codes of its
+          compartments are rotated
+
+/api/{tenant}/accesspoints/{id}/compartments/{compartmentId}/rotate-scan-code:
+  post:
+    tags:
+      - Access Points
+    summary: Rotate the scan code of one Fach of a locker system
+    description: |
+      Rotates the scan code of one compartment (Fach) of a locker system that
+      carries its own list of compartments (Open Locker), addressed by the
+      locker system and the compartment's UUID, by the door's rule: the
+      current code is pushed to the front of the compartment's
+      `previousScanCodes` (capped at five, the oldest fall off) and a new
+      one takes its place. The old sticker resolves as stale
+      (`stale_scan_code`) from then on. The other compartments and the
+      locker system's own code stay as they are.
+
+      Runs under the mutex of the locker system, which every save of it holds
+      as well, so a concurrent save never writes the old code back.
+
+      Reserved for tenant owners (membership `owner: true`; instance owners are
+      allowed as well), like the door's rotation.
+
+      The response carries neither the old nor the new scan code.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: id
+        in: path
+        required: true
+        description: Unique identifier of the locker system
+        schema:
+          type: string
+      - name: compartmentId
+        in: path
+        required: true
+        description: UUID of the compartment at Open Locker
+        schema:
+          type: string
+    responses:
+      "200":
+        description: The locker system after rotation, without any scan codes
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManagedAccessPoint"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not a tenant owner
+      "404":
+        description: |
+          The tenant has no access point with that id, it is a door or a
+          locker system without its own list of compartments (iFBS, Pareva),
+          or the locker system carries no compartment with that UUID
+      "503":
+        description: The locker system stayed held (`locker_system_busy`)
+
+/api/{tenant}/accesspoints/{id}/compartments/rotate-scan-codes:
+  post:
+    tags:
+      - Access Points
+    summary: Rotate the scan codes of all Fächer of a locker system
+    description: |
+      Rotates the scan code of every compartment (Fach) of a locker system
+      that carries its own list of compartments (Open Locker), out of service
+      included, each by the rule of one compartment: the current code is
+      pushed to the front of the compartment's `previousScanCodes` (capped at
+      five, the oldest fall off) and a new one takes its place. The locker
+      system is stored once. Every printed sticker resolves as stale
+      (`stale_scan_code`) from then on. The locker system's own code stays as
+      it is.
+
+      Runs under the mutex of the locker system, which every save of it holds
+      as well, so a concurrent save never writes the old codes back.
+
+      Reserved for tenant owners (membership `owner: true`; instance owners are
+      allowed as well), like the door's rotation.
+
+      The response carries neither the old nor the new scan codes.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: id
+        in: path
+        required: true
+        description: Unique identifier of the locker system
+        schema:
+          type: string
+    responses:
+      "200":
+        description: The locker system after rotation, without any scan codes
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManagedAccessPoint"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not a tenant owner
+      "404":
+        description: |
+          The tenant has no access point with that id, or it is a door or a
+          locker system without its own list of compartments (iFBS, Pareva)
+      "503":
+        description: The locker system stayed held (`locker_system_busy`)
 
 components:
   schemas:
@@ -804,7 +1066,10 @@ components:
       description: |
         A compartment of a locker system that carries its own list. On write
         only `id` and `outOfService` count while the provider is active;
-        `number` and `lockerBank` are taken from its listing.
+        `number` and `lockerBank` are taken from its listing. Each compartment
+        carries a scan code of its own, minted by the server when it joins
+        the list and kept while it stays in it, out of service included; a
+        scan code in the request is ignored, and no answer carries one.
       required: [id]
       properties:
         id:

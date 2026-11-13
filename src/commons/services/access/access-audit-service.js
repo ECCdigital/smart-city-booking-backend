@@ -88,6 +88,14 @@ const OPEN_ACTION_ORIGIN_LABELS = Object.freeze({
   [OPEN_ACTION_ORIGINS.FALLBACK]: "Rückfall",
 });
 
+// German wording for an error code where the raw code would not speak for
+// itself. Every other code - `stale_scan_code`, a provider's error - reaches
+// the export as recorded. `wrong_compartment` is the scan at a Fach the
+// person does not hold (`access-scan-service.js`).
+const ERROR_CODE_LABELS = Object.freeze({
+  wrong_compartment: "Fremdes Fach",
+});
+
 /**
  * Builds tenant-wide audit exports (CSV / PDF) from the `accessLogs`
  * collection for compliance purposes (see ACCESS_POINTS_IMPLEMENTATION_PLAN §7).
@@ -185,7 +193,10 @@ class AccessAuditService {
       bookingId: log.bookingId || "",
       actorUserId: log.actor?.userId || "",
       actorSource: log.actor?.source || "",
-      errorCode: log.errorCode || "",
+      errorCode: AccessAuditService._formatLabelled(
+        log.errorCode,
+        ERROR_CODE_LABELS,
+      ),
       errorMessage: log.errorMessage || "",
       details: AccessAuditService._stringifyPayload(log.payload),
     }));

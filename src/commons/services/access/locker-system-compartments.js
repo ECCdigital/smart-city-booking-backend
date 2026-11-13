@@ -1,5 +1,8 @@
 const { ValidationError } = require("../../../errors/ValidationError");
-const { AccessPointType } = require("../../entities/access/access-point");
+const {
+  AccessPointType,
+  generateScanCode,
+} = require("../../entities/access/access-point");
 
 /**
  * The Fächer a Schließfachanlage carries itself - today only an Anlage of
@@ -9,7 +12,8 @@ const { AccessPointType } = require("../../entities/access/access-point");
  * ```
  * { id: "<UUID at the provider>", number: 3,
  *   lockerBank: { id: "<Schließfachschrank id>", name: "Labor Fachbank 1" },
- *   outOfService: false }
+ *   outOfService: false,
+ *   scanCode: "<opaque>", previousScanCodes: ["<rotated out>", …] }
  * ```
  *
  * An Anlage that carries its own list is one where the platform assigns the
@@ -34,6 +38,17 @@ function carriesOwnCompartments(accessPoint) {
     accessPoint?.type === AccessPointType.LOCKER &&
     Array.isArray(accessPoint?.config?.compartments)
   );
+}
+
+/**
+ * The name of the Schließfachschrank a Fach stands in, as its entry or an
+ * `assignedCompartment` carries it.
+ *
+ * @param {Object} compartment The Fach's entry
+ * @returns {string|null} The name, `null` where the entry names none
+ */
+function lockerBankNameOf(compartment) {
+  return compartment.lockerBank?.name ?? null;
 }
 
 /**
@@ -96,6 +111,40 @@ function requestedCompartments(compartments) {
   }
 
   return requested;
+}
+
+/**
+ * The Fächer as a save stores them, each with its scan code (tickets#1055):
+ * a Fach the Anlage already holds keeps `scanCode` and `previousScanCodes`
+ * of its stored entry, found by its UUID, so printed stickers stay valid; a
+ * Fach new to the Anlage - a Fach taken back in included - gets a fresh code
+ * minted like a door's. The codes come from the stored entries alone, never
+ * from the request.
+ *
+ * @param {Object[]} compartments The Fächer as the save leaves them
+ * @param {Object[]} storedCompartments The Fächer as stored before the
+ *   save, none on a create
+ * @returns {Object[]} The Fächer with their scan codes
+ */
+function withScanCodes(compartments, storedCompartments = []) {
+  const stored = new Map(
+    storedCompartments.map((compartment) => [
+      String(compartment.id),
+      compartment,
+    ]),
+  );
+
+  return compartments.map((compartment) => {
+    const kept = stored.get(String(compartment.id));
+
+    return kept?.scanCode
+      ? {
+          ...compartment,
+          scanCode: kept.scanCode,
+          previousScanCodes: [...(kept.previousScanCodes || [])],
+        }
+      : { ...compartment, scanCode: generateScanCode(), previousScanCodes: [] };
+  });
 }
 
 /**
@@ -174,6 +223,8 @@ function refusal(field, compartmentId, claim) {
 module.exports = {
   carriesOwnCompartments,
   compartmentsOf,
+  lockerBankNameOf,
   requestedCompartments,
+  withScanCodes,
   assertCompartmentsUnclaimed,
 };

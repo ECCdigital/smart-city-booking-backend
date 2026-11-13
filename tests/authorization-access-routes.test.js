@@ -95,6 +95,67 @@ describe("authorization on the access, catalog and calendar routes", function ()
     ).to.equal(200);
   });
 
+  // tickets#1056: the QR code of a Fach takes the door's right. The world's
+  // access point is a door, so the tenant owner passes the right and meets the
+  // 404 for an access point without Fächer.
+  it("puts the QR code of a Fach on the tenant owner, like the door's", async function () {
+    const path = `/accesspoints/${FIXTURE_ID}/compartments/${FIXTURE_ID}/qrcode`;
+
+    expect((await get(path)).status).to.equal(401);
+
+    const customer = await get(path, CUSTOMER);
+    expect(customer.status).to.equal(403);
+    expect(customer.body).to.deep.equal(FORBIDDEN);
+
+    expect((await get(path, ROLE_HOLDER)).status).to.equal(403);
+    expect((await get(path, OWNER)).status).to.equal(404);
+  });
+
+  // tickets#1062: the Sammel-PDF of an Anlage takes the same right; the
+  // world's door meets the 404 of an access point without its own Fächer.
+  it("puts the Sammel-PDF of an Anlage on the tenant owner, like the door's QR code", async function () {
+    const path = `/accesspoints/${FIXTURE_ID}/compartments/qrcodes`;
+
+    expect((await get(path)).status).to.equal(401);
+
+    const customer = await get(path, CUSTOMER);
+    expect(customer.status).to.equal(403);
+    expect(customer.body).to.deep.equal(FORBIDDEN);
+
+    expect((await get(path, ROLE_HOLDER)).status).to.equal(403);
+    expect((await get(path, OWNER)).status).to.equal(404);
+  });
+
+  // tickets#1061: rotating the code of a Fach takes the door's right as well.
+  it("puts the rotation of a Fach's code on the tenant owner, like the door's", async function () {
+    const path = `/accesspoints/${FIXTURE_ID}/compartments/${FIXTURE_ID}/rotate-scan-code`;
+    const post = (userId) => call("post", path, userId);
+
+    expect((await post()).status).to.equal(401);
+
+    const customer = await post(CUSTOMER);
+    expect(customer.status).to.equal(403);
+    expect(customer.body).to.deep.equal(FORBIDDEN);
+
+    expect((await post(ROLE_HOLDER)).status).to.equal(403);
+    expect((await post(OWNER)).status).to.equal(404);
+  });
+
+  // tickets#1063: rotating the codes of all Fächer takes the door's right too.
+  it("puts the rotation of all Fächer's codes on the tenant owner, like the door's", async function () {
+    const path = `/accesspoints/${FIXTURE_ID}/compartments/rotate-scan-codes`;
+    const post = (userId) => call("post", path, userId);
+
+    expect((await post()).status).to.equal(401);
+
+    const customer = await post(CUSTOMER);
+    expect(customer.status).to.equal(403);
+    expect(customer.body).to.deep.equal(FORBIDDEN);
+
+    expect((await post(ROLE_HOLDER)).status).to.equal(403);
+    expect((await post(OWNER)).status).to.equal(404);
+  });
+
   it("puts the bookings of an access point on the booking reader, not the bookable reader", async function () {
     const path = `/accesspoints/${FIXTURE_ID}/bookings`;
 

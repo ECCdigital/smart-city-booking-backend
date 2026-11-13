@@ -45,6 +45,22 @@ router.get(
   AccessPointController.getQrCode,
 );
 
+// The QR code of one Fach of a Schließfachanlage (tickets#1056), with the
+// door's right: printing a sticker is writing the access point.
+router.get(
+  "/:id/compartments/:compartmentId/qrcode",
+  authorize("accessPoint", "write"),
+  AccessPointController.getCompartmentQrCode,
+);
+
+// The Sammel-PDF of a Schließfachanlage (tickets#1062): the QR codes of all
+// its Fächer on an Etikettenbogen, with the right of the QR code above.
+router.get(
+  "/:id/compartments/qrcodes",
+  authorize("accessPoint", "write"),
+  AccessPointController.getCompartmentQrSheet,
+);
+
 router.get(
   "/:id/location-prefill",
   authorize("accessPoint", "write"),
@@ -55,6 +71,21 @@ router.post(
   "/:id/rotate-scan-code",
   authorize("accessPoint", "write"),
   AccessPointController.rotateScanCode,
+);
+
+// The rotation of one Fach's code (tickets#1061), with the door's right.
+router.post(
+  "/:id/compartments/:compartmentId/rotate-scan-code",
+  authorize("accessPoint", "write"),
+  AccessPointController.rotateCompartmentScanCode,
+);
+
+// The rotation of all Fächer's codes at once (tickets#1063), with the door's
+// right.
+router.post(
+  "/:id/compartments/rotate-scan-codes",
+  authorize("accessPoint", "write"),
+  AccessPointController.rotateAllCompartmentScanCodes,
 );
 
 router.delete(

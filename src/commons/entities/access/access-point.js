@@ -32,12 +32,40 @@ const FIELDS_HIDDEN_IN_RESPONSES = ["scanCode", "previousScanCodes"];
 
 /**
  * Create a scan code: an opaque, url-safe random value that identifies an
- * access point in the printed QR code.
+ * access point in the printed QR code - a door, or a Fach of a
+ * Schließfachanlage with its own list (`locker-system-compartments.js`).
  *
  * @returns {string} A new scan code
  */
 function generateScanCode() {
   return crypto.randomBytes(SCAN_CODE_BYTES).toString("base64url");
+}
+
+/**
+ * The scan codes after a rotation, of a door or of a Fach of a
+ * Schließfachanlage alike: the current code moves to the front of
+ * `previousScanCodes` (capped at {@link PREVIOUS_SCAN_CODES_CAP}, the
+ * oldest fall off) and a fresh code takes its place.
+ *
+ * @param {{scanCode: string, previousScanCodes?: string[]}} holder The
+ *   access point or Fach, only read
+ * @returns {{scanCode: string, previousScanCodes: string[]}} The new codes
+ */
+function rotatedScanCodes({ scanCode, previousScanCodes = [] }) {
+  return {
+    scanCode: generateScanCode(),
+    previousScanCodes: [scanCode, ...previousScanCodes].slice(
+      0,
+      PREVIOUS_SCAN_CODES_CAP,
+    ),
+  };
+}
+
+/** A copy of the access point or Fach without its scan codes. */
+function withoutScanCodes(holder) {
+  const copy = { ...holder };
+  FIELDS_HIDDEN_IN_RESPONSES.forEach((field) => delete copy[field]);
+  return copy;
 }
 
 function deriveSupportedModes(capabilities = []) {
@@ -102,13 +130,20 @@ class AccessPoint {
   /**
    * Export the access point for API responses. Scan codes never leave the
    * server: they are only meaningful on the printed QR code and are resolved
-   * server-side.
+   * server-side. That holds for the codes of the Fächer of a
+   * Schließfachanlage in `config.compartments` as well (tickets#1055).
    *
    * @returns {Object} Access point data without its scan codes
    */
   toResponse() {
-    const response = this.toDocument();
-    FIELDS_HIDDEN_IN_RESPONSES.forEach((field) => delete response[field]);
+    const response = withoutScanCodes(this.toDocument());
+
+    if (Array.isArray(response.config?.compartments)) {
+      response.config = {
+        ...response.config,
+        compartments: response.config.compartments.map(withoutScanCodes),
+      };
+    }
     return response;
   }
 
@@ -122,12 +157,68 @@ class AccessPoint {
    * @returns {AccessPoint} This access point, so callers can chain.
    */
   rotateScanCode() {
-    this.previousScanCodes = [this.scanCode, ...this.previousScanCodes].slice(
-      0,
-      PREVIOUS_SCAN_CODES_CAP,
-    );
-    this.scanCode = generateScanCode();
+    Object.assign(this, rotatedScanCodes(this));
     return this;
+  }
+
+  /**
+   * Rotate the scan code of one Fach of a Schließfachanlage that carries its
+   * own list (tickets#1061), by the door's rule (see {@link rotatedScanCodes}).
+   * The list is replaced, never written into, since `toDocument` shares
+   * `config` by reference.
+   *
+   * @param {string} compartmentId The UUID of the Fach
+   * @returns {boolean} Whether the Anlage carries that Fach, so its code was
+   *   rotated
+   */
+  rotateCompartmentScanCode(compartmentId) {
+    return (
+      Array.isArray(this.config?.compartments) &&
+      this.config.compartments.some(
+        (compartment) => compartment.id === compartmentId,
+      ) &&
+      this._rotateCompartmentScanCodes(
+        (compartment) => compartment.id === compartmentId,
+      )
+    );
+  }
+
+  /**
+   * Rotate the scan codes of all Fächer of a Schließfachanlage that carries
+   * its own list (tickets#1063), each by the rule of one Fach (see
+   * {@link rotatedScanCodes}), so every printed sticker is void at once. The
+   * list is replaced, never written into, like for one Fach.
+   *
+   * @returns {boolean} Whether the Anlage carries its own list, so its codes
+   *   were rotated
+   */
+  rotateAllCompartmentScanCodes() {
+    return this._rotateCompartmentScanCodes(() => true);
+  }
+
+  /**
+   * @private
+   * Replace the list of Fächer with one where each Fach `rotates` picks has
+   * its codes rotated by {@link rotatedScanCodes}; the others stay as they
+   * are.
+   *
+   * @param {(compartment: Object) => boolean} rotates Picks the Fächer
+   * @returns {boolean} Whether the access point carries a list of Fächer
+   */
+  _rotateCompartmentScanCodes(rotates) {
+    const compartments = this.config?.compartments;
+    if (!Array.isArray(compartments)) {
+      return false;
+    }
+    this.config = {
+      ...this.config,
+      compartments: compartments.map((compartment) =>
+        rotates(compartment)
+          ? { ...compartment, ...rotatedScanCodes(compartment) }
+          : compartment,
+      ),
+    };
+    return true;
   }
 
   /**
@@ -165,4 +256,5 @@ module.exports = {
   AccessPointState,
   VALIDATION_RULE_TYPES,
   deriveSupportedModes,
+  generateScanCode,
 };

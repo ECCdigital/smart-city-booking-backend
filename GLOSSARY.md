@@ -129,8 +129,12 @@ Die optionale physische Verortung eines AccessPoints — Koordinaten, wahlweise 
 _Avoid_: Location (als Entity), Site
 
 **Scan-Code**:
-Ein opaker, rotierbarer Zufallswert eines AccessPoints, der in der QR-URL an der Tür steckt und beim Scan server-seitig zum AccessPoint aufgelöst wird. Rotation macht alle zuvor gedruckten Codes ungültig.
+Ein opaker, rotierbarer Zufallswert einer Tür oder eines Fachs einer Schließfachanlage, der in der QR-URL am Ort steckt und beim Scan server-seitig dazu aufgelöst wird. Rotation macht alle zuvor gedruckten Codes ungültig. Eine Schließfachanlage selbst hat keinen gedruckten Code.
 _Avoid_: Token, QR-ID
+
+**Sammel-PDF**:
+Das PDF mit den QR-Codes aller Fächer einer Schließfachanlage, als Etikettenbogen: 2×4 Etiketten von 105 × 74 mm (A7) auf A4, randlos, etwa Zweckform 3427, mit gestrichelten Schnittlinien für Normalpapier. Jeder Schließfachschrank beginnt eine neue Seite, die Fächer stehen in der Reihenfolge der Zuteilung; ein Fach außer Betrieb steht mit dem Vermerk „außer Betrieb“ darin, denn sein Code gilt weiter. Gedruckt wird ein Fach oder alle, nie eine Auswahl.
+_Avoid_: Sammeldruck, Bogen (unqualifiziert), Etiketten-PDF
 
 **Evidence**:
 Ein vom Client beim Öffnen mitgelieferter Nachweis (z.B. QR-Scan, Geoposition), den der Server gegen die konfigurierten Validierungsregeln eines AccessPoints prüft.
@@ -169,7 +173,7 @@ Eine pro AccessPoint konfigurierte Evidence-Anforderung, die der Server beim Öf
 _Avoid_: Validation Rule, Policy, Check
 
 **Scan-Landing-Page**:
-Die Frontend-Seite, die sich öffnet, wenn ein Nutzer den QR-Code an einem AccessPoint scannt; sie führt durch Login, Berechtigungsprüfung und Öffnen.
+Die Frontend-Seite, die sich öffnet, wenn ein Nutzer den QR-Code an einer Tür oder einem Fach einer Schließfachanlage scannt; sie führt durch Login, Berechtigungsprüfung und Öffnen.
 
 **Tenant-Owner**:
 Ein Nutzer, dessen Membership im Mandanten als Owner markiert ist; umgeht alle rollenbasierten Rechteprüfungen des Mandanten und trägt exklusiv die Schreibrechte an AccessPoints (Anlage, Bearbeitung, QR-Druck, Rotation).

@@ -10,6 +10,7 @@ describe("AccessController.resolveScan", () => {
   let sandbox;
   let request;
   let response;
+  let lockerSystemsByCode;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
@@ -24,6 +25,9 @@ describe("AccessController.resolveScan", () => {
       json: sandbox.stub(),
       sendStatus: sandbox.stub(),
     };
+    lockerSystemsByCode = sandbox
+      .stub(AccessPointManager, "getLockerSystemsByCompartmentScanCode")
+      .resolves([]);
   });
 
   afterEach(() => {
@@ -60,6 +64,55 @@ describe("AccessController.resolveScan", () => {
     expect(
       response.json.firstCall.args[0].data.validationRuleTypes,
     ).to.deep.equal(["qrScan"]);
+  });
+
+  it("answers the code of a Fach with the Fach of its Schließfachanlage", async () => {
+    const anlage = AccessPoint.create({
+      id: "anlage-1",
+      tenantId: "tenant-1",
+      type: "locker",
+      provider: "open-locker",
+      label: "Fächer Bahnhof",
+      mode: "remote",
+      validationRules: [{ type: "qrScan" }],
+      config: {
+        compartments: [
+          {
+            id: "fach-3",
+            number: 3,
+            lockerBank: { id: "bank-1", name: "Labor Fachbank 1" },
+            outOfService: false,
+            scanCode: "code-1",
+            previousScanCodes: [],
+          },
+        ],
+      },
+    });
+    sandbox.stub(AccessPointManager, "getAccessPointByScanCode").resolves(null);
+    lockerSystemsByCode.resolves([anlage]);
+
+    await AccessController.resolveScan(request, response);
+
+    expect(response.status.calledWith(200)).to.be.true;
+    expect(response.json.firstCall.args[0]).to.deep.equal({
+      success: true,
+      data: {
+        id: "anlage-1:fach-3",
+        tenantId: "tenant-1",
+        lockerSystemId: "anlage-1",
+        label: "Fächer Bahnhof",
+        type: "locker",
+        provider: "open-locker",
+        mode: "remote",
+        validationRuleTypes: ["qrScan"],
+        capabilities: ["open"],
+        compartment: {
+          number: 3,
+          lockerBankName: "Labor Fachbank 1",
+          outOfService: false,
+        },
+      },
+    });
   });
 
   it("answers a resolved code with the success envelope", async () => {
