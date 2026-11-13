@@ -95,6 +95,7 @@ _Avoid_: usedBy (als Feld — existiert nicht), Rückreferenz, Usage-Index
 **AccessPoint**:
 Ein physischer Zugangspunkt, den die Plattform über einen Provider (z.B. NUKI, Salto, Open Locker, iFBS, Pareva) einer Buchung zuordnet: eine Tür (geteilt, fest konfiguriert; auch das Fach eines Schließfachschranks) oder eine Schließfachanlage (exklusiv, je Buchung ein Fach zugeteilt). Ein AccessPoint ohne Bedien-Capability ist zulässig — die Plattform muss ihn nicht öffnen können.
 _Avoid_: Tür (als Entity-Name), Door, Schloss, Lock, Locker
+Die Seite Zugangspunkte der Admin UI zeigt „Schloss“ nicht mehr, sie sagt Zugangspunkt, Tür oder Fach.
 
 **Schließfachanlage**:
 Ein AccessPoint, dessen Provider je Buchung ein Fach zuteilt: bei iFBS ein Standort mit Fahrradboxen (genau ein Fach je Buchung, iFBS wählt es), bei Pareva ein Produkt (Produkt-ID, die 24-stellige Hex-ID des Produkts bei Pareva) einer Schließfachanlage (mehrere Fächer je Buchung, Pareva gibt den Zugangscode selbst an den Buchenden). Bei iFBS und Pareva kennt die Plattform vor der Buchung nur die Anlage, nie das Fach. Bei Open Locker teilt die Plattform zu, aus den Fächern, die die Verwaltung der Anlage gegeben hat (ihre eigene Liste von Fächern, gewählt aus der Liste von Open Locker, auch aus mehreren Schließfachschränken), und prüft die Belegung selbst; eine solche Anlage gehört zu genau einem Bookable und begrenzt dessen Verfügbarkeit auf die Zahl ihrer Fächer in Betrieb. Ob die Plattform zuteilt, hängt daran, ob die Anlage eine eigene Liste von Fächern trägt, nicht am Namen des Providers. Kapazität ist Sache des Bookables, nicht der Anlage: `amount` ist die Obergrenze gleichzeitiger Buchungen des Bookables insgesamt, leer heißt unbegrenzt; eine Zahl je Anlage gibt es nicht. Jede Anlage des Bookables gibt einer Buchung so viele Fächer, wie deren Position Einheiten bucht - bei mehreren Anlagen jede für sich, hingenommen. Den Bestand eines Pareva-Produkts kennt nur Pareva: die Verfügbarkeit des Produkts fragt der Checkout live bei Pareva ab (`rental/available`, ein Eintrag je freies Fach im Zeitraum, gebraucht werden so viele wie die Position bucht), zusätzlich zur eigenen Zählung gegen `amount` - beide müssen passen, bei unbegrenztem `amount` allein Pareva; antwortet Pareva nicht, entscheidet die eigene Zählung allein.
@@ -103,6 +104,9 @@ _Avoid_: Locker, Locker-Unit, Location (als Entity), Schließfach (unqualifizier
 **Fach**:
 Ein abschließbares Abteil mit eigener Tür. An einer Schließfachanlage teilt der Provider es einer Buchung zu, und es lebt im Grant der Buchung für die Anlage; bei iFBS trägt es die Boxnummer, an der der Buchende seine Box erkennt. Ein Fach von Open Locker steht in höchstens einer Schließfachanlage oder ist ein festes Fach (ein AccessPoint vom Typ Tür, fest einem Bookable zugeordnet), nie beides; die Plattform prüft das beim Speichern über alle AccessPoints des Mandanten. In einer Anlage merkt sie sich je Fach die UUID bei Open Locker, die Fachnummer, den Schließfachschrank und ob es außer Betrieb ist. Ein zugeteiltes Fach einer solchen Anlage lebt ohne Grant im Fach-Eintrag der Buchung: Es gilt mit der Bereitstellung als bereitgestellt und mit der Rücknahme als zurückgenommen, beides ohne Aufruf bei Open Locker, und geöffnet wird es über seine UUID. Die buchende Person und die Verwaltung sehen es als „{Anlage} — Schrank {Name}, Fach {Nummer}“; das feste Fach heißt weiter nach seinem Label.
 _Avoid_: Box (als Begriff — iFBS-Jargon), Unit, Locker, Compartment (als Sprechbegriff)
+
+**Festes Fach**:
+Ein einzelnes Fach von Open Locker, das selbst ein AccessPoint ist (Typ Tür), ohne Schließfachanlage drumherum, fest einem Bookable zugeordnet. Es steht in keiner Schließfachanlage, und es heißt nach seinem Label. Die Seite Zugangspunkte der Admin UI nennt es neben Tür und Schließfachanlage als dritte Art Zugangspunkt.
 
 **Schließfachschrank**:
 Ein Schrank mit nummerierten Fächern, den Open Locker steuert. Nicht der Schrank ist ein AccessPoint; seine Fächer stehen in Schließfachanlagen oder sind feste Fächer. Der Schrank gibt dem Fach Namen und Ort, etwa „Labor Fachbank 1 · Fach 2“; Name und Nummer übernimmt die Plattform beim Speichern aus der Liste von Open Locker.
@@ -558,6 +562,7 @@ _Avoid_: Integration, Plugin, Adapter (das ist der Code-Baustein)
 
 **Anbindung**:
 Ein für eine Instanz oder einen Mandanten eingerichteter Anbieter samt Zugangsdaten und Aktiv-Schalter. Ein Modul ist damit auf zwei Ebenen „an“: der Betreiber nimmt es in die Instanz auf, ein Mandant bindet einen Anbieter an.
+Auf der Seite Zugangspunkte der Admin UI liest die Verwaltung für die Anbindung eines Schließdienstes „Anbieter“.
 _Avoid_: Application/App (Name im Code), Integration, Konfiguration
 
 **Profil**:

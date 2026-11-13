@@ -1,5 +1,3 @@
-const TenantManager = require("../../data-managers/tenant-manager");
-const { DOMAIN } = require("../authorization/reach");
 const {
   SaltoKsApiClient,
   extractSaltoList,
@@ -9,103 +7,11 @@ const BaseAccessApiClient = require("./clients/base-access-api-client");
 const {
   SaltoKsAccessApplication,
 } = require("../../entities/application/accessApplication");
+const { prepareConnectionTest } = require("./connection-test-secrets");
 
-const APP_TYPE = "access";
 const PROVIDER_ID = "salto-ks";
 
 const REQUIRED_FIELDS = ["clientId", "clientSecret", "username", "password"];
-
-/**
- * Which stored secret belongs to which part of the identity: a client secret
- * is issued for a client id in one environment, a password belongs to a
- * system user in one environment. The site plays no part - a new site needs
- * no new secret.
- */
-const SECRETS = [
-  {
-    field: "clientSecret",
-    identity: "clientId",
-    reason: "client_id_changed",
-  },
-  { field: "password", identity: "username", reason: "username_changed" },
-];
-
-/**
- * The tenant's stored Salto KS application, active or not - an admin may
- * test a configuration before switching it on.
- *
- * @param {string} [tenantId]
- * @returns {Promise<Object|null>}
- */
-async function getStoredApp(tenantId) {
-  if (!tenantId) {
-    return null;
-  }
-
-  const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
-  return (
-    tenant?.applications?.find(
-      (app) => app.type === APP_TYPE && app.id === PROVIDER_ID,
-    ) || null
-  );
-}
-
-function same(a, b) {
-  return String(a ?? "").trim() === String(b ?? "").trim();
-}
-
-/**
- * The configuration under test with every secret the form left empty taken
- * from the stored application - but only while it still belongs to what the
- * form names: the client secret while client id and environment are the
- * stored ones, the password while system user and environment are. A secret
- * that cannot be taken is named in `missing` with the reason.
- *
- * `sources` says per secret where the tested value came from.
- *
- * @param {Object} config The configuration as the admin form sent it
- * @param {Object|null} stored The stored Salto KS application
- * @returns {{
- *   config: Object,
- *   sources: Object<string, "stored"|"form"|"missing">,
- *   missing: {field: string, reason: string}[],
- * }}
- */
-function completeSecrets(config, stored) {
-  const completed = {
-    ...config,
-    environment: SaltoKsAccessApplication.resolveEnvironment(config),
-  };
-  const sources = {};
-  const missing = [];
-  const sameEnvironment =
-    !!stored &&
-    SaltoKsAccessApplication.resolveEnvironment(stored) ===
-      completed.environment;
-
-  for (const { field, identity, reason } of SECRETS) {
-    if (config[field]) {
-      sources[field] = "form";
-      continue;
-    }
-
-    if (!stored?.[field]) {
-      sources[field] = "missing";
-      missing.push({ field, reason: "not_stored" });
-    } else if (!sameEnvironment) {
-      sources[field] = "missing";
-      missing.push({ field, reason: "environment_changed" });
-    } else if (!same(config[identity], stored[identity])) {
-      sources[field] = "missing";
-      missing.push({ field, reason });
-    } else {
-      sources[field] = "stored";
-      completed[field] = stored[field];
-    }
-  }
-
-  return { config: completed, sources, missing };
-}
 
 /** Network errors axios raises when Salto does not answer in time. */
 const TIMEOUT_CODES = ["ECONNABORTED", "ETIMEDOUT"];
@@ -284,8 +190,9 @@ async function runChecks(client, siteId, tenantId) {
 
 /**
  * The connection test of Salto KS. Secrets the form leaves empty are taken
- * from the stored application (see `completeSecrets`); only then are the
- * required fields checked. A required field that is missing stops the test
+ * from the stored application while client id, system user and environment
+ * stay (`completeSecrets`, `secretIdentity`); only then are the required
+ * fields checked. A required field that is missing stops the test
  * before Salto is asked, naming the fields as the request does:
  *
  *     { success: false, code: "missing_fields", message,
@@ -315,38 +222,25 @@ async function runChecks(client, siteId, tenantId) {
  * access and the IQs) comes with a working connection.
  *
  * @param {Object} config The configuration as the admin form sent it
- * @param {{tenantId?: string}} [context]
+ * @param {{tenantId?: string, secrets?: Object}} [context] As of
+ *   `testProvider`
  * @returns {Promise<Object>}
  */
 async function testSaltoKsConnection(config, context = {}) {
-  const stored = await getStoredApp(context.tenantId);
-  const {
-    config: completed,
-    sources,
-    missing,
-  } = completeSecrets(config, stored);
-
-  const missingFields = REQUIRED_FIELDS.filter(
-    (field) =>
-      !completed[field] && !missing.some((secret) => secret.field === field),
+  const prepared = prepareConnectionTest(
+    PROVIDER_ID,
+    config,
+    context.secrets,
+    REQUIRED_FIELDS,
   );
-  if (missingFields.length > 0) {
-    return {
-      success: false,
-      code: "missing_fields",
-      message: `Missing required fields: ${missingFields.join(", ")}`,
-      missing: missingFields.map((field) => ({ field })),
-    };
+  if (prepared.refusal) {
+    return prepared.refusal;
   }
-
-  if (missing.length > 0) {
-    return {
-      success: false,
-      code: "missing_secret",
-      message: `Missing secrets: ${missing.map((m) => m.field).join(", ")}`,
-      missing,
-    };
-  }
+  const { sources } = prepared;
+  const completed = {
+    ...prepared.config,
+    environment: SaltoKsAccessApplication.resolveEnvironment(config),
+  };
 
   const { clientId, clientSecret, siteId, environment, username, password } =
     completed;

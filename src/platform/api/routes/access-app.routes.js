@@ -41,6 +41,26 @@ router.delete(
   AccessAppController.saltoKsDiscardIqActivation,
 );
 
+// The access application of one provider, saved, switched and removed on
+// its own (tickets#1101) - never the whole tenant.
+router.put(
+  "/:provider",
+  authorize("accessApp", "manage"),
+  AccessAppController.saveApplication,
+);
+
+router.put(
+  "/:provider/active",
+  authorize("accessApp", "manage"),
+  AccessAppController.setApplicationActive,
+);
+
+router.delete(
+  "/:provider",
+  authorize("accessApp", "manage"),
+  AccessAppController.removeApplication,
+);
+
 router.post(
   "/:provider/test",
   authorize("accessApp", "manage"),

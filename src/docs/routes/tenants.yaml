@@ -95,6 +95,12 @@
       save can be refused for the reference rather than the tenant. The owner
       of a declined tenant is refused, the membership rests:
       `403 tenant_declined` (`TenantDeclinedError`).
+
+      The access applications (`type: access`) are not the save's: they stay
+      as stored, whatever `applications` brings, and are written by
+      `/api/{tenant}/access-apps/{provider}` alone. The other applications
+      (payment, sign-in) are stored as sent. The answer carries the access
+      applications without their secrets, as reading the tenant does.
     security:
       - bearerAuth: []
     requestBody:
