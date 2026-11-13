@@ -5,7 +5,8 @@ const { carriesOwnCompartments } = require("./locker-system-compartments");
 const { ValidationError } = require("../../../errors/ValidationError");
 const { ForbiddenError, NotFoundError } = require("../../../errors/BaseError");
 
-const FIELD = "bookableIds";
+/** The request field every refusal of the assignment names. */
+const BOOKABLE_IDS_FIELD = "bookableIds";
 
 /** The access point ids a bookable links, as strings. */
 function linksOf(bookable) {
@@ -24,7 +25,7 @@ function requestedIds(bookableIds) {
     bookableIds.every((id) => typeof id === "string" && id.trim() !== "");
   if (!valid) {
     throw new ValidationError([
-      { field: FIELD, code: "invalid_bookable_ids", params: {} },
+      { field: BOOKABLE_IDS_FIELD, code: "invalid_bookable_ids", params: {} },
     ]);
   }
   return [...new Set(bookableIds)];
@@ -42,8 +43,8 @@ function requestedIds(bookableIds) {
  *
  * Every bookable that changes has to lie within the reach of the request
  * (`bookable.update`, as `PUT bookables`); a bookable that does not change
- * is not asked about. A Schließfachanlage with its own Fächer hangs at one
- * bookable at most (tickets#1038).
+ * is not asked about. A locker system with its own compartments hangs at
+ * one bookable at most (tickets#1038).
  *
  * @param {string} tenantId
  * @param {string} accessPointId
@@ -67,6 +68,12 @@ async function assignBookables(tenantId, accessPointId, bookableIds, scope) {
   }
   const linkId = String(accessPoint.id);
 
+  // The assignment is read whole, by the domain: the bookables listed and
+  // every one that carries the access point, out of reach too. A scoped
+  // read would hide a bookable out of reach that the request changes - one
+  // it would silently leave carrying the access point, or call unknown -
+  // where the spec asks to refuse the change; the reach is decided below,
+  // at the bookables that change.
   const listed = await BookableManager.getBookablesByIds(
     tenantId,
     wanted,
@@ -77,7 +84,7 @@ async function assignBookables(tenantId, accessPointId, bookableIds, scope) {
   if (unknown.length > 0) {
     throw new ValidationError(
       unknown.map((bookableId) => ({
-        field: FIELD,
+        field: BOOKABLE_IDS_FIELD,
         code: "unknown_bookable",
         params: { bookableId },
       })),
@@ -87,7 +94,7 @@ async function assignBookables(tenantId, accessPointId, bookableIds, scope) {
   if (carriesOwnCompartments(accessPoint) && wanted.length > 1) {
     throw new ValidationError([
       {
-        field: FIELD,
+        field: BOOKABLE_IDS_FIELD,
         code: "locker_system_one_bookable",
         params: { accessPointId: linkId, label: accessPoint.label || "" },
       },
@@ -106,7 +113,12 @@ async function assignBookables(tenantId, accessPointId, bookableIds, scope) {
   const changing = [...toAdd, ...toRemove];
 
   // The read `PUT bookables` makes of the bookable it changes, under the
-  // reach of the request.
+  // reach of the request. A bookable that changes but lies out of reach is
+  // refused with 403, not the 404 of a scoped read that finds nothing: the
+  // spec of the access points page asks for 403 at a bookable the request
+  // would change without `bookable.update` on it (tickets#1082), and the
+  // bookable is known to exist - the request names it, or it carries the
+  // access point.
   for (const bookable of changing) {
     if (!(await BookableManager.getBookable(bookable.id, tenantId, scope))) {
       throw new ForbiddenError();
