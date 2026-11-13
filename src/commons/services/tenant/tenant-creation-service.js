@@ -19,6 +19,7 @@ const SupervisionHistoryManager = require("../../data-managers/supervision-histo
 const SupervisionNotificationService = require("../supervision/supervision-notification-service");
 const Tenant = require("../../entities/tenant/tenant");
 const Membership = require("../../entities/tenant/membership");
+const InvoiceApplication = require("../../entities/application/payment/invoiceApplication");
 const {
   mergeDefaultMailSnippets,
 } = require("../../mail-service/templates/default-mail-snippets");
@@ -147,6 +148,13 @@ class TenantCreationService {
     tenant.invoiceTemplate = readTemplate(
       "pdf-service/templates/default-invoice-template.temp.html",
     );
+    tenant.cancellationTemplate = readTemplate(
+      "pdf-service/templates/default-cancellation-receipt.temp.html",
+    );
+    tenant.withdrawalTemplate = readTemplate(
+      "pdf-service/templates/default-withdrawal-receipt.temp.html",
+    );
+    TenantCreationService._activateInvoice(tenant);
     tenant.mailSnippets = mergeDefaultMailSnippets(tenant.mailSnippets);
 
     // The level a new tenant starts at is the server's (spec §2): free for
@@ -210,6 +218,22 @@ class TenantCreationService {
       );
     }
     return tenant;
+  }
+
+  /**
+   * A new tenant can be paid by invoice from the start: the invoice app is
+   * added active unless the body already names one, which is kept as sent.
+   */
+  static _activateInvoice(tenant) {
+    const applications = Array.isArray(tenant.applications)
+      ? tenant.applications
+      : [];
+    const hasInvoice = applications.some(
+      (app) => app?.type === "payment" && app?.id === "invoice",
+    );
+    tenant.applications = hasInvoice
+      ? applications
+      : [...applications, { ...new InvoiceApplication({ active: true }) }];
   }
 
   /**
