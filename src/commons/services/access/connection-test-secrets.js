@@ -34,9 +34,9 @@ function same(a, b) {
   return String(a ?? "").trim() === String(b ?? "").trim();
 }
 
-/** `clientId` -> `client_id`. */
+/** `clientId` -> `client_id`, `apiKeyID` -> `api_key_id`. */
 function snakeCase(field) {
-  return field.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+  return field.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
 }
 
 /**

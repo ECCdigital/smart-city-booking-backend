@@ -71,6 +71,8 @@ const PROVIDERS = {
     changed: { secretPhrase: "new-phrase" },
     identity: { serverUrl: "https://other.ifbs.example" },
     reason: "server_url_changed",
+    // The API key is issued under its key id.
+    moreIdentity: { apiKeyID: { to: "key-2", reason: "api_key_id_changed" } },
   },
   pareva: {
     stored: {
@@ -233,6 +235,28 @@ describe("connection test of an access application over HTTP", function () {
         expect(res.body.success).to.equal(true);
       });
 
+      for (const [field, value] of Object.entries(spec.moreIdentity || {})) {
+        it(`takes no stored secret once ${field} changed`, async function () {
+          store(provider, spec.stored);
+
+          const res = await call("post", `/${provider}/test`, {
+            ...spec.stored,
+            [field]: value.to,
+            [spec.secret]: "",
+          });
+
+          expect(res.body).to.include({
+            success: false,
+            code: "missing_secret",
+          });
+          expect(res.body.missing).to.deep.include({
+            field: spec.secret,
+            reason: value.reason,
+          });
+          expect(asked[provider]).to.deep.equal([]);
+        });
+      }
+
       it("takes no stored secret once the identity it belongs to changed", async function () {
         store(provider, spec.stored);
 
@@ -383,6 +407,18 @@ describe("connection test of an access application over HTTP", function () {
         connectionState: "connected",
         lastTest: answered.lastTest,
       });
+    });
+
+    it("an iFBS key id other than the tested one is unchecked", async function () {
+      const IFBS = PROVIDERS.ifbs.stored;
+      store("ifbs", IFBS);
+      await call("post", "/ifbs/test", { ...IFBS, apiKey: "" });
+      expect((await read("ifbs")).connectionState).to.equal("connected");
+
+      const saved = await call("put", "/ifbs", { ...IFBS, apiKeyID: "key-2" });
+
+      expect(saved.status).to.equal(200);
+      expect(saved.body.connectionState).to.equal("unchecked");
     });
 
     it("a test before the application is stored records nothing", async function () {

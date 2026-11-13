@@ -763,6 +763,7 @@ components:
                   - username_changed
                   - api_base_url_changed
                   - server_url_changed
+                  - api_key_id_changed
                   - user_changed
                   - email_changed
         environment:

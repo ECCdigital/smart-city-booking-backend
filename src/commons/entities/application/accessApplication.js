@@ -269,12 +269,13 @@ class IfbsAccessApplication extends AccessApplication {
     return ["apiKey", "secretPhrase"];
   }
 
+  /** An API key is issued under its key id at one server. */
   static get secretIdentity() {
-    return { apiKey: ["serverUrl"], secretPhrase: ["serverUrl"] };
+    return { apiKey: ["serverUrl", "apiKeyID"], secretPhrase: ["serverUrl"] };
   }
 
   static get testedFields() {
-    return ["serverUrl", "apiKey"];
+    return ["serverUrl", "apiKeyID", "apiKey"];
   }
 
   static get Schema() {
