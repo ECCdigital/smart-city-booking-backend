@@ -83,6 +83,9 @@ describe("meta flags: the flags of a tenant's offers", function () {
     h.tenant.supervisionLevel = "free";
   });
 
+  // The two levels without a public projection, as for the tags.
+  const HIDDEN_LEVELS = ["pending", "declined"];
+
   const get = (path, userId) => {
     let req = h.api().get(path).timeout({ response: 3000 });
     if (userId) req = req.set(h.as(userId));
@@ -102,20 +105,21 @@ describe("meta flags: the flags of a tenant's offers", function () {
     });
 
     it("answers each flag of the events the public sees once", async function () {
-      const res = await get(path);
+      for (const userId of [undefined, CUSTOMER]) {
+        const res = await get(path, userId);
 
-      expect(res.status).to.equal(200);
-      expect(res.body).to.have.members(["barrierefrei", "kinder", "draussen"]);
-      expect(res.body).to.have.lengthOf(3);
-      expect((await get(path, CUSTOMER)).body).to.have.members([
-        "barrierefrei",
-        "kinder",
-        "draussen",
-      ]);
+        expect(res.status, userId).to.equal(200);
+        expect(res.body, userId).to.have.members([
+          "barrierefrei",
+          "kinder",
+          "draussen",
+        ]);
+        expect(res.body, userId).to.have.lengthOf(3);
+      }
     });
 
     it("answers the staff the flags of all the tenant's events", async function () {
-      for (const userId of [OWNER, ADMIN]) {
+      for (const userId of [OWNER, ROLE_HOLDER, ADMIN]) {
         const res = await get(path, userId);
 
         expect(res.status, userId).to.equal(200);
@@ -129,13 +133,15 @@ describe("meta flags: the flags of a tenant's offers", function () {
       }
     });
 
-    it("keeps the flags of a pending tenant from the public, not from the instance owner", async function () {
-      h.tenant.supervisionLevel = "pending";
+    for (const level of HIDDEN_LEVELS) {
+      it(`keeps the flags of a ${level} tenant from the public, not from the instance owner`, async function () {
+        h.tenant.supervisionLevel = level;
 
-      expect((await get(path)).status).to.equal(404);
-      expect((await get(path, CUSTOMER)).status).to.equal(404);
-      expect((await get(path, ADMIN)).body).to.have.lengthOf(4);
-    });
+        expect((await get(path)).status).to.equal(404);
+        expect((await get(path, CUSTOMER)).status).to.equal(404);
+        expect((await get(path, ADMIN)).body).to.have.lengthOf(4);
+      });
+    }
   });
 
   describe("GET /:tenant/bookables/_meta/flags", function () {
@@ -172,7 +178,7 @@ describe("meta flags: the flags of a tenant's offers", function () {
     });
 
     it("answers the staff the flags of all the tenant's bookables", async function () {
-      for (const userId of [OWNER, ADMIN]) {
+      for (const userId of [OWNER, ROLE_HOLDER, ADMIN]) {
         const res = await get(path, userId);
 
         expect(res.status, userId).to.equal(200);
@@ -186,12 +192,14 @@ describe("meta flags: the flags of a tenant's offers", function () {
       }
     });
 
-    it("keeps the flags of a pending tenant from the public, not from the instance owner", async function () {
-      h.tenant.supervisionLevel = "pending";
+    for (const level of HIDDEN_LEVELS) {
+      it(`keeps the flags of a ${level} tenant from the public, not from the instance owner`, async function () {
+        h.tenant.supervisionLevel = level;
 
-      expect((await get(path)).status).to.equal(404);
-      expect((await get(path, CUSTOMER)).status).to.equal(404);
-      expect((await get(path, ADMIN)).body).to.have.lengthOf(4);
-    });
+        expect((await get(path)).status).to.equal(404);
+        expect((await get(path, CUSTOMER)).status).to.equal(404);
+        expect((await get(path, ADMIN)).body).to.have.lengthOf(4);
+      });
+    }
   });
 });

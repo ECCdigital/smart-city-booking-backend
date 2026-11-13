@@ -7,6 +7,7 @@ const { v4: uuidv4 } = require("uuid");
 const AccessPointManager = require("../../../commons/data-managers/access-point-manager");
 const { ValidationError } = require("../../../errors/ValidationError");
 const { BaseError } = require("../../../errors/BaseError");
+const { answerMetaValues } = require("./meta-values-answer");
 const {
   scopeOf,
   reachesOf,
@@ -555,67 +556,36 @@ class BookableController {
   }
 
   /**
-   * This method is used to get all unique tags from all bookable objects for a specific tenant.
-   * It first fetches all bookables from the database.
-   * Then it extracts all tags from each bookable, flattens the array and filters out duplicates.
-   * Finally, it sends the unique tags back with a 200 status code.
+   * `GET /bookables/_meta/tags`: each tag of the bookables within the reach
+   * once (`bookable.meta`): those of the public's list, or of the tenant's
+   * whole for the staff.
    *
    * @param {Object} request - The HTTP request object, containing the parameters and body.
    * @param {Object} response - The HTTP response object, used to send the response back to the client.
-   * @throws {Error} If an error occurs during the process, it logs the error and sends a 500 status code with an error message.
+   * @param {Function} next - Hands an expected error to the error handler.
    */
   static async getTags(request, response, next) {
-    try {
-      const tenant = request.params.tenant;
-      const user = request.user;
-
-      // The aggregate over the bookables within the reach: the public's
-      // list, or the tenant's whole for the staff (`bookable.meta`).
-      const bookables = await BookableManager.getBookables(
-        tenant,
-        scopeOf(request),
-      );
-      const tags = bookables
-        .map((b) => b.tags)
-        .flat()
-        .filter((value, index, self) => self.indexOf(value) === index);
-
-      logger.info(
-        `${tenant} -- Returning ${tags.length} tags to user ${user?.id}`,
-      );
-      response.status(200).send(tags);
-    } catch (err) {
-      if (err instanceof BaseError) {
-        return next(err);
-      }
-      logger.error(err);
-      response.status(500).send("Could not get tags");
-    }
+    return answerMetaValues(request, response, next, {
+      name: "tags",
+      offersOf: (tenant, scope) => BookableManager.getBookables(tenant, scope),
+      valuesOf: (b) => b.tags,
+    });
   }
 
+  /**
+   * `GET /bookables/_meta/flags`: each flag of the bookables within the
+   * reach once, as `getTags` (ECCdigital/tickets#1114).
+   *
+   * @param {Object} request - The HTTP request object, containing the parameters and body.
+   * @param {Object} response - The HTTP response object, used to send the response back to the client.
+   * @param {Function} next - Hands an expected error to the error handler.
+   */
   static async getFlags(request, response, next) {
-    try {
-      const tenant = request.params.tenant;
-      const user = request.user;
-
-      // As the tags: the flags of the bookables within the reach, each once.
-      const bookables = await BookableManager.getBookables(
-        tenant,
-        scopeOf(request),
-      );
-      const flags = [...new Set(bookables.flatMap((b) => b.flags || []))];
-
-      logger.info(
-        `${tenant} -- Returning ${flags.length} flags to user ${user?.id}`,
-      );
-      response.status(200).send(flags);
-    } catch (err) {
-      if (err instanceof BaseError) {
-        return next(err);
-      }
-      logger.error(err);
-      response.status(500).send("Could not get flags");
-    }
+    return answerMetaValues(request, response, next, {
+      name: "flags",
+      offersOf: (tenant, scope) => BookableManager.getBookables(tenant, scope),
+      valuesOf: (b) => b.flags || [],
+    });
   }
 
   /**
