@@ -90,8 +90,8 @@ class AccessAppLifecycleService {
    * `storedSecrets` says whether one is stored (`secretFieldsOf`); the
    * Salto KS IQ activations never leave, not even encrypted; the last test
    * leaves without its fingerprint, and beside it the connection state
-   * (`connectionStateOf`). Each access application is answered as a copy;
-   * payment and sign-in applications as they are.
+   * (`connectionStateOf`). Each access application is answered as a copy
+   * (`exportApplication`); payment and sign-in applications as they are.
    *
    * @param {Object|null} tenant The tenant about to be sent, mutated
    * @returns {Object|null} `tenant`
@@ -101,13 +101,11 @@ class AccessAppLifecycleService {
       // Copies: the applications may be the ones just read or stored.
       tenant.applications = tenant.applications.map((app) =>
         app?.type === ACCESS_APP_TYPE
-          ? AccessAppLifecycleService._exportAccessApp(app)
+          ? AccessAppLifecycleService.exportApplication(app)
           : app,
       );
     }
-
-    const SaltoKsIqActivationService = require("./salto-ks-iq-activation-service");
-    return SaltoKsIqActivationService.redactActivations(tenant);
+    return tenant;
   }
 
   /**
@@ -289,31 +287,23 @@ class AccessAppLifecycleService {
   }
 
   /**
-   * An access application as it leaves through the API: without its
-   * secrets and without backend-owned state, with its connection state
-   * and last test (`redactBackendState`). Per secret field `storedSecrets`
-   * says whether one is stored.
+   * An access application as it leaves through the API, as a copy: without
+   * its secrets - per secret field `storedSecrets` says whether one is
+   * stored -, without the Salto KS IQ activations, which never leave, not
+   * even encrypted: whoever holds their OTP ingredients can open every door
+   * of the IQ (`preserveBackendState` keeps them on a write); with its
+   * connection state and the last test without its fingerprint.
    *
-   * @param {Object} app
+   * @param {Object} app The stored application, secrets in plain text
    * @returns {Object}
    */
   static exportApplication(app) {
-    return AccessAppLifecycleService.redactBackendState({ applications: [app] })
-      .applications[0];
-  }
-
-  /**
-   * @private
-   * A copy of an access application without its secrets, with
-   * `storedSecrets`, the connection state and the last test without its
-   * fingerprint. The IQ activations go with `redactActivations`.
-   */
-  static _exportAccessApp(app) {
     const exported = {
       ...app,
       connectionState: AccessAppLifecycleService.connectionStateOf(app),
       lastTest: AccessAppLifecycleService._exportLastTest(app.lastTest),
     };
+    delete exported.iqActivations;
     const storedSecrets = {};
     for (const field of secretFieldsOf(app.id)) {
       storedSecrets[field] = !isEmpty(exported[field]);
