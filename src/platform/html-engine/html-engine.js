@@ -675,10 +675,19 @@ function getBookablePrice(bookable) {
           style: "currency",
           currency: "EUR",
         }).format(price);
-      htmlOutput += priceCategory.external
-        ? HtmlEngine.translateExternalUnit(priceCategory.unit)
-        : HtmlEngine.translatePriceTyp(bookable.priceType);
+      // A flat rate is the price of the booking, not of a unit: shown as
+      // „Pauschalpreis“, as the storefront does.
+      const isFlatRate = !priceCategory.external && !!priceCategory.fixedPrice;
+      if (priceCategory.external) {
+        htmlOutput += HtmlEngine.translateExternalUnit(priceCategory.unit);
+      } else if (!isFlatRate) {
+        htmlOutput += HtmlEngine.translatePriceTyp(bookable.priceType);
+      }
       htmlOutput += "</span>";
+      if (isFlatRate) {
+        htmlOutput +=
+          ' <span class="price-category-flat-rate">Pauschalpreis</span>';
+      }
 
       if (priceCategory.interval?.start || priceCategory.interval?.end) {
         htmlOutput +=
