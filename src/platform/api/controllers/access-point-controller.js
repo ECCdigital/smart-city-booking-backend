@@ -13,6 +13,8 @@ const AccessService = require("../../../commons/services/access/access-service")
 const LockerSystemRedistribution = require("../../../commons/services/access/locker-system-redistribution");
 const CompartmentScanCodeService = require("../../../commons/services/access/compartment-scan-code-service");
 const LocationGuard = require("../../../commons/services/location/location-guard");
+const AccessPointAssignment = require("../../../commons/services/access/access-point-assignment");
+const { scopeOf } = require("../../../commons/services/authorization");
 const {
   carriesOwnCompartments,
   compartmentsOf,
@@ -315,6 +317,29 @@ class AccessPointController {
     return response
       .status(200)
       .send({ ...updatedAccessPoint.toResponse(), unmovedBookings: unmoved });
+  }
+
+  /**
+   * `PUT /accesspoints/:id/bookables`: sets the bookables that carry the
+   * access point (tickets#1110), under `bookable.update` with the reach of
+   * `PUT bookables` - `AccessPointAssignment.assignBookables`.
+   */
+  static async assignBookables(request, response, next) {
+    try {
+      const tenantId = request.params.tenant;
+      const result = await AccessPointAssignment.assignBookables(
+        tenantId,
+        request.params.id,
+        request.body?.bookableIds,
+        scopeOf(request),
+      );
+      logger.info(
+        `${tenantId} -- Access point ${result.accessPointId} assigned to ${result.bookableIds.length} bookables by user ${request.user?.id}`,
+      );
+      return response.status(200).json(result);
+    } catch (err) {
+      return next(err);
+    }
   }
 
   /**
