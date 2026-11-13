@@ -70,11 +70,37 @@ class AccessAppLifecycleService {
   }
 
   /**
-   * Turns the backend-owned runtime state of access applications in a
-   * tenant answer into what may leave through the API: the Salto KS IQ
-   * activations never leave, not even encrypted; the last test leaves
-   * without its fingerprint, and beside it the connection state
-   * (`connectionStateOf`). Each access application is answered as a copy.
+   * Keeps the access applications of a tenant that is about to be stored
+   * by a whole-tenant write (`PUT api/tenants`) as stored, whatever the
+   * write brings: they are written by their own routes alone
+   * (`saveApplication`, `setActive`, `removeApplication`), and the admin
+   * UI, which never reads their secrets, would drop them. The other
+   * applications are the write's.
+   *
+   * @param {Object|null} previousTenant The stored tenant
+   * @param {Object} nextTenant The tenant about to be stored, mutated
+   * @returns {Object} `nextTenant`
+   */
+  static keepStoredApplications(previousTenant, nextTenant) {
+    nextTenant.applications = [
+      ...(nextTenant.applications || []).filter(
+        (app) => app?.type !== APP_TYPE,
+      ),
+      ...(previousTenant?.applications || []).filter(
+        (app) => app?.type === APP_TYPE,
+      ),
+    ];
+    return nextTenant;
+  }
+
+  /**
+   * Turns the access applications in a tenant answer into what may leave
+   * through the API: their secrets never leave - per secret field
+   * `storedSecrets` says whether one is stored (`secretFieldsOf`); the
+   * Salto KS IQ activations never leave, not even encrypted; the last test
+   * leaves without its fingerprint, and beside it the connection state
+   * (`connectionStateOf`). Each access application is answered as a copy;
+   * payment and sign-in applications as they are.
    *
    * @param {Object|null} tenant The tenant about to be sent, mutated
    * @returns {Object|null} `tenant`
@@ -84,11 +110,7 @@ class AccessAppLifecycleService {
       // Copies: the applications may be the ones just read or stored.
       tenant.applications = tenant.applications.map((app) =>
         app?.type === APP_TYPE
-          ? {
-              ...app,
-              connectionState: AccessAppLifecycleService.connectionStateOf(app),
-              lastTest: AccessAppLifecycleService._exportLastTest(app.lastTest),
-            }
+          ? AccessAppLifecycleService._exportAccessApp(app)
           : app,
       );
     }
@@ -276,9 +298,22 @@ class AccessAppLifecycleService {
    * @returns {Object}
    */
   static exportApplication(app) {
-    const {
-      applications: [exported],
-    } = AccessAppLifecycleService.redactBackendState({ applications: [app] });
+    return AccessAppLifecycleService.redactBackendState({ applications: [app] })
+      .applications[0];
+  }
+
+  /**
+   * @private
+   * A copy of an access application without its secrets, with
+   * `storedSecrets`, the connection state and the last test without its
+   * fingerprint. The IQ activations go with `redactActivations`.
+   */
+  static _exportAccessApp(app) {
+    const exported = {
+      ...app,
+      connectionState: AccessAppLifecycleService.connectionStateOf(app),
+      lastTest: AccessAppLifecycleService._exportLastTest(app.lastTest),
+    };
     const storedSecrets = {};
     for (const field of secretFieldsOf(app.id)) {
       storedSecrets[field] = !isEmpty(exported[field]);

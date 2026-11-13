@@ -238,10 +238,11 @@
       `salto-ks` `clientSecret` and `password`, `open-locker` `password`,
       `ifbs` `apiKey` and `secretPhrase`, `pareva` `password`.
 
-      `GET` and `PUT /api/tenants` still read and write the access
-      applications with the whole tenant; each access application there
-      carries `connectionState` and `lastTest` too, and a `PUT` keeps the
-      stored last test.
+      The access applications are written by these routes alone. Reading
+      the tenant (`GET /api/tenants`, `GET /api/tenants/{tenant}`) answers
+      each of them in the same form: without its secrets, with
+      `storedSecrets`, `connectionState` and `lastTest`. `PUT /api/tenants`
+      keeps them as stored, whatever it sends.
 
       Reserved for the tenant owner, like the connection test
       (`accessApp.manage`).
