@@ -5,7 +5,11 @@ function registerTestHandler(providerId, handler) {
 }
 
 /**
- * Runs the registered connection test of a provider.
+ * Runs the registered connection test of a provider. A handler given as an
+ * object (`{ requiredFields, handler }`) gets the configuration with the
+ * stored secrets the form left empty taken and its required fields checked
+ * (`prepareConnectionTest`); a handler given as a function does that
+ * itself.
  *
  * @param {string} providerId
  * @param {Object} config The configuration under test, as the admin form
@@ -24,17 +28,23 @@ async function testProvider(providerId, config, context = {}) {
     return handler(config, context);
   }
 
-  if (handler.requiredFields) {
-    const missing = handler.requiredFields.filter((field) => !config[field]);
-    if (missing.length > 0) {
-      return {
-        success: false,
-        message: `Missing required fields: ${missing.join(", ")}`,
-      };
-    }
+  // Lazy require: the stored secrets are read off the tenant, whose
+  // manager reaches the client registries.
+  const {
+    getStoredApp,
+    prepareConnectionTest,
+  } = require("../connection-test-secrets");
+  const prepared = prepareConnectionTest(
+    providerId,
+    config,
+    await getStoredApp(providerId, context.tenantId),
+    handler.requiredFields || [],
+  );
+  if (prepared.refusal) {
+    return prepared.refusal;
   }
 
-  return handler.handler(config, context);
+  return handler.handler(prepared.config, context);
 }
 
 function hasTestHandler(providerId) {

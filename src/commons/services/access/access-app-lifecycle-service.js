@@ -1,5 +1,7 @@
 const TenantManager = require("../../data-managers/tenant-manager");
 const AccessPointManager = require("../../data-managers/access-point-manager");
+const AccessInfoService = require("./access-info-service");
+const { completeSecrets } = require("./connection-test-secrets");
 const { DOMAIN } = require("../authorization/reach");
 const {
   accessAppTypes,
@@ -13,6 +15,20 @@ const {
 } = require("../../../errors/BaseError");
 
 const APP_TYPE = "access";
+
+/**
+ * The connection state of an access application (glossary "Anbindung"),
+ * the one the head of its section on the access points page shows.
+ */
+const CONNECTION_STATES = Object.freeze({
+  CONNECTED: "connected",
+  FAILING: "failing",
+  UNCHECKED: "unchecked",
+  DISABLED: "disabled",
+});
+
+/** What a test that threw instead of answering records. */
+const TEST_THREW = "Could not test access connection";
 
 /** The stored access application of a provider in a tenant, or null. */
 function findApp(tenant, providerId) {
@@ -31,13 +47,21 @@ class AccessAppLifecycleService {
   /**
    * Restores the backend-owned runtime state of access applications on a
    * tenant that is about to be stored - state the admin UI neither writes
-   * nor may drop. Today that is the Salto KS IQ activations.
+   * nor may drop: the Salto KS IQ activations and the last connection test
+   * of every access application. The connection state the answers carry is
+   * derived, never stored.
    *
    * @param {Object|null} previousTenant The stored tenant
    * @param {Object} nextTenant The tenant about to be stored, mutated
    * @returns {Object} `nextTenant`
    */
   static preserveBackendState(previousTenant, nextTenant) {
+    for (const app of nextTenant?.applications || []) {
+      if (app.type !== APP_TYPE) continue;
+      app.lastTest = findApp(previousTenant, app.id)?.lastTest || null;
+      delete app.connectionState;
+    }
+
     const SaltoKsIqActivationService = require("./salto-ks-iq-activation-service");
     return SaltoKsIqActivationService.preserveActivations(
       previousTenant,
@@ -46,15 +70,103 @@ class AccessAppLifecycleService {
   }
 
   /**
-   * Removes the backend-owned runtime state of access applications from a
-   * tenant answer - it never leaves through the API, not even encrypted.
+   * Turns the backend-owned runtime state of access applications in a
+   * tenant answer into what may leave through the API: the Salto KS IQ
+   * activations never leave, not even encrypted; the last test leaves
+   * without its fingerprint, and beside it the connection state
+   * (`connectionStateOf`). Each access application is answered as a copy.
    *
    * @param {Object|null} tenant The tenant about to be sent, mutated
    * @returns {Object|null} `tenant`
    */
   static redactBackendState(tenant) {
+    if (Array.isArray(tenant?.applications)) {
+      // Copies: the applications may be the ones just read or stored.
+      tenant.applications = tenant.applications.map((app) =>
+        app?.type === APP_TYPE
+          ? {
+              ...app,
+              connectionState: AccessAppLifecycleService.connectionStateOf(app),
+              lastTest: AccessAppLifecycleService._exportLastTest(app.lastTest),
+            }
+          : app,
+      );
+    }
+
     const SaltoKsIqActivationService = require("./salto-ks-iq-activation-service");
     return SaltoKsIqActivationService.redactActivations(tenant);
+  }
+
+  /**
+   * The connection state of an access application: `disabled` while it is
+   * switched off; else, while its last test checked the stored values (the
+   * fingerprints match), `connected` if that test succeeded and `failing`
+   * if not; else `unchecked` - never tested, or changed since.
+   *
+   * @param {Object} app The stored application, secrets in plain text
+   * @returns {"connected"|"failing"|"unchecked"|"disabled"}
+   */
+  static connectionStateOf(app) {
+    if (!app.active) {
+      return CONNECTION_STATES.DISABLED;
+    }
+    const lastTest = app.lastTest;
+    if (
+      !lastTest?.fingerprint ||
+      lastTest.fingerprint !==
+        createAccessApplication({ ...app }).connectionFingerprint()
+    ) {
+      return CONNECTION_STATES.UNCHECKED;
+    }
+    return lastTest.success
+      ? CONNECTION_STATES.CONNECTED
+      : CONNECTION_STATES.FAILING;
+  }
+
+  /**
+   * Tests the connection of a provider with the configuration the admin
+   * form sends, stored secrets taken for empty ones (see the registered
+   * test), and records the test at the provider's stored application:
+   * result, time, error message and the fingerprint of the tested values.
+   * Without a stored application nothing is recorded. A test that throws
+   * is recorded as failed and rethrown.
+   *
+   * @param {string} tenantId
+   * @param {string} providerId
+   * @param {Object} config The configuration as the admin form sent it
+   * @param {{reach: string, userId?: string|null}} scope The route's reach
+   * @returns {Promise<Object>} The provider's test answer
+   */
+  static async testConnection(tenantId, providerId, config, scope) {
+    const tenant = await AccessAppLifecycleService._tenantOf(tenantId, scope);
+    const stored = findApp(tenant, providerId);
+    const tested = completeSecrets(providerId, config || {}, stored).config;
+    const record = (success, error) =>
+      stored
+        ? TenantManager.recordAccessTest(tenantId, providerId, {
+            success,
+            testedAt: Date.now(),
+            error: success ? null : error || null,
+            fingerprint: createAccessApplication({
+              ...tested,
+              type: APP_TYPE,
+              id: providerId,
+            }).connectionFingerprint(),
+          })
+        : Promise.resolve();
+
+    let result;
+    try {
+      result = await AccessInfoService.testConnection(providerId, config, {
+        tenantId,
+      });
+    } catch (err) {
+      await record(false, TEST_THREW);
+      throw err;
+    }
+
+    await record(!!result?.success, result?.message);
+    return result;
   }
 
   /**
@@ -156,21 +268,38 @@ class AccessAppLifecycleService {
 
   /**
    * An access application as it leaves through the API: without its
-   * secrets and without backend-owned state. Per secret field
-   * `storedSecrets` says whether one is stored.
+   * secrets and without backend-owned state, with its connection state
+   * and last test (`redactBackendState`). Per secret field `storedSecrets`
+   * says whether one is stored.
    *
    * @param {Object} app
    * @returns {Object}
    */
   static exportApplication(app) {
-    const exported = { ...app };
+    const {
+      applications: [exported],
+    } = AccessAppLifecycleService.redactBackendState({ applications: [app] });
     const storedSecrets = {};
     for (const field of secretFieldsOf(app.id)) {
       storedSecrets[field] = !isEmpty(exported[field]);
       delete exported[field];
     }
-    AccessAppLifecycleService.redactBackendState({ applications: [exported] });
     return { ...exported, storedSecrets };
+  }
+
+  /**
+   * @private
+   * The last test as it leaves through the API: without its fingerprint.
+   */
+  static _exportLastTest(lastTest) {
+    if (!lastTest) {
+      return null;
+    }
+    return {
+      success: !!lastTest.success,
+      testedAt: lastTest.testedAt ?? null,
+      error: lastTest.error ?? null,
+    };
   }
 
   /** @private */

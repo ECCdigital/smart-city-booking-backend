@@ -126,6 +126,13 @@ class AccessAppController {
     }
   }
 
+  /**
+   * POST /:tenant/access-apps/:provider/test
+   *
+   * Tests the configuration the form sends, a stored secret taken for an
+   * empty one while its identity stays, and records the test at the
+   * provider's stored application - the source of its connection state.
+   */
   static async testConnection(request, response) {
     try {
       const { tenant, provider } = request.params;
@@ -137,16 +144,20 @@ class AccessAppController {
           .send(`No test available for provider: ${provider}`);
       }
 
-      const result = await AccessInfoService.testConnection(
+      const result = await AccessAppLifecycleService.testConnection(
+        tenant,
         provider,
         request.body,
-        { tenantId: tenant },
+        scopeOf(request),
       );
       logger.info(
         `${tenant} -- ${provider} access connection test by user ${user?.id}: ${result.success}`,
       );
       return response.status(200).send(result);
     } catch (err) {
+      if (err instanceof BaseError) {
+        return ApiResponse.fail(response, err);
+      }
       logger.error(err);
       return response.status(500).send("Could not test access connection");
     }

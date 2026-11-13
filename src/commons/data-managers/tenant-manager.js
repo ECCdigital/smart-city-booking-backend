@@ -345,6 +345,32 @@ class TenantManager {
   }
 
   /**
+   * Records the last connection test at one access application of a
+   * tenant, and writes nothing else: a test may run while the application
+   * is saved, and it must not undo that save. A tenant without the
+   * application stays as it is.
+   *
+   * @param {string} tenantId
+   * @param {string} providerId
+   * @param {{success: boolean, testedAt: number, error: string|null,
+   *   fingerprint: string}} lastTest
+   * @returns {Promise<void>}
+   */
+  static async recordAccessTest(tenantId, providerId, lastTest) {
+    await TenantModel.updateOne(
+      {
+        id: tenantId,
+        applications: { $elemMatch: { type: "access", id: providerId } },
+      },
+      { $set: { "applications.$[app].lastTest": lastTest } },
+      {
+        arrayFilters: [{ "app.type": "access", "app.id": providerId }],
+        strict: false,
+      },
+    );
+  }
+
+  /**
    * Removes one access application of a tenant with its credentials, and
    * nothing else of the tenant.
    *

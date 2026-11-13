@@ -43,6 +43,21 @@ class SecurityUtils {
     return { iv: iv.toString("hex"), data: encrypted.toString("hex") };
   }
 
+  /**
+   * A keyed hash of a text (HMAC-SHA256 under `CRYPTO_SECRET`): equal texts
+   * give equal fingerprints, and without the key a fingerprint tells
+   * nothing about the text, not even a short password.
+   *
+   * @param {string} text
+   * @returns {string} Hex digest
+   */
+  static fingerprint(text) {
+    return crypto
+      .createHmac("sha256", key())
+      .update(String(text ?? ""))
+      .digest("hex");
+  }
+
   static decrypt(encryptedTextObject) {
     if (!encryptedTextObject || typeof encryptedTextObject !== "object")
       return null;

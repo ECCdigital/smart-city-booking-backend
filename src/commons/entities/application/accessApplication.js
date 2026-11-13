@@ -20,6 +20,11 @@ class AccessApplication extends TenantApplication {
     this.webhookRegisteredAt = params.webhookRegisteredAt || null;
     this.webhookRegistrationError = params.webhookRegistrationError || null;
     this.customerService = params.customerService || null;
+    // The last connection test, the backend's alone to write
+    // (`AccessAppLifecycleService.recordTest`): `{ success, testedAt,
+    // error, fingerprint }`, the fingerprint a keyed hash of the tested
+    // values (`connectionFingerprint`), never the values themselves.
+    this.lastTest = params.lastTest || null;
   }
 
   /**
@@ -32,6 +37,45 @@ class AccessApplication extends TenantApplication {
    */
   static get secretFields() {
     return [];
+  }
+
+  /**
+   * Per secret field the fields that name what it belongs to, in the order
+   * they are checked: a connection test takes a stored secret only while
+   * each of them is still the stored one (a password belongs to one user
+   * at one server).
+   *
+   * @returns {Object<string, string[]>}
+   */
+  static get secretIdentity() {
+    return {};
+  }
+
+  /**
+   * The fields the connection test of this provider checks - what its
+   * fingerprint is made of.
+   *
+   * @returns {string[]}
+   */
+  static get testedFields() {
+    return [];
+  }
+
+  /**
+   * A keyed hash of the tested fields of this application, secrets in plain
+   * text, so the last test can tell whether it tested what is stored
+   * without keeping the values.
+   *
+   * @returns {string}
+   */
+  connectionFingerprint() {
+    const values = this.constructor.testedFields.map((field) => {
+      const value = isEncrypted(this[field])
+        ? SecurityUtils.decrypt(this[field])
+        : this[field];
+      return [field, String(value ?? "").trim()];
+    });
+    return SecurityUtils.fingerprint(JSON.stringify(values));
   }
 
   decrypt() {
@@ -59,6 +103,7 @@ class AccessApplication extends TenantApplication {
       webhookRegisteredAt: { type: Number, default: null },
       webhookRegistrationError: { type: String, default: null },
       customerService: { type: Object, default: null },
+      lastTest: { type: Object, default: null },
     };
   }
 }
@@ -72,6 +117,14 @@ class NukiAccessApplication extends AccessApplication {
 
   static get secretFields() {
     return ["apiToken"];
+  }
+
+  static get secretIdentity() {
+    return { apiToken: ["apiBaseUrl"] };
+  }
+
+  static get testedFields() {
+    return ["apiBaseUrl", "apiToken"];
   }
 
   static get Schema() {
@@ -145,6 +198,29 @@ class SaltoKsAccessApplication extends AccessApplication {
     return ["clientSecret", "password"];
   }
 
+  /**
+   * A client secret is issued for a client id in one environment, a
+   * password belongs to a system user in one environment. The site plays no
+   * part - a new site needs no new secret.
+   */
+  static get secretIdentity() {
+    return {
+      clientSecret: ["environment", "clientId"],
+      password: ["environment", "username"],
+    };
+  }
+
+  static get testedFields() {
+    return [
+      "environment",
+      "clientId",
+      "clientSecret",
+      "username",
+      "password",
+      "siteId",
+    ];
+  }
+
   encrypt() {
     super.encrypt();
     for (const activation of this.iqActivations || []) {
@@ -193,6 +269,14 @@ class IfbsAccessApplication extends AccessApplication {
     return ["apiKey", "secretPhrase"];
   }
 
+  static get secretIdentity() {
+    return { apiKey: ["serverUrl"], secretPhrase: ["serverUrl"] };
+  }
+
+  static get testedFields() {
+    return ["serverUrl", "apiKey"];
+  }
+
   static get Schema() {
     return {
       ...super.Schema,
@@ -223,6 +307,14 @@ class ParevaAccessApplication extends AccessApplication {
     return ["password"];
   }
 
+  static get secretIdentity() {
+    return { password: ["serverUrl", "user"] };
+  }
+
+  static get testedFields() {
+    return ["serverUrl", "lockerId", "user", "password"];
+  }
+
   static get Schema() {
     return {
       ...super.Schema,
@@ -250,6 +342,14 @@ class OpenLockerAccessApplication extends AccessApplication {
 
   static get secretFields() {
     return ["password"];
+  }
+
+  static get secretIdentity() {
+    return { password: ["serverUrl", "email"] };
+  }
+
+  static get testedFields() {
+    return ["serverUrl", "email", "password"];
   }
 
   static get Schema() {
