@@ -1,6 +1,10 @@
 const TenantApplication = require("./tenantApplication");
 const SecurityUtils = require("../../utilities/security-utils");
 
+function isEncrypted(value) {
+  return value?.iv != null && value?.data != null;
+}
+
 /**
  * An access application of a tenant: the provider's credentials plus
  * `customerService`, the Provider Support Contact (name, phone, email) the
@@ -18,9 +22,33 @@ class AccessApplication extends TenantApplication {
     this.customerService = params.customerService || null;
   }
 
-  decrypt() {}
+  /**
+   * The fields of this provider that hold secrets: stored encrypted, never
+   * answered over the API, kept when a save leaves them empty. The one
+   * place that names them - encryption, saving, the connection test and
+   * the reading of an application all go by it (`secretFieldsOf`).
+   *
+   * @returns {string[]}
+   */
+  static get secretFields() {
+    return [];
+  }
 
-  encrypt() {}
+  decrypt() {
+    for (const field of this.constructor.secretFields) {
+      if (isEncrypted(this[field])) {
+        this[field] = SecurityUtils.decrypt(this[field]);
+      }
+    }
+  }
+
+  encrypt() {
+    for (const field of this.constructor.secretFields) {
+      if (this[field] && typeof this[field] === "string") {
+        this[field] = SecurityUtils.encrypt(this[field]);
+      }
+    }
+  }
 
   static get Schema() {
     return {
@@ -42,16 +70,8 @@ class NukiAccessApplication extends AccessApplication {
     this.apiBaseUrl = params.apiBaseUrl || "https://api.nuki.io";
   }
 
-  decrypt() {
-    if (this.apiToken?.iv != null && this.apiToken?.data != null) {
-      this.apiToken = SecurityUtils.decrypt(this.apiToken);
-    }
-  }
-
-  encrypt() {
-    if (this.apiToken && typeof this.apiToken === "string") {
-      this.apiToken = SecurityUtils.encrypt(this.apiToken);
-    }
+  static get secretFields() {
+    return ["apiToken"];
   }
 
   static get Schema() {
@@ -121,22 +141,12 @@ class SaltoKsAccessApplication extends AccessApplication {
     return [...SALTO_KS_ENVIRONMENTS];
   }
 
-  decrypt() {
-    if (this.clientSecret?.iv != null && this.clientSecret?.data != null) {
-      this.clientSecret = SecurityUtils.decrypt(this.clientSecret);
-    }
-    if (this.password?.iv != null && this.password?.data != null) {
-      this.password = SecurityUtils.decrypt(this.password);
-    }
+  static get secretFields() {
+    return ["clientSecret", "password"];
   }
 
   encrypt() {
-    if (this.clientSecret && typeof this.clientSecret === "string") {
-      this.clientSecret = SecurityUtils.encrypt(this.clientSecret);
-    }
-    if (this.password && typeof this.password === "string") {
-      this.password = SecurityUtils.encrypt(this.password);
-    }
+    super.encrypt();
     for (const activation of this.iqActivations || []) {
       if (activation.secret && typeof activation.secret === "string") {
         activation.secret = SecurityUtils.encrypt(activation.secret);
@@ -165,10 +175,6 @@ class SaltoKsAccessApplication extends AccessApplication {
   }
 }
 
-function isEncrypted(value) {
-  return value?.iv != null && value?.data != null;
-}
-
 /**
  * The iFBS bike box API of a tenant: one server, one API key, and the
  * secret phrase the booking checksums are made with. Configured as a
@@ -183,22 +189,8 @@ class IfbsAccessApplication extends AccessApplication {
     this.secretPhrase = params.secretPhrase || "";
   }
 
-  decrypt() {
-    if (isEncrypted(this.apiKey)) {
-      this.apiKey = SecurityUtils.decrypt(this.apiKey);
-    }
-    if (isEncrypted(this.secretPhrase)) {
-      this.secretPhrase = SecurityUtils.decrypt(this.secretPhrase);
-    }
-  }
-
-  encrypt() {
-    if (this.apiKey && typeof this.apiKey === "string") {
-      this.apiKey = SecurityUtils.encrypt(this.apiKey);
-    }
-    if (this.secretPhrase && typeof this.secretPhrase === "string") {
-      this.secretPhrase = SecurityUtils.encrypt(this.secretPhrase);
-    }
+  static get secretFields() {
+    return ["apiKey", "secretPhrase"];
   }
 
   static get Schema() {
@@ -227,16 +219,8 @@ class ParevaAccessApplication extends AccessApplication {
     this.password = params.password || null;
   }
 
-  decrypt() {
-    if (isEncrypted(this.password)) {
-      this.password = SecurityUtils.decrypt(this.password);
-    }
-  }
-
-  encrypt() {
-    if (this.password && typeof this.password === "string") {
-      this.password = SecurityUtils.encrypt(this.password);
-    }
+  static get secretFields() {
+    return ["password"];
   }
 
   static get Schema() {
@@ -264,16 +248,8 @@ class OpenLockerAccessApplication extends AccessApplication {
     this.password = params.password || null;
   }
 
-  decrypt() {
-    if (isEncrypted(this.password)) {
-      this.password = SecurityUtils.decrypt(this.password);
-    }
-  }
-
-  encrypt() {
-    if (this.password && typeof this.password === "string") {
-      this.password = SecurityUtils.encrypt(this.password);
-    }
+  static get secretFields() {
+    return ["password"];
   }
 
   static get Schema() {
@@ -299,6 +275,17 @@ function createAccessApplication(params) {
   return new AppClass(params);
 }
 
+/**
+ * The secret fields of a provider's access application, as its class names
+ * them (`secretFields`); none for a provider without a class of its own.
+ *
+ * @param {string} providerId e.g. `nuki`, `salto-ks`
+ * @returns {string[]}
+ */
+function secretFieldsOf(providerId) {
+  return (accessAppTypes[providerId] || AccessApplication).secretFields ?? [];
+}
+
 function registerAccessAppType(id, AppClass) {
   accessAppTypes[id] = AppClass;
 }
@@ -313,4 +300,5 @@ module.exports = {
   accessAppTypes,
   createAccessApplication,
   registerAccessAppType,
+  secretFieldsOf,
 };

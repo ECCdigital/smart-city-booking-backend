@@ -10,6 +10,9 @@ const { BookableManager } = require("./bookable-manager");
 const {
   releaseTenantClients,
 } = require("../services/access/clients/tenant-client-cache");
+const {
+  createAccessApplication,
+} = require("../entities/application/accessApplication");
 const { ownCondition } = require("../services/authorization/reach");
 const { REACH } = require("../services/authorization/policy");
 const {
@@ -301,6 +304,74 @@ class TenantManager {
   static async removeTenant(id) {
     await TenantModel.deleteOne({ id: id });
     releaseTenantClients(id);
+  }
+
+  /**
+   * Writes one access application of a tenant (glossary "Anbindung"):
+   * replaces the stored one of the same provider or adds it, and touches
+   * nothing else of the tenant - neither its other applications nor a
+   * field a whole-tenant write would carry. The secrets are encrypted here,
+   * as the tenant model's hooks do on a whole-tenant write.
+   *
+   * @param {string} tenantId
+   * @param {Object} app The access application, secrets in plain text
+   * @returns {Promise<void>}
+   */
+  static async storeAccessApplication(tenantId, app) {
+    const entity = createAccessApplication({ ...app, type: "access" });
+    entity.encrypt();
+    const value = { ...entity };
+    const matchApp = { type: "access", id: entity.id };
+
+    const replaced = await TenantModel.updateOne(
+      { id: tenantId, applications: { $elemMatch: matchApp } },
+      { $set: { "applications.$[app]": value } },
+      {
+        arrayFilters: [{ "app.type": "access", "app.id": entity.id }],
+        // The applications are an untyped array: in strict mode mongoose
+        // refuses the filter on their fields instead of passing it on.
+        strict: false,
+      },
+    );
+    if (replaced?.matchedCount === 0) {
+      await TenantModel.updateOne(
+        { id: tenantId, applications: { $not: { $elemMatch: matchApp } } },
+        { $push: { applications: value } },
+        { strict: false },
+      );
+    }
+
+    await TenantManager._releaseClientsOf(tenantId);
+  }
+
+  /**
+   * Removes one access application of a tenant with its credentials, and
+   * nothing else of the tenant.
+   *
+   * @param {string} tenantId
+   * @param {string} providerId
+   * @returns {Promise<void>}
+   */
+  static async removeAccessApplication(tenantId, providerId) {
+    await TenantModel.updateOne(
+      { id: tenantId },
+      { $pull: { applications: { type: "access", id: providerId } } },
+      { strict: false },
+    );
+
+    await TenantManager._releaseClientsOf(tenantId);
+  }
+
+  /**
+   * Drops the kept provider clients of a tenant whose access applications
+   * changed, as a whole-tenant write does (`releaseTenantClients`).
+   *
+   * @private
+   * @param {string} tenantId
+   */
+  static async _releaseClientsOf(tenantId) {
+    const raw = await TenantModel.findOne({ id: tenantId });
+    releaseTenantClients(tenantId, raw ? raw.toEntity() : null);
   }
 
   /**

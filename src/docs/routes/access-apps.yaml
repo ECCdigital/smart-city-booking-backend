@@ -214,6 +214,183 @@
       "500":
         description: Could not discard Salto KS IQ activation
 
+/api/{tenant}/access-apps/{provider}:
+  put:
+    tags:
+      - Access Apps
+    summary: Save the access application of one provider
+    description: |
+      Creates or changes the tenant's access application (glossary
+      „Anbindung“) of `provider` and nothing else: payment, sign-in and the
+      other providers' applications stay as stored. A new application is
+      switched on; a stored one keeps `active` - switching is
+      `PUT …/{provider}/active`. A field the body leaves out stays as stored,
+      and so does a secret the body leaves empty or out: the admin form
+      never sees a stored secret. Backend-owned state (the Salto KS IQ
+      activations) is not the body's to write.
+
+      The answer is the saved application without its secrets;
+      `storedSecrets` says per secret field whether one is stored. Which
+      fields are secrets is the provider's to say: `nuki` `apiToken`,
+      `salto-ks` `clientSecret` and `password`, `open-locker` `password`,
+      `ifbs` `apiKey` and `secretPhrase`, `pareva` `password`.
+
+      `GET` and `PUT /api/tenants` are unchanged: they still read and write
+      the access applications with the whole tenant.
+
+      Reserved for the tenant owner, like the connection test
+      (`accessApp.manage`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - $ref: "#/components/parameters/AccessProviderParam"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: true
+            description: |
+              The provider's fields as the admin form holds them, e.g. for
+              `nuki` `apiToken`, `apiBaseUrl` and `customerService`. `type`,
+              `id` and `active` are ignored.
+          example:
+            apiToken: ""
+            apiBaseUrl: https://api.nuki.io
+    responses:
+      "200":
+        description: The saved application, without secrets
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessApplicationWithoutSecrets"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the tenant owner
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessAppError"
+      "404":
+        description: |
+          `access_provider_not_found` - there is no such provider.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessAppError"
+  delete:
+    tags:
+      - Access Apps
+    summary: Remove the access application of one provider
+    description: |
+      Removes the tenant's access application of `provider` with its
+      credentials, and nothing else of the tenant. Not while the provider
+      still has access points - they would be left without the credentials
+      they open with: delete them first.
+
+      Reserved for the tenant owner (`accessApp.manage`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - $ref: "#/components/parameters/AccessProviderParam"
+    responses:
+      "204":
+        description: The application is removed
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the tenant owner
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessAppError"
+      "404":
+        description: |
+          `access_provider_not_found` - there is no such provider.
+          `access_app_not_found` - the tenant has no application of it.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessAppError"
+      "409":
+        description: |
+          `access_app_has_access_points` - the provider still has access
+          points; `params` names `provider` and the number of
+          `accessPoints`.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessAppError"
+            example:
+              error: ConflictError
+              code: access_app_has_access_points
+              statusCode: 409
+              params:
+                provider: nuki
+                accessPoints: 3
+
+/api/{tenant}/access-apps/{provider}/active:
+  put:
+    tags:
+      - Access Apps
+    summary: Switch the access application of one provider on or off
+    description: |
+      Sets `active` of the tenant's access application of `provider` and
+      changes nothing else. Switched off, the application keeps its
+      credentials, its access points and their assignment to bookables, so
+      switching it on again needs no new setup.
+
+      Reserved for the tenant owner (`accessApp.manage`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - $ref: "#/components/parameters/AccessProviderParam"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - active
+            properties:
+              active:
+                type: boolean
+    responses:
+      "200":
+        description: The application, without secrets
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessApplicationWithoutSecrets"
+      "400":
+        description: "`access_app_active_invalid` - `active` is not a boolean"
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessAppError"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the tenant owner
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessAppError"
+      "404":
+        description: |
+          `access_provider_not_found` - there is no such provider.
+          `access_app_not_found` - the tenant has no application of it.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessAppError"
+
 /api/{tenant}/access-apps/{provider}/test:
   post:
     tags:
@@ -267,6 +444,60 @@
 
 components:
   schemas:
+    AccessApplicationWithoutSecrets:
+      type: object
+      description: |
+        An access application of the tenant as it leaves through the API:
+        the provider's fields without its secrets and without backend-owned
+        state. `storedSecrets` says per secret field whether one is stored.
+      required:
+        - type
+        - id
+        - active
+        - storedSecrets
+      properties:
+        type:
+          type: string
+          enum: [access]
+        id:
+          type: string
+          description: The provider, e.g. `nuki`
+        active:
+          type: boolean
+        storedSecrets:
+          type: object
+          additionalProperties:
+            type: boolean
+          example:
+            apiToken: true
+      additionalProperties: true
+      example:
+        type: access
+        id: nuki
+        active: true
+        title: ""
+        apiBaseUrl: https://api.nuki.io
+        customerService: null
+        storedSecrets:
+          apiToken: true
+
+    AccessAppError:
+      type: object
+      description: The one JSON form of the central error handler
+      properties:
+        error:
+          type: string
+          example: NotFoundError
+        code:
+          type: string
+          example: access_app_not_found
+        statusCode:
+          type: integer
+          example: 404
+        params:
+          type: object
+          additionalProperties: true
+
     ListedAccessPoint:
       type: object
       description: |

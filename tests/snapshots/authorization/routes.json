@@ -2239,6 +2239,30 @@
     "instanceOwner": 404,
     "expiredToken": 401
   },
+  "PUT /api/:tenant/access-apps/:provider": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": 200,
+    "instanceOwner": 200,
+    "expiredToken": 401
+  },
+  "PUT /api/:tenant/access-apps/:provider/active": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": 400,
+    "instanceOwner": 400,
+    "expiredToken": 401
+  },
+  "DELETE /api/:tenant/access-apps/:provider": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": 404,
+    "instanceOwner": 404,
+    "expiredToken": 401
+  },
   "POST /api/:tenant/access-apps/:provider/test": {
     "anonymous": 401,
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",

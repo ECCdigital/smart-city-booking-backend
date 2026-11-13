@@ -1,5 +1,7 @@
 const bunyan = require("bunyan");
 const AccessInfoService = require("../../../commons/services/access/access-info-service");
+const AccessAppLifecycleService = require("../../../commons/services/access/access-app-lifecycle-service");
+const { scopeOf } = require("../../../commons/services/authorization");
 const SaltoKsIqActivationService = require("../../../commons/services/access/salto-ks-iq-activation-service");
 const {
   hasTestHandler,
@@ -49,6 +51,78 @@ class AccessAppController {
 
       logger.error(err);
       return response.status(500).send("Could not get access points");
+    }
+  }
+
+  /**
+   * PUT /:tenant/access-apps/:provider
+   *
+   * Saves the provider's access application on its own: creates it switched
+   * on or changes it, keeps a secret the form leaves empty, and answers it
+   * without secrets (`storedSecrets` says which are stored).
+   */
+  static async saveApplication(request, response, next) {
+    try {
+      const { tenant, provider } = request.params;
+      const app = await AccessAppLifecycleService.saveApplication(
+        tenant,
+        provider,
+        request.body || {},
+        scopeOf(request),
+      );
+      logger.info(
+        `${tenant} -- ${provider} access application saved by user ${request.user?.id}`,
+      );
+      return response.status(200).send(app);
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  /**
+   * PUT /:tenant/access-apps/:provider/active
+   *
+   * Switches the provider's access application on or off (`{ active }`),
+   * nothing else; answers it without secrets.
+   */
+  static async setApplicationActive(request, response, next) {
+    try {
+      const { tenant, provider } = request.params;
+      const app = await AccessAppLifecycleService.setActive(
+        tenant,
+        provider,
+        request.body?.active,
+        scopeOf(request),
+      );
+      logger.info(
+        `${tenant} -- ${provider} access application switched ${app.active ? "on" : "off"} by user ${request.user?.id}`,
+      );
+      return response.status(200).send(app);
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  /**
+   * DELETE /:tenant/access-apps/:provider
+   *
+   * Removes the provider's access application with its credentials; `409
+   * access_app_has_access_points` while the provider has access points.
+   */
+  static async removeApplication(request, response, next) {
+    try {
+      const { tenant, provider } = request.params;
+      await AccessAppLifecycleService.removeApplication(
+        tenant,
+        provider,
+        scopeOf(request),
+      );
+      logger.info(
+        `${tenant} -- ${provider} access application removed by user ${request.user?.id}`,
+      );
+      return response.sendStatus(204);
+    } catch (err) {
+      return next(err);
     }
   }
 

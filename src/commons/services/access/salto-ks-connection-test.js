@@ -19,16 +19,17 @@ const REQUIRED_FIELDS = ["clientId", "clientSecret", "username", "password"];
  * Which stored secret belongs to which part of the identity: a client secret
  * is issued for a client id in one environment, a password belongs to a
  * system user in one environment. The site plays no part - a new site needs
- * no new secret.
+ * no new secret. Which fields are secrets is the application's to say
+ * (`secretFields`).
  */
-const SECRETS = [
-  {
-    field: "clientSecret",
-    identity: "clientId",
-    reason: "client_id_changed",
-  },
-  { field: "password", identity: "username", reason: "username_changed" },
-];
+const IDENTITY_OF_SECRET = {
+  clientSecret: { identity: "clientId", reason: "client_id_changed" },
+  password: { identity: "username", reason: "username_changed" },
+};
+const SECRETS = SaltoKsAccessApplication.secretFields.map((field) => ({
+  field,
+  ...IDENTITY_OF_SECRET[field],
+}));
 
 /**
  * The tenant's stored Salto KS application, active or not - an admin may
