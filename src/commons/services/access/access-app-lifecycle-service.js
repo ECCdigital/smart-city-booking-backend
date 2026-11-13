@@ -4,8 +4,10 @@ const AccessInfoService = require("./access-info-service");
 const { completeSecrets } = require("./connection-test-secrets");
 const { DOMAIN } = require("../authorization/reach");
 const {
+  ACCESS_APP_TYPE,
   accessAppTypes,
   createAccessApplication,
+  findAccessApp,
   secretFieldsOf,
 } = require("../../entities/application/accessApplication");
 const {
@@ -13,8 +15,6 @@ const {
   ConflictError,
   NotFoundError,
 } = require("../../../errors/BaseError");
-
-const APP_TYPE = "access";
 
 /**
  * The connection state of an access application (glossary "Anbindung"),
@@ -29,15 +29,6 @@ const CONNECTION_STATES = Object.freeze({
 
 /** What a test that threw instead of answering records. */
 const TEST_THREW = "Could not test access connection";
-
-/** The stored access application of a provider in a tenant, or null. */
-function findApp(tenant, providerId) {
-  return (
-    (tenant?.applications || []).find(
-      (app) => app.type === APP_TYPE && app.id === providerId,
-    ) || null
-  );
-}
 
 function isEmpty(value) {
   return value === undefined || value === null || value === "";
@@ -57,8 +48,8 @@ class AccessAppLifecycleService {
    */
   static preserveBackendState(previousTenant, nextTenant) {
     for (const app of nextTenant?.applications || []) {
-      if (app.type !== APP_TYPE) continue;
-      app.lastTest = findApp(previousTenant, app.id)?.lastTest || null;
+      if (app.type !== ACCESS_APP_TYPE) continue;
+      app.lastTest = findAccessApp(previousTenant, app.id)?.lastTest || null;
       delete app.connectionState;
     }
 
@@ -84,10 +75,10 @@ class AccessAppLifecycleService {
   static keepStoredApplications(previousTenant, nextTenant) {
     nextTenant.applications = [
       ...(nextTenant.applications || []).filter(
-        (app) => app?.type !== APP_TYPE,
+        (app) => app?.type !== ACCESS_APP_TYPE,
       ),
       ...(previousTenant?.applications || []).filter(
-        (app) => app?.type === APP_TYPE,
+        (app) => app?.type === ACCESS_APP_TYPE,
       ),
     ];
     return nextTenant;
@@ -109,7 +100,7 @@ class AccessAppLifecycleService {
     if (Array.isArray(tenant?.applications)) {
       // Copies: the applications may be the ones just read or stored.
       tenant.applications = tenant.applications.map((app) =>
-        app?.type === APP_TYPE
+        app?.type === ACCESS_APP_TYPE
           ? AccessAppLifecycleService._exportAccessApp(app)
           : app,
       );
@@ -147,8 +138,8 @@ class AccessAppLifecycleService {
 
   /**
    * Tests the connection of a provider with the configuration the admin
-   * form sends, stored secrets taken for empty ones (see the registered
-   * test), and records the test at the provider's stored application:
+   * form sends, stored secrets taken for empty ones (`completeSecrets`,
+   * from the application read once under the route's reach), and records the test at the provider's stored application:
    * result, time, error message and the fingerprint of the tested values.
    * Without a stored application nothing is recorded. A test that throws
    * is recorded as failed and rethrown.
@@ -161,8 +152,8 @@ class AccessAppLifecycleService {
    */
   static async testConnection(tenantId, providerId, config, scope) {
     const tenant = await AccessAppLifecycleService._tenantOf(tenantId, scope);
-    const stored = findApp(tenant, providerId);
-    const tested = completeSecrets(providerId, config || {}, stored).config;
+    const stored = findAccessApp(tenant, providerId);
+    const secrets = completeSecrets(providerId, config || {}, stored);
     const record = (success, error) =>
       stored
         ? TenantManager.recordAccessTest(tenantId, providerId, {
@@ -170,8 +161,8 @@ class AccessAppLifecycleService {
             testedAt: Date.now(),
             error: success ? null : error || null,
             fingerprint: createAccessApplication({
-              ...tested,
-              type: APP_TYPE,
+              ...secrets.config,
+              type: ACCESS_APP_TYPE,
               id: providerId,
             }).connectionFingerprint(),
           })
@@ -181,6 +172,7 @@ class AccessAppLifecycleService {
     try {
       result = await AccessInfoService.testConnection(providerId, config, {
         tenantId,
+        secrets,
       });
     } catch (err) {
       await record(false, TEST_THREW);
@@ -215,12 +207,12 @@ class AccessAppLifecycleService {
   static async saveApplication(tenantId, providerId, fields, scope) {
     AccessAppLifecycleService._assertProvider(providerId);
     const tenant = await AccessAppLifecycleService._tenantOf(tenantId, scope);
-    const stored = findApp(tenant, providerId);
+    const stored = findAccessApp(tenant, providerId);
 
     const app = createAccessApplication({
       ...stored,
       ...fields,
-      type: APP_TYPE,
+      type: ACCESS_APP_TYPE,
       id: providerId,
       active: stored ? stored.active : true,
     });
@@ -393,7 +385,7 @@ class AccessAppLifecycleService {
   static async _storedApp(tenantId, providerId, scope) {
     AccessAppLifecycleService._assertProvider(providerId);
     const tenant = await AccessAppLifecycleService._tenantOf(tenantId, scope);
-    const stored = findApp(tenant, providerId);
+    const stored = findAccessApp(tenant, providerId);
     if (!stored) {
       throw new NotFoundError("access_app_not_found", {
         provider: providerId,
@@ -422,11 +414,12 @@ class AccessAppLifecycleService {
    */
   static async webhookSecretOf(tenantId, providerId) {
     const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
-    const app = (tenant?.applications || []).find(
-      (a) => a.type === APP_TYPE && a.id === providerId && a.active,
-    );
+    const app = findAccessApp(tenant, providerId);
+    if (!app?.active) {
+      return null;
+    }
 
-    return app?.webhookSecret || app?.notificationSecret || null;
+    return app.webhookSecret || app.notificationSecret || null;
   }
 }
 

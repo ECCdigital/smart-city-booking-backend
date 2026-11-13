@@ -7,10 +7,7 @@ const BaseAccessApiClient = require("./clients/base-access-api-client");
 const {
   SaltoKsAccessApplication,
 } = require("../../entities/application/accessApplication");
-const {
-  getStoredApp,
-  prepareConnectionTest,
-} = require("./connection-test-secrets");
+const { prepareConnectionTest } = require("./connection-test-secrets");
 
 const PROVIDER_ID = "salto-ks";
 
@@ -225,14 +222,15 @@ async function runChecks(client, siteId, tenantId) {
  * access and the IQs) comes with a working connection.
  *
  * @param {Object} config The configuration as the admin form sent it
- * @param {{tenantId?: string}} [context]
+ * @param {{tenantId?: string, secrets?: Object}} [context] As of
+ *   `testProvider`
  * @returns {Promise<Object>}
  */
 async function testSaltoKsConnection(config, context = {}) {
   const prepared = prepareConnectionTest(
     PROVIDER_ID,
     config,
-    await getStoredApp(PROVIDER_ID, context.tenantId),
+    context.secrets,
     REQUIRED_FIELDS,
   );
   if (prepared.refusal) {

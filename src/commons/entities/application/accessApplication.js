@@ -1,6 +1,9 @@
 const TenantApplication = require("./tenantApplication");
 const SecurityUtils = require("../../utilities/security-utils");
 
+/** The `type` of every access application among a tenant's applications. */
+const ACCESS_APP_TYPE = "access";
+
 function isEncrypted(value) {
   return value?.iv != null && value?.data != null;
 }
@@ -13,7 +16,7 @@ function isEncrypted(value) {
  */
 class AccessApplication extends TenantApplication {
   constructor(params) {
-    super({ type: "access", ...params });
+    super({ type: ACCESS_APP_TYPE, ...params });
     this.apiBaseUrl = params.apiBaseUrl || "";
     this.webhookCallbackUrl = params.webhookCallbackUrl || null;
     this.webhookSubscriptionId = params.webhookSubscriptionId || null;
@@ -371,8 +374,19 @@ const accessAppTypes = {
   "open-locker": OpenLockerAccessApplication,
 };
 
+/**
+ * The class of a provider's access application; `AccessApplication` for a
+ * provider without a class of its own.
+ *
+ * @param {string} providerId e.g. `nuki`, `salto-ks`
+ * @returns {typeof AccessApplication}
+ */
+function appClassOf(providerId) {
+  return accessAppTypes[providerId] || AccessApplication;
+}
+
 function createAccessApplication(params) {
-  const AppClass = accessAppTypes[params.id] || AccessApplication;
+  const AppClass = appClassOf(params.id);
   return new AppClass(params);
 }
 
@@ -384,7 +398,22 @@ function createAccessApplication(params) {
  * @returns {string[]}
  */
 function secretFieldsOf(providerId) {
-  return (accessAppTypes[providerId] || AccessApplication).secretFields ?? [];
+  return appClassOf(providerId).secretFields ?? [];
+}
+
+/**
+ * The stored access application of a provider in a tenant, active or not.
+ *
+ * @param {Object|null} tenant
+ * @param {string} providerId
+ * @returns {Object|null}
+ */
+function findAccessApp(tenant, providerId) {
+  return (
+    (tenant?.applications || []).find(
+      (app) => app.type === ACCESS_APP_TYPE && app.id === providerId,
+    ) || null
+  );
 }
 
 function registerAccessAppType(id, AppClass) {
@@ -398,8 +427,11 @@ module.exports = {
   IfbsAccessApplication,
   ParevaAccessApplication,
   OpenLockerAccessApplication,
+  ACCESS_APP_TYPE,
   accessAppTypes,
+  appClassOf,
   createAccessApplication,
+  findAccessApp,
   registerAccessAppType,
   secretFieldsOf,
 };

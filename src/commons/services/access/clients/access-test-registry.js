@@ -1,3 +1,5 @@
+const { prepareConnectionTest } = require("../connection-test-secrets");
+
 const testHandlers = {};
 
 function registerTestHandler(providerId, handler) {
@@ -14,8 +16,10 @@ function registerTestHandler(providerId, handler) {
  * @param {string} providerId
  * @param {Object} config The configuration under test, as the admin form
  *   sent it - not necessarily what is stored
- * @param {Object} [context] Where the test runs, e.g. `{ tenantId }`, for
- *   handlers that enrich the answer with stored state
+ * @param {Object} [context] Where the test runs: `tenantId` for handlers
+ *   that enrich the answer with stored state, `secrets` the configuration
+ *   completed with the stored secrets (`completeSecrets`) by the caller
+ *   that read the stored application
  */
 async function testProvider(providerId, config, context = {}) {
   const handler = testHandlers[providerId];
@@ -28,16 +32,10 @@ async function testProvider(providerId, config, context = {}) {
     return handler(config, context);
   }
 
-  // Lazy require: the stored secrets are read off the tenant, whose
-  // manager reaches the client registries.
-  const {
-    getStoredApp,
-    prepareConnectionTest,
-  } = require("../connection-test-secrets");
   const prepared = prepareConnectionTest(
     providerId,
     config,
-    await getStoredApp(providerId, context.tenantId),
+    context.secrets,
     handler.requiredFields || [],
   );
   if (prepared.refusal) {

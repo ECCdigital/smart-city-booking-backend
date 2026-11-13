@@ -1,34 +1,8 @@
-const TenantManager = require("../../data-managers/tenant-manager");
-const { DOMAIN } = require("../authorization/reach");
 const {
-  accessAppTypes,
+  appClassOf,
   createAccessApplication,
   secretFieldsOf,
 } = require("../../entities/application/accessApplication");
-
-const APP_TYPE = "access";
-
-/**
- * The tenant's stored access application of a provider, active or not - an
- * admin may test a configuration before switching it on. The connection
- * test is guarded at its route; the domain reads the tenant.
- *
- * @param {string} providerId
- * @param {string} [tenantId]
- * @returns {Promise<Object|null>}
- */
-async function getStoredApp(providerId, tenantId) {
-  if (!tenantId) {
-    return null;
-  }
-
-  const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
-  return (
-    tenant?.applications?.find(
-      (app) => app.type === APP_TYPE && app.id === providerId,
-    ) || null
-  );
-}
 
 function same(a, b) {
   return String(a ?? "").trim() === String(b ?? "").trim();
@@ -61,7 +35,7 @@ function snakeCase(field) {
  * }}
  */
 function completeSecrets(providerId, config, stored) {
-  const identityOf = accessAppTypes[providerId]?.secretIdentity ?? {};
+  const identityOf = appClassOf(providerId).secretIdentity ?? {};
   const asForm = createAccessApplication({ ...config, id: providerId });
   const asStored = stored
     ? createAccessApplication({ ...stored, id: providerId })
@@ -96,9 +70,8 @@ function completeSecrets(providerId, config, stored) {
 
 /**
  * What a connection test runs with: the configuration with the stored
- * secrets taken (`completeSecrets`), checked for the required fields. A
- * required field that is missing stops the test before the provider is
- * asked, naming the fields:
+ * secrets taken, checked for the required fields. A required field that is
+ * missing stops the test before the provider is asked, naming the fields:
  *
  *     { success: false, code: "missing_fields", message,
  *       missing: [{ field }] }
@@ -110,16 +83,19 @@ function completeSecrets(providerId, config, stored) {
  *
  * @param {string} providerId
  * @param {Object} config The configuration as the admin form sent it
- * @param {Object|null} stored The stored application of the provider
+ * @param {ReturnType<typeof completeSecrets>|undefined} secrets The
+ *   configuration completed with the stored secrets (`completeSecrets`), as
+ *   the caller that read the stored application made it; without, no
+ *   stored secret is taken
  * @param {string[]} requiredFields
  * @returns {{refusal: Object}|{config: Object, sources: Object}}
  */
-function prepareConnectionTest(providerId, config, stored, requiredFields) {
+function prepareConnectionTest(providerId, config, secrets, requiredFields) {
   const {
     config: completed,
     sources,
     missing,
-  } = completeSecrets(providerId, config || {}, stored);
+  } = secrets ?? completeSecrets(providerId, config || {}, null);
 
   const missingFields = requiredFields.filter(
     (field) =>
@@ -153,4 +129,4 @@ function prepareConnectionTest(providerId, config, stored, requiredFields) {
   return { config: completed, sources };
 }
 
-module.exports = { getStoredApp, completeSecrets, prepareConnectionTest };
+module.exports = { completeSecrets, prepareConnectionTest };

@@ -10,6 +10,9 @@ const {
   testProvider,
 } = require("../src/commons/services/access/clients/access-test-registry");
 const {
+  completeSecrets,
+} = require("../src/commons/services/access/connection-test-secrets");
+const {
   installFakeSaltoKsConnectApi,
   saltoHttpError,
   identityError,
@@ -371,8 +374,11 @@ describe("Salto KS connection test with the stored secrets", () => {
   }
 
   let salto;
+  /** The stored Salto KS application, as the route read it. */
+  let stored;
 
   function storeTenant(app = STORED) {
+    stored = app;
     TenantManager.getTenant.resolves({
       id: "tenant-1",
       applications: app ? [app] : [],
@@ -392,8 +398,13 @@ describe("Salto KS connection test with the stored secrets", () => {
     sinon.restore();
   });
 
+  // The stored secrets as the route completes them, once, from the
+  // application it read (`AccessAppLifecycleService.testConnection`).
   async function test(config) {
-    return testProvider("salto-ks", config, { tenantId: "tenant-1" });
+    return testProvider("salto-ks", config, {
+      tenantId: "tenant-1",
+      secrets: completeSecrets("salto-ks", config, stored),
+    });
   }
 
   it("tests with the stored secrets when the form leaves them empty", async () => {
