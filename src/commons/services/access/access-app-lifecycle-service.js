@@ -195,8 +195,11 @@ class AccessAppLifecycleService {
    * Saves the access application of one provider (glossary "Anbindung"):
    * creates it, switched on, or changes the stored one, and nothing else of
    * the tenant. What the request leaves out stays as stored; a secret it
-   * leaves empty too. Whether the application is switched on is not the
-   * save's to change (`setActive`), nor is the backend-owned state
+   * leaves empty too, as long as the identity it belongs to stays - the
+   * rule of the connection test (`completeSecrets`, `secretIdentity`). A
+   * stored secret whose identity changed is not kept: the save is refused
+   * and nothing is stored. Whether the application is switched on is not
+   * the save's to change (`setActive`), nor is the backend-owned state
    * (`preserveBackendState`).
    *
    * @param {string} tenantId
@@ -204,6 +207,9 @@ class AccessAppLifecycleService {
    * @param {Object} fields The application as the admin form sends it
    * @param {{reach: string, userId?: string|null}} scope The route's reach
    * @returns {Promise<Object>} The saved application as `exportApplication`
+   * @throws {BadRequestError} `missing_secret` with `{ provider, missing:
+   *   [{ field, reason }] }`, `reason` as at the connection test (e.g.
+   *   `server_url_changed`)
    * @throws {NotFoundError} `access_provider_not_found`, `tenant_not_found`
    */
   static async saveApplication(tenantId, providerId, fields, scope) {
@@ -218,11 +224,13 @@ class AccessAppLifecycleService {
       id: providerId,
       active: stored ? stored.active : true,
     });
-    for (const field of secretFieldsOf(providerId)) {
-      if (isEmpty(fields?.[field])) {
-        app[field] = stored?.[field] ?? null;
-      }
-    }
+    const keptSecrets = AccessAppLifecycleService._keptSecrets(
+      providerId,
+      app,
+      fields,
+      stored,
+    );
+    Object.assign(app, keptSecrets);
     AccessAppLifecycleService.preserveBackendState(
       { applications: stored ? [stored] : [] },
       { applications: [app] },
@@ -335,6 +343,37 @@ class AccessAppLifecycleService {
       testedAt: lastTest.testedAt ?? null,
       error: lastTest.error ?? null,
     };
+  }
+
+  /**
+   * @private
+   * The secrets a save keeps from the stored application: every one the
+   * request leaves empty, null where none is stored.
+   *
+   * @throws {BadRequestError} `missing_secret` for a stored secret the
+   *   request leaves empty while its identity changes
+   */
+  static _keptSecrets(providerId, app, fields, stored) {
+    const leftEmpty = secretFieldsOf(providerId).filter((field) =>
+      isEmpty(fields?.[field]),
+    );
+    const sent = { ...app };
+    for (const field of leftEmpty) {
+      sent[field] = null;
+    }
+
+    const { config, missing } = completeSecrets(providerId, sent, stored);
+    const changed = missing.filter(({ reason }) => reason !== "not_stored");
+    if (changed.length > 0) {
+      throw new BadRequestError("missing_secret", {
+        provider: providerId,
+        missing: changed,
+      });
+    }
+
+    return Object.fromEntries(
+      leftEmpty.map((field) => [field, config[field] ?? null]),
+    );
   }
 
   /** @private */

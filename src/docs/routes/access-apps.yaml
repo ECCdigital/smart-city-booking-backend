@@ -226,8 +226,12 @@
       switched on; a stored one keeps `active` - switching is
       `PUT …/{provider}/active`. A field the body leaves out stays as stored,
       and so does a secret the body leaves empty or out: the admin form
-      never sees a stored secret. Backend-owned state (the Salto KS IQ
-      activations, the last connection test) is not the body's to write.
+      never sees a stored secret. A stored secret stays only with its
+      identity, by the rule of the connection test (e.g. a password with
+      its server and user): when the body changes the identity and leaves
+      the secret empty, the save is refused with `400 missing_secret` and
+      nothing is stored. Backend-owned state (the Salto KS IQ activations,
+      the last connection test) is not the body's to write.
 
       The answer is the saved application without its secrets;
       `storedSecrets` says per secret field whether one is stored, and
@@ -272,6 +276,26 @@
           application/json:
             schema:
               $ref: "#/components/schemas/AccessApplicationWithoutSecrets"
+      "400":
+        description: |
+          `missing_secret` - a stored secret the body leaves empty belongs
+          to another identity than the body names. `params.provider` is the
+          provider, `params.missing` the secrets, each with `field` and the
+          `reason` as the connection test names it: the first field of the
+          secret's identity that changed (e.g. `server_url_changed`).
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessAppError"
+            example:
+              error: BadRequestError
+              code: missing_secret
+              statusCode: 400
+              params:
+                provider: open-locker
+                missing:
+                  - field: password
+                    reason: server_url_changed
       "401":
         description: Not authenticated
       "403":

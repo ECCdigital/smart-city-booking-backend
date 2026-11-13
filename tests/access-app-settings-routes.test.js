@@ -172,7 +172,7 @@ describe("access application of one provider over HTTP", function () {
         });
         const [first, ...rest] = Object.keys(secrets);
         const body = {
-          serverUrl: "https://neu.example",
+          customerService: { name: "Hausmeister" },
           [first]: "",
         };
 
@@ -191,6 +191,92 @@ describe("access application of one provider over HTTP", function () {
         }
       });
     }
+
+    // A secret belongs to its identity (`secretIdentity`), as at the
+    // connection test: a password to one account at one server.
+    describe("once the identity a stored secret belongs to changes", function () {
+      const openLocker = {
+        type: "access",
+        id: "open-locker",
+        active: true,
+        serverUrl: "https://locker.example",
+        email: "technik@example.test",
+        password: "locker-pw",
+      };
+
+      it("refuses a save that leaves the secret empty with 400 missing_secret, and stores nothing", async function () {
+        h.tenant.applications.push({ ...openLocker });
+
+        const res = await call("put", "/open-locker", OWNER, {
+          serverUrl: "https://other-locker.example",
+          email: "technik@example.test",
+          password: "",
+        });
+
+        expect(res.status).to.equal(400);
+        expect(res.body).to.deep.equal({
+          error: "BadRequestError",
+          code: "missing_secret",
+          statusCode: 400,
+          params: {
+            provider: "open-locker",
+            missing: [{ field: "password", reason: "server_url_changed" }],
+          },
+        });
+        expect(stored("open-locker")).to.deep.equal(openLocker);
+      });
+
+      it("names every secret that cannot be kept, with the identity that changed", async function () {
+        h.tenant.applications.push({
+          type: "access",
+          id: "salto-ks",
+          active: true,
+          environment: "accept",
+          clientId: "client",
+          clientSecret: "client-secret",
+          username: "system@example.test",
+          password: "salto-pw",
+        });
+
+        const res = await call("put", "/salto-ks", OWNER, {
+          environment: "production",
+          clientId: "client",
+          username: "system@example.test",
+        });
+
+        expect(res.status).to.equal(400);
+        expect(res.body.params.missing).to.deep.equal([
+          { field: "clientSecret", reason: "environment_changed" },
+          { field: "password", reason: "environment_changed" },
+        ]);
+        expect(stored("salto-ks").environment).to.equal("accept");
+      });
+
+      it("saves the new identity with its new secret", async function () {
+        h.tenant.applications.push({ ...openLocker });
+
+        const res = await call("put", "/open-locker", OWNER, {
+          serverUrl: "https://other-locker.example",
+          password: "other-pw",
+        });
+
+        expect(res.status).to.equal(200);
+        expect(stored("open-locker")).to.include({
+          serverUrl: "https://other-locker.example",
+          password: "other-pw",
+        });
+      });
+
+      it("saves a first secret-less application, as nothing stored belongs to another identity", async function () {
+        const res = await call("put", "/open-locker", OWNER, {
+          serverUrl: "https://locker.example",
+          email: "technik@example.test",
+        });
+
+        expect(res.status).to.equal(200);
+        expect(res.body.storedSecrets).to.deep.equal({ password: false });
+      });
+    });
 
     it("leaves switching on and off to its own call", async function () {
       h.tenant.applications.push({
