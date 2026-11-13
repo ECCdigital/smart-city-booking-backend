@@ -47,6 +47,7 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ### Changed
 
+- A new tenant starts with the payment option „Rechnung“ active and with the default templates for invoices, cancellation and withdrawal receipts stored; an invoice app sent with the creation is kept as sent
 - The CSV of an event's attendee list (`GET /csv/:tenant/events/:id/bookings`) heads the column of `assignedUserId` „Zugewiesener Benutzer“ instead of „Angemeldeter Benutzer“ ([ECCdigital/tickets#562](https://github.com/ECCdigital/tickets/issues/562))
 - Bank details of a cancellation follow one rule ([ECCdigital/tickets#565](https://github.com/ECCdigital/tickets/issues/565)): they are kept only for a paid booking (cancelled from `confirmed`), for the direct cancellation, the cancellation request and the rejection by the administration alike, single and group. A cancellation request of an unpaid booking no longer stores them in its hook, and a rejection of an unpaid booking no longer prints them on the cancellation document
 - The connection test of Salto KS answers per check ([ECCdigital/tickets#576](https://github.com/ECCdigital/tickets/issues/576)): `POST /api/:tenant/access-apps/salto-ks/test` adds `checks` (`credentials`, `login`, `site`, `remoteAccess`, `remoteLockingRight`, `iqs`, each with a `status` and, for a failure Salto explains, a `code` such as `invalid_client` or `site_forbidden`), `testedWith`, `testedAt` and `environment`. A failure in credentials, login or site fails the test and skips the rest; OpenAPI documents the answer
