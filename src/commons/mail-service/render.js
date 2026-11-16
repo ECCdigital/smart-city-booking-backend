@@ -395,7 +395,8 @@ function renderMissingProofs({
     );
   const missing = fieldsOf(missingRequiredFieldsOf);
   const optional = hasStoreFront() ? [] : fieldsOf(openOptionalFieldsOf);
-  // Without a storefront a series has one page for all its bookings.
+  // A series of a guest, or any without a storefront, has one page for all
+  // its bookings.
   const seriesUrl = aggregated
     ? customerUploadSeriesUrl(bookings[0].tenantId, groupBookingId, bookings)
     : "";

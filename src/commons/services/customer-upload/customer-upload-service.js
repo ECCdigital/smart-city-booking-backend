@@ -645,7 +645,8 @@ class CustomerUploadService {
    *   replaced upload, name, code and params
    */
   static async submitAll(context, entries) {
-    const { tenantId, userId } = context;
+    // A series' link chooses among the bookings of its group, as one upload.
+    const { tenantId, userId, seriesId = null } = context;
     if (!entries?.length) {
       throw new BadRequestError(R.FILE_MISSING);
     }
@@ -675,7 +676,15 @@ class CustomerUploadService {
         if (replacing && replaced.has(replacing)) {
           throw new NotFoundError(R.UPLOAD_NOT_FOUND, { mediaId: replacing });
         }
-        const ofFile = { tenantId, booking, field, fieldId, userId, limits };
+        const ofFile = {
+          tenantId,
+          booking,
+          field,
+          fieldId,
+          userId,
+          seriesId,
+          limits,
+        };
         if (replacing) {
           CustomerUploadService._pendingReference(ofFile, replacing);
         }

@@ -478,6 +478,57 @@ describe("customer uploads: the signed link of a guest", function () {
       expect(links.some((l) => l.includes("/account/proofs"))).to.equal(true);
       expect(links.some((l) => l.includes("/proofs?link="))).to.equal(false);
     });
+
+    /** A weekly series of two dates with a proof due before the release. */
+    async function seriesBy(as) {
+      let request = h
+        .api()
+        .post(`/api/v2/${TENANT}/checkout/group?simulate=false`);
+      if (as) request = request.set(h.as(as));
+      const res = await request.send({
+        bookableItems: [{ bookableId: "mixed-room", amount: 1 }],
+        bookingAttempts: [
+          { timeBegin: TIME_BEGIN, timeEnd: TIME_END },
+          { timeBegin: TIME_BEGIN + 7 * DAY, timeEnd: TIME_END + 7 * DAY },
+        ],
+        name: "Erika Muster",
+        mail: CUSTOMER,
+        paymentProvider: "giroCockpit",
+      });
+      expect(res.body.success, res.text).to.equal(true);
+      h.clearEffects();
+      const { id, bookingIds } = res.body.data.groupBooking;
+      sent.length = 0;
+      await mail.send("BOOKING_REQUEST_CONFIRMATION", {
+        tenantId: TENANT,
+        bookingIds,
+        groupBookingId: id,
+      });
+      const [customerMail] = sent.filter((m) => m.to === CUSTOMER);
+      return { groupId: id, links: linksOf(customerMail.html) };
+    }
+
+    it("of a guest's series has one button to the page of the series, no link per proof", async function () {
+      const { groupId, links } = await seriesBy(null);
+
+      const proofLinks = links.filter((href) =>
+        href.startsWith(`${STORE_FRONT_URL}/proofs?`),
+      );
+      expect(proofLinks, links.join(" ")).to.have.length(1);
+      const query = new URL(proofLinks[0]).searchParams;
+      expect(query.get("field")).to.equal(null);
+      expect(verifyCustomerUploadLink(query.get("link"))).to.deep.equal({
+        tenantId: TENANT,
+        groupBookingId: groupId,
+      });
+    });
+
+    it("of a customer's series links the page under the account", async function () {
+      const { links } = await seriesBy(CUSTOMER);
+
+      expect(links.some((l) => l.includes("/account/proofs"))).to.equal(true);
+      expect(links.some((l) => l.includes("/proofs?link="))).to.equal(false);
+    });
   });
 
   describe("without a storefront", function () {
@@ -749,6 +800,32 @@ describe("customer uploads: the signed link of a guest", function () {
         const [medium] = [...media.values()];
         expect(medium.bookingIds).to.have.members(bookingIds);
         expect(references(bookingIds[0])).to.have.length(1);
+        expect(references(bookingIds[1])).to.have.length(1);
+      });
+
+      it("hands files in at once for the dates chosen of the series", async function () {
+        const { groupId, bookingIds } = await series("request-room");
+        const link = signCustomerUploadGroupLink(TENANT, groupId);
+
+        const res = await h
+          .api()
+          .post(
+            `/api/v2/${TENANT}/bookings/${bookingIds[0]}/customer-uploads-by-link`,
+          )
+          .set("X-Customer-Upload-Link", link)
+          .field(
+            "alsoFor",
+            JSON.stringify({
+              0: [{ bookingId: bookingIds[1], fieldId: CHECKOUT_FIELD.id }],
+            }),
+          )
+          .attach(`customerUpload:${CHECKOUT_FIELD.id}`, PDF, "ausweis.pdf");
+
+        expect(res.status, res.text).to.equal(201);
+        expect(res.body.refused).to.deep.equal([]);
+        expect(media.size).to.equal(1);
+        const [medium] = [...media.values()];
+        expect(medium.bookingIds).to.have.members(bookingIds);
         expect(references(bookingIds[1])).to.have.length(1);
       });
 

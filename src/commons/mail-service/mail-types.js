@@ -302,9 +302,8 @@ const MailType = Object.freeze({
     sendBCC: false,
     addRejectionLink: false,
     // The button opens the page at the field of the (first) booking. A
-    // signed link of a booking holds for that one: in a group without a
-    // storefront the button leads to the page of the series, a guest's
-    // group with a storefront gets one link per booking instead.
+    // signed link of a booking holds for that one: in a group of a guest, or
+    // without a storefront, the button leads to the page of the series.
     templateData: (
       { reason, fieldLabels = [], kind, fieldId, fileDeleted = false },
       { bookings, groupBookingId = null },
