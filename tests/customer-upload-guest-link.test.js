@@ -22,6 +22,9 @@ const {
   TENANT,
   ADMIN,
   CUSTOMER,
+  TIME_BEGIN,
+  TIME_END,
+  DAY,
 } = require("./helpers/booking-lifecycle-harness");
 const {
   installInMemoryRateLimitEvents,
@@ -38,6 +41,7 @@ const {
   renderSnippet,
 } = require("../src/commons/mail-service/templates/template-loader");
 const {
+  signCustomerUploadGroupLink,
   signCustomerUploadLink,
   verifyCustomerUploadLink,
 } = require("../src/commons/services/customer-upload/customer-upload-link");
@@ -156,6 +160,14 @@ describe("customer uploads: the signed link of a guest", function () {
       media.set(medium.id, medium);
       return medium;
     });
+    // The holders of a medium of several bookings, for the state.
+    sinon
+      .stub(MediaManager, "getAllMedia")
+      .callsFake(async (filter) =>
+        [...media.values()].filter(
+          (m) => m.tenantId === filter.tenantId && filter.id.$in.includes(m.id),
+        ),
+      );
     MediaManager.getMedia.callsFake(
       async (id, tenantId) =>
         [media.get(id)].find((m) => m && m.tenantId === tenantId) ?? null,
@@ -638,6 +650,165 @@ describe("customer uploads: the signed link of a guest", function () {
       expect(
         linksOf(confirmation.html).some((l) => l.includes("proofs")),
       ).to.equal(false);
+    });
+
+    describe("a series", function () {
+      /** A weekly series of the customer of `bookableId`, two dates. */
+      async function series(bookableId = "mixed-room") {
+        const res = await h
+          .api()
+          .post(`/api/v2/${TENANT}/checkout/group?simulate=false`)
+          .set(h.as(CUSTOMER))
+          .send({
+            bookableItems: [{ bookableId, amount: 1 }],
+            bookingAttempts: [
+              { timeBegin: TIME_BEGIN, timeEnd: TIME_END },
+              { timeBegin: TIME_BEGIN + 7 * DAY, timeEnd: TIME_END + 7 * DAY },
+            ],
+            name: "Erika Muster",
+            mail: CUSTOMER,
+            paymentProvider: "giroCockpit",
+          });
+        expect(res.body.success, res.text).to.equal(true);
+        h.clearEffects();
+        const { id, bookingIds } = res.body.data.groupBooking;
+        return { groupId: id, bookingIds };
+      }
+
+      const readAll = (link) =>
+        h
+          .api()
+          .get(`/api/v2/${TENANT}/customer-uploads-by-link`)
+          .set("X-Customer-Upload-Link", link);
+
+      it("has one button in the request to the page of all its bookings", async function () {
+        const { groupId, bookingIds } = await series();
+        sent.length = 0;
+
+        await mail.send("BOOKING_REQUEST_CONFIRMATION", {
+          tenantId: TENANT,
+          bookingIds,
+          groupBookingId: groupId,
+        });
+
+        const [request] = sent.filter((m) => m.to === CUSTOMER);
+        const links = adminProofLinks(request.html);
+        expect(links, links.join(" ")).to.have.length(1);
+        const query = new URL(links[0]).searchParams;
+        expect(query.get("field")).to.equal(null);
+        expect(verifyCustomerUploadLink(query.get("link"))).to.deep.equal({
+          tenantId: TENANT,
+          groupBookingId: groupId,
+        });
+      });
+
+      it("opens every booking of the series with its link", async function () {
+        const { groupId, bookingIds } = await series("request-room");
+        const link = signCustomerUploadGroupLink(TENANT, groupId);
+
+        const res = await readAll(link);
+
+        expect(res.status, res.text).to.equal(200);
+        expect(res.body.tenant.id).to.equal(TENANT);
+        expect(res.body.bookings.map((b) => b.id)).to.deep.equal(bookingIds);
+        expect(res.body.bookings[1].customerUploadState.fields).to.have.length(
+          2,
+        );
+        const handedIn = await h
+          .api()
+          .post(
+            `/api/v2/${TENANT}/bookings/${bookingIds[1]}/customer-uploads-by-link/${CHECKOUT_FIELD.id}`,
+          )
+          .set("X-Customer-Upload-Link", link)
+          .attach("file", PDF, "ausweis.pdf");
+        expect(handedIn.status, handedIn.text).to.equal(201);
+        expect(references(bookingIds[1])).to.have.length(1);
+        expect(references(bookingIds[0])).to.have.length(0);
+      });
+
+      it("hands one file in for the dates chosen of the series", async function () {
+        const { groupId, bookingIds } = await series("request-room");
+        const link = signCustomerUploadGroupLink(TENANT, groupId);
+
+        const res = await h
+          .api()
+          .post(
+            `/api/v2/${TENANT}/bookings/${bookingIds[0]}/customer-uploads-by-link/${CHECKOUT_FIELD.id}`,
+          )
+          .set("X-Customer-Upload-Link", link)
+          .field(
+            "alsoFor",
+            JSON.stringify([
+              { bookingId: bookingIds[1], fieldId: CHECKOUT_FIELD.id },
+            ]),
+          )
+          .attach("file", PDF, "ausweis.pdf");
+
+        expect(res.status, res.text).to.equal(201);
+        expect(media.size).to.equal(1);
+        const [medium] = [...media.values()];
+        expect(medium.bookingIds).to.have.members(bookingIds);
+        expect(references(bookingIds[0])).to.have.length(1);
+        expect(references(bookingIds[1])).to.have.length(1);
+      });
+
+      it("chooses no date outside the series", async function () {
+        const { groupId, bookingIds } = await series("request-room");
+        const other = await requestBooking();
+
+        const res = await h
+          .api()
+          .post(
+            `/api/v2/${TENANT}/bookings/${bookingIds[0]}/customer-uploads-by-link/${CHECKOUT_FIELD.id}`,
+          )
+          .set(
+            "X-Customer-Upload-Link",
+            signCustomerUploadGroupLink(TENANT, groupId),
+          )
+          .field(
+            "alsoFor",
+            JSON.stringify([{ bookingId: other, fieldId: CHECKOUT_FIELD.id }]),
+          )
+          .attach("file", PDF, "ausweis.pdf");
+
+        expect(res.status, res.text).to.equal(400);
+        expect(res.body.code).to.equal("customer_upload_target_invalid");
+        expect(media.size).to.equal(0);
+      });
+
+      it("opens no booking outside the series", async function () {
+        const { groupId } = await series("request-room");
+        const other = await requestBooking();
+        const link = signCustomerUploadGroupLink(TENANT, groupId);
+
+        const res = await h
+          .api()
+          .post(
+            `/api/v2/${TENANT}/bookings/${other}/customer-uploads-by-link/${CHECKOUT_FIELD.id}`,
+          )
+          .set("X-Customer-Upload-Link", link)
+          .attach("file", PDF, "ausweis.pdf");
+
+        expect(res.status, res.text).to.equal(403);
+        expect(res.body.code).to.equal("customer_upload_link_invalid");
+        expect(media.size).to.equal(0);
+      });
+
+      it("refuses the link of a series that does not exist", async function () {
+        const res = await readAll(signCustomerUploadGroupLink(TENANT, "nope"));
+
+        expect(res.status, res.text).to.equal(403);
+        expect(res.body.code).to.equal("customer_upload_link_invalid");
+      });
+
+      it("reads the one booking of a booking's link on the same page", async function () {
+        const id = await requestBooking();
+
+        const res = await readAll(linkOf(id));
+
+        expect(res.status, res.text).to.equal(200);
+        expect(res.body.bookings.map((b) => b.id)).to.deep.equal([id]);
+      });
     });
   });
 

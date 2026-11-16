@@ -56,4 +56,13 @@ byLink.delete(
   CustomerUploadControllerV2.remove,
 );
 
-module.exports = byLink;
+// The bookings a link opens, all of a series with its link: mounted at
+// `/api/v2/:tenant/customer-uploads-by-link`.
+const allByLink = asyncRouter();
+allByLink.get(
+  "/",
+  publicRoute("booking", "customerUploadByLink"),
+  CustomerUploadControllerV2.readAllByLink,
+);
+
+module.exports = { byLink, allByLink };

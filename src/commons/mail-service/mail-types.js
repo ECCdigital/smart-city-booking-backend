@@ -44,7 +44,8 @@
  *
  * Of a booking notice, `ctx` of `subject`, `includeQRCode` and `sendBCC`
  * is `{ tenant, hasAttachments, bookings }`, and `templateData` gets the
- * type-specific part of the caller's context and the loaded bookings.
+ * type-specific part of the caller's context and the loaded bookings, with
+ * the `groupBookingId` of an aggregated notice.
  * `includeQRCode`, `sendBCC`, `addRejectionLink`, `attachICal` and
  * `mergeMailAttach` are of the booking family only; `gate` is of every
  * family with a tenant.
@@ -68,6 +69,7 @@ const {
   adminGroupBookingUrl,
   adminTenantMembersUrl,
   customerUploadUrlOf,
+  customerUploadSeriesUrl,
   usesSignedLink,
 } = require("./mail-links");
 const {
@@ -300,20 +302,32 @@ const MailType = Object.freeze({
     sendBCC: false,
     addRejectionLink: false,
     // The button opens the page at the field of the (first) booking. A
-    // signed link holds for one booking: in a group a guest - or anyone
-    // without a storefront - gets one link per booking instead.
+    // signed link of a booking holds for that one: in a group without a
+    // storefront the button leads to the page of the series, a guest's
+    // group with a storefront gets one link per booking instead.
     templateData: (
       { reason, fieldLabels = [], kind, fieldId, fileDeleted = false },
-      { bookings },
+      { bookings, groupBookingId = null },
     ) => {
-      const guestGroup = bookings.length > 1 && usesSignedLink(bookings[0]);
+      const seriesUrl =
+        bookings.length > 1
+          ? customerUploadSeriesUrl(
+              bookings[0].tenantId,
+              groupBookingId,
+              bookings,
+            )
+          : "";
+      const guestGroup =
+        !seriesUrl && bookings.length > 1 && usesSignedLink(bookings[0]);
       return {
         customerUploadReason: reason,
         customerUploadFields: fieldLabels.join(", "),
         customerUploadRequestedAgain: kind === "requestedAgain",
         // Only a sensitive upload loses its file with the check.
         customerUploadFileDeleted: Boolean(fileDeleted),
-        proofsUrl: guestGroup ? "" : customerUploadUrlOf(bookings[0], fieldId),
+        proofsUrl:
+          seriesUrl ||
+          (guestGroup ? "" : customerUploadUrlOf(bookings[0], fieldId)),
         proofLinks: guestGroup
           ? bookings
               .map((booking) => ({

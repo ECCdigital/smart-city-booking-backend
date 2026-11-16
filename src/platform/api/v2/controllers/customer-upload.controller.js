@@ -128,6 +128,21 @@ class CustomerUploadControllerV2 {
   }
 
   /**
+   * The page „Nachweise einreichen“ of a link: every booking it opens -
+   * the one of a booking's link, those of the group of a series' link.
+   */
+  static async readAllByLink(req, res) {
+    const bookings = await CustomerUploadService.bookingsOfLink({
+      tenantId: req.params.tenant,
+      link: CustomerUploadControllerV2._link(req),
+    });
+    res.set("Cache-Control", "no-store");
+    return res
+      .status(200)
+      .json(await CustomerUploadService.guestViewsOf(bookings));
+  }
+
+  /**
    * A file for an upload field of the booking. In a group the booking
    * person names the fields of other bookings of the group it counts for
    * too, in the form field `alsoFor` as JSON `[{ bookingId, fieldId }]`;

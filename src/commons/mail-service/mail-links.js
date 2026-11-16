@@ -9,6 +9,7 @@
 const {
   isGuestBooking,
   linkHolds,
+  signCustomerUploadGroupLink,
   signCustomerUploadLink,
 } = require("../services/customer-upload/customer-upload-link");
 
@@ -131,9 +132,36 @@ function customerUploadAdminUrl(booking, fieldId = null) {
 
 function signedProofsUrl(base, path, booking, fieldId) {
   if (!base || !booking || !linkHolds(booking)) return "";
-  const query = new URLSearchParams({ link: signCustomerUploadLink(booking) });
+  return proofsPageUrl(base, path, signCustomerUploadLink(booking), fieldId);
+}
+
+function proofsPageUrl(base, path, link, fieldId) {
+  const query = new URLSearchParams({ link });
   if (fieldId) query.set("field", fieldId);
   return `${base}${path}?${query}`;
+}
+
+/**
+ * The page „Nachweise einreichen“ of the Admin UI for all bookings of a
+ * series, with the link of the group: where the instance runs no
+ * storefront, the button of a series' mail. None with a storefront, without
+ * `FRONTEND_URL`, nor once no booking of the series' link still holds.
+ *
+ * @param {string} tenantId
+ * @param {string} groupBookingId
+ * @param {Object[]} bookings The bookings of the group
+ * @returns {string}
+ */
+function customerUploadSeriesUrl(tenantId, groupBookingId, bookings) {
+  const base = (process.env.FRONTEND_URL || "").replace(/\/+$/, "");
+  if (hasStoreFront() || !base || !groupBookingId) return "";
+  if (!bookings.some((booking) => linkHolds(booking))) return "";
+  return proofsPageUrl(
+    base,
+    "/booking/proofs",
+    signCustomerUploadGroupLink(tenantId, groupBookingId),
+    null,
+  );
 }
 
 /**
@@ -171,6 +199,7 @@ module.exports = {
   customerUploadProofsUrl,
   customerUploadGuestUrl,
   customerUploadUrlOf,
+  customerUploadSeriesUrl,
   hasStoreFront,
   usesSignedLink,
   cancellationUrl,

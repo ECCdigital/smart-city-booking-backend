@@ -21,6 +21,7 @@ const {
   bookingStatusUrl,
   cancellationUrl,
   customerUploadUrlOf,
+  customerUploadSeriesUrl,
   hasStoreFront,
   usesSignedLink,
   withdrawalUrl,
@@ -352,6 +353,8 @@ function renderShortBookingDetails({
  * @param {Object[]} params.bookings
  * @param {Object[]} params.bookables The bookables of every position
  * @param {boolean} params.aggregated Each line names its booking
+ * @param {?string} [params.groupBookingId] The group of an aggregated
+ *   notice: without a storefront its button leads to the page of the series
  * @param {?Object} [params.customerUploads] The instance's settings of
  *   customer uploads; none: off
  * @param {number} [params.now]
@@ -362,6 +365,7 @@ function renderMissingProofs({
   bookings,
   bookables,
   aggregated,
+  groupBookingId = null,
   customerUploads = null,
   now = Date.now(),
 }) {
@@ -391,14 +395,19 @@ function renderMissingProofs({
     );
   const missing = fieldsOf(missingRequiredFieldsOf);
   const optional = hasStoreFront() ? [] : fieldsOf(openOptionalFieldsOf);
+  // Without a storefront a series has one page for all its bookings.
+  const seriesUrl = aggregated
+    ? customerUploadSeriesUrl(bookings[0].tenantId, groupBookingId, bookings)
+    : "";
   if (missing.length === 0) {
-    return renderOpenProofs({ optional, aggregated });
+    return renderOpenProofs({ optional, aggregated, seriesUrl });
   }
 
   const first = missing[0];
-  // A signed link holds for one booking: in a group of a guest, or of
-  // anyone without a storefront, each line carries the link of its own.
-  const linkPerBooking = aggregated && usesSignedLink(first.booking);
+  // A signed link of a booking holds for that one: in a group of a guest
+  // each line carries the link of its own, unless the series has its page.
+  const linkPerBooking =
+    aggregated && !seriesUrl && usesSignedLink(first.booking);
   // The required proofs a request still needs before the tenant releases it.
   const forRelease = missing.filter(
     ({ booking, field }) =>
@@ -421,11 +430,13 @@ function renderMissingProofs({
       url: linkPerBooking ? customerUploadUrlOf(booking, field.fieldId) : "",
     })),
     // One booking: the page opens at its most pressing field; a group:
-    // at the first booking with a proof missing.
-    proofsUrl: customerUploadUrlOf(
-      first.booking,
-      aggregated ? null : first.field.fieldId,
-    ),
+    // the page of the series, or at the first booking with a proof missing.
+    proofsUrl:
+      seriesUrl ||
+      customerUploadUrlOf(
+        first.booking,
+        aggregated ? null : first.field.fieldId,
+      ),
   });
 }
 
@@ -437,19 +448,21 @@ function renderMissingProofs({
  * @param {Object} params
  * @param {{booking: Object, field: Object}[]} params.optional
  * @param {boolean} params.aggregated Each line names its booking
+ * @param {string} [params.seriesUrl] The page of the series, if any
  * @returns {string} HTML
  */
-function renderOpenProofs({ optional, aggregated }) {
+function renderOpenProofs({ optional, aggregated, seriesUrl = "" }) {
   if (optional.length === 0) return "";
-  // A signed link holds for one booking: in a group each line carries the
-  // link of its own, one booking has the button.
+  // A series has the button to its page; one booking the button to its
+  // own; otherwise each line of a group carries the link of its booking.
+  const linkPerBooking = aggregated && !seriesUrl;
   const openProofs = optional.map(({ booking, field }) => ({
     label: field.label,
     bookingId: aggregated ? booking.id : "",
-    url: aggregated ? customerUploadUrlOf(booking, field.fieldId) : "",
+    url: linkPerBooking ? customerUploadUrlOf(booking, field.fieldId) : "",
   }));
   const proofsUrl = aggregated
-    ? ""
+    ? seriesUrl
     : customerUploadUrlOf(optional[0].booking, optional[0].field.fieldId);
   if (!proofsUrl && !openProofs.some((line) => line.url)) return "";
   return renderSnippet("open-proofs", { openProofs, proofsUrl });
@@ -593,6 +606,7 @@ async function render(
           bookings,
           bookables,
           aggregated,
+          groupBookingId,
           customerUploads,
         })
       : "",

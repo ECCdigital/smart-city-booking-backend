@@ -226,7 +226,8 @@ class CustomerUploadService {
    * yet. The link stands in for the sign-in; nothing else of the tenant
    * opens. Only a guest gets one where a storefront runs; without one,
    * the customer of an account's booking gets one too (`usesSignedLink`),
-   * so the link is not refused for an account's booking.
+   * so the link is not refused for an account's booking. The link of a
+   * series opens each booking of its group.
    *
    * @param {Object} params
    * @param {string} params.tenantId
@@ -237,11 +238,15 @@ class CustomerUploadService {
    */
   static async bookingOfLink({ tenantId, bookingId, link, now = Date.now() }) {
     const named = verifyCustomerUploadLink(link);
-    if (
-      !named ||
-      named.tenantId !== tenantId ||
-      named.bookingId !== bookingId
-    ) {
+    if (!named || named.tenantId !== tenantId) {
+      throw new ForbiddenError(R.LINK_INVALID);
+    }
+    const opens = named.groupBookingId
+      ? (await CustomerUploadService._groupOfLink(named)).bookingIds.includes(
+          bookingId,
+        )
+      : named.bookingId === bookingId;
+    if (!opens) {
       throw new ForbiddenError(R.LINK_INVALID);
     }
     const booking = await BookingManager.getBooking(
@@ -256,6 +261,61 @@ class CustomerUploadService {
       throw new ForbiddenError(R.LINK_EXPIRED);
     }
     return booking;
+  }
+
+  /**
+   * The bookings a signed link opens, for the page „Nachweise einreichen“:
+   * the one booking of a booking's link, the bookings of the group not
+   * ended yet of a series' link, in the order of the group.
+   *
+   * @param {Object} params
+   * @param {string} params.tenantId
+   * @param {string} params.link The token of the link
+   * @param {number} [params.now]
+   * @returns {Promise<Object[]>} The bookings, never none
+   */
+  static async bookingsOfLink({ tenantId, link, now = Date.now() }) {
+    const named = verifyCustomerUploadLink(link);
+    if (!named || named.tenantId !== tenantId) {
+      throw new ForbiddenError(R.LINK_INVALID);
+    }
+    if (!named.groupBookingId) {
+      return [
+        await CustomerUploadService.bookingOfLink({
+          tenantId,
+          bookingId: named.bookingId,
+          link,
+          now,
+        }),
+      ];
+    }
+    const group = await CustomerUploadService._groupOfLink(named);
+    const bookings = await Promise.all(
+      group.bookingIds.map((id) =>
+        BookingManager.getBooking(id, tenantId, DOMAIN),
+      ),
+    );
+    const open = bookings.filter(
+      (booking) => booking && linkHolds(booking, now),
+    );
+    if (open.length === 0) {
+      throw new ForbiddenError(R.LINK_EXPIRED);
+    }
+    return open;
+  }
+
+  /** The group a series' link names; none is a link refused. */
+  static async _groupOfLink({ tenantId, groupBookingId }) {
+    const group = await GroupBookingManager.getGroupBooking(
+      tenantId,
+      groupBookingId,
+      false,
+      DOMAIN,
+    );
+    if (!group) {
+      throw new ForbiddenError(R.LINK_INVALID);
+    }
+    return group;
   }
 
   /**
@@ -282,6 +342,8 @@ class CustomerUploadService {
     return CustomerUploadService._admitTo(booking, {
       fieldId,
       userId: null,
+      // A series' link chooses among the bookings of its group.
+      seriesId: verifyCustomerUploadLink(link)?.groupBookingId ?? null,
       ip,
       forUpload,
     });
@@ -296,11 +358,25 @@ class CustomerUploadService {
    * @returns {Promise<{tenant: Object, booking: Object}>}
    */
   static async guestViewOf(booking) {
-    const tenant = await TenantManager.getTenant(booking.tenantId, DOMAIN);
-    const states = await CustomerUploadService.statesOf([booking]);
+    const { tenant, bookings } = await CustomerUploadService.guestViewsOf([
+      booking,
+    ]);
+    return { tenant, booking: bookings[0] };
+  }
+
+  /**
+   * {@link guestViewOf} for all bookings a link opens, of one tenant.
+   *
+   * @param {Object[]} bookings Of {@link bookingsOfLink}
+   * @returns {Promise<{tenant: Object, bookings: Object[]}>}
+   */
+  static async guestViewsOf(bookings) {
+    const { tenantId } = bookings[0];
+    const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
+    const states = await CustomerUploadService.statesOf(bookings);
     return {
-      tenant: { id: booking.tenantId, name: tenant?.name ?? "" },
-      booking: {
+      tenant: { id: tenantId, name: tenant?.name ?? "" },
+      bookings: bookings.map((booking) => ({
         id: booking.id,
         tenantId: booking.tenantId,
         timeBegin: booking.timeBegin ?? null,
@@ -310,15 +386,18 @@ class CustomerUploadService {
           _bookableUsed: { title: item._bookableUsed?.title ?? "" },
         })),
         customerUploadState: states.get(booking.id) ?? null,
-      },
+      })),
     };
   }
 
   /** The field and the rate limit at an admitted booking. */
-  static async _admitTo(booking, { fieldId, userId, ip, forUpload }) {
+  static async _admitTo(
+    booking,
+    { fieldId, userId, seriesId = null, ip, forUpload },
+  ) {
     const tenantId = booking.tenantId;
     const bookingId = booking.id;
-    const context = { tenantId, booking, fieldId, userId };
+    const context = { tenantId, booking, fieldId, userId, seriesId };
 
     if (forUpload) {
       const {
@@ -357,8 +436,9 @@ class CustomerUploadService {
    * bookingId, fieldId }` each - there is no rule which fields are "the
    * same". Each is a booking of the group of the request's booking, the
    * booking person's own, with the field taking uploads there, and no
-   * booking twice. A guest's link covers one booking: a guest has no
-   * choice.
+   * booking twice. A booking's link covers that one booking: it has no
+   * choice. A series' link chooses among the bookings of its group whose
+   * link still holds.
    *
    * @param {Object} context Of {@link admit}
    * @param {Array<{bookingId: string, fieldId: string}>|null} alsoFor
@@ -373,8 +453,8 @@ class CustomerUploadService {
     }
     if (alsoFor.length === 0) return none;
 
-    const { tenantId, booking, userId } = context;
-    if (!userId) {
+    const { tenantId, booking, userId, seriesId = null } = context;
+    if (!userId && !seriesId) {
       throw new BadRequestError(R.TARGET_INVALID, { guest: true });
     }
     const group = await GroupBookingManager.getGroupBookingByBookingId(
@@ -383,7 +463,9 @@ class CustomerUploadService {
       false,
       DOMAIN,
     );
-    const members = new Set(group?.bookingIds || []);
+    const members = new Set(
+      !userId && group?.id !== seriesId ? [] : group?.bookingIds || [],
+    );
 
     const seen = new Set([booking.id]);
     const targets = [];
@@ -400,12 +482,15 @@ class CustomerUploadService {
       }
       seen.add(bookingId);
 
-      // The booking person's own booking alone, as for the request's one.
-      const other = await BookingManager.getBooking(bookingId, tenantId, {
-        reach: REACH.OWN,
-        userId,
-      });
-      if (!other) {
+      // The booking person's own booking alone, as for the request's one;
+      // with a series' link one its link still opens.
+      const other = userId
+        ? await BookingManager.getBooking(bookingId, tenantId, {
+            reach: REACH.OWN,
+            userId,
+          })
+        : await BookingManager.getBooking(bookingId, tenantId, DOMAIN);
+      if (!other || (!userId && !linkHolds(other))) {
         throw new BadRequestError(R.TARGET_INVALID, { bookingId });
       }
       const { settings, fields } = await CustomerUploadService._fieldsOf(other);

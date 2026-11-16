@@ -17,7 +17,11 @@ router.use(
 );
 router.use(
   "/:tenant/bookings/:id/customer-uploads-by-link",
-  require("./tenant.customer-upload-link.routes"),
+  require("./tenant.customer-upload-link.routes").byLink,
+);
+router.use(
+  "/:tenant/customer-uploads-by-link",
+  require("./tenant.customer-upload-link.routes").allByLink,
 );
 router.use("/:tenant/bookings", require("./tenant.booking-status.routes"));
 router.use("/:tenant/media", require("./tenant.media.routes"));

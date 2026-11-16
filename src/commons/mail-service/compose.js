@@ -247,7 +247,7 @@ async function composeBookingNotice(type, mailType, ctx) {
     recipients,
     attachments,
     templateData: mailType.templateData
-      ? mailType.templateData(specific, loaded)
+      ? mailType.templateData(specific, { ...loaded, groupBookingId })
       : {},
   });
 

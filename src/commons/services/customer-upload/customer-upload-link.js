@@ -13,6 +13,11 @@ const crypto = require("crypto");
  * moved later keeps its link valid as long as it lasts.
  *
  * A token is `base64url(JSON {t, b}) "." base64url(signature)`.
+ *
+ * A series has a link of its own, `{t, g}` with the id of the group in
+ * place of the booking: without a storefront the mails of a series lead to
+ * one page with all its bookings. It opens each booking of the group, as
+ * the link of that booking would, and holds for each until it ends.
  */
 
 const PURPOSE = "biletado:customer-upload-link:v1";
@@ -56,18 +61,33 @@ function linkHolds(booking, now = Date.now()) {
  * @returns {string}
  */
 function signCustomerUploadLink(booking) {
-  const payload = Buffer.from(
-    JSON.stringify({ t: booking.tenantId, b: booking.id }),
-  ).toString("base64url");
+  return sign({ t: booking.tenantId, b: booking.id });
+}
+
+function sign(content) {
+  const payload = Buffer.from(JSON.stringify(content)).toString("base64url");
   return `${payload}.${signatureOf(payload).toString("base64url")}`;
 }
 
 /**
- * Reads a token of {@link signCustomerUploadLink}.
+ * The token of a series' link: tenant and group.
+ *
+ * @param {string} tenantId
+ * @param {string} groupBookingId
+ * @returns {string}
+ */
+function signCustomerUploadGroupLink(tenantId, groupBookingId) {
+  return sign({ t: tenantId, g: groupBookingId });
+}
+
+/**
+ * Reads a token of {@link signCustomerUploadLink} or
+ * {@link signCustomerUploadGroupLink}.
  *
  * @param {string} token
- * @returns {{tenantId: string, bookingId: string}|null} What it names, or
- *   null when it is not a token signed here
+ * @returns {{tenantId: string, bookingId: string}|{tenantId: string,
+ *   groupBookingId: string}|null} What it names, or null when it is not a
+ *   token signed here
  */
 function verifyCustomerUploadLink(token) {
   if (typeof token !== "string") return null;
@@ -83,11 +103,17 @@ function verifyCustomerUploadLink(token) {
     return null;
   }
   try {
-    const { t, b } = JSON.parse(
+    const { t, b, g } = JSON.parse(
       Buffer.from(payload, "base64url").toString("utf8"),
     );
-    if (typeof t !== "string" || typeof b !== "string") return null;
-    return { tenantId: t, bookingId: b };
+    if (typeof t !== "string") return null;
+    if (typeof b === "string" && g === undefined) {
+      return { tenantId: t, bookingId: b };
+    }
+    if (typeof g === "string" && b === undefined) {
+      return { tenantId: t, groupBookingId: g };
+    }
+    return null;
   } catch {
     return null;
   }
@@ -96,6 +122,7 @@ function verifyCustomerUploadLink(token) {
 module.exports = {
   isGuestBooking,
   linkHolds,
+  signCustomerUploadGroupLink,
   signCustomerUploadLink,
   verifyCustomerUploadLink,
 };
