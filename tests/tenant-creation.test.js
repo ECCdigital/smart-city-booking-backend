@@ -145,6 +145,28 @@ describe("tenant creation", function () {
       expect(res.body.params.field).to.equal("mail");
     });
 
+    it("stores PDF templates the Admin UI opens in its visual editor", async function () {
+      // The editor opens a template visually only when it starts with the
+      // block list it was built from (parseMetadata.js in the Admin UI);
+      // without one it falls back to the expert mode.
+      const MARKER = /^<!--MAILBLOCKS:v=1;b64=([A-Za-z0-9+/=]+)-->/;
+
+      await create(ADMIN, VALID);
+
+      const stored = TenantManager.storeTenant.lastCall.args[0];
+      for (const field of [
+        "receiptTemplate",
+        "invoiceTemplate",
+        "cancellationTemplate",
+        "withdrawalTemplate",
+      ]) {
+        const match = String(stored[field]).match(MARKER);
+        expect(match, field).to.not.equal(null);
+        const blocks = JSON.parse(Buffer.from(match[1], "base64").toString());
+        expect(blocks, field).to.be.an("array").that.is.not.empty;
+      }
+    });
+
     it("creates with the required contact alone and makes the creator the owner", async function () {
       const res = await create(ADMIN, VALID);
 

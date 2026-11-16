@@ -7,6 +7,10 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ## [Unreleased]
 
+### Changed
+
+- The default PDF templates for receipts, invoices, cancellation and withdrawal receipts are the Admin UI's visual defaults, built from its default blocks and carrying them, so a new tenant's templates open in the visual editor instead of the expert mode. A tenant without a stored template gets this layout as well. Templates already stored stay as they are
+
 ## [4.4.0] — 2026-11-16
 
 ### Security
