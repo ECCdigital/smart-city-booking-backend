@@ -29,6 +29,7 @@ const SupervisionHistoryManager = require("../src/commons/data-managers/supervis
 const SupervisionNotificationManager = require("../src/commons/data-managers/supervision-notification-manager");
 const Instance = require("../src/commons/entities/instance/instance");
 const Tenant = require("../src/commons/entities/tenant/tenant");
+const InvoiceApplication = require("../src/commons/entities/application/payment/invoiceApplication");
 const { User } = require("../src/commons/entities/user/user");
 const {
   TenantController,
@@ -155,6 +156,11 @@ describe("tenant creation", function () {
       expect(stored.genericMailTemplate).to.be.a("string").that.is.not.empty;
       expect(stored.receiptTemplate).to.be.a("string").that.is.not.empty;
       expect(stored.invoiceTemplate).to.be.a("string").that.is.not.empty;
+      expect(stored.cancellationTemplate).to.be.a("string").that.is.not.empty;
+      expect(stored.withdrawalTemplate).to.be.a("string").that.is.not.empty;
+      expect(stored.applications).to.deep.include({
+        ...new InvoiceApplication({ active: true }),
+      });
       expect(stored.mailSnippets).to.be.an("object");
       expect(stored.cancellationRefundTiers).to.be.an("array");
 
@@ -182,6 +188,22 @@ describe("tenant creation", function () {
         website: "https://stadthalle.example",
         location: "Rathausplatz 1",
       });
+    });
+
+    it("keeps an invoice app the body already names", async function () {
+      const invoice = {
+        type: "payment",
+        id: "invoice",
+        title: "Rechnung",
+        active: false,
+      };
+      const res = await create(ADMIN, { ...VALID, applications: [invoice] });
+
+      expect(res.status).to.equal(201);
+      const { applications } = TenantManager.storeTenant.lastCall.args[0];
+      expect(applications.filter((app) => app.id === "invoice")).to.deep.equal([
+        invoice,
+      ]);
     });
 
     it("updates an existing tenant without the new required contact", async function () {
