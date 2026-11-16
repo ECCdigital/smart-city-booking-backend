@@ -634,7 +634,6 @@ async function createGroupBooking({
             attempts: bookingAttempts,
             files: customerUploadFiles ?? [],
             targets: customerUploadTargets ?? {},
-            guest: !user?.id,
           }),
         )
       : [];

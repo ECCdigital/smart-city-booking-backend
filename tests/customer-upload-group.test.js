@@ -7,7 +7,8 @@
  * of the booking. A check of it writes the note at all of them, a
  * rejection mails the customer once for all, the notice „Nachweis
  * eingereicht“ goes once per group, and the file stays until the end of
- * the last booking holding it. A guest has no such choice.
+ * the last booking holding it. A guest chooses at the checkout of the
+ * group too.
  *
  * Over the lifecycle harness: the real routers and the mail module, the
  * storage, the media records and clamd as fakes.
@@ -495,8 +496,8 @@ describe("customer uploads: one proof for several bookings of a group", function
       expectNothingStored();
     });
 
-    it("gives a guest no choice: a file for one booking each", async function () {
-      const refused = await groupCheckout(
+    it("lets a guest choose several bookings for a file too", async function () {
+      const res = await groupCheckout(
         [
           {
             key: "card",
@@ -508,28 +509,14 @@ describe("customer uploads: one proof for several bookings of a group", function
         ],
         { as: null },
       );
-      expectRefused(
-        refused,
-        "checkout.customer_upload_refused",
-        "customer_upload_target_invalid",
-      );
-      expectNothingStored();
 
-      const res = await groupCheckout(
-        [
-          { key: "a", targets: [{ attempt: 0, fieldId: CHECKOUT_FIELD.id }] },
-          { key: "b", targets: [{ attempt: 1, fieldId: CHECKOUT_FIELD.id }] },
-        ],
-        { as: null },
-      );
       expect(res.body.success, res.text).to.equal(true);
       const [first, second] = membersOf(res);
-      expect(first.customerUploads).to.have.length(1);
-      expect(second.customerUploads).to.have.length(1);
-      expect(first.customerUploads[0].mediaId).to.not.equal(
-        second.customerUploads[0].mediaId,
-      );
-      expect(first.customerUploads[0].sharedWith).to.deep.equal([]);
+      expect(media.size).to.equal(1);
+      const [medium] = [...media.values()];
+      expect(medium.bookingIds).to.deep.equal([first.id, second.id]);
+      expect(first.customerUploads[0].mediaId).to.equal(medium.id);
+      expect(second.customerUploads[0].mediaId).to.equal(medium.id);
     });
 
     it("takes the files on the legacy group checkout too", async function () {

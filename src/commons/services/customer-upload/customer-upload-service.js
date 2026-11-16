@@ -908,8 +908,8 @@ class CustomerUploadService {
    * before a booking or a file is stored. Each file names the bookings of
    * the group and the upload field of each it is for, `targets[key]` a
    * list of `{ attempt, fieldId }` with `attempt` the index of the booking
-   * attempt as sent - there is no rule which fields are "the same". A
-   * guest has no choice: each of their files is for one booking. Every
+   * attempt as sent - there is no rule which fields are "the same"; a
+   * guest chooses as a signed-in booking person does. Every
    * required upload field "in the checkout" of every booking needs a file.
    * A file counts at each of its bookings against the field and the limit
    * of the booking.
@@ -920,7 +920,6 @@ class CustomerUploadService {
    * @param {Array<{key: string, file: Object}>} params.files
    * @param {Object<string, Array<{attempt: number, fieldId: string}>>}
    *   params.targets By the key of each file
-   * @param {boolean} params.guest Whether nobody is signed in
    * @returns {Promise<Object[]>} The accepted files, each with its bytes and
    *   its targets `{ attempt, field }`, for {@link storeAtGroupCheckout}
    */
@@ -929,7 +928,6 @@ class CustomerUploadService {
     attempts,
     files = [],
     targets = {},
-    guest = false,
   }) {
     const fieldsOf = await CustomerUploadService._groupCheckoutFieldsOf(
       tenantId,
@@ -950,7 +948,6 @@ class CustomerUploadService {
       targets: CustomerUploadService._groupTargetsOf(targets[key], {
         key,
         fieldsOf,
-        guest,
       }),
     }));
 
@@ -1137,12 +1134,9 @@ class CustomerUploadService {
   }
 
   /** The targets of one file of a group checkout, each `{ attempt, field }`. */
-  static _groupTargetsOf(list, { key, fieldsOf, guest }) {
+  static _groupTargetsOf(list, { key, fieldsOf }) {
     if (!Array.isArray(list) || list.length === 0) {
       throw new BadRequestError(R.TARGET_INVALID, { key });
-    }
-    if (guest && list.length > 1) {
-      throw new BadRequestError(R.TARGET_INVALID, { key, guest: true });
     }
     const seen = new Set();
     return list.map((target) => {
