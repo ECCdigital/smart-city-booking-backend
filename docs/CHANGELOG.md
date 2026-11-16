@@ -7,6 +7,8 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ## [Unreleased]
 
+## [4.4.0] — 2026-11-16
+
 ### Security
 
 - Forgot password is rate-limited ([ECCdigital/tickets#302](https://github.com/ECCdigital/tickets/issues/302)): `POST /auth/forgot-password` answers `429 too_many_requests` with `Retry-After` past 30 requests per client IP and hour (`RATE_LIMIT_FORGOT_PASSWORD_PER_IP`); an account gets at most 1 reset mail per minute and 5 per hour (`RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_SHORT`, `_LONG`), silently, so the answer still does not tell whether the address has an account. Defaults in `.env-example`
