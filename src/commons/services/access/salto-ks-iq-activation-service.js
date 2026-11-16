@@ -483,24 +483,6 @@ class SaltoKsIqActivationService {
   }
 
   /**
-   * Removes the activation entries from a tenant that is about to leave
-   * through the API: even encrypted, the OTP ingredients never travel, since
-   * whoever holds them can open every door of the IQ. Safe because a tenant
-   * update never writes them back - see {@link preserveActivations}.
-   *
-   * @param {Object|null} tenant The tenant answer to redact, mutated in place
-   * @returns {Object|null} The same tenant
-   */
-  static redactActivations(tenant) {
-    for (const app of tenant?.applications || []) {
-      if (app.type === APP_TYPE && app.id === PROVIDER_ID) {
-        delete app.iqActivations;
-      }
-    }
-    return tenant;
-  }
-
-  /**
    * Books a successful open: the failure streak ends and a degraded
    * activation is proven healthy again.
    *

@@ -1,6 +1,13 @@
 const TenantApplication = require("./tenantApplication");
 const SecurityUtils = require("../../utilities/security-utils");
 
+/** The `type` of every access application among a tenant's applications. */
+const ACCESS_APP_TYPE = "access";
+
+function isEncrypted(value) {
+  return value?.iv != null && value?.data != null;
+}
+
 /**
  * An access application of a tenant: the provider's credentials plus
  * `customerService`, the Provider Support Contact (name, phone, email) the
@@ -9,18 +16,86 @@ const SecurityUtils = require("../../utilities/security-utils");
  */
 class AccessApplication extends TenantApplication {
   constructor(params) {
-    super({ type: "access", ...params });
+    super({ type: ACCESS_APP_TYPE, ...params });
     this.apiBaseUrl = params.apiBaseUrl || "";
     this.webhookCallbackUrl = params.webhookCallbackUrl || null;
     this.webhookSubscriptionId = params.webhookSubscriptionId || null;
     this.webhookRegisteredAt = params.webhookRegisteredAt || null;
     this.webhookRegistrationError = params.webhookRegistrationError || null;
     this.customerService = params.customerService || null;
+    // The last connection test, the backend's alone to write
+    // (`AccessAppLifecycleService.recordTest`): `{ success, testedAt,
+    // error, fingerprint }`, the fingerprint a keyed hash of the tested
+    // values (`connectionFingerprint`), never the values themselves.
+    this.lastTest = params.lastTest || null;
   }
 
-  decrypt() {}
+  /**
+   * The fields of this provider that hold secrets: stored encrypted, never
+   * answered over the API, kept when a save leaves them empty. The one
+   * place that names them - encryption, saving, the connection test and
+   * the reading of an application all go by it (`secretFieldsOf`).
+   *
+   * @returns {string[]}
+   */
+  static get secretFields() {
+    return [];
+  }
 
-  encrypt() {}
+  /**
+   * Per secret field the fields that name what it belongs to, in the order
+   * they are checked: a connection test takes a stored secret only while
+   * each of them is still the stored one (a password belongs to one user
+   * at one server).
+   *
+   * @returns {Object<string, string[]>}
+   */
+  static get secretIdentity() {
+    return {};
+  }
+
+  /**
+   * The fields the connection test of this provider checks - what its
+   * fingerprint is made of.
+   *
+   * @returns {string[]}
+   */
+  static get testedFields() {
+    return [];
+  }
+
+  /**
+   * A keyed hash of the tested fields of this application, secrets in plain
+   * text, so the last test can tell whether it tested what is stored
+   * without keeping the values.
+   *
+   * @returns {string}
+   */
+  connectionFingerprint() {
+    const values = this.constructor.testedFields.map((field) => {
+      const value = isEncrypted(this[field])
+        ? SecurityUtils.decrypt(this[field])
+        : this[field];
+      return [field, String(value ?? "").trim()];
+    });
+    return SecurityUtils.fingerprint(JSON.stringify(values));
+  }
+
+  decrypt() {
+    for (const field of this.constructor.secretFields) {
+      if (isEncrypted(this[field])) {
+        this[field] = SecurityUtils.decrypt(this[field]);
+      }
+    }
+  }
+
+  encrypt() {
+    for (const field of this.constructor.secretFields) {
+      if (this[field] && typeof this[field] === "string") {
+        this[field] = SecurityUtils.encrypt(this[field]);
+      }
+    }
+  }
 
   static get Schema() {
     return {
@@ -31,6 +106,7 @@ class AccessApplication extends TenantApplication {
       webhookRegisteredAt: { type: Number, default: null },
       webhookRegistrationError: { type: String, default: null },
       customerService: { type: Object, default: null },
+      lastTest: { type: Object, default: null },
     };
   }
 }
@@ -42,16 +118,16 @@ class NukiAccessApplication extends AccessApplication {
     this.apiBaseUrl = params.apiBaseUrl || "https://api.nuki.io";
   }
 
-  decrypt() {
-    if (this.apiToken?.iv != null && this.apiToken?.data != null) {
-      this.apiToken = SecurityUtils.decrypt(this.apiToken);
-    }
+  static get secretFields() {
+    return ["apiToken"];
   }
 
-  encrypt() {
-    if (this.apiToken && typeof this.apiToken === "string") {
-      this.apiToken = SecurityUtils.encrypt(this.apiToken);
-    }
+  static get secretIdentity() {
+    return { apiToken: ["apiBaseUrl"] };
+  }
+
+  static get testedFields() {
+    return ["apiBaseUrl", "apiToken"];
   }
 
   static get Schema() {
@@ -121,22 +197,35 @@ class SaltoKsAccessApplication extends AccessApplication {
     return [...SALTO_KS_ENVIRONMENTS];
   }
 
-  decrypt() {
-    if (this.clientSecret?.iv != null && this.clientSecret?.data != null) {
-      this.clientSecret = SecurityUtils.decrypt(this.clientSecret);
-    }
-    if (this.password?.iv != null && this.password?.data != null) {
-      this.password = SecurityUtils.decrypt(this.password);
-    }
+  static get secretFields() {
+    return ["clientSecret", "password"];
+  }
+
+  /**
+   * A client secret is issued for a client id in one environment, a
+   * password belongs to a system user in one environment. The site plays no
+   * part - a new site needs no new secret.
+   */
+  static get secretIdentity() {
+    return {
+      clientSecret: ["environment", "clientId"],
+      password: ["environment", "username"],
+    };
+  }
+
+  static get testedFields() {
+    return [
+      "environment",
+      "clientId",
+      "clientSecret",
+      "username",
+      "password",
+      "siteId",
+    ];
   }
 
   encrypt() {
-    if (this.clientSecret && typeof this.clientSecret === "string") {
-      this.clientSecret = SecurityUtils.encrypt(this.clientSecret);
-    }
-    if (this.password && typeof this.password === "string") {
-      this.password = SecurityUtils.encrypt(this.password);
-    }
+    super.encrypt();
     for (const activation of this.iqActivations || []) {
       if (activation.secret && typeof activation.secret === "string") {
         activation.secret = SecurityUtils.encrypt(activation.secret);
@@ -165,10 +254,6 @@ class SaltoKsAccessApplication extends AccessApplication {
   }
 }
 
-function isEncrypted(value) {
-  return value?.iv != null && value?.data != null;
-}
-
 /**
  * The iFBS bike box API of a tenant: one server, one API key, and the
  * secret phrase the booking checksums are made with. Configured as a
@@ -183,22 +268,17 @@ class IfbsAccessApplication extends AccessApplication {
     this.secretPhrase = params.secretPhrase || "";
   }
 
-  decrypt() {
-    if (isEncrypted(this.apiKey)) {
-      this.apiKey = SecurityUtils.decrypt(this.apiKey);
-    }
-    if (isEncrypted(this.secretPhrase)) {
-      this.secretPhrase = SecurityUtils.decrypt(this.secretPhrase);
-    }
+  static get secretFields() {
+    return ["apiKey", "secretPhrase"];
   }
 
-  encrypt() {
-    if (this.apiKey && typeof this.apiKey === "string") {
-      this.apiKey = SecurityUtils.encrypt(this.apiKey);
-    }
-    if (this.secretPhrase && typeof this.secretPhrase === "string") {
-      this.secretPhrase = SecurityUtils.encrypt(this.secretPhrase);
-    }
+  /** An API key is issued under its key id at one server. */
+  static get secretIdentity() {
+    return { apiKey: ["serverUrl", "apiKeyID"], secretPhrase: ["serverUrl"] };
+  }
+
+  static get testedFields() {
+    return ["serverUrl", "apiKeyID", "apiKey"];
   }
 
   static get Schema() {
@@ -227,16 +307,16 @@ class ParevaAccessApplication extends AccessApplication {
     this.password = params.password || null;
   }
 
-  decrypt() {
-    if (isEncrypted(this.password)) {
-      this.password = SecurityUtils.decrypt(this.password);
-    }
+  static get secretFields() {
+    return ["password"];
   }
 
-  encrypt() {
-    if (this.password && typeof this.password === "string") {
-      this.password = SecurityUtils.encrypt(this.password);
-    }
+  static get secretIdentity() {
+    return { password: ["serverUrl", "user"] };
+  }
+
+  static get testedFields() {
+    return ["serverUrl", "lockerId", "user", "password"];
   }
 
   static get Schema() {
@@ -264,16 +344,16 @@ class OpenLockerAccessApplication extends AccessApplication {
     this.password = params.password || null;
   }
 
-  decrypt() {
-    if (isEncrypted(this.password)) {
-      this.password = SecurityUtils.decrypt(this.password);
-    }
+  static get secretFields() {
+    return ["password"];
   }
 
-  encrypt() {
-    if (this.password && typeof this.password === "string") {
-      this.password = SecurityUtils.encrypt(this.password);
-    }
+  static get secretIdentity() {
+    return { password: ["serverUrl", "email"] };
+  }
+
+  static get testedFields() {
+    return ["serverUrl", "email", "password"];
   }
 
   static get Schema() {
@@ -294,9 +374,46 @@ const accessAppTypes = {
   "open-locker": OpenLockerAccessApplication,
 };
 
+/**
+ * The class of a provider's access application; `AccessApplication` for a
+ * provider without a class of its own.
+ *
+ * @param {string} providerId e.g. `nuki`, `salto-ks`
+ * @returns {typeof AccessApplication}
+ */
+function appClassOf(providerId) {
+  return accessAppTypes[providerId] || AccessApplication;
+}
+
 function createAccessApplication(params) {
-  const AppClass = accessAppTypes[params.id] || AccessApplication;
+  const AppClass = appClassOf(params.id);
   return new AppClass(params);
+}
+
+/**
+ * The secret fields of a provider's access application, as its class names
+ * them (`secretFields`); none for a provider without a class of its own.
+ *
+ * @param {string} providerId e.g. `nuki`, `salto-ks`
+ * @returns {string[]}
+ */
+function secretFieldsOf(providerId) {
+  return appClassOf(providerId).secretFields ?? [];
+}
+
+/**
+ * The stored access application of a provider in a tenant, active or not.
+ *
+ * @param {Object|null} tenant
+ * @param {string} providerId
+ * @returns {Object|null}
+ */
+function findAccessApp(tenant, providerId) {
+  return (
+    (tenant?.applications || []).find(
+      (app) => app.type === ACCESS_APP_TYPE && app.id === providerId,
+    ) || null
+  );
 }
 
 function registerAccessAppType(id, AppClass) {
@@ -310,7 +427,11 @@ module.exports = {
   IfbsAccessApplication,
   ParevaAccessApplication,
   OpenLockerAccessApplication,
+  ACCESS_APP_TYPE,
   accessAppTypes,
+  appClassOf,
   createAccessApplication,
+  findAccessApp,
   registerAccessAppType,
+  secretFieldsOf,
 };

@@ -845,6 +845,96 @@
       "503":
         description: The locker system stayed held (`locker_system_busy`)
 
+/api/{tenant}/accesspoints/{id}/bookables:
+  put:
+    tags:
+      - Access Points
+    summary: Set the bookables of an access point
+    description: |
+      Sets which bookables carry the access point (glossary "Zuordnung"),
+      as the access points page assigns it. The body lists every bookable
+      that shall carry it: the access point's id is added to
+      `accessPointDetails.accessPointIds` of each listed bookable that lacks
+      it and removed from each other bookable of the tenant that carries
+      it. A bookable that gets its first access point has its access
+      switched on (`accessPointDetails.active: true`), so the assignment
+      takes effect at once; one that loses its last keeps `active` as it
+      is. Nothing else of a bookable changes - the assignment is the same
+      the bookable's own section shows and saves with `PUT bookables`.
+
+      Requires `update` on `manageBookables` at every bookable that changes,
+      with the reach of `PUT /api/{tenant}/bookables`: with `updateOwn`
+      alone the bookables the user owns. A bookable that does not change is
+      not asked about, so a list that keeps a bookable out of reach goes
+      through. A locker system with its own compartments (Open Locker) hangs
+      at one bookable at most.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: id
+        in: path
+        required: true
+        description: Unique identifier of the access point
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - bookableIds
+            properties:
+              bookableIds:
+                type: array
+                description: |
+                  Every bookable that shall carry the access point; an empty
+                  list removes it from all of them
+                items:
+                  type: string
+                example: [b-saal, b-foyer]
+    responses:
+      "200":
+        description: The access point and the bookables that carry it now
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                accessPointId:
+                  type: string
+                  example: ap-1
+                bookableIds:
+                  type: array
+                  items:
+                    type: string
+                  example: [b-saal, b-foyer]
+      "400":
+        description: |
+          `invalid_bookable_ids` - `bookableIds` is no list of ids.
+          `unknown_bookable` - the tenant has no bookable of that id
+          (`params.bookableId`). `locker_system_one_bookable` - a locker
+          system with its own compartments is to hang at more than one
+          bookable (`params.accessPointId`, `params.label`). Nothing is
+          stored.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ValidationErrorResponse"
+      "401":
+        description: Not authenticated
+      "403":
+        description: |
+          No `update` on `manageBookables`, or a bookable that would change
+          lies out of the user's reach; nothing is stored. The one JSON form
+          of the central error handler (`ForbiddenError`, code `forbidden`).
+      "404":
+        description: |
+          `access_point_not_found` - the tenant has no access point with
+          that id
+
 components:
   schemas:
     AccessPointBookings:

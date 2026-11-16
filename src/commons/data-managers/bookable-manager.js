@@ -404,6 +404,31 @@ class BookableManager {
   }
 
   /**
+   * Store the assignment of a bookable to its access points: the list of
+   * `accessPointDetails.accessPointIds` and the switch
+   * `accessPointDetails.active`, nothing else of the bookable. Written
+   * through the document, so the iFBS entry of `externalProviders` follows
+   * the locker system as on a whole-bookable write.
+   * @param {string} tenantId Tenant ID
+   * @param {string} id Bookable ID
+   * @param {{accessPointIds: string[], active: boolean}} links
+   * @returns {Promise<void>}
+   */
+  static async storeAccessPointLinks(tenantId, id, { accessPointIds, active }) {
+    const doc = await BookableModel.findOne({ tenantId: tenantId, id: id });
+    if (!doc) {
+      return;
+    }
+    doc.accessPointDetails = {
+      ...(doc.accessPointDetails || {}),
+      accessPointIds: accessPointIds,
+      active: active,
+    };
+    doc.markModified("accessPointDetails");
+    await doc.save({ validateModifiedOnly: true });
+  }
+
+  /**
    * Get parent bookables (bookables that reference this one) - an embedded
    * list (ADR 0003).
    * @param {string} id Bookable ID

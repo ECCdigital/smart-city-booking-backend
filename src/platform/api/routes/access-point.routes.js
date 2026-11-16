@@ -88,6 +88,15 @@ router.post(
   AccessPointController.rotateAllCompartmentScanCodes,
 );
 
+// The bookables of an access point (glossary "Zuordnung", tickets#1110),
+// set from the access points page: a write of the bookables that change,
+// so the right and the reach are those of `PUT bookables`.
+router.put(
+  "/:id/bookables",
+  authorize("bookable", "update"),
+  AccessPointController.assignBookables,
+);
+
 router.delete(
   "/:id",
   authorize("accessPoint", "write"),

@@ -777,34 +777,6 @@ describe("SaltoKsIqActivationService open bookkeeping (reactivation)", () => {
   });
 });
 
-describe("SaltoKsIqActivationService.redactActivations", () => {
-  it("strips the activation entries from a tenant answer", () => {
-    const tenant = {
-      id: TENANT_ID,
-      applications: [
-        saltoApp({
-          iqActivations: [{ iqId: IQ_ID, state: "activated" }],
-        }),
-        { type: "payment", id: "other" },
-      ],
-    };
-
-    SaltoKsIqActivationService.redactActivations(tenant);
-
-    expect(tenant.applications[0]).to.not.have.property("iqActivations");
-    expect(tenant.applications[1]).to.deep.equal({
-      type: "payment",
-      id: "other",
-    });
-  });
-
-  it("tolerates a tenant without applications", () => {
-    expect(() =>
-      SaltoKsIqActivationService.redactActivations(null),
-    ).to.not.throw();
-  });
-});
-
 describe("SaltoKsIqActivationService.preserveActivations", () => {
   it("keeps the stored activations regardless of what a tenant update sends", () => {
     const stored = [{ iqId: IQ_ID, state: "activated" }];

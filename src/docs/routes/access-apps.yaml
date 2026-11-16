@@ -214,23 +214,42 @@
       "500":
         description: Could not discard Salto KS IQ activation
 
-/api/{tenant}/access-apps/{provider}/test:
-  post:
+/api/{tenant}/access-apps/{provider}:
+  put:
     tags:
       - Access Apps
-    summary: Test the connection to an access provider
+    summary: Save the access application of one provider
     description: |
-      Tests the configuration in the body, as the admin form holds it, against
-      the provider; nothing is stored. Reserved for the tenant owner
-      (`accessApp.manage`).
+      Creates or changes the tenant's access application (glossary
+      „Anbindung“) of `provider` and nothing else: payment, sign-in and the
+      other providers' applications stay as stored. A new application is
+      switched on; a stored one keeps `active` - switching is
+      `PUT …/{provider}/active`. A field the body leaves out stays as stored,
+      and so does a secret the body leaves empty or out: the admin form
+      never sees a stored secret. A stored secret stays only with its
+      identity, by the rule of the connection test (e.g. a password with
+      its server and user): when the body changes the identity and leaves
+      the secret empty, the save is refused with `400 missing_secret` and
+      nothing is stored. Backend-owned state (the Salto KS IQ activations,
+      the last connection test) is not the body's to write.
 
-      For `salto-ks` a secret left empty or out is taken from the tenant's
-      stored Salto KS application, but only while it belongs to what the body
-      names: the client secret while `clientId` and `environment` are the
-      stored ones, the password while `username` and `environment` are. The
-      site plays no part. Only then are the required fields checked. A secret
-      that is still missing stops the test before Salto is asked, with
-      `code: "missing_secret"` and the reason per secret.
+      The answer is the saved application without its secrets;
+      `storedSecrets` says per secret field whether one is stored, and
+      `connectionState` with `lastTest` what the last connection test says
+      about the saved values: a test, then saving what it tested, is
+      `connected` or `failing`; saving other values is `unchecked`. Which
+      fields are secrets is the provider's to say: `nuki` `apiToken`,
+      `salto-ks` `clientSecret` and `password`, `open-locker` `password`,
+      `ifbs` `apiKey` and `secretPhrase`, `pareva` `password`.
+
+      The access applications are written by these routes alone. Reading
+      the tenant (`GET /api/tenants`, `GET /api/tenants/{tenant}`) answers
+      each of them in the same form: without its secrets, with
+      `storedSecrets`, `connectionState` and `lastTest`. `PUT /api/tenants`
+      keeps them as stored, whatever it sends.
+
+      Reserved for the tenant owner, like the connection test
+      (`accessApp.manage`).
     security:
       - bearerAuth: []
     parameters:
@@ -244,8 +263,215 @@
             type: object
             additionalProperties: true
             description: |
-              The provider's credentials. `salto-ks`: `clientId`,
-              `clientSecret`, `siteId`, `environment`, `username`, `password`.
+              The provider's fields as the admin form holds them, e.g. for
+              `nuki` `apiToken`, `apiBaseUrl` and `customerService`. `type`,
+              `id` and `active` are ignored.
+          example:
+            apiToken: ""
+            apiBaseUrl: https://api.nuki.io
+    responses:
+      "200":
+        description: The saved application, without secrets
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessApplicationWithoutSecrets"
+      "400":
+        description: |
+          `missing_secret` - a stored secret the body leaves empty belongs
+          to another identity than the body names. `params.provider` is the
+          provider, `params.missing` the secrets, each with `field` and the
+          `reason` as the connection test names it: the first field of the
+          secret's identity that changed (e.g. `server_url_changed`).
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessAppError"
+            example:
+              error: BadRequestError
+              code: missing_secret
+              statusCode: 400
+              params:
+                provider: open-locker
+                missing:
+                  - field: password
+                    reason: server_url_changed
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the tenant owner
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessAppError"
+      "404":
+        description: |
+          `access_provider_not_found` - there is no such provider.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessAppError"
+  delete:
+    tags:
+      - Access Apps
+    summary: Remove the access application of one provider
+    description: |
+      Removes the tenant's access application of `provider` with its
+      credentials, and nothing else of the tenant. Not while the provider
+      still has access points - they would be left without the credentials
+      they open with: delete them first.
+
+      Reserved for the tenant owner (`accessApp.manage`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - $ref: "#/components/parameters/AccessProviderParam"
+    responses:
+      "204":
+        description: The application is removed
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the tenant owner
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessAppError"
+      "404":
+        description: |
+          `access_provider_not_found` - there is no such provider.
+          `access_app_not_found` - the tenant has no application of it.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessAppError"
+      "409":
+        description: |
+          `access_app_has_access_points` - the provider still has access
+          points; `params` names `provider` and the number of
+          `accessPoints`.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessAppError"
+            example:
+              error: ConflictError
+              code: access_app_has_access_points
+              statusCode: 409
+              params:
+                provider: nuki
+                accessPoints: 3
+
+/api/{tenant}/access-apps/{provider}/active:
+  put:
+    tags:
+      - Access Apps
+    summary: Switch the access application of one provider on or off
+    description: |
+      Sets `active` of the tenant's access application of `provider` and
+      changes nothing else. Switched off, the application keeps its
+      credentials, its access points and their assignment to bookables, so
+      switching it on again needs no new setup.
+
+      Reserved for the tenant owner (`accessApp.manage`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - $ref: "#/components/parameters/AccessProviderParam"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - active
+            properties:
+              active:
+                type: boolean
+    responses:
+      "200":
+        description: The application, without secrets
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessApplicationWithoutSecrets"
+      "400":
+        description: "`access_app_active_invalid` - `active` is not a boolean"
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessAppError"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the tenant owner
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessAppError"
+      "404":
+        description: |
+          `access_provider_not_found` - there is no such provider.
+          `access_app_not_found` - the tenant has no application of it.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessAppError"
+
+/api/{tenant}/access-apps/{provider}/test:
+  post:
+    tags:
+      - Access Apps
+    summary: Test the connection to an access provider
+    description: |
+      Tests the configuration in the body, as the admin form holds it, against
+      the provider. Reserved for the tenant owner (`accessApp.manage`).
+
+      At every provider a secret left empty or out is taken from the
+      tenant's stored application, also beside changed fields, but only
+      while it belongs to what the body names (its identity):
+
+      - `nuki`: `apiToken` while `apiBaseUrl` is the stored one
+      - `salto-ks`: `clientSecret` while `environment` and `clientId` are,
+        `password` while `environment` and `username` are; the site plays
+        no part
+      - `ifbs`: `apiKey` and `secretPhrase` while `serverUrl` is
+      - `pareva`: `password` while `serverUrl` and `user` are
+      - `open-locker`: `password` while `serverUrl` and `email` are
+
+      Only then are the required fields checked. A required field that is
+      missing stops the test before the provider is asked, with
+      `code: "missing_fields"`; then a required secret that is still
+      missing, with `code: "missing_secret"` and the reason per secret.
+
+      The test is recorded at the tenant's stored application of the
+      provider, also when it failed: result, time, the provider's message
+      and a keyed hash of the tested values (never the values, never
+      answered). From it the application's `connectionState` follows, see
+      `AccessApplicationWithoutSecrets`. Without a stored application
+      nothing is recorded.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - $ref: "#/components/parameters/AccessProviderParam"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: true
+            description: |
+              The provider's fields as the admin form holds them. `nuki`:
+              `apiBaseUrl`, `apiToken`. `salto-ks`: `clientId`,
+              `clientSecret`, `siteId`, `environment`, `username`,
+              `password`. `ifbs`: `serverUrl`, `apiKey`. `pareva`:
+              `serverUrl`, `lockerId`, `user`, `password`. `open-locker`:
+              `serverUrl`, `email`, `password`.
     responses:
       "200":
         description: |
@@ -267,6 +493,112 @@
 
 components:
   schemas:
+    AccessApplicationWithoutSecrets:
+      type: object
+      description: |
+        An access application of the tenant as it leaves through the API:
+        the provider's fields without its secrets and without backend-owned
+        state. `storedSecrets` says per secret field whether one is stored.
+      required:
+        - type
+        - id
+        - active
+        - storedSecrets
+        - connectionState
+        - lastTest
+      properties:
+        type:
+          type: string
+          enum: [access]
+        id:
+          type: string
+          description: The provider, e.g. `nuki`
+        active:
+          type: boolean
+        storedSecrets:
+          type: object
+          additionalProperties:
+            type: boolean
+          example:
+            apiToken: true
+        connectionState:
+          $ref: "#/components/schemas/AccessConnectionState"
+        lastTest:
+          $ref: "#/components/schemas/AccessLastTest"
+      additionalProperties: true
+      example:
+        type: access
+        id: nuki
+        active: true
+        title: ""
+        apiBaseUrl: https://api.nuki.io
+        customerService: null
+        storedSecrets:
+          apiToken: true
+        connectionState: connected
+        lastTest:
+          success: true
+          testedAt: 1794571200000
+          error: null
+
+    AccessConnectionState:
+      type: string
+      enum:
+        - connected
+        - failing
+        - unchecked
+        - disabled
+      description: |
+        What the head of the provider's section on the access points page
+        shows, derived on every answer, never stored:
+        `disabled` (Ausgeschaltet) while `active` is off;
+        `connected` (Verbunden) when the last test succeeded and tested the
+        stored values; `failing` (Gestört) when it failed and tested the
+        stored values; `unchecked` (Nicht geprüft) otherwise - never
+        tested, or saved or tested with other values since.
+
+    AccessLastTest:
+      type: object
+      nullable: true
+      description: |
+        The last connection test of the application, `null` before the
+        first. Written by `POST …/{provider}/test` alone; saving the
+        application or the tenant keeps it.
+      required:
+        - success
+        - testedAt
+        - error
+      properties:
+        success:
+          type: boolean
+        testedAt:
+          type: integer
+          format: int64
+          description: When the test ran, milliseconds since the epoch
+        error:
+          type: string
+          nullable: true
+          description: |
+            The test's `message` when it failed (the provider's, not a UI
+            text), else `null`
+
+    AccessAppError:
+      type: object
+      description: The one JSON form of the central error handler
+      properties:
+        error:
+          type: string
+          example: NotFoundError
+        code:
+          type: string
+          example: access_app_not_found
+        statusCode:
+          type: integer
+          example: 404
+        params:
+          type: object
+          additionalProperties: true
+
     ListedAccessPoint:
       type: object
       description: |
@@ -396,10 +728,12 @@ components:
             - terms_not_accepted
             - email_not_verified
           description: |
-            `missing_fields` (`salto-ks`): `clientId` or `username` is empty or
-            left out; Salto was not asked. Checked before `missing_secret`.
-            `missing_secret` (`salto-ks`): a secret is neither in the body nor
-            stored for the identity the body names; Salto was not asked.
+            `missing_fields`: a required field that is no secret is empty or
+            left out; the provider was not asked. Checked before
+            `missing_secret`.
+            `missing_secret`: a required secret is neither in the body nor
+            stored for the identity the body names; the provider was not
+            asked.
             `invalid_credentials` (`open-locker`): Open Locker refused the
             e-mail address or the password of the technical account.
             `terms_not_accepted` (`open-locker`): the technical account is
@@ -410,27 +744,28 @@ components:
         missing:
           type: array
           description: |
-            With `missing_fields`, the required fields that are missing
-            (`clientId`, `username`), named as in the request, `field` only.
-            With `missing_secret`, the secrets that are missing (`clientSecret`,
-            `password`), with the `reason`.
+            With `missing_fields`, the required fields that are missing,
+            named as in the request, `field` only. With `missing_secret`,
+            the secrets that are missing, with the `reason`: `not_stored`,
+            or the first field of the secret's identity that changed.
           items:
             type: object
             properties:
               field:
                 type: string
-                enum:
-                  - clientId
-                  - clientSecret
-                  - username
-                  - password
+                example: clientSecret
               reason:
                 type: string
                 enum:
+                  - not_stored
+                  - environment_changed
                   - client_id_changed
                   - username_changed
-                  - environment_changed
-                  - not_stored
+                  - api_base_url_changed
+                  - server_url_changed
+                  - api_key_id_changed
+                  - user_changed
+                  - email_changed
         environment:
           type: string
           enum:

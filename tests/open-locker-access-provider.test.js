@@ -749,6 +749,7 @@ describe("Open Locker access provider", () => {
       });
     });
 
+    // The fields first, then the secret, as at every provider (tickets#1102).
     it("is registered for the admin form and asks for every field", async () => {
       const result = await testProvider("open-locker", {
         serverUrl: FAKE_SERVER_URL,
@@ -756,7 +757,21 @@ describe("Open Locker access provider", () => {
 
       expect(result).to.deep.equal({
         success: false,
-        message: "Missing required fields: email, password",
+        code: "missing_fields",
+        message: "Missing required fields: email",
+        missing: [{ field: "email" }],
+      });
+
+      const withEmail = await testProvider("open-locker", {
+        serverUrl: FAKE_SERVER_URL,
+        email: "technik@example.test",
+      });
+
+      expect(withEmail).to.deep.equal({
+        success: false,
+        code: "missing_secret",
+        message: "Missing secrets: password",
+        missing: [{ field: "password", reason: "not_stored" }],
       });
     });
 

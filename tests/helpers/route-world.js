@@ -460,6 +460,13 @@ function installRouteWorld({
           scope,
           reached,
         ),
+      getBookablesReferencingAccessPoints: async (tenantId, ids, scope) =>
+        Object.values(bookables).filter(
+          (record) =>
+            (record.accessPointDetails?.accessPointIds || []).some((id) =>
+              ids.includes(id),
+            ) && reaches(record, "bookable", tenantId, scope),
+        ),
       getMediaUsage: async () => [],
       getBookableStats: async () => ({}),
       getParentBookables: async () => [],
