@@ -34,6 +34,11 @@ const {
 } = require("../../../commons/services/booking-lifecycle");
 const { answerTransitionError } = require("./transition-error-answer");
 const {
+  withCustomerUploadState,
+  customerUploadScopeOf,
+} = require("./customer-upload-answer");
+
+const {
   findReinstatementConflicts,
 } = require("../../../commons/services/checkout/reinstatement-conflicts");
 const {
@@ -152,6 +157,12 @@ class BookingController {
         },
       );
 
+      await withCustomerUploadState(
+        allowedBookings,
+        allowedBookings,
+        customerUploadScopeOf(request),
+      );
+
       logger.info(
         `${tenant} -- sending ${allowedBookings.length} allowed bookings to user ${user?.id}`,
       );
@@ -193,6 +204,9 @@ class BookingController {
         (booking) => booking.exportCustomer(),
         { withWithdrawalUrl: true },
       );
+      // Each with its group, for proofs handed in for several bookings of
+      // a series at once.
+      await withCustomerUploadState(view, bookings, null, { withGroup: true });
 
       logger.info(
         `${tenant} -- sending ${bookings.length} assigned bookings to user ${user?.id}`,
@@ -336,6 +350,11 @@ class BookingController {
         if (!booking) {
           return BookingController._notFound(response, id);
         }
+        await withCustomerUploadState(
+          [booking],
+          [booking],
+          customerUploadScopeOf(request),
+        );
         logger.info(`${tenantId} -- sending booking ${id} to user ${user?.id}`);
         response.status(200).send(booking);
       } else {
@@ -415,6 +434,8 @@ class BookingController {
         bookingAttempt: request.body,
         policy: CheckoutPolicy.ADMIN_MANUAL,
         checkoutId,
+        // The proofs the staff hands in with it, if sent as multipart.
+        customerUploadFiles: request.customerUploadFiles ?? [],
       });
       return response.status(200).send(newBooking);
     } catch (err) {

@@ -1,0 +1,11 @@
+<p>
+  <strong>Mit der Buchung eingereichte Nachweise:</strong>
+</p>
+
+<ul>
+  {{#each submittedProofs}}
+    <li>
+      {{label}}{{#if bookingId}} (Buchung {{bookingId}}){{/if}}
+    </li>
+  {{/each}}
+</ul>

@@ -11,6 +11,18 @@ router.use("/favorites", require("./favorite.routes"));
 
 router.use("/:tenant/checkout", require("./tenant.checkout.routes"));
 router.use("/:tenant/coupon", require("./tenant.coupon.routes"));
+router.use(
+  "/:tenant/bookings/:id/customer-uploads",
+  require("./tenant.customer-upload.routes"),
+);
+router.use(
+  "/:tenant/bookings/:id/customer-uploads-by-link",
+  require("./tenant.customer-upload-link.routes").byLink,
+);
+router.use(
+  "/:tenant/customer-uploads-by-link",
+  require("./tenant.customer-upload-link.routes").allByLink,
+);
 router.use("/:tenant/bookings", require("./tenant.booking-status.routes"));
 router.use("/:tenant/media", require("./tenant.media.routes"));
 router.use("/:tenant/dashboard", require("./tenant.dashboard.routes"));

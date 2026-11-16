@@ -3,7 +3,6 @@ require("dotenv").config();
 const express = require("express");
 const cookieParser = require("cookie-parser");
 const helmet = require("helmet");
-const fileUpload = require("express-fileupload");
 const bunyan = require("bunyan");
 const swaggerUi = require("swagger-ui-express");
 
@@ -19,9 +18,7 @@ const { requestLogger } = require("./middleware/logger.js");
 const lazyBrowser = require("./commons/pdf-service/LazyBrowser");
 const { errorHandler } = require("./middleware/error-handler");
 const { assertStorageConfig } = require("./commons/services/storage");
-const {
-  uploadBackstopBytes,
-} = require("./commons/services/media/media-config");
+const { rejectMultipart } = require("./middleware/file-upload");
 const {
   applySharpConcurrency,
 } = require("./commons/services/media/image-variants");
@@ -30,6 +27,9 @@ const {
 } = require("./commons/services/media/media-import-status");
 const { applyTrustedProxies } = require("./commons/utilities/trusted-proxies");
 const { warnIfContactMissing } = require("./commons/services/geo/user-agent");
+const {
+  CustomerUploadJobs,
+} = require("./commons/services/customer-upload/customer-upload-jobs");
 
 // Fail fast when the explicitly chosen storage provider is misconfigured.
 assertStorageConfig();
@@ -62,16 +62,9 @@ if (process.env.NODE_ENV !== "production") {
   );
 }
 
-// Global backstop for every upload route. It sits above the largest media
-// limit on purpose: media uploads answer with their own 400, this only stops
-// requests no route would ever accept.
-app.use(
-  fileUpload({
-    limits: { fileSize: uploadBackstopBytes() },
-    abortOnLimit: true,
-    responseOnLimit: "File too large.",
-  }),
-);
+// Files are only parsed on the upload routes, after the authorization there
+// (see `acceptSingleFile`); every other route turns multipart bodies away.
+app.use(rejectMultipart);
 
 app.use(helmet({ crossOriginResourcePolicy: false }));
 
@@ -81,7 +74,9 @@ app.use(function (req, res, next) {
   res.header("Access-Control-Allow-Methods", "GET,PUT,POST,DELETE,OPTIONS");
   res.header(
     "Access-Control-Allow-Headers",
-    "X-Requested-With, X-HTTP-Method-Override, Content-Type, Accept, Authorization",
+    // `X-Customer-Upload-Link`: the signed link of a booking, which the
+    // Admin UI's page „Nachweise einreichen“ sends from the browser.
+    "X-Requested-With, X-HTTP-Method-Override, Content-Type, Accept, Authorization, X-Customer-Upload-Link",
   );
   if ("OPTIONS" === req.method) {
     res.sendStatus(200);
@@ -176,6 +171,9 @@ dbm.connect().then(() => {
       // Not migrating is not an error: the legacy resolver route keeps serving
       // the old tree until the media CLI has run (§4.10).
       await warnIfImportPending();
+      // Reminders, overdue notices and the deletion deadline of customer
+      // uploads, every hour; idempotent, so every instance may run it.
+      CustomerUploadJobs.schedule();
       if (process.env.RULE_ENGINE_ENABLED === "true") {
         await RuleEngine.initEngine();
       }

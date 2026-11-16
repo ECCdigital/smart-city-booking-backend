@@ -637,6 +637,12 @@ function installRouteWorld({
       getBookableCustomFields: async () => [],
       getBranding: async () => ({ active: false }),
       getPortalConfig: async () => ({ publicOffersEnabled: false }),
+      getCustomerUploads: async () => ({
+        enabled: true,
+        maxFileSizeMb: null,
+        maxFilesPerBooking: null,
+        maxTotalSizeMbPerBooking: null,
+      }),
       getMediaUsage: async () => [],
       getBrandingMediaUsage: async () => [],
       hasBackgroundMedia: async () => false,

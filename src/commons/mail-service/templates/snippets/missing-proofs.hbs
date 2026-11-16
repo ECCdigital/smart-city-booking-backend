@@ -1,0 +1,42 @@
+<p>
+  <strong>Folgende Nachweise fehlen noch:</strong>
+</p>
+
+<ul>
+  {{#each missingProofs}}
+    <li>
+      {{label}}{{#if optional}} (optional){{/if}}{{#if deadline}}
+        – bis {{deadline}}{{/if}}{{#if bookingId}}
+        (Buchung {{bookingId}}){{/if}}{{#if url}}
+        – <a href="{{url}}">einreichen</a>{{/if}}
+    </li>
+  {{/each}}
+</ul>
+
+{{#if forRelease}}
+  <p>
+    {{#if forReleaseOne}}Zur Freigabe der Buchung ist 1 Nachweis erforderlich.{{else}}Zur
+      Freigabe der Buchung sind
+      {{forRelease}}
+      Nachweise erforderlich.{{/if}}
+  </p>
+{{/if}}
+
+{{#if proofsUrl}}
+  <p>
+    <a
+      href="{{proofsUrl}}"
+      style="
+        background-color: #0055a5;
+        color: #ffffff;
+        padding: 12px 24px;
+        border-radius: 4px;
+        text-decoration: none;
+        font-weight: bold;
+        display: inline-block;
+      "
+    >
+      Jetzt einreichen
+    </a>
+  </p>
+{{/if}}

@@ -20,6 +20,10 @@ const { renderSnippet } = require("./templates/template-loader");
 const {
   bookingStatusUrl,
   cancellationUrl,
+  customerUploadUrlOf,
+  customerUploadSeriesUrl,
+  hasStoreFront,
+  usesSignedLink,
   withdrawalUrl,
 } = require("./mail-links");
 const {
@@ -35,6 +39,7 @@ const Formatters = require("../utilities/formatters");
 const { withdrawalOffered } = require("../services/booking/booking-withdrawal");
 const {
   LIVE_STATUSES,
+  STATUS,
 } = require("../services/booking-lifecycle/booking-state");
 const {
   EVENT_FORMAT,
@@ -42,6 +47,17 @@ const {
   formatLabel,
   participationLinkForBooking,
 } = require("../entities/event/event-format");
+const {
+  UPLOAD_FIELD_TIMINGS,
+  customerUploadLimits,
+  effectiveCustomerUploadSettings,
+} = require("../services/customer-upload/customer-upload-rules");
+const {
+  deriveCustomerUploadState,
+  missingRequiredFieldsOf,
+  openOptionalFieldsOf,
+  uploadFieldsOf,
+} = require("../services/customer-upload/customer-upload-state");
 
 const overrideDateFormatter = new Intl.DateTimeFormat("de-DE", {
   day: "2-digit",
@@ -317,6 +333,170 @@ function renderShortBookingDetails({
   });
 }
 
+/**
+ * The proofs the customer still has to hand in:
+ * the required upload fields of the bookings that are open, rejected or
+ * overdue, each with its deadline, and the button to the storefront's page
+ * „Nachweise einreichen“. Read off the same derived state the booking
+ * answers carry; never a file, never a file name. Empty where nothing is
+ * missing or the tenant has customer uploads off.
+ *
+ * Without a storefront the optional ones that still take a file stand
+ * there too, after the required ones and marked „(optional)“; where no
+ * required proof is missing, they stand alone, with the button to the page
+ * of the Admin UI: a booker without an account has no other way to that
+ * page - the proofs before the release of a request, those of the
+ * checkout left out, those still open after the release.
+ *
+ * @param {Object} params
+ * @param {Object} params.tenant
+ * @param {Object[]} params.bookings
+ * @param {Object[]} params.bookables The bookables of every position
+ * @param {boolean} params.aggregated Each line names its booking
+ * @param {?string} [params.groupBookingId] The group of an aggregated
+ *   notice: without a storefront its button leads to the page of the series
+ * @param {?Object} [params.customerUploads] The instance's settings of
+ *   customer uploads; none: off
+ * @param {number} [params.now]
+ * @returns {string} HTML
+ */
+function renderMissingProofs({
+  tenant,
+  bookings,
+  bookables,
+  aggregated,
+  groupBookingId = null,
+  customerUploads = null,
+  now = Date.now(),
+}) {
+  const settings = effectiveCustomerUploadSettings(
+    tenant.customerUploads,
+    customerUploads,
+  );
+  if (!settings.enabled) return "";
+  const bookablesById = new Map(
+    bookables.map((bookable) => [bookable.id, bookable]),
+  );
+  const limits = customerUploadLimits(customerUploads);
+
+  const states = bookings.map((booking) => ({
+    booking,
+    state: deriveCustomerUploadState({
+      booking,
+      fields: uploadFieldsOf(booking, bookablesById),
+      settings,
+      limits,
+      now,
+    }),
+  }));
+  const fieldsOf = (pick) =>
+    states.flatMap(({ booking, state }) =>
+      pick(state).map((field) => ({ booking, field })),
+    );
+  const missing = fieldsOf(missingRequiredFieldsOf);
+  const optional = hasStoreFront() ? [] : fieldsOf(openOptionalFieldsOf);
+  // A series of a guest, or any without a storefront, has one page for all
+  // its bookings.
+  const seriesUrl = aggregated
+    ? customerUploadSeriesUrl(bookings[0].tenantId, groupBookingId, bookings)
+    : "";
+  if (missing.length === 0) {
+    return renderOpenProofs({ optional, aggregated, seriesUrl });
+  }
+
+  const first = missing[0];
+  // A signed link of a booking holds for that one: in a group of a guest
+  // each line carries the link of its own, unless the series has its page.
+  const linkPerBooking =
+    aggregated && !seriesUrl && usesSignedLink(first.booking);
+  // The required proofs a request still needs before the tenant releases it.
+  const forRelease = missing.filter(
+    ({ booking, field }) =>
+      booking.status === STATUS.REQUESTED &&
+      field.timing === UPLOAD_FIELD_TIMINGS.BEFORE_RELEASE,
+  ).length;
+  return renderSnippet("missing-proofs", {
+    forRelease,
+    forReleaseOne: forRelease === 1,
+    missingProofs: [...missing, ...optional].map(({ booking, field }) => ({
+      label: field.label,
+      // A proof before the release has no deadline: it is due with the
+      // release. An optional one names none: nothing is due.
+      deadline:
+        field.deadline === null || !field.required
+          ? ""
+          : Formatters.formatDateTime(field.deadline),
+      bookingId: aggregated ? booking.id : "",
+      optional: !field.required,
+      url: linkPerBooking ? customerUploadUrlOf(booking, field.fieldId) : "",
+    })),
+    // One booking: the page opens at its most pressing field; a group:
+    // the page of the series, or at the first booking with a proof missing.
+    proofsUrl:
+      seriesUrl ||
+      customerUploadUrlOf(
+        first.booking,
+        aggregated ? null : first.field.fieldId,
+      ),
+  });
+}
+
+/**
+ * The optional proofs that still take a file, with the button to the page
+ * „Nachweise einreichen“ of the Admin UI: for an instance without a
+ * storefront. Empty where none is open or no link holds.
+ *
+ * @param {Object} params
+ * @param {{booking: Object, field: Object}[]} params.optional
+ * @param {boolean} params.aggregated Each line names its booking
+ * @param {string} [params.seriesUrl] The page of the series, if any
+ * @returns {string} HTML
+ */
+function renderOpenProofs({ optional, aggregated, seriesUrl = "" }) {
+  if (optional.length === 0) return "";
+  // A series has the button to its page; one booking the button to its
+  // own; otherwise each line of a group carries the link of its booking.
+  const linkPerBooking = aggregated && !seriesUrl;
+  const openProofs = optional.map(({ booking, field }) => ({
+    label: field.label,
+    bookingId: aggregated ? booking.id : "",
+    url: linkPerBooking ? customerUploadUrlOf(booking, field.fieldId) : "",
+  }));
+  const proofsUrl = aggregated
+    ? seriesUrl
+    : customerUploadUrlOf(optional[0].booking, optional[0].field.fieldId);
+  if (!proofsUrl && !openProofs.some((line) => line.url)) return "";
+  return renderSnippet("open-proofs", { openProofs, proofsUrl });
+}
+
+/**
+ * The upload fields the customer handed proofs in for with the checkout,
+ * in the tenant's notice of a new booking: one
+ * line per field and booking, by the label the field had when the proof
+ * came in. Never a file, never a file name. Empty without a proof.
+ *
+ * @param {Object} params
+ * @param {Object[]} params.bookings
+ * @param {boolean} params.aggregated Each line names its booking
+ * @returns {string} HTML
+ */
+function renderSubmittedProofs({ bookings, aggregated }) {
+  const submittedProofs = bookings.flatMap((booking) => {
+    const labels = new Map();
+    for (const reference of booking.customerUploads || []) {
+      if (!labels.has(reference.fieldId)) {
+        labels.set(reference.fieldId, reference.fieldLabel);
+      }
+    }
+    return [...labels.values()].map((label) => ({
+      label,
+      bookingId: aggregated ? booking.id : "",
+    }));
+  });
+  if (submittedProofs.length === 0) return "";
+  return renderSnippet("submitted-proofs", { submittedProofs });
+}
+
 /** The QR code of the public status view: its paragraph and its image. */
 async function qrCode(booking, tenantId) {
   const qrUrl = bookingStatusUrl(booking, tenantId);
@@ -345,6 +525,7 @@ async function qrCode(booking, tenantId) {
  * @param {Object[]} loaded.bookings In the order of the context's ids
  * @param {Object[]} loaded.bookables The bookables of every position
  * @param {Map<string, Object>} loaded.events The events of the tickets, by id
+ * @param {?Object} [loaded.customerUploads] The instance's settings of customer uploads
  * @param {boolean} loaded.aggregated One notice for a group
  * @param {string|null} [loaded.groupBookingId] The group's id of an aggregated notice
  * @param {string[]} loaded.recipients
@@ -361,6 +542,7 @@ async function render(
     bookings,
     bookables,
     events,
+    customerUploads = null,
     aggregated,
     groupBookingId = null,
     recipients,
@@ -419,6 +601,19 @@ async function render(
     showFooter: tenant.mailShowSupportFooter !== false,
     supportEmail: tenant.mail,
     messageAfter,
+    missingProofs: mailType.showsMissingProofs
+      ? renderMissingProofs({
+          tenant,
+          bookings,
+          bookables,
+          aggregated,
+          groupBookingId,
+          customerUploads,
+        })
+      : "",
+    submittedProofs: mailType.showsSubmittedProofs
+      ? renderSubmittedProofs({ bookings, aggregated })
+      : "",
   };
   let content;
   let allAttachments = attachments;

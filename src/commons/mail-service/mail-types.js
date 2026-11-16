@@ -14,7 +14,9 @@
  *   `tenant`, `supervisors`, `organizers`, `instanceAdmin` (the instance's
  *   address), `instanceOwners` (the users of `instance.ownerUserIds`),
  *   `tenantOwners` (the users owning the tenant `ctx.tenantId` by
- *   membership) or `named` (`ctx.to`).
+ *   membership), `customerUploadReviewers` (the active members of the
+ *   roles the tenant named for the notices of customer uploads) or `named`
+ *   (`ctx.to`).
  * - `subject(ctx)`: the default subject; a subject override of the
  *   tenant takes precedence.
  * - `includeQRCode(ctx)`, `sendBCC(ctx)`, `addRejectionLink`: as before.
@@ -27,13 +29,23 @@
  *   confirmations, the receipt of a request and the invoices.
  * - `mergeMailAttach`: the `mailAttach` documents of the bookings go
  *   with it.
+ * - `showsMissingProofs`: the required customer uploads still missing
+ *   stand above the booking details, each with its deadline, with the
+ *   button to the storefront's page „Nachweise einreichen“
+ * - the notices confirming a booking or its
+ *   receipt. Nothing where none is missing.
+ * - `showsSubmittedProofs`: the upload fields the customer handed proofs in
+ *   for with the checkout stand above the booking details, without a file
+ *   name - the tenant's notice of a new booking,
+ *   which so takes the place of a notice „Nachweis eingereicht“.
  * - `gate({ tenant })`: the audience only gets it where this holds.
  * - `templateData(ctx, loaded)`: the type's own template variables from
  *   the caller's context and what the loader read.
  *
  * Of a booking notice, `ctx` of `subject`, `includeQRCode` and `sendBCC`
  * is `{ tenant, hasAttachments, bookings }`, and `templateData` gets the
- * type-specific part of the caller's context and the loaded bookings.
+ * type-specific part of the caller's context and the loaded bookings, with
+ * the `groupBookingId` of an aggregated notice.
  * `includeQRCode`, `sendBCC`, `addRejectionLink`, `attachICal` and
  * `mergeMailAttach` are of the booking family only; `gate` is of every
  * family with a tenant.
@@ -52,7 +64,18 @@ const {
 } = require("../services/payment/cancellation-refund-service");
 
 const { SupervisionMailType } = require("./supervision-mail-types");
-const { adminTenantMembersUrl } = require("./mail-links");
+const {
+  adminBookingUrl,
+  adminGroupBookingUrl,
+  adminTenantMembersUrl,
+  customerUploadUrlOf,
+  customerUploadSeriesUrl,
+  hasStoreFront,
+  usesSignedLink,
+} = require("./mail-links");
+const {
+  normalizeCustomerUploadSettings,
+} = require("../services/customer-upload/customer-upload-rules");
 const Formatters = require("../utilities/formatters");
 const { STATUS } = require("../services/booking-lifecycle/booking-state");
 
@@ -76,6 +99,7 @@ const MailType = Object.freeze({
     sendBCC: (ctx) => ctx.hasAttachments && ctx.tenant.receiptEnableBCC,
     addRejectionLink: true,
     showsWithdrawalHint: true,
+    showsMissingProofs: true,
     attachICal: true,
     showsParticipationLink: true,
     mergeMailAttach: true,
@@ -90,6 +114,7 @@ const MailType = Object.freeze({
     sendBCC: false,
     addRejectionLink: true,
     showsWithdrawalHint: true,
+    showsMissingProofs: true,
     attachICal: true,
     showsParticipationLink: true,
     mergeMailAttach: true,
@@ -156,6 +181,7 @@ const MailType = Object.freeze({
     sendBCC: false,
     addRejectionLink: true,
     showsWithdrawalHint: true,
+    showsMissingProofs: true,
     mergeMailAttach: true,
   },
 
@@ -179,6 +205,7 @@ const MailType = Object.freeze({
     sendBCC: false,
     addRejectionLink: true,
     showsWithdrawalHint: true,
+    showsMissingProofs: true,
     attachICal: true,
   },
 
@@ -192,6 +219,7 @@ const MailType = Object.freeze({
     sendBCC: false,
     addRejectionLink: true,
     showsWithdrawalHint: true,
+    showsMissingProofs: true,
     templateData: ({ paymentUrl }) => ({ paymentUrl }),
   },
 
@@ -205,6 +233,7 @@ const MailType = Object.freeze({
     sendBCC: false,
     addRejectionLink: false,
     showsWithdrawalHint: true,
+    showsMissingProofs: true,
   },
 
   INCOMING_BOOKING: {
@@ -222,6 +251,7 @@ const MailType = Object.freeze({
     includeQRCode: false,
     sendBCC: false,
     addRejectionLink: false,
+    showsSubmittedProofs: true,
     gate: (ctx) => Boolean(ctx.tenant.notifyOnNewBooking),
   },
 
@@ -258,6 +288,166 @@ const MailType = Object.freeze({
       cancelReason: reason,
       verifyRejectionUrl: `${process.env.FRONTEND_URL}/booking/verify-reject/${loaded.tenantId}?id=${loaded.bookings[0].id}&hookId=${hookId}`,
       ...CancellationRefundService.toMailTemplateData(refundPreview),
+    }),
+  },
+
+  // A customer upload rejected, or „Erneut anfordern“ of a checked upload
+  // field: the reason and the way to hand in
+  // anew, never the file nor its name. Accepting sends nothing.
+  CUSTOMER_UPLOAD_REOPENED: {
+    family: "booking",
+    templateName: "customer-upload-reopened",
+    audience: "booker",
+    subject: (ctx) => `Nachweis erneut einreichen: ${ctx.tenant.name}`,
+    includeQRCode: false,
+    sendBCC: false,
+    addRejectionLink: false,
+    // The button opens the page at the field of the (first) booking. A
+    // signed link of a booking holds for that one: in a group of a guest, or
+    // without a storefront, the button leads to the page of the series.
+    templateData: (
+      { reason, fieldLabels = [], kind, fieldId, fileDeleted = false },
+      { bookings, groupBookingId = null },
+    ) => {
+      const seriesUrl =
+        bookings.length > 1
+          ? customerUploadSeriesUrl(
+              bookings[0].tenantId,
+              groupBookingId,
+              bookings,
+            )
+          : "";
+      const guestGroup =
+        !seriesUrl && bookings.length > 1 && usesSignedLink(bookings[0]);
+      return {
+        customerUploadReason: reason,
+        customerUploadFields: fieldLabels.join(", "),
+        customerUploadRequestedAgain: kind === "requestedAgain",
+        // Only a sensitive upload loses its file with the check.
+        customerUploadFileDeleted: Boolean(fileDeleted),
+        proofsUrl:
+          seriesUrl ||
+          (guestGroup ? "" : customerUploadUrlOf(bookings[0], fieldId)),
+        proofLinks: guestGroup
+          ? bookings
+              .map((booking) => ({
+                bookingId: booking.id,
+                url: customerUploadUrlOf(booking, fieldId),
+              }))
+              .filter((link) => link.url)
+          : [],
+      };
+    },
+  },
+
+  // „Nachweise anfordern“ by the staff, from the release of a booking:
+  // the required proofs still missing with their deadlines and the button
+  // to hand them in, in the block of the missing proofs.
+  // „Nachreichen anfordern“ of one field names that proof; the block of
+  // the missing proofs lists it with the button, unless it is an optional
+  // one where a storefront runs - the block leaves those out, so the button
+  // to that field stands above it.
+  CUSTOMER_UPLOAD_REQUESTED: {
+    family: "booking",
+    templateName: "customer-upload-requested",
+    audience: "booker",
+    subject: (ctx) => `Nachweise für Ihre Buchung bei ${ctx.tenant.name}`,
+    includeQRCode: false,
+    sendBCC: false,
+    addRejectionLink: false,
+    showsMissingProofs: true,
+    templateData: (
+      { fieldLabels = [], fieldId = null, fieldRequired = false },
+      { bookings },
+    ) => ({
+      customerUploadFields: fieldId ? fieldLabels.join(", ") : "",
+      proofsUrl:
+        fieldId && !fieldRequired && hasStoreFront()
+          ? customerUploadUrlOf(bookings[0], fieldId)
+          : "",
+    }),
+  },
+
+  // The reminder before the deadline of a required upload field still
+  // missing: one per booking, from the job of
+  // customer uploads. The missing proofs with their deadlines and the
+  // button to hand them in stand in the block of the missing proofs - a
+  // guest's signed link where the booking has no account.
+  CUSTOMER_UPLOAD_REMINDER: {
+    family: "booking",
+    templateName: "customer-upload-reminder",
+    audience: "booker",
+    subject: (ctx) =>
+      `Erinnerung: Nachweise für Ihre Buchung bei ${ctx.tenant.name}`,
+    includeQRCode: false,
+    sendBCC: false,
+    addRejectionLink: false,
+    showsMissingProofs: true,
+  },
+
+  // The deadline of a required upload field has passed and the field is
+  // not fulfilled: one notice per booking to the
+  // staff, from the job of customer uploads, with the link into the Admin
+  // UI. Biletado itself blocks and cancels nothing - the staff decides.
+  // Behind the tenant's own switch, never with a file.
+  CUSTOMER_UPLOAD_OVERDUE: {
+    family: "tenant",
+    templateName: "customer-upload-overdue",
+    // The roles the tenant named, never its address.
+    audience: "customerUploadReviewers",
+    subject: (ctx) => `Nachweis überfällig zur Buchung ${ctx.bookingId}`,
+    gate: (ctx) => {
+      const settings = normalizeCustomerUploadSettings(
+        ctx.tenant.customerUploads,
+      );
+      return settings.enabled && settings.notifyOnOverdue !== false;
+    },
+    // The overdue upload fields stand one point each.
+    templateData: ({ tenantId, bookingId, fieldLabels = [] }) => ({
+      bookingId,
+      customerUploadFields: fieldLabels,
+      adminUrl: adminBookingUrl(tenantId, bookingId),
+    }),
+  },
+
+  // Customer uploads handed in later, or replaced:
+  // one notice per request and booking - the page „Nachweise einreichen“
+  // hands in every proof of a booking in one request - and one per request
+  // and group for an upload handed in for several bookings of a group,
+  // telling the staff there is something to
+  // check: the upload fields and the link into the Admin UI, never a file
+  // nor its name. A tenant notice, so it never carries an attachment. To
+  // the members of the roles the tenant named, never its address; behind
+  // the tenant's own switch, apart from the notice of new bookings. The
+  // checkout's proofs stand in that one instead.
+  CUSTOMER_UPLOAD_SUBMITTED: {
+    family: "tenant",
+    templateName: "customer-upload-submitted",
+    audience: "customerUploadReviewers",
+    subject: (ctx) =>
+      ctx.groupBookingId
+        ? `Nachweis eingereicht zur Gruppe ${ctx.groupBookingId}`
+        : `Nachweis eingereicht zur Buchung ${ctx.bookingId}`,
+    gate: (ctx) => {
+      const settings = normalizeCustomerUploadSettings(
+        ctx.tenant.customerUploads,
+      );
+      return settings.enabled && settings.notifyOnSubmitted !== false;
+    },
+    templateData: ({
+      tenantId,
+      bookingId,
+      groupBookingId = null,
+      bookingIds = [],
+      fieldLabels = [],
+    }) => ({
+      bookingId,
+      groupBookingId,
+      groupBookingIds: groupBookingId ? bookingIds.join(", ") : "",
+      customerUploadFieldList: fieldLabels,
+      adminUrl: groupBookingId
+        ? adminGroupBookingUrl(tenantId, groupBookingId)
+        : adminBookingUrl(tenantId, bookingId),
     }),
   },
 

@@ -608,6 +608,198 @@ class BookingManager {
   }
 
   /**
+   * Adds a customer upload to a booking in one atomic push, so a write of
+   * the booking in between loses nothing.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {Object} reference In the shape of `customerUploadReferenceSchema`
+   * @returns {Promise<boolean>} Whether the booking was there
+   */
+  static async addCustomerUpload(tenantId, bookingId, reference) {
+    const result = await BookingModel.updateOne(
+      { id: bookingId, tenantId },
+      { $push: { customerUploads: reference } },
+    );
+    return result.matchedCount > 0;
+  }
+
+  /**
+   * Takes the reference of a medium off a booking, in one atomic pull, and
+   * only while its check is still the one given.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {string} mediaId
+   * @param {string} reviewStatus The review status the reference must have
+   * @returns {Promise<boolean>} Whether a reference was taken off
+   */
+  static async removeCustomerUpload(
+    tenantId,
+    bookingId,
+    mediaId,
+    reviewStatus,
+  ) {
+    const result = await BookingModel.updateOne(
+      { id: bookingId, tenantId },
+      {
+        $pull: {
+          customerUploads: { mediaId, "review.status": reviewStatus },
+        },
+      },
+    );
+    return result.modifiedCount > 0;
+  }
+
+  /**
+   * Writes the note of a check onto the reference of a medium, in one atomic
+   * update, and only while it still waits for its check: of two checks at
+   * once only the first one counts. The file name
+   * goes with the file - the note keeps no content.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {string} mediaId
+   * The job of customer uploads writes its note of an automatic deletion
+   * the same way; a file deleted so is checked no
+   * more.
+   *
+   * @param {Object} review In the shape of the reference's `review`
+   * @returns {Promise<boolean>} Whether a waiting reference was checked
+   */
+  static async reviewCustomerUpload(tenantId, bookingId, mediaId, review) {
+    const result = await BookingModel.updateOne(
+      {
+        id: bookingId,
+        tenantId,
+        customerUploads: {
+          $elemMatch: {
+            mediaId,
+            "review.status": "submitted",
+            "review.fileDeletedAt": null,
+          },
+        },
+      },
+      {
+        $set: {
+          "customerUploads.$.review": review,
+          // The name goes with the file; a file kept keeps it.
+          ...(review.fileDeletedAt !== null
+            ? { "customerUploads.$.originalFileName": "" }
+            : {}),
+        },
+      },
+    );
+    return result.modifiedCount > 0;
+  }
+
+  /**
+   * Adds „Erneut anfordern“ of an upload field to a booking, in one atomic
+   * push.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {Object} request In the shape of `customerUploadRequestSchema`
+   * @returns {Promise<boolean>} Whether the booking was there
+   */
+  static async addCustomerUploadRequest(tenantId, bookingId, request) {
+    const result = await BookingModel.updateOne(
+      { id: bookingId, tenantId },
+      { $push: { customerUploadRequests: request } },
+    );
+    return result.matchedCount > 0;
+  }
+
+  /**
+   * The bookings of every tenant with a sensitive customer upload whose
+   * file is still stored: what the deletion deadline of the job of customer
+   * uploads looks at. A normal upload stays with its booking. A reference
+   * without a category is from before and counts as sensitive.
+   *
+   * @returns {Promise<Booking[]>}
+   */
+  static async getBookingsWithStoredCustomerUploads() {
+    const rawBookings = await BookingModel.find({
+      customerUploads: {
+        $elemMatch: {
+          "review.status": "submitted",
+          "review.fileDeletedAt": null,
+          category: { $ne: "normal" },
+        },
+      },
+    });
+    return BookingManager._toEntities(rawBookings, DOMAIN);
+  }
+
+  /**
+   * Notes at a booking that the job of customer uploads sends a notice for
+   * an upload field, in one atomic push and only while the booking has none
+   * of its kind for the field: of two runs at once only one sends it.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {{kind: string, fieldId: string, sentAt: number}} notice
+   * @returns {Promise<boolean>} Whether this call noted it
+   */
+  static async claimCustomerUploadNotice(tenantId, bookingId, notice) {
+    const result = await BookingModel.updateOne(
+      {
+        id: bookingId,
+        tenantId,
+        customerUploadNotices: {
+          $not: {
+            $elemMatch: { kind: notice.kind, fieldId: notice.fieldId },
+          },
+        },
+      },
+      { $push: { customerUploadNotices: notice } },
+    );
+    return result.modifiedCount > 0;
+  }
+
+  /**
+   * Takes a notice off a booking again, so the next run of the job sends it:
+   * its mail could not be sent.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {{kind: string, fieldId: string}} notice
+   * @returns {Promise<void>}
+   */
+  static async releaseCustomerUploadNotice(tenantId, bookingId, notice) {
+    await BookingModel.updateOne(
+      { id: bookingId, tenantId },
+      {
+        $pull: {
+          customerUploadNotices: {
+            kind: notice.kind,
+            fieldId: notice.fieldId,
+          },
+        },
+      },
+    );
+  }
+
+  /**
+   * Sets when the job of customer uploads first found a booking ended by
+   * cancellation, withdrawal or rejection - only where none is set yet - or
+   * takes it off again with null.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {number|null} endedAt
+   * @returns {Promise<void>}
+   */
+  static async setCustomerUploadEndedAt(tenantId, bookingId, endedAt) {
+    await BookingModel.updateOne(
+      endedAt === null
+        ? { id: bookingId, tenantId }
+        : { id: bookingId, tenantId, customerUploadEndedAt: null },
+      { $set: { customerUploadEndedAt: endedAt } },
+    );
+  }
+
+  /**
    * Remove a booking
    * @param {string} id Booking ID
    * @param {string} tenantId Tenant ID

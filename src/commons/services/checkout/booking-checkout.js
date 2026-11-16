@@ -24,11 +24,17 @@ const checkoutPolicy = require("./checkout-policy");
 const { CheckoutPolicy } = checkoutPolicy;
 const { BookedVia, bookedViaOf } = require("./booked-via");
 const { isBusinessOf } = require("./business-booking");
+const {
+  keepBookedUploadFields,
+} = require("../customer-upload/customer-upload-state");
 const { CustomFieldService } = require("../custom-field/custom-field-service");
 const BlacklistService = require("../blacklist/blacklist-service");
 const InstanceManager = require("../../data-managers/instance-manager");
 const { parseEmails } = require("../../utilities/mail-utils");
 const { CheckoutError } = require("../../../errors/CheckoutError");
+const {
+  CUSTOMER_UPLOAD_REVIEW,
+} = require("../../schemas/customerUploadReferenceSchema");
 const { CHECKOUT_REASONS } = require("./checkout-reasons");
 const {
   BadRequestError,
@@ -55,6 +61,10 @@ const {
 const { planUpdate } = require("../booking-lifecycle/update-plan");
 const BookingService = require("./booking-service");
 const { DOMAIN, PUBLIC } = require("../authorization/reach");
+const {
+  CustomerUploadService,
+  CUSTOMER_UPLOAD_REASONS,
+} = require("../customer-upload/customer-upload-service");
 
 const logger = bunyan.createLogger({
   name: "booking-checkout.js",
@@ -231,7 +241,17 @@ async function assertNoAddressBlacklisted({ mail, policy }) {
  * the coupon consumed. No effect of the lifecycle runs here; the caller
  * admits the booking. With `simulate`, nothing is stored.
  *
- * @param {{ tenantId: string, user?: Object, bookingAttempt: Object, simulate: boolean, policy?: string, checkoutId?: string }} params
+ * With `customerUploadFiles` the booking person's own checkout hands in the
+ * files of the upload fields "in the checkout":
+ * they pass every check before anything is stored, their references go
+ * into the booking with its store write, and where that write fails the
+ * files go again - booking and customer uploads come about together or
+ * not at all.
+ *
+ * A manual booking carries the files the staff hands in instead
+ * (`staffUploadFiles`), for any of its upload fields, none required.
+ *
+ * @param {{ tenantId: string, user?: Object, bookingAttempt: Object, simulate: boolean, policy?: string, checkoutId?: string, customerUploadFiles?: Array<{fieldId: string, file: Object}>|null, staffUploadFiles?: Array<{fieldId: string, file: Object}>|null }} params
  * @returns {Promise<Booking>} The booking as prepared
  */
 async function createBooking({
@@ -241,6 +261,8 @@ async function createBooking({
   simulate,
   policy = CheckoutPolicy.SELF_SERVICE,
   checkoutId: providedCheckoutId,
+  customerUploadFiles = null,
+  staffUploadFiles = null,
 }) {
   checkoutPolicy.assertCheckoutPolicy(policy);
   const checkoutId = providedCheckoutId || uuidV4();
@@ -359,7 +381,25 @@ async function createBooking({
   );
 
   if (simulate === false) {
-    await BookingManager.storeBooking(booking);
+    const references =
+      customerUploadFiles !== null
+        ? await acceptCustomerUploads(booking, customerUploadFiles, user)
+        : staffUploadFiles?.length
+          ? await asCheckoutRefusal(() =>
+              CustomerUploadService.acceptByStaff({
+                booking,
+                files: staffUploadFiles,
+                uploadedBy: user?.id ?? null,
+              }),
+            )
+          : [];
+    booking.customerUploads = references;
+    try {
+      await BookingManager.storeBooking(booking);
+    } catch (err) {
+      await CustomerUploadService.releaseAll(tenantId, booking.id, references);
+      throw err;
+    }
     await CouponService.incrementCouponUsage(couponCode, tenantId);
     logger.info(
       `${tenantId}, cid ${checkoutId} -- Booking ${booking.id} stored by user ${user?.id} as ${booking.status}`,
@@ -371,14 +411,86 @@ async function createBooking({
 }
 
 /**
+ * The files the staff handed in with a manual booking, accepted in their
+ * name as a check would: a sensitive one loses its file at once. Accepting
+ * sends no mail.
+ */
+async function acceptStaffUploads(tenantId, booking, user) {
+  // Late: the check reaches back into the services of the checkout.
+  const {
+    CustomerUploadReview,
+  } = require("../customer-upload/customer-upload-review");
+  for (const reference of booking.customerUploads || []) {
+    await CustomerUploadReview.review({
+      tenantId,
+      bookingId: booking.id,
+      fieldId: reference.fieldId,
+      mediaId: reference.mediaId,
+      result: CUSTOMER_UPLOAD_REVIEW.ACCEPTED,
+      reason: "",
+      alsoFor: [],
+      user,
+    });
+  }
+}
+
+/**
+ * The customer uploads of a checkout, a refusal as the checkout's own
+ * reason: a missing required field, or a refused file with the code of the
+ * one place of acceptance and its field in `params`.
+ *
+ * @returns {Promise<Object[]>} The references for the booking
+ */
+async function acceptCustomerUploads(booking, files, user) {
+  return asCheckoutRefusal(() =>
+    CustomerUploadService.acceptAtCheckout({
+      booking,
+      files,
+      uploadedBy: user?.id ?? null,
+    }),
+  );
+}
+
+/**
+ * A refusal of the customer uploads of a checkout as the checkout's own
+ * reason; any other error as it is.
+ */
+async function asCheckoutRefusal(accept) {
+  try {
+    return await accept();
+  } catch (err) {
+    if (!(err instanceof BaseError) || !isCustomerUploadCode(err.code)) {
+      throw err;
+    }
+    throw new CheckoutError({
+      reason:
+        err.code === CUSTOMER_UPLOAD_REASONS.REQUIRED_MISSING
+          ? CHECKOUT_REASONS.CUSTOMER_UPLOAD_REQUIRED
+          : CHECKOUT_REASONS.CUSTOMER_UPLOAD_REFUSED,
+      statusCode: err.statusCode,
+      params: { code: err.code, ...err.params },
+    });
+  }
+}
+
+const isCustomerUploadCode = (code) =>
+  Object.values(CUSTOMER_UPLOAD_REASONS).includes(code);
+
+/**
  * Takes a stored booking back after an admission that aborted: the
- * booking is removed, its coupon given back. A rollback that fails is
- * logged; the admission's error is the one the caller sees.
+ * booking is removed, its coupon given back, the customer uploads of its
+ * checkout deleted. A rollback that fails is logged; the admission's error
+ * is the one the caller sees.
  */
 async function rollback(tenantId, booking) {
   try {
     await BookingManager.removeBooking(booking.id, tenantId);
     await CouponService.decrementCouponUsage(booking.couponCode, tenantId);
+    await CustomerUploadService.releaseAll(
+      tenantId,
+      booking.id,
+      booking.customerUploads,
+    );
     logger.info(
       `${tenantId} -- booking ${booking.id} rolled back after its admission aborted`,
     );
@@ -395,7 +507,14 @@ async function rollback(tenantId, booking) {
  * the admission aborts - the compartments could not be held - the booking
  * is deleted, the coupon given back and what caused the abort thrown.
  *
- * @param {{ tenantId: string, user?: Object, bookingAttempt: Object, simulate: boolean, policy?: string, checkoutId?: string }} params
+ * The booking person's own checkout (self-service) carries the files of
+ * the upload fields "in the checkout"; without
+ * them a required one of those fields refuses the checkout. A booking the
+ * staff makes asks for none: the files the staff hands in with it count as
+ * checked by them - accepted once the booking is admitted, after its mails,
+ * which so name them as handed in, not as missing.
+ *
+ * @param {{ tenantId: string, user?: Object, bookingAttempt: Object, simulate: boolean, policy?: string, checkoutId?: string, customerUploadFiles?: Array<{fieldId: string, file: Object}> }} params
  * @returns {Promise<Booking>} The booking as stored after the admission
  */
 async function createSingleBooking({
@@ -405,6 +524,7 @@ async function createSingleBooking({
   simulate,
   policy = CheckoutPolicy.SELF_SERVICE,
   checkoutId,
+  customerUploadFiles = [],
 }) {
   await assertSignedInWhereRequired({
     tenantId,
@@ -420,6 +540,12 @@ async function createSingleBooking({
     simulate,
     policy,
     checkoutId,
+    customerUploadFiles: checkoutPolicy.runsChecks(policy)
+      ? customerUploadFiles
+      : null,
+    staffUploadFiles: checkoutPolicy.runsChecks(policy)
+      ? null
+      : customerUploadFiles,
   });
 
   if (simulate) {
@@ -436,6 +562,10 @@ async function createSingleBooking({
     );
     await rollback(tenantId, booking);
     throw causeOf(err);
+  }
+
+  if (!checkoutPolicy.runsChecks(policy)) {
+    await acceptStaffUploads(tenantId, booking, user);
   }
 
   return await BookingManager.getBooking(booking.id, tenantId, DOMAIN);
@@ -497,7 +627,18 @@ async function generateGroupBookingReference(
  * states, which the group's guard refuses - every member and the group are
  * deleted, the coupons given back and what caused the abort thrown.
  *
- * @param {{ tenantId: string, user?: Object, contactData: Object, bookingAttempts: Object[], paymentProvider: string, simulate: boolean, policy?: string }} params
+ * The booking person's own checkout (self-service) carries the files of
+ * the upload fields "in the checkout", each for
+ * the bookings of the group and the field of each the customer chose
+ * (`customerUploadTargets` by the key of the file, see
+ * `CustomerUploadService.checkAtGroupCheckout`). Every file passes every
+ * check before the first member is stored, and a required field of a
+ * member without a file refuses the checkout. Once the members are stored
+ * each file becomes one medium for all its bookings, before the group is
+ * admitted; where that fails, the members go again. A booking the staff
+ * makes asks for none.
+ *
+ * @param {{ tenantId: string, user?: Object, contactData: Object, bookingAttempts: Object[], paymentProvider: string, simulate: boolean, policy?: string, customerUploadFiles?: Array<{key: string, file: Object}>, customerUploadTargets?: Object }} params
  * @returns {Promise<GroupBooking>} The group with its members as stored after the admission; under `simulate` the group it would book, unstored, with the computed members
  */
 async function createGroupBooking({
@@ -508,6 +649,8 @@ async function createGroupBooking({
   paymentProvider,
   simulate,
   policy = CheckoutPolicy.SELF_SERVICE,
+  customerUploadFiles = [],
+  customerUploadTargets = {},
 }) {
   if (!Array.isArray(bookingAttempts) || bookingAttempts.length === 0) {
     throw new BadRequestError("missing_booking_attempts");
@@ -530,12 +673,26 @@ async function createGroupBooking({
 
   await assertInvoicePermission(tenantId, user, paymentProvider, policy);
 
+  // The files of the group, every one checked before a member is stored.
+  const uploads =
+    !simulate && checkoutPolicy.runsChecks(policy)
+      ? await asCheckoutRefusal(() =>
+          CustomerUploadService.checkAtGroupCheckout({
+            tenantId,
+            attempts: bookingAttempts,
+            files: customerUploadFiles ?? [],
+            targets: customerUploadTargets ?? {},
+          }),
+        )
+      : [];
+
   const checkoutId = uuidV4();
   logger.info(
     `${tenantId}, cid ${checkoutId} -- multiple checkout request by user ${user?.id}, simulate=${simulate}`,
   );
 
   const allBookings = [];
+  const bookingOfAttempt = new Map();
 
   for (const bookingAttempt of sortedBookingAttempts) {
     bookingAttempt.mail = contactData.mail;
@@ -558,6 +715,32 @@ async function createGroupBooking({
     });
 
     allBookings.push(booking);
+    bookingOfAttempt.set(bookingAttempt, booking);
+  }
+
+  if (uploads.length > 0) {
+    try {
+      const references = await CustomerUploadService.storeAtGroupCheckout({
+        tenantId,
+        accepted: uploads,
+        bookings: bookingAttempts.map((attempt) =>
+          bookingOfAttempt.get(attempt),
+        ),
+        uploadedBy: user?.id ?? null,
+      });
+      // What a rollback after an aborted admission takes back.
+      for (const booking of allBookings) {
+        booking.customerUploads = references.get(booking.id) ?? [];
+      }
+    } catch (err) {
+      logger.error(
+        `${tenantId} -- customer uploads of a group checkout not stored, rolling back: ${err.message}`,
+      );
+      for (const booking of allBookings) {
+        await rollback(tenantId, booking);
+      }
+      throw err;
+    }
   }
 
   const uniqueId = await generateGroupBookingReference(tenantId);
@@ -790,6 +973,8 @@ async function updateBooking(
   } else if (typeof oldBooking.isBusiness === "boolean") {
     booking.isBusiness = oldBooking.isBusiness;
   }
+  // The proofs asked of the booking stay those of the time it was booked.
+  keepBookedUploadFields(oldBooking, booking);
 
   if (onUnreject) {
     // The reinstatement keeps price, positions and coupon of before the

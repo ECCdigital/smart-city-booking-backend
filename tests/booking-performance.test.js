@@ -1,5 +1,6 @@
 const assert = require("assert");
 const sinon = require("sinon");
+const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const {
   BookingController,
 } = require("../src/platform/api/controllers/booking-controller");
@@ -114,6 +115,8 @@ describe("Phase 1 booking performance", () => {
       const getTenantBookings = sinon
         .stub(BookingManager, "getTenantBookings")
         .resolves([{ id: "booking-allowed", tenantId: "tenant-1" }]);
+      // The answer reads the tenant's settings for customer uploads.
+      sinon.stub(TenantManager, "getTenantsByIds").resolves([]);
 
       const response = createMockResponse();
       await BookingController.getBookings(

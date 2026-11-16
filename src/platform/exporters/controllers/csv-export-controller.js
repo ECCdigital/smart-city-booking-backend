@@ -1,11 +1,29 @@
 const Formatters = require("../../../commons/utilities/formatters");
 const BookingService = require("../../../commons/services/checkout/booking-service");
 const { scopeOf } = require("../../../commons/services/authorization");
+const {
+  CustomerUploadService,
+} = require("../../../commons/services/customer-upload/customer-upload-service");
+const {
+  BOOKING_STATE,
+} = require("../../../commons/services/customer-upload/customer-upload-state");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
   name: "csv-export-controller.js",
   level: process.env.LOG_LEVEL,
+});
+
+/**
+ * The column "Nachweise": the least favourable
+ * state of a booking's required proofs in words, empty without one. No file
+ * names, no links.
+ */
+const PROOF_STATE_LABELS = Object.freeze({
+  [BOOKING_STATE.OVERDUE]: "Überfällig",
+  [BOOKING_STATE.MISSING]: "Fehlt",
+  [BOOKING_STATE.TO_REVIEW]: "Zu prüfen",
+  [BOOKING_STATE.FULFILLED]: "Erfüllt",
 });
 
 class CsvExportController {
@@ -42,6 +60,9 @@ class CsvExportController {
     );
 
     try {
+      // Whoever may export the list sees the state of the proofs, no more:
+      // the names of the reviewers stay out.
+      const proofStates = await CustomerUploadService.statesOf(eventBookings);
       const attendeeList = eventBookings.map((b) => {
         return {
           id: b.id,
@@ -66,6 +87,7 @@ class CsvExportController {
           isPayed: b.isPayed ? "Ja" : "Nein",
           priceEur: Formatters.formatCurrency(b.priceEur),
           paymentMethod: Formatters.translatePayMethod(b.paymentMethod),
+          proofs: PROOF_STATE_LABELS[proofStates.get(b.id)?.state] ?? "",
         };
       });
 
@@ -92,6 +114,7 @@ class CsvExportController {
           isPayed: "Buchung bezahlt",
           priceEur: "Preis",
           paymentMethod: "Zahlungsart",
+          proofs: "Nachweise",
         });
 
       response.setHeader("Content-Type", "text/csv");

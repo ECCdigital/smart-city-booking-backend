@@ -1,4 +1,8 @@
 const { customFieldDefinitionSchema } = require("./customFieldDefinition");
+const { customerUploadSettingsSchema } = require("./uploadFieldDefinition");
+const {
+  defaultCustomerUploadSettings,
+} = require("../services/customer-upload/customer-upload-rules");
 const { Schema } = require("mongoose");
 const {
   getCancellationRefundTiersError,
@@ -117,6 +121,12 @@ const tenantSchemaDefinition = {
   notifyOnNewBooking: { type: Boolean, default: true },
   notifySupervisorsOnBooking: { type: Boolean, default: false },
   notifyOwnersOnInvitationAccepted: { type: Boolean, default: true },
+  // Customer uploads (glossary "Kunden-Upload"): off until the tenant
+  // enables them; the controller checks them via `customer-upload-rules.js`.
+  customerUploads: {
+    type: customerUploadSettingsSchema,
+    default: defaultCustomerUploadSettings,
+  },
   catalogParticipation: {
     type: Object,
     default: {

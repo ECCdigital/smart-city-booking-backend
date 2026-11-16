@@ -131,7 +131,32 @@ function geoTilesOutbound() {
   };
 }
 
+/**
+ * Uploads and deletions of customer uploads,
+ * so nobody makes load by uploading and deleting in a loop: per booking 30,
+ * per person 60 and per IP 60 an hour, all at once. A checkout with
+ * customer uploads has no booking yet, a guest no
+ * person: those limits are left out.
+ */
+function customerUploadLimits({ bookingId = null, userId = null, ip }) {
+  return [
+    bookingId && {
+      key: `customer-upload:booking:${bookingId}`,
+      ...limitFrom("RATE_LIMIT_CUSTOMER_UPLOAD_PER_BOOKING", 30, 3600),
+    },
+    userId && {
+      key: `customer-upload:user:${normalizeSubject(userId)}`,
+      ...limitFrom("RATE_LIMIT_CUSTOMER_UPLOAD_PER_USER", 60, 3600),
+    },
+    {
+      key: `customer-upload:ip:${ip}`,
+      ...limitFrom("RATE_LIMIT_CUSTOMER_UPLOAD_PER_IP", 60, 3600),
+    },
+  ].filter(Boolean);
+}
+
 module.exports = {
+  customerUploadLimits,
   signupPerIp,
   verificationMailPerAccount,
   verificationMailPerIp,

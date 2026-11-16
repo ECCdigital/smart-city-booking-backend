@@ -11,6 +11,13 @@ const MEDIA_VISIBILITY = {
   INTERN: "intern",
 };
 
+/**
+ * The tag every customer upload carries (glossary "Kunden-Upload"): a
+ * booking document the booking person handed
+ * in, under its own receipt rule.
+ */
+const CUSTOMER_UPLOAD_TAG = "customerUpload";
+
 const STORAGE_PROVIDER = {
   NEXTCLOUD: "nextcloud",
   S3: "s3",
@@ -147,6 +154,10 @@ const mediaSchemaDefinition = {
   bookingIds: { type: [String], default: null },
   // Only set by the media import (B7), never on fresh uploads
   legacyPath: { type: String, default: null },
+  // How the bytes of the original are encrypted in the storage, null for
+  // plain bytes. Only customer uploads are:
+  // `aes-256-gcm`, see `customer-upload-crypto.js`.
+  encryption: { type: String, default: null },
 
   storage: { type: storageLocationSchema, required: true },
   variants: { type: [mediaVariantSchema], default: [] },
@@ -163,4 +174,5 @@ module.exports = {
   MEDIA_VISIBILITY,
   MEDIA_REFERENCE_SOURCE,
   STORAGE_PROVIDER,
+  CUSTOMER_UPLOAD_TAG,
 };

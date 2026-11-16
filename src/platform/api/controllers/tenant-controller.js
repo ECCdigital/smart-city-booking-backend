@@ -35,6 +35,10 @@ const {
 } = require("../../../commons/utilities/legal-documents");
 const MediaReferenceGuard = require("../../../commons/services/media/media-reference-guard");
 const {
+  getCustomerUploadSettingsError,
+  normalizeCustomerUploadSettings,
+} = require("../../../commons/services/customer-upload/customer-upload-rules");
+const {
   BaseError,
   BadRequestError,
   ForbiddenError,
@@ -453,6 +457,7 @@ class TenantController {
         "notifyOnNewBooking",
         "notifySupervisorsOnBooking",
         "notifyOwnersOnInvitationAccepted",
+        "customerUploads",
         "catalogParticipation",
         "bookableCustomFields",
         "cancellationTemplate",
@@ -525,6 +530,24 @@ class TenantController {
       const descriptionError = validateDescriptionField(request.body);
       if (descriptionError) {
         return response.status(400).send(descriptionError);
+      }
+
+      if (
+        Object.prototype.hasOwnProperty.call(request.body, "customerUploads")
+      ) {
+        // What the request leaves out keeps its stored value.
+        request.body.customerUploads = normalizeCustomerUploadSettings({
+          ...tenant.customerUploads,
+          ...request.body.customerUploads,
+        });
+        const customerUploadsError = getCustomerUploadSettingsError(
+          request.body.customerUploads,
+        );
+        if (customerUploadsError) {
+          return response
+            .status(customerUploadsError.statusCode)
+            .send(customerUploadsError.toJSON());
+        }
       }
 
       // Checked is what the request brings, not what is already stored: a

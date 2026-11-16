@@ -1,0 +1,33 @@
+<p>
+  Zur Buchung
+  <strong>{{bookingId}}</strong>
+  ist die Frist für einen Pflicht-Nachweis abgelaufen:
+</p>
+
+<ul>
+  {{#each customerUploadFields}}
+    <li>{{this}}</li>
+  {{/each}}
+</ul>
+
+<p>
+  Die Buchung wurde nicht gesperrt und nicht storniert. Bitte entscheiden Sie
+  in der Verwaltung, wie es weitergeht.
+</p>
+
+<p>
+  <a
+    href="{{adminUrl}}"
+    style="
+      background-color: #0055a5;
+      color: #ffffff;
+      padding: 12px 24px;
+      border-radius: 4px;
+      text-decoration: none;
+      font-weight: bold;
+      display: inline-block;
+    "
+  >
+    Buchung öffnen
+  </a>
+</p>

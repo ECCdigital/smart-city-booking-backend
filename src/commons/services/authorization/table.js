@@ -24,7 +24,10 @@
  * with the fixed precedence instanceOwner ⊇ tenantOwner ⊇ role ⊇
  * tenantMember ⊇ signedIn: an instance owner satisfies every level, a
  * tenant owner every level but `instanceOwner` and `mayCreateTenant` (that
- * one follows the instance setting alone). Actions beyond create, read,
+ * one follows the instance setting alone). The one exception is an entry
+ * flagged `exceptInstanceOwner: true`: there the instance owner gets no
+ * reach from the special position, only from what they hold in the tenant
+ * (the customer uploads). Actions beyond create, read,
  * update and delete (`qr`, `operate`, `document`, `challenge`, ...) are
  * named entries here, never new role steps: the role steps stay the seven
  * of the role schema.
@@ -125,6 +128,28 @@ const TABLE = {
     delete: { any: "manageBookings.deleteAny" },
     cancel: { own: "signedIn", any: "manageBookings.updateAny" },
     operate: { own: "signedIn", any: "manageBookings.updateAny" },
+    // Handing in, replacing and deleting a customer upload (glossary
+    // "Kunden-Upload"): the booking person's own booking alone.
+    customerUpload: { own: "signedIn" },
+    // The same for a guest with the signed link of the booking:
+    // public, the link is checked by the route.
+    customerUploadByLink: { public: true },
+    // Reading the customer uploads of a booking - the derived state in the
+    // booking answers: the booking person, and
+    // whoever reads the tenant's bookings. Not the instance owner by the
+    // special position: a proof is no business of the instance.
+    readCustomerUploads: {
+      own: "signedIn",
+      any: "manageBookings.readAny",
+      exceptInstanceOwner: true,
+    },
+    // Checking a customer upload and „Erneut anfordern“ of a checked field:
+    // whoever may edit the booking. It deletes
+    // the file - not the instance owner by the special position.
+    reviewCustomerUpload: {
+      any: "manageBookings.updateAny",
+      exceptInstanceOwner: true,
+    },
   },
 
   groupBooking: {
@@ -164,6 +189,14 @@ const TABLE = {
     update: { own: "manageMedia.updateOwn", any: "manageMedia.updateAny" },
     delete: { own: "manageMedia.deleteOwn", any: "manageMedia.deleteAny" },
     bookingDocument: { own: "signedIn", any: "manageBookings.readAny" },
+    // The receipt rule of a customer upload: the
+    // booking person until the check, whoever reads the tenant's bookings,
+    // never the instance owner by the special position.
+    customerUpload: {
+      own: "signedIn",
+      any: "manageBookings.readAny",
+      exceptInstanceOwner: true,
+    },
     updateBookingDocument: {
       own: "signedIn",
       any: "manageBookings.updateAny",
@@ -402,6 +435,7 @@ const OWNER_KEY = {
     key: "uploadedBy",
     byAction: {
       bookingDocument: { key: "assignedUserId" },
+      customerUpload: { key: "assignedUserId" },
       updateBookingDocument: { key: "assignedUserId" },
     },
   },

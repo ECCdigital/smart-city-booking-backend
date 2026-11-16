@@ -12,6 +12,11 @@ const CHECKOUT_REASONS = {
   PERMISSION_DENIED: "checkout.permission_denied",
   BAD_REQUEST: "checkout.bad_request",
   CUSTOM_FIELDS_INVALID: "checkout.custom_fields_invalid",
+  // The customer uploads of the checkout: a
+  // required upload field without a file, and a file refused, whose own
+  // code (`customer_upload_*`) and field stand in `params`.
+  CUSTOMER_UPLOAD_REQUIRED: "checkout.customer_upload_required",
+  CUSTOMER_UPLOAD_REFUSED: "checkout.customer_upload_refused",
   // An address of `mail` on the blacklist; the
   // answer carries the instance's `mailAddress` to write to with questions.
   ADDRESS_BLACKLISTED: "checkout.address_blacklisted",

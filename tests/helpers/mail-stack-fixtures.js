@@ -18,6 +18,9 @@ const sinon = require("sinon");
 
 const TenantManager = require("../../src/commons/data-managers/tenant-manager");
 const InstanceManager = require("../../src/commons/data-managers/instance-manager");
+const {
+  normalizeInstanceCustomerUploads,
+} = require("../../src/commons/services/customer-upload/customer-upload-rules");
 const BookingManager = require("../../src/commons/data-managers/booking-manager");
 const {
   BookableManager,
@@ -381,6 +384,15 @@ function installMailStackStore(options = {}) {
     return store.tenant;
   });
   sinon.stub(InstanceManager, "getInstance").resolves(store.instance);
+  // Customer uploads are cleared for the tenants unless the instance says
+  // otherwise.
+  sinon
+    .stub(InstanceManager, "getCustomerUploads")
+    .callsFake(async () =>
+      normalizeInstanceCustomerUploads(
+        store.instance.customerUploads ?? { enabled: true },
+      ),
+    );
   sinon
     .stub(BookingManager, "getBooking")
     .callsFake(async (id) => byId(store.bookings, id));

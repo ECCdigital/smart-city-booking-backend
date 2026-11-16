@@ -47,12 +47,18 @@ const SECOND_DECISIONS = {};
 const REACH_BRANCHES = {
   platform: {
     "api/controllers/booking-controller.js": { reach: 3 }, // stays: ?public=true
+    // stays: the customer uploads of the own bookings
+    // (`readCustomerUploads`), and the reviewer's
+    // name for the reach `any` alone
+    "api/controllers/customer-upload-answer.js": { reach: 1, withinReach: 1 },
     "api/controllers/ical-controller.js": { readsRecords: 1 }, // stays: ?includePrivate
     "api/controllers/role-controller.js": { reach: 1 }, // 05
   },
   services: {
     "access/access-service.js": { reach: 1 }, // stays: managesUnder
-    "media/media-rights.js": { readsRecords: 4, withinReach: 5 }, // stays: the bundle
+    // stays: the bundle; a customer upload of one's own booking only until
+    // its check
+    "media/media-rights.js": { reach: 1, readsRecords: 5, withinReach: 6 },
   },
 };
 

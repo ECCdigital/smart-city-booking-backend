@@ -31,6 +31,7 @@ const {
   tokenAuthorized,
 } = require("../../commons/services/authorization");
 const SupervisionController = require("./controllers/supervision-controller");
+const { acceptCheckoutFiles } = require("../../middleware/file-upload");
 const {
   OFFER_TYPES,
 } = require("../../commons/services/supervision/supervision-constants");
@@ -215,12 +216,15 @@ router.get(
 
 router.get(
   "/bookings",
-  publicRoute("booking", "list"),
+  publicRoute("booking", "list", { also: ["readCustomerUploads"] }),
   BookingController.getBookings,
 );
+// The manual booking; as multipart it carries files the staff hands in
+// for its upload fields, accepted with the booking.
 router.post(
   "/bookings",
   authorize("booking", "create"),
+  acceptCheckoutFiles(),
   BookingController.createBooking,
 );
 router.put(
@@ -247,7 +251,7 @@ router.get(
 );
 router.get(
   "/bookings/:id",
-  authorize("booking", "read"),
+  authorize("booking", "read", { also: ["readCustomerUploads"] }),
   BookingController.getBooking,
 );
 router.delete(
@@ -383,7 +387,9 @@ router.get(
 );
 router.get(
   "/group-bookings/:id",
-  authorize("groupBooking", "read"),
+  authorize("groupBooking", "read", {
+    also: ["booking.readCustomerUploads"],
+  }),
   GroupBookingController.getGroupBooking,
 );
 router.put(
@@ -420,7 +426,9 @@ router.post(
 );
 router.get(
   "/group-bookings/booking/:bookingId",
-  authorize("groupBooking", "read"),
+  authorize("groupBooking", "read", {
+    also: ["booking.readCustomerUploads"],
+  }),
   GroupBookingController.getGroupBookingByBookingId,
 );
 router.delete(
@@ -446,8 +454,20 @@ router.post(
 
 // CHECKOUT
 // ========
-router.post("/checkout", publicRoute(), CheckoutController.checkout);
-router.post("/checkout/group", publicRoute(), CheckoutController.groupCheckout);
+// JSON, or multipart with the customer uploads of the checkout.
+router.post(
+  "/checkout",
+  publicRoute(),
+  acceptCheckoutFiles(),
+  CheckoutController.checkout,
+);
+// JSON, or multipart with the customer uploads of the group.
+router.post(
+  "/checkout/group",
+  publicRoute(),
+  acceptCheckoutFiles(),
+  CheckoutController.groupCheckout,
+);
 router.post(
   "/checkout/validateItem",
   publicRoute(),
@@ -536,7 +556,9 @@ router.delete(
 // rights' to decide, from the questions the marker names.
 router.get(
   "/files/get",
-  publicRoute("media", "file", { also: ["bookingDocument", "intern"] }),
+  publicRoute("media", "file", {
+    also: ["bookingDocument", "customerUpload", "intern"],
+  }),
   FileController.getTenantFile,
 );
 
