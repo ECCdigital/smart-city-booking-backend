@@ -213,6 +213,16 @@ class CustomerUploadControllerV2 {
     return res.status(200).json({ fieldLabels });
   }
 
+  /** „Nachreichen anfordern“ of one field not handed in yet. */
+  static async requestField(req, res) {
+    await CustomerUploadReview.requestField({
+      tenantId: req.params.tenant,
+      bookingId: req.params.id,
+      fieldId: req.params.fieldId,
+    });
+    return CustomerUploadControllerV2._answerStaffState(req, res);
+  }
+
   static async _answerStaffState(req, res) {
     return res.status(200).json({
       customerUploadState: await CustomerUploadReview.stateOf(

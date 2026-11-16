@@ -28,6 +28,13 @@ const {
   missingRequiredFieldsOf,
 } = require("./customer-upload-state");
 
+/** The states of a field the booker still has to hand it in from. */
+const REQUESTABLE_STATES = new Set([
+  FIELD_STATE.OPEN,
+  FIELD_STATE.REJECTED,
+  FIELD_STATE.OVERDUE,
+]);
+
 const logger = bunyan.createLogger({
   name: "customer-upload-review.js",
   level: process.env.LOG_LEVEL,
@@ -324,6 +331,44 @@ class CustomerUploadReview {
       `${tenantId} -- missing customer uploads of booking ${bookingId} asked for`,
     );
     return fieldLabels;
+  }
+
+  /**
+   * „Nachreichen anfordern“ of one upload field the booker has not handed
+   * in yet - open, rejected or overdue, required or optional: a mail to the
+   * booker naming that proof, with the way to hand it in. Sent each time
+   * the staff asks. A field waiting for its check or checked is refused
+   * (`customer_upload_nothing_missing`).
+   *
+   * @param {Object} params
+   * @param {string} params.tenantId
+   * @param {string} params.bookingId
+   * @param {string} params.fieldId
+   * @returns {Promise<string>} The label of the proof asked for
+   */
+  static async requestField({ tenantId, bookingId, fieldId }) {
+    const booking = await CustomerUploadReview._booking(tenantId, bookingId);
+    const states = await CustomerUploadService.statesOf([booking]);
+    const field = (states.get(booking.id)?.fields || []).find(
+      (candidate) => candidate.fieldId === fieldId,
+    );
+    if (!field) {
+      throw new NotFoundError(R.FIELD_NOT_FOUND, { fieldId });
+    }
+    if (!REQUESTABLE_STATES.has(field.state)) {
+      throw new ConflictError(REVIEW_REASONS.NOTHING_MISSING, { fieldId });
+    }
+    await mailService.notify("CUSTOMER_UPLOAD_REQUESTED", {
+      tenantId,
+      bookingIds: [bookingId],
+      fieldLabels: [field.label],
+      fieldId,
+      fieldRequired: Boolean(field.required),
+    });
+    logger.info(
+      `${tenantId} -- customer upload ${fieldId} of booking ${bookingId} asked for`,
+    );
+    return field.label;
   }
 
   /**

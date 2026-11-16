@@ -32,6 +32,9 @@ const BlacklistService = require("../blacklist/blacklist-service");
 const InstanceManager = require("../../data-managers/instance-manager");
 const { parseEmails } = require("../../utilities/mail-utils");
 const { CheckoutError } = require("../../../errors/CheckoutError");
+const {
+  CUSTOMER_UPLOAD_REVIEW,
+} = require("../../schemas/customerUploadReferenceSchema");
 const { CHECKOUT_REASONS } = require("./checkout-reasons");
 const {
   BadRequestError,
@@ -245,7 +248,10 @@ async function assertNoAddressBlacklisted({ mail, policy }) {
  * files go again - booking and customer uploads come about together or
  * not at all.
  *
- * @param {{ tenantId: string, user?: Object, bookingAttempt: Object, simulate: boolean, policy?: string, checkoutId?: string, customerUploadFiles?: Array<{fieldId: string, file: Object}>|null }} params
+ * A manual booking carries the files the staff hands in instead
+ * (`staffUploadFiles`), for any of its upload fields, none required.
+ *
+ * @param {{ tenantId: string, user?: Object, bookingAttempt: Object, simulate: boolean, policy?: string, checkoutId?: string, customerUploadFiles?: Array<{fieldId: string, file: Object}>|null, staffUploadFiles?: Array<{fieldId: string, file: Object}>|null }} params
  * @returns {Promise<Booking>} The booking as prepared
  */
 async function createBooking({
@@ -256,6 +262,7 @@ async function createBooking({
   policy = CheckoutPolicy.SELF_SERVICE,
   checkoutId: providedCheckoutId,
   customerUploadFiles = null,
+  staffUploadFiles = null,
 }) {
   checkoutPolicy.assertCheckoutPolicy(policy);
   const checkoutId = providedCheckoutId || uuidV4();
@@ -377,7 +384,15 @@ async function createBooking({
     const references =
       customerUploadFiles !== null
         ? await acceptCustomerUploads(booking, customerUploadFiles, user)
-        : [];
+        : staffUploadFiles?.length
+          ? await asCheckoutRefusal(() =>
+              CustomerUploadService.acceptByStaff({
+                booking,
+                files: staffUploadFiles,
+                uploadedBy: user?.id ?? null,
+              }),
+            )
+          : [];
     booking.customerUploads = references;
     try {
       await BookingManager.storeBooking(booking);
@@ -393,6 +408,30 @@ async function createBooking({
     logger.info(`${tenantId}, cid ${checkoutId} -- Simulated booking`);
   }
   return booking;
+}
+
+/**
+ * The files the staff handed in with a manual booking, accepted in their
+ * name as a check would: a sensitive one loses its file at once. Accepting
+ * sends no mail.
+ */
+async function acceptStaffUploads(tenantId, booking, user) {
+  // Late: the check reaches back into the services of the checkout.
+  const {
+    CustomerUploadReview,
+  } = require("../customer-upload/customer-upload-review");
+  for (const reference of booking.customerUploads || []) {
+    await CustomerUploadReview.review({
+      tenantId,
+      bookingId: booking.id,
+      fieldId: reference.fieldId,
+      mediaId: reference.mediaId,
+      result: CUSTOMER_UPLOAD_REVIEW.ACCEPTED,
+      reason: "",
+      alsoFor: [],
+      user,
+    });
+  }
 }
 
 /**
@@ -471,7 +510,9 @@ async function rollback(tenantId, booking) {
  * The booking person's own checkout (self-service) carries the files of
  * the upload fields "in the checkout"; without
  * them a required one of those fields refuses the checkout. A booking the
- * staff makes asks for none.
+ * staff makes asks for none: the files the staff hands in with it count as
+ * checked by them - accepted once the booking is admitted, after its mails,
+ * which so name them as handed in, not as missing.
  *
  * @param {{ tenantId: string, user?: Object, bookingAttempt: Object, simulate: boolean, policy?: string, checkoutId?: string, customerUploadFiles?: Array<{fieldId: string, file: Object}> }} params
  * @returns {Promise<Booking>} The booking as stored after the admission
@@ -502,6 +543,9 @@ async function createSingleBooking({
     customerUploadFiles: checkoutPolicy.runsChecks(policy)
       ? customerUploadFiles
       : null,
+    staffUploadFiles: checkoutPolicy.runsChecks(policy)
+      ? null
+      : customerUploadFiles,
   });
 
   if (simulate) {
@@ -518,6 +562,10 @@ async function createSingleBooking({
     );
     await rollback(tenantId, booking);
     throw causeOf(err);
+  }
+
+  if (!checkoutPolicy.runsChecks(policy)) {
+    await acceptStaffUploads(tenantId, booking, user);
   }
 
   return await BookingManager.getBooking(booking.id, tenantId, DOMAIN);

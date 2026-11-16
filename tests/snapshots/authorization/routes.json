@@ -1063,6 +1063,14 @@
     "instanceOwner": 404,
     "expiredToken": 401
   },
+  "POST /api/v2/:tenant/bookings/:id/customer-uploads/:fieldId/request": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 404,
+    "tenantOwner": 404,
+    "instanceOwner": 404,
+    "expiredToken": 401
+  },
   "POST /api/v2/:tenant/bookings/:id/customer-uploads/:fieldId/request-again": {
     "anonymous": 401,
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",

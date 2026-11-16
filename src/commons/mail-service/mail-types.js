@@ -70,6 +70,7 @@ const {
   adminTenantMembersUrl,
   customerUploadUrlOf,
   customerUploadSeriesUrl,
+  hasStoreFront,
   usesSignedLink,
 } = require("./mail-links");
 const {
@@ -342,6 +343,10 @@ const MailType = Object.freeze({
   // „Nachweise anfordern“ by the staff, from the release of a booking:
   // the required proofs still missing with their deadlines and the button
   // to hand them in, in the block of the missing proofs.
+  // „Nachreichen anfordern“ of one field names that proof; the block of
+  // the missing proofs lists it with the button, unless it is an optional
+  // one where a storefront runs - the block leaves those out, so the button
+  // to that field stands above it.
   CUSTOMER_UPLOAD_REQUESTED: {
     family: "booking",
     templateName: "customer-upload-requested",
@@ -351,6 +356,16 @@ const MailType = Object.freeze({
     sendBCC: false,
     addRejectionLink: false,
     showsMissingProofs: true,
+    templateData: (
+      { fieldLabels = [], fieldId = null, fieldRequired = false },
+      { bookings },
+    ) => ({
+      customerUploadFields: fieldId ? fieldLabels.join(", ") : "",
+      proofsUrl:
+        fieldId && !fieldRequired && hasStoreFront()
+          ? customerUploadUrlOf(bookings[0], fieldId)
+          : "",
+    }),
   },
 
   // The reminder before the deadline of a required upload field still

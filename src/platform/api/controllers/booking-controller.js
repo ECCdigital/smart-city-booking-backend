@@ -434,6 +434,8 @@ class BookingController {
         bookingAttempt: request.body,
         policy: CheckoutPolicy.ADMIN_MANUAL,
         checkoutId,
+        // The proofs the staff hands in with it, if sent as multipart.
+        customerUploadFiles: request.customerUploadFiles ?? [],
       });
       return response.status(200).send(newBooking);
     } catch (err) {

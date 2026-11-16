@@ -219,9 +219,12 @@ router.get(
   publicRoute("booking", "list", { also: ["readCustomerUploads"] }),
   BookingController.getBookings,
 );
+// The manual booking; as multipart it carries files the staff hands in
+// for its upload fields, accepted with the booking.
 router.post(
   "/bookings",
   authorize("booking", "create"),
+  acceptCheckoutFiles(),
   BookingController.createBooking,
 );
 router.put(

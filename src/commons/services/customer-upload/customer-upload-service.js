@@ -800,9 +800,45 @@ class CustomerUploadService {
    * @returns {Promise<Object[]>} The references for the booking
    */
   static async acceptAtCheckout({ booking, files = [], uploadedBy = null }) {
-    const checkoutFields =
-      await CustomerUploadService._checkoutFieldsOfBooking(booking);
+    return CustomerUploadService._acceptWithBooking({
+      booking,
+      files,
+      uploadedBy,
+      fields: await CustomerUploadService._checkoutFieldsOfBooking(booking),
+      requireAll: true,
+    });
+  }
 
+  /**
+   * The files the staff hands in with a manual booking, for any of its
+   * upload fields, whatever their timing: the checks of the checkout, no
+   * field required. As at the checkout the booking is not stored yet; the
+   * references are pending, and the caller accepts them once the booking
+   * is stored ({@link CustomerUploadReview.review}).
+   *
+   * @param {Object} params As {@link acceptAtCheckout}, `uploadedBy` the
+   *   staff member
+   * @returns {Promise<Object[]>} The references for the booking
+   */
+  static async acceptByStaff({ booking, files = [], uploadedBy = null }) {
+    if (files.length === 0) return [];
+    return CustomerUploadService._acceptWithBooking({
+      booking,
+      files,
+      uploadedBy,
+      fields: await CustomerUploadService._snapshotFieldsOfBooking(booking),
+      requireAll: false,
+    });
+  }
+
+  /** The common part of {@link acceptAtCheckout} and {@link acceptByStaff}. */
+  static async _acceptWithBooking({
+    booking,
+    files,
+    uploadedBy,
+    fields: checkoutFields,
+    requireAll,
+  }) {
     const filesOf = new Map(checkoutFields.map((field) => [field.id, []]));
     for (const { fieldId, file } of files) {
       if (!filesOf.has(fieldId)) {
@@ -812,7 +848,8 @@ class CustomerUploadService {
     }
 
     const missing = checkoutFields.filter(
-      (field) => field.required && filesOf.get(field.id).length === 0,
+      (field) =>
+        requireAll && field.required && filesOf.get(field.id).length === 0,
     );
     if (missing.length > 0) {
       throw new BadRequestError(R.REQUIRED_MISSING, {
@@ -1477,15 +1514,25 @@ class CustomerUploadService {
    * tenant asked only where there are any.
    */
   static async _checkoutFieldsOfBooking(booking) {
+    return CustomerUploadService._snapshotFieldsOfBooking(
+      booking,
+      (field) => field.timing === UPLOAD_FIELD_TIMINGS.CHECKOUT,
+    );
+  }
+
+  /**
+   * The upload fields of a booking not stored yet, off the snapshots of its
+   * offers, those `pick` keeps; none while the tenant has customer uploads
+   * off.
+   */
+  static async _snapshotFieldsOfBooking(booking, pick = () => true) {
     const snapshots = new Map(
       (booking.bookableItems || []).map((item) => [
         item.bookableId,
         item._bookableUsed,
       ]),
     );
-    const fields = uploadFieldsOf(booking, snapshots).filter(
-      (field) => field.timing === UPLOAD_FIELD_TIMINGS.CHECKOUT,
-    );
+    const fields = uploadFieldsOf(booking, snapshots).filter(pick);
     if (fields.length === 0) return [];
 
     const tenant = await TenantManager.getTenant(booking.tenantId, DOMAIN);

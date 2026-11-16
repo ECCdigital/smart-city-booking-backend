@@ -56,6 +56,11 @@ router.put(
 // The check by the staff and „Erneut anfordern“:
 // whoever may edit the booking; a JSON body, no file.
 router.post(
+  "/:fieldId/request",
+  authorize("booking", "reviewCustomerUpload"),
+  CustomerUploadControllerV2.requestField,
+);
+router.post(
   "/:fieldId/request-again",
   authorize("booking", "reviewCustomerUpload"),
   CustomerUploadControllerV2.requestAgain,
