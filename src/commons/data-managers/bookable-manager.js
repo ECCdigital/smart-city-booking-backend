@@ -413,11 +413,11 @@ class BookableManager {
    * write.
    * @param {string} tenantId Tenant ID
    * @param {string} id Bookable ID
-   * @param {{accessPointIds: string[], active: boolean, amount?: number}} links
+   * @param {{accessPointIds: string[], active: boolean, amount?: number}} assignment
    *   `amount` left out keeps the stored one
    * @returns {Promise<void>}
    */
-  static async storeAccessPointLinks(
+  static async storeAssignment(
     tenantId,
     id,
     { accessPointIds, active, amount },

@@ -98,7 +98,7 @@ describe("assignment of an access point to bookables over HTTP", function () {
     // assignment, nothing else.
     restub(
       BookableManager,
-      "storeAccessPointLinks",
+      "storeAssignment",
       async (tenantId, id, { accessPointIds, active, amount }) => {
         writes.push([
           id,

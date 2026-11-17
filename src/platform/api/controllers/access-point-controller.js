@@ -330,8 +330,10 @@ class AccessPointController {
       const result = await AccessPointAssignment.assignBookables(
         tenantId,
         request.params.id,
-        request.body?.bookableIds,
-        request.body?.amount,
+        {
+          bookableIds: request.body?.bookableIds,
+          amount: request.body?.amount,
+        },
         scopeOf(request),
       );
       logger.info(

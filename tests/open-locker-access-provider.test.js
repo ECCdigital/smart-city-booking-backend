@@ -278,7 +278,7 @@ describe("Open Locker access provider", () => {
       await rejectsOpen(
         provider.open(door, bookingContext()),
         "configuration",
-        "Schließfachanlage",
+        "compartment of a locker system",
       );
       expect(client.requests).to.deep.equal([]);
     });
