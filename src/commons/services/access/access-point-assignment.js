@@ -34,17 +34,28 @@ function requestedIds(bookableIds) {
 }
 
 /**
- * Checks the amount a request body names for the bookable, if any.
+ * Checks the amount a request body names for the bookable, if any: it goes
+ * to the one bookable of a locker system with its own compartments alone,
+ * so it can never reach the wrong one (tickets#1167).
  *
  * @throws {ValidationError} `invalid_amount` unless it is left out or a
  *   whole number from 1: 0 and empty both mean unlimited, which the
- *   assignment never sets (tickets#1167)
+ *   assignment never sets; then `amount_needs_one_locker_bookable` unless
+ *   the access point carries its own compartments and exactly one bookable
+ *   is listed
  */
-function checkAmount(amount) {
-  if (amount !== undefined && !(Number.isInteger(amount) && amount >= 1)) {
-    throw new ValidationError([
-      { field: AMOUNT_FIELD, code: "invalid_amount", params: {} },
-    ]);
+function checkAmount(amount, accessPoint, wanted) {
+  if (amount === undefined) {
+    return;
+  }
+  const refuse = (code) => {
+    throw new ValidationError([{ field: AMOUNT_FIELD, code, params: {} }]);
+  };
+  if (!(Number.isInteger(amount) && amount >= 1)) {
+    refuse("invalid_amount");
+  }
+  if (!(carriesOwnCompartments(accessPoint) && wanted.length === 1)) {
+    refuse("amount_needs_one_locker_bookable");
   }
 }
 
@@ -71,9 +82,9 @@ function checkAmount(amount) {
  *
  * @param {string} tenantId
  * @param {string} accessPointId
- * @param {string[]} bookableIds The bookables that shall carry the access point
- * @param {number|undefined} amount The amount of the one bookable, or
- *   `undefined` to leave it alone
+ * @param {{bookableIds: string[], amount?: number}} request The bookables
+ *   that shall carry the access point and the amount of the one bookable,
+ *   left out to leave it alone
  * @param {{reach: string, userId?: string|null}} scope The reach of the request
  * @returns {Promise<{accessPointId: string, bookableIds: string[], amount?: number}>}
  *   `amount` only when the request names one: the amount stored now
@@ -86,12 +97,10 @@ function checkAmount(amount) {
 async function assignBookables(
   tenantId,
   accessPointId,
-  bookableIds,
-  amount,
+  { bookableIds, amount },
   scope,
 ) {
   const wanted = requestedIds(bookableIds);
-  checkAmount(amount);
 
   const accessPoint = await AccessPointManager.getAccessPoint(
     accessPointId,
@@ -102,20 +111,7 @@ async function assignBookables(
   }
   const linkId = String(accessPoint.id);
 
-  // The amount goes to the one bookable of a locker system with its own
-  // compartments alone, so it can never reach the wrong one (tickets#1167).
-  if (
-    amount !== undefined &&
-    !(carriesOwnCompartments(accessPoint) && wanted.length === 1)
-  ) {
-    throw new ValidationError([
-      {
-        field: AMOUNT_FIELD,
-        code: "amount_needs_one_locker_bookable",
-        params: {},
-      },
-    ]);
-  }
+  checkAmount(amount, accessPoint, wanted);
 
   // The assignment is read whole, by the domain: the bookables listed and
   // every one that carries the access point, out of reach too. A scoped
@@ -185,7 +181,7 @@ async function assignBookables(
       continue;
     }
     const links = linksOf(bookable);
-    await BookableManager.storeAccessPointLinks(tenantId, bookable.id, {
+    await BookableManager.storeAssignment(tenantId, bookable.id, {
       accessPointIds: added ? [...links, linkId] : links,
       active:
         added && links.length === 0
@@ -195,15 +191,14 @@ async function assignBookables(
     });
   }
   for (const bookable of toRemove) {
-    await BookableManager.storeAccessPointLinks(tenantId, bookable.id, {
+    await BookableManager.storeAssignment(tenantId, bookable.id, {
       accessPointIds: linksOf(bookable).filter((id) => id !== linkId),
       active: !!bookable.accessPointDetails?.active,
     });
   }
 
-  return amount === undefined
-    ? { accessPointId: linkId, bookableIds: wanted }
-    : { accessPointId: linkId, bookableIds: wanted, amount };
+  // `amount` left out stays undefined and so out of the answer.
+  return { accessPointId: linkId, bookableIds: wanted, amount };
 }
 
 module.exports = { assignBookables };

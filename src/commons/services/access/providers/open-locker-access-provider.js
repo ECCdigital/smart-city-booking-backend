@@ -116,7 +116,7 @@ class OpenLockerAccessProvider extends AccessProvider {
       !accessPoint.externalId
     ) {
       throw AccessOpenError.configuration(
-        `Open Locker opens only the assigned compartment of a Schließfachanlage, not access point '${accessPoint.id}' of type '${accessPoint.type}'`,
+        `Open Locker opens only the assigned compartment of a locker system, not access point '${accessPoint.id}' of type '${accessPoint.type}'`,
       );
     }
 
