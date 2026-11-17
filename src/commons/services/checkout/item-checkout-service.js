@@ -499,6 +499,20 @@ class ItemCheckoutService {
     return Math.round((end - start) / 60000);
   }
 
+  /**
+   * The booking's minutes as its price counts them: with
+   * `priceCountStartedHours` an hour price counts every started hour in
+   * full, otherwise the minutes are taken as they are.
+   */
+  getBilledDuration() {
+    const minutes = this.getBookingDuration();
+    const { priceType, priceCountStartedHours } = this.originBookable;
+    if (priceType === "per-hour" && priceCountStartedHours) {
+      return Math.ceil(minutes / 60) * 60;
+    }
+    return minutes;
+  }
+
   async isTimeRelated() {
     return isTimeRelatedBookable(this.originBookable);
   }
@@ -539,19 +553,25 @@ class ItemCheckoutService {
 
   async _internalRegularPriceEur() {
     const segments = this._splitIntoDailySegments();
+    // The rest of a started hour lies at the end of the booking, so the
+    // last day bills it, not every day the booking touches.
+    const startedHourRest =
+      this.getBilledDuration() - this.getBookingDuration();
 
     const prices = [];
 
-    for (const segment of segments) {
+    for (const [index, segment] of segments.entries()) {
       const priceCategory = this.getPriceCategory(segment.start, segment.end);
 
       let multiplier;
       if (!priceCategory?.fixedPrice) {
         switch (this.originBookable.priceType) {
-          case "per-hour":
+          case "per-hour": {
+            const rest = index === segments.length - 1 ? startedHourRest : 0;
             multiplier =
-              this.getBookingDuration(segment.start, segment.end) / 60;
+              (this.getBookingDuration(segment.start, segment.end) + rest) / 60;
             break;
+          }
           case "per-day":
             multiplier =
               this.getBookingDuration(segment.start, segment.end) / 1440;
@@ -651,7 +671,7 @@ class ItemCheckoutService {
       );
     }
 
-    const bookingDurationInMinutes = this.getBookingDuration();
+    const bookingDurationInMinutes = this.getBilledDuration();
 
     let valueToCheck;
     switch (priceType) {

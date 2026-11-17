@@ -194,8 +194,12 @@ class Bookable {
     const basePrice = this.getBasePriceForTime(timeBegin, timeEnd);
 
     switch (this.priceType) {
-      case PRICE_TYPES.PER_HOUR:
-        return Math.round(basePrice * duration * 100) / 100;
+      case PRICE_TYPES.PER_HOUR: {
+        const hours = this.priceCountStartedHours
+          ? Math.ceil(duration)
+          : duration;
+        return Math.round(basePrice * hours * 100) / 100;
+      }
       case PRICE_TYPES.PER_DAY:
         return Math.round(((basePrice * duration) / 24) * 100) / 100;
       case PRICE_TYPES.PER_ITEM:
@@ -420,6 +424,7 @@ class Bookable {
       priceValueAddedTax: this.priceValueAddedTax,
       priceCategories: this.priceCategories,
       priceType: this.priceType,
+      priceCountStartedHours: this.priceCountStartedHours,
       relatedBookableIds: this.relatedBookableIds,
       checkoutBookableIds: this.checkoutBookableIds,
       eventId: this.eventId,
