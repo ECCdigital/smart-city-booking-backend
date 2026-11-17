@@ -33,7 +33,7 @@ describe("AccessAppController.getAccessPoints", () => {
     sandbox.restore();
   });
 
-  it("sends the locks the provider lists", async () => {
+  it("sends every lock the provider lists", async () => {
     const locks = [{ id: "lock-1", provider: "nuki", externalId: "lock-1" }];
     sandbox.stub(AccessInfoService, "getAccessPoints").resolves(locks);
 
