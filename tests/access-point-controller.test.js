@@ -87,16 +87,6 @@ function listedAccessPoint(supportedModes) {
   };
 }
 
-/** The tenant's Open Locker compartment as its listing names it. */
-function listedCompartment() {
-  return {
-    id: COMPARTMENT_ID,
-    provider: "open-locker",
-    externalId: COMPARTMENT_ID,
-    supportedModes: ["remote"],
-  };
-}
-
 /**
  * A lock as Nuki lists it: the device type sits in the provider's raw
  * `metadata`. No `supportedModes`, so the mode check passes and the
@@ -339,13 +329,13 @@ describe("AccessPointController", () => {
         expect(created.validationRules).to.deep.equal([{ type: "qrScan" }]);
       });
 
-      it("requires no qr scan at an Open Locker compartment when validationRules are omitted", async () => {
-        findListedAccessPoint.resolves(listedCompartment());
+      it("requires no qr scan at an Open Locker Anlage when validationRules are omitted", async () => {
+        sandbox.stub(AccessInfoService, "getAccessPoints").resolves([]);
         request.body = {
           provider: "open-locker",
-          type: "door",
+          type: "locker",
           mode: "remote",
-          externalId: COMPARTMENT_ID,
+          config: { compartments: [] },
         };
 
         await AccessPointController.storeAccessPoint(request, response, next);
@@ -354,13 +344,13 @@ describe("AccessPointController", () => {
         expect(created.validationRules).to.deep.equal([]);
       });
 
-      it("requires a qr scan at an Open Locker compartment that configures one", async () => {
-        findListedAccessPoint.resolves(listedCompartment());
+      it("requires a qr scan at an Open Locker Anlage that configures one", async () => {
+        sandbox.stub(AccessInfoService, "getAccessPoints").resolves([]);
         request.body = {
           provider: "open-locker",
-          type: "door",
+          type: "locker",
           mode: "remote",
-          externalId: COMPARTMENT_ID,
+          config: { compartments: [] },
           validationRules: [{ type: "qrScan" }],
         };
 
@@ -1089,104 +1079,12 @@ describe("AccessPointController", () => {
      * over the fake instance, where a neighbour's account holds the other
      * compartment.
      */
-    describe("Open Locker compartment access", () => {
-      let openLocker;
-
-      after(() => {
-        registerAccessProvider("open-locker", OpenLockerAccessProvider);
-      });
-
-      beforeEach(() => {
-        findListedAccessPoint.restore();
-        openLocker = new FakeOpenLockerApiClient();
-        registerAccessProvider(
-          "open-locker",
-          class extends OpenLockerAccessProvider {
-            constructor() {
-              super({ client: openLocker });
-            }
-          },
-        );
-      });
-
-      function compartment(externalId) {
-        return {
-          provider: "open-locker",
-          type: "door",
-          mode: "remote",
-          label: "Fach",
-          externalId,
-        };
-      }
-
-      it("stores a compartment the account holds a permission on", async () => {
-        request.body = compartment(COMPARTMENT_ID);
-
-        await AccessPointController.storeAccessPoint(request, response, next);
-
-        expect(next.called).to.be.false;
-        expect(storeAccessPoint.calledOnce).to.be.true;
-        expect(response.status.calledWith(201)).to.be.true;
-      });
-
-      it("refuses the compartment of another tenant's account", async () => {
-        request.body = compartment(OTHER_COMPARTMENT_ID);
-
-        await AccessPointController.storeAccessPoint(request, response, next);
-
-        const error = next.firstCall.args[0];
-        expect(error).to.be.instanceOf(ValidationError);
-        expect(error.statusCode).to.equal(400);
-        expect(error.errors).to.deep.equal([
-          {
-            field: "externalId",
-            code: "compartment_not_accessible",
-            params: { externalId: OTHER_COMPARTMENT_ID },
-          },
-        ]);
-        expect(storeAccessPoint.called).to.be.false;
-      });
-
-      it("refuses a compartment without a UUID, without asking Open Locker", async () => {
-        request.body = compartment("");
-
-        await AccessPointController.storeAccessPoint(request, response, next);
-
-        const error = next.firstCall.args[0];
-        expect(error).to.be.instanceOf(ValidationError);
-        expect(error.statusCode).to.equal(400);
-        expect(error.errors).to.deep.equal([
-          { field: "externalId", code: "required" },
-        ]);
-        expect(storeAccessPoint.called).to.be.false;
-        expect(openLocker.requests).to.deep.equal([]);
-      });
-
-      it("refuses to store a compartment again once the account lost its permission on it", async () => {
-        sandbox.stub(AccessPointManager, "getAccessPoint").resolves(
-          createAccessPoint({
-            ...compartment(COMPARTMENT_ID),
-            validationRules: [],
-          }),
-        );
-        openLocker.revokePermission(COMPARTMENT_ID);
-        request.body = { id: "point-1", label: "Fach 1" };
-
-        await AccessPointController.storeAccessPoint(request, response, next);
-
-        const error = next.firstCall.args[0];
-        expect(error).to.be.instanceOf(ValidationError);
-        expect(error.errors[0].code).to.equal("compartment_not_accessible");
-        expect(storeAccessPoint.called).to.be.false;
-      });
-    });
-
     /**
      * An Open Locker Schließfachanlage is a `locker` in mode `remote` that
      * carries its own list of Fächer, picked from Open Locker's listing
      * (tickets#1037). The save copies each Fach's Schließfachschrank and
-     * number from the listing, and keeps one Fach in at most one Anlage and
-     * out of the fixed Fächer, across the tenant.
+     * number from the listing, and keeps one Fach in at most one Anlage
+     * across the tenant.
      */
     describe("Open Locker locker system", () => {
       let openLocker;
@@ -1467,35 +1365,6 @@ describe("AccessPointController", () => {
         expect(storeAccessPoint.called).to.be.false;
       });
 
-      it("refuses a Fach that is a fixed Fach of the tenant", async () => {
-        tenantAccessPoints = [
-          createAccessPoint({
-            id: "fach-1",
-            provider: "open-locker",
-            type: "door",
-            mode: "remote",
-            externalId: COMPARTMENT_ID,
-            label: "Labor Fachbank 1 · Fach 1",
-          }),
-        ];
-        request.body = lockerSystem([{ id: COMPARTMENT_ID }]);
-
-        await AccessPointController.storeAccessPoint(request, response, next);
-
-        expect(next.firstCall.args[0].errors).to.deep.equal([
-          {
-            field: "config.compartments.0",
-            code: "compartment_is_fixed",
-            params: {
-              compartmentId: COMPARTMENT_ID,
-              accessPointId: "fach-1",
-              label: "Labor Fachbank 1 · Fach 1",
-            },
-          },
-        ]);
-        expect(storeAccessPoint.called).to.be.false;
-      });
-
       it("checks the Fächer also while the tenant's Open Locker is not active", async () => {
         registerAccessProvider("open-locker", OpenLockerAccessProvider);
         sandbox.stub(TenantManager, "getTenant").resolves({
@@ -1537,38 +1406,6 @@ describe("AccessPointController", () => {
 
         expect(next.called).to.be.false;
         expect(storedCompartments()[0].outOfService).to.be.true;
-      });
-
-      it("refuses a fixed Fach that already stands in an Anlage", async () => {
-        tenantAccessPoints = [
-          createAccessPoint({
-            id: "anlage-2",
-            ...lockerSystem([{ id: COMPARTMENT_ID }]),
-            label: "Paketstation",
-          }),
-        ];
-        request.body = {
-          provider: "open-locker",
-          type: "door",
-          mode: "remote",
-          label: "Fach 1",
-          externalId: COMPARTMENT_ID,
-        };
-
-        await AccessPointController.storeAccessPoint(request, response, next);
-
-        expect(next.firstCall.args[0].errors).to.deep.equal([
-          {
-            field: "externalId",
-            code: "compartment_in_locker_system",
-            params: {
-              compartmentId: COMPARTMENT_ID,
-              accessPointId: "anlage-2",
-              label: "Paketstation",
-            },
-          },
-        ]);
-        expect(storeAccessPoint.called).to.be.false;
       });
 
       it("refuses a list of Fächer on an Anlage whose provider assigns the Fach itself", async () => {
@@ -2414,27 +2251,32 @@ describe("AccessPointController", () => {
       // for a tenant without its active application. That is no answer about
       // the lock, so the save goes through unchecked, to be checked on the
       // first save once the provider is active.
-      // A compartment without its UUID is refused all the same: that rule
-      // needs no listing.
-      it("refuses an Open Locker compartment without a UUID while the tenant's application is not active", async () => {
+      // A door of Open Locker is refused all the same: that rule needs no
+      // listing (tickets#1162).
+      it("refuses a door of Open Locker while the tenant's application is not active", async () => {
         findListedAccessPoint.restore();
         sandbox.stub(TenantManager, "getTenant").resolves({
           id: "tenant-1",
           applications: [{ type: "access", id: "open-locker", active: false }],
         });
-        request.body = { provider: "open-locker", mode: "remote" };
+        request.body = {
+          provider: "open-locker",
+          type: "door",
+          mode: "remote",
+          externalId: "lock-1",
+        };
 
         await AccessPointController.storeAccessPoint(request, response, next);
 
         const error = next.firstCall.args[0];
         expect(error).to.be.instanceOf(ValidationError);
         expect(error.errors).to.deep.equal([
-          { field: "externalId", code: "required" },
+          { field: "type", code: "open_locker_locker_only", params: {} },
         ]);
         expect(storeAccessPoint.called).to.be.false;
       });
 
-      ["nuki", "ifbs", "salto-ks", "open-locker"].forEach((provider) => {
+      ["nuki", "ifbs", "salto-ks"].forEach((provider) => {
         it(`stores a ${provider} access point while the tenant's ${provider} application is not active`, async () => {
           findListedAccessPoint.restore();
           sandbox.stub(TenantManager, "getTenant").resolves({

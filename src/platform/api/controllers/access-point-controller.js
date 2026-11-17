@@ -785,8 +785,8 @@ class AccessPointController {
    * back into its `config` as they are stored (tickets#1037): Schrank and
    * number from the provider's listing, so a rename at the provider takes
    * effect on the next save. A provider the tenant has not switched on is
-   * not asked, and the Fächer are stored as the request names them, like a
-   * fixed Fach (tickets#311, #971). A provider whose Anlagen carry no list
+   * not asked, and the Fächer are stored as the request names them
+   * (tickets#311, #971). A provider whose Anlagen carry no list
    * of their own refuses one.
    *
    * @param {AccessPoint} accessPoint The access point as it would be stored
@@ -834,24 +834,17 @@ class AccessPointController {
   }
 
   /**
-   * Refuses a Fach another access point of the tenant already holds - see
-   * `assertCompartmentsUnclaimed`. Asked only where it can matter: for an
-   * Anlage that carries its own list, and for a fixed Fach of a provider
-   * whose Anlagen do.
+   * Refuses a Fach another Anlage of the tenant already holds - see
+   * `assertCompartmentsUnclaimed`. Asked only for an Anlage that carries its
+   * own list: no other access point holds a Fach.
    *
    * @param {AccessPoint} accessPoint The access point as it would be stored
    * @param {string} tenantId Tenant the access point belongs to
    * @returns {Promise<void>}
-   * @throws {ValidationError} At the Fach another access point holds
+   * @throws {ValidationError} At the Fach another Anlage holds
    */
   static async _assertCompartmentsUnclaimed(accessPoint, tenantId) {
-    if (
-      !carriesOwnCompartments(accessPoint) &&
-      !(
-        accessPoint.externalId &&
-        AccessInfoService.resolvesCompartments(accessPoint.provider)
-      )
-    ) {
+    if (!carriesOwnCompartments(accessPoint)) {
       return;
     }
 

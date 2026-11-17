@@ -85,8 +85,8 @@ Controllers should stay thin — delegate to services and managers.
 
 - **Payment:** GiroCockpit, PM Payment (provider pattern in `src/commons/services/payment/`)
 - **File storage:** Nextcloud/WebDAV (`docs/nextcloud.md`)
-- **Lockers:** IFBS, Pareva (adapters in `src/commons/services/access/providers/`, clients in `src/commons/services/access/clients/`; locker systems are access points of type `locker`, the checkout runs through `AccessService`; they are administered through the access point routes (`/access-apps`, `/accesspoints`))
-- **Doors:** Nuki, Salto KS, Open Locker (a fixed compartment of an Open Locker locker bank is a door in mode `remote`, opened through the tenant's technical account; same adapter and client folders). An Open Locker locker system is a `locker` that carries its own compartments (`config.compartments`, see `services/access/locker-system-compartments.js`), and the platform assigns them
+- **Lockers:** IFBS, Pareva, Open Locker (adapters in `src/commons/services/access/providers/`, clients in `src/commons/services/access/clients/`; locker systems are access points of type `locker`, the checkout runs through `AccessService`; they are administered through the access point routes (`/access-apps`, `/accesspoints`))
+- **Doors:** Nuki, Salto KS (same adapter and client folders). Open Locker knows only the locker system: a `locker` in mode `remote` that carries its own compartments (`config.compartments`, see `services/access/locker-system-compartments.js`), and the platform assigns them; each compartment is opened through the tenant's technical account
 - **SSO:** Keycloak, Azure MSAL
 
 ## Version lines

@@ -258,31 +258,33 @@ class OpenLockerAccessProvider extends AccessProvider {
   }
 
   /**
-   * Refuses a compartment without its UUID, before the listing is fetched:
-   * Open Locker knows a compartment by its UUID alone, so one without it
-   * never opens - whether the tenant's application is active or not.
+   * Refuses everything but a Schließfachanlage, before the listing is
+   * fetched: Open Locker knows only the Anlage, one with a single Fach
+   * included (tickets#1162). A `door` - the former fixed Fach - is refused
+   * at `type`, whether it comes from the API or an old client and whether
+   * the tenant's application is active or not.
    *
-   * @param {Object} accessPoint The compartment as it would be stored
+   * @param {Object} accessPoint The access point as it would be stored
    * @returns {void}
-   * @throws {ValidationError} `required` at `externalId`
+   * @throws {ValidationError} `open_locker_locker_only` at `type`, or what
+   *   an Anlage is refused for (`validateLockerSystem`)
    */
   validateAccessPointWithoutListing(accessPoint) {
-    if (accessPoint.type === AccessPointType.LOCKER) {
-      return validateLockerSystem(accessPoint);
+    if (accessPoint.type !== AccessPointType.LOCKER) {
+      throw new ValidationError([
+        { field: "type", code: "open_locker_locker_only", params: {} },
+      ]);
     }
 
-    if (accessPoint.externalId) {
-      return;
-    }
-
-    throw new ValidationError([{ field: "externalId", code: "required" }]);
+    validateLockerSystem(accessPoint);
   }
 
   /**
    * The Fächer of a Schließfachanlage as stored: each with its
    * Schließfachschrank (`id`, `name`) and number from the listing of the
    * tenant's technical account. A Fach the account holds no permission on
-   * is refused at that Fach, like a fixed Fach (`compartment_not_accessible`).
+   * is refused at that Fach (`compartment_not_accessible`), so no Fach is
+   * set up that never opens.
    *
    * @param {Object[]} compartments The requested Fächer in the stored shape
    * @param {import("./access-provider").ListedAccessPoint[]}
@@ -327,42 +329,6 @@ class OpenLockerAccessProvider extends AccessProvider {
     return resolved;
   }
 
-  /**
-   * Refuses a compartment the tenant's technical account holds no
-   * permission on - one its listing does not name - so no compartment is
-   * set up that never opens. A save that did not ask Open Locker, because
-   * the tenant has not switched it on (tickets#311), stores it unchecked;
-   * the next save that asks checks it. A compartment without its UUID never
-   * gets here (`validateAccessPointWithoutListing`).
-   *
-   * @param {Object} accessPoint The compartment as it would be stored
-   * @param {import("./access-provider").ListedAccessPoint|null}
-   *   listedAccessPoint The listing's entry for it, `null` where the
-   *   listing does not name it
-   * @param {Object} [listing] What the save knows of the listing
-   * @param {boolean} [listing.asked=true] `false` when Open Locker was not
-   *   asked
-   * @returns {void}
-   * @throws {ValidationError} `compartment_not_accessible` at `externalId`
-   */
-  validateAccessPoint(accessPoint, listedAccessPoint, listing = {}) {
-    if (
-      accessPoint.type === AccessPointType.LOCKER ||
-      listedAccessPoint ||
-      listing.asked === false
-    ) {
-      return;
-    }
-
-    throw new ValidationError([
-      {
-        field: "externalId",
-        code: "compartment_not_accessible",
-        params: { externalId: accessPoint.externalId },
-      },
-    ]);
-  }
-
   /** Opened without a QR scan, unless the access point configures one. */
   static get requiresScanByDefault() {
     return false;
@@ -376,7 +342,6 @@ class OpenLockerAccessProvider extends AccessProvider {
       "open",
       "getOpenProgress",
       "listAccessPoints",
-      "validateAccessPoint",
       "validateAccessPointWithoutListing",
       "resolveCompartments",
     ];
