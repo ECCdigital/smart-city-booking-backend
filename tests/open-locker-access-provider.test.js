@@ -1,6 +1,8 @@
 /**
  * Open Locker as the fifth provider (ECCdigital/tickets#970): a compartment
- * is a door in mode `remote`, opened through the tenant's technical account.
+ * of a Schließfachanlage in mode `remote`, opened through the tenant's
+ * technical account - the only access point Open Locker knows
+ * (ECCdigital/tickets#1162, #1163).
  * The adapter runs for real over the fake Open Locker in
  * `tests/helpers/fake-open-locker-api-client.js`, which replaces only the
  * HTTP transport.
@@ -58,13 +60,17 @@ const {
 
 require("../src/commons/services/access/providers/register-access-providers");
 
+/**
+ * The assigned Fach of an Anlage as the service hands it to the provider:
+ * the Anlage's row under the Fach's id, the Fach's UUID as `externalId`.
+ */
 const COMPARTMENT = Object.freeze({
-  id: "compartment-1",
+  id: `anlage-1:${COMPARTMENT_ID}`,
   tenantId: TENANT,
-  type: "door",
+  type: "locker",
   provider: "open-locker",
   externalId: COMPARTMENT_ID,
-  label: "Fach 1",
+  label: "Fächer Bahnhof",
   mode: AccessPointMode.REMOTE,
   validationRules: [],
 });
@@ -255,6 +261,26 @@ describe("Open Locker access provider", () => {
         openProcessId: request.command_id,
       });
       expect(request.compartment_id).to.equal(COMPARTMENT_ID);
+    });
+
+    it("opens nothing but a Fach of a Schließfachanlage: a door, the former fixed Fach, is a configuration failure, and Open Locker is not asked", async () => {
+      const door = {
+        id: "door-1",
+        tenantId: TENANT,
+        type: "door",
+        provider: "open-locker",
+        externalId: COMPARTMENT_ID,
+        label: "Labor Fachbank 1 · Fach 1",
+        mode: AccessPointMode.REMOTE,
+        validationRules: [],
+      };
+
+      await rejectsOpen(
+        provider.open(door, bookingContext()),
+        "configuration",
+        "Schließfachanlage",
+      );
+      expect(client.requests).to.deep.equal([]);
     });
 
     it("signs in once and keeps the token for the next call", async () => {
@@ -750,6 +776,34 @@ describe("Open Locker through AccessService", () => {
   const mailModule = require("../src/commons/mail-service");
   const { Booking } = require("../src/commons/entities/booking/booking");
   const { MINUTE } = require("./helpers/access-provider-fixtures");
+  const {
+    installInMemoryLockerSystemHolds,
+  } = require("./helpers/in-memory-locker-system-holds");
+
+  /** An Anlage with a single Fach, the key to a room. */
+  const anlage = (compartmentId = COMPARTMENT_ID) => ({
+    id: "anlage-1",
+    tenantId: TENANT,
+    type: "locker",
+    provider: "open-locker",
+    externalId: "",
+    label: "Schlüssel Raum 1",
+    mode: AccessPointMode.REMOTE,
+    validationRules: [],
+    config: {
+      compartments: [
+        {
+          id: compartmentId,
+          number: 1,
+          lockerBank: { id: LOCKER_BANK_ID, name: "Labor Fachbank 1" },
+          outOfService: false,
+        },
+      ],
+    },
+  });
+  /** The id the booking's Fach is listed and opened under. */
+  const fachId = (compartmentId = COMPARTMENT_ID) =>
+    `anlage-1:${compartmentId}`;
 
   let client;
   let sandbox;
@@ -774,6 +828,7 @@ describe("Open Locker through AccessService", () => {
 
   afterEach(() => {
     sandbox.restore();
+    sinon.restore();
   });
 
   function createBooking(overrides = {}) {
@@ -796,13 +851,22 @@ describe("Open Locker through AccessService", () => {
     });
   }
 
-  function stubBooking(booking, doors = [COMPARTMENT]) {
+  /**
+   * The booking at the Anlage, through the Vormerkung and the Bereitstellung
+   * - its Fach assigned and provisioned, without a word to Open Locker.
+   */
+  async function stubBooking(booking, lockerSystem = anlage()) {
+    const doors = [lockerSystem];
     sandbox.stub(BookingManager, "getBooking").resolves(booking);
     sandbox.stub(BookingManager, "storeBooking").resolves(booking);
+    sandbox.stub(BookingManager, "getBookingsHoldingCompartments").resolves([]);
+    sandbox.stub(BookingManager, "getConcurrentBookings").resolves([]);
+    installInMemoryLockerSystemHolds();
     sandbox.stub(BookableManager, "getBookablesByIds").resolves([
       {
         id: "room",
-        title: "Schrank",
+        title: "Raum 1",
+        amount: 1,
         accessPointDetails: {
           active: true,
           accessPointIds: doors.map((door) => door.id),
@@ -817,6 +881,9 @@ describe("Open Locker through AccessService", () => {
       .callsFake(async (id) => doors.find((door) => door.id === id) || null);
     sandbox.stub(AccessLogService, "log").resolves();
     sandbox.stub(mailModule, "notify").resolves([]);
+
+    await AccessService.holdForBooking(TENANT, booking.id);
+    await AccessService.provisionForBooking(TENANT, booking.id);
   }
 
   function logged(action) {
@@ -826,12 +893,12 @@ describe("Open Locker through AccessService", () => {
   }
 
   it("opens a compartment and stores the command_id with the open in the audit", async () => {
-    stubBooking(createBooking());
+    await stubBooking(createBooking());
 
     const outcome = await AccessService.open(
       TENANT,
       "booking-1",
-      COMPARTMENT.id,
+      fachId(),
       "user-1",
     );
 
@@ -849,11 +916,15 @@ describe("Open Locker through AccessService", () => {
   });
 
   it("audits an open the account may not make as a failure naming the command_id", async () => {
-    const denied = { ...COMPARTMENT, externalId: OTHER_COMPARTMENT_ID };
-    stubBooking(createBooking(), [denied]);
+    await stubBooking(createBooking(), anlage(OTHER_COMPARTMENT_ID));
 
     await assert.rejects(
-      AccessService.open(TENANT, "booking-1", denied.id, "user-1"),
+      AccessService.open(
+        TENANT,
+        "booking-1",
+        fachId(OTHER_COMPARTMENT_ID),
+        "user-1",
+      ),
       AccessOpenError,
     );
 
@@ -863,15 +934,15 @@ describe("Open Locker through AccessService", () => {
   });
 
   it("audits every poll, an unconfirmed one and a failed one included", async () => {
-    stubBooking(createBooking());
+    await stubBooking(createBooking());
     const {
       data: { openProcessId },
-    } = await AccessService.open(TENANT, "booking-1", COMPARTMENT.id, "user-1");
+    } = await AccessService.open(TENANT, "booking-1", fachId(), "user-1");
     client.advance(openProcessId, "sent");
     await AccessService.getOpenStatus(
       TENANT,
       "booking-1",
-      COMPARTMENT.id,
+      fachId(),
       openProcessId,
       "user-1",
     );
@@ -880,7 +951,7 @@ describe("Open Locker through AccessService", () => {
     const status = await AccessService.getOpenStatus(
       TENANT,
       "booking-1",
-      COMPARTMENT.id,
+      fachId(),
       openProcessId,
       "user-1",
     );
@@ -911,21 +982,16 @@ describe("Open Locker through AccessService", () => {
     ["denied", "configuration"],
   ]) {
     it(`audits a poll that ends in ${state} as a failure, not a success`, async () => {
-      stubBooking(createBooking());
+      await stubBooking(createBooking());
       const {
         data: { openProcessId },
-      } = await AccessService.open(
-        TENANT,
-        "booking-1",
-        COMPARTMENT.id,
-        "user-1",
-      );
+      } = await AccessService.open(TENANT, "booking-1", fachId(), "user-1");
       client.advance(openProcessId, state);
 
       await AccessService.getOpenStatus(
         TENANT,
         "booking-1",
-        COMPARTMENT.id,
+        fachId(),
         openProcessId,
         "user-1",
       );
@@ -939,21 +1005,16 @@ describe("Open Locker through AccessService", () => {
 
   for (const state of ["sent", "opened", "already_open"]) {
     it(`audits a poll that answers ${state} as a success`, async () => {
-      stubBooking(createBooking());
+      await stubBooking(createBooking());
       const {
         data: { openProcessId },
-      } = await AccessService.open(
-        TENANT,
-        "booking-1",
-        COMPARTMENT.id,
-        "user-1",
-      );
+      } = await AccessService.open(TENANT, "booking-1", fachId(), "user-1");
       client.advance(openProcessId, state);
 
       await AccessService.getOpenStatus(
         TENANT,
         "booking-1",
-        COMPARTMENT.id,
+        fachId(),
         openProcessId,
         "user-1",
       );
@@ -966,15 +1027,15 @@ describe("Open Locker through AccessService", () => {
 
   it("tells Open Locker nothing when access is provisioned, revoked or updated", async () => {
     const booking = createBooking();
-    stubBooking(booking);
+    await stubBooking(booking);
 
     await AccessService.provisionForBooking(TENANT, "booking-1");
-    await AccessService.revokeForBooking(TENANT, "booking-1");
     const moved = createBooking({
       timeBegin: booking.timeBegin + 60 * MINUTE,
       timeEnd: booking.timeEnd + 60 * MINUTE,
     });
     await AccessService.updateForBooking(TENANT, booking, moved);
+    await AccessService.revokeForBooking(TENANT, "booking-1");
 
     expect(client.requests).to.deep.equal([]);
   });
@@ -982,12 +1043,14 @@ describe("Open Locker through AccessService", () => {
   // The decision names a cancelled booking `rejected`; it is refused the
   // same way at every provider, and Open Locker is never asked.
   it("refuses to open a compartment of a cancelled booking, without asking Open Locker", async () => {
-    stubBooking(createBooking({ status: "cancelled" }));
+    const booking = createBooking();
+    await stubBooking(booking);
+    booking.status = "cancelled";
 
     const outcome = await AccessService.open(
       TENANT,
       "booking-1",
-      COMPARTMENT.id,
+      fachId(),
       "user-1",
     );
 
@@ -1002,11 +1065,11 @@ describe("Open Locker through AccessService", () => {
       timeBegin: now + 120 * MINUTE,
       timeEnd: now + 180 * MINUTE,
     });
-    stubBooking(booking);
+    await stubBooking(booking);
     const early = await AccessService.open(
       TENANT,
       "booking-1",
-      COMPARTMENT.id,
+      fachId(),
       "user-1",
     );
     booking.timeBegin = now - 5 * MINUTE;
@@ -1015,7 +1078,7 @@ describe("Open Locker through AccessService", () => {
     const moved = await AccessService.open(
       TENANT,
       "booking-1",
-      COMPARTMENT.id,
+      fachId(),
       "user-1",
     );
 
@@ -1028,7 +1091,7 @@ describe("Open Locker through AccessService", () => {
 
   it("refuses to open in the old window after a rebooking to later, without asking Open Locker", async () => {
     const now = Date.now();
-    stubBooking(
+    await stubBooking(
       createBooking({
         timeBegin: now + 120 * MINUTE,
         timeEnd: now + 180 * MINUTE,
@@ -1038,7 +1101,7 @@ describe("Open Locker through AccessService", () => {
     const early = await AccessService.open(
       TENANT,
       "booking-1",
-      COMPARTMENT.id,
+      fachId(),
       "user-1",
     );
 
