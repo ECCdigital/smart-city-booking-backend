@@ -7,6 +7,8 @@ const { ForbiddenError, NotFoundError } = require("../../../errors/BaseError");
 
 /** The request field every refusal of the assignment names. */
 const BOOKABLE_IDS_FIELD = "bookableIds";
+/** The request field every refusal of the amount names. */
+const AMOUNT_FIELD = "amount";
 
 /** The access point ids a bookable links, as strings. */
 function linksOf(bookable) {
@@ -32,6 +34,32 @@ function requestedIds(bookableIds) {
 }
 
 /**
+ * Checks the amount a request body names for the bookable, if any: it goes
+ * to the one bookable of a locker system with its own compartments alone,
+ * so it can never reach the wrong one (tickets#1167).
+ *
+ * @throws {ValidationError} `invalid_amount` unless it is left out or a
+ *   whole number from 1: 0 and empty both mean unlimited, which the
+ *   assignment never sets; then `amount_needs_one_locker_bookable` unless
+ *   the access point carries its own compartments and exactly one bookable
+ *   is listed
+ */
+function checkAmount(amount, accessPoint, wanted) {
+  if (amount === undefined) {
+    return;
+  }
+  const refuse = (code) => {
+    throw new ValidationError([{ field: AMOUNT_FIELD, code, params: {} }]);
+  };
+  if (!(Number.isInteger(amount) && amount >= 1)) {
+    refuse("invalid_amount");
+  }
+  if (!(carriesOwnCompartments(accessPoint) && wanted.length === 1)) {
+    refuse("amount_needs_one_locker_bookable");
+  }
+}
+
+/**
  * Sets the bookables of an access point (glossary "Zuordnung") from the
  * access points page (tickets#1110): the access point's id is added to
  * `accessPointDetails.accessPointIds` of every listed bookable that lacks
@@ -46,17 +74,32 @@ function requestedIds(bookableIds) {
  * is not asked about. A locker system with its own compartments hangs at
  * one bookable at most (tickets#1038).
  *
+ * With `amount`, the same call writes the amount of that one bookable of a
+ * locker system with its own compartments (tickets#1167). A bookable whose
+ * amount changes counts as changed, so it needs `bookable.update` within
+ * reach even where it carries the access point already. Without `amount`
+ * nothing of this applies.
+ *
  * @param {string} tenantId
  * @param {string} accessPointId
- * @param {string[]} bookableIds The bookables that shall carry the access point
+ * @param {{bookableIds: string[], amount?: number}} request The bookables
+ *   that shall carry the access point and the amount of the one bookable,
+ *   left out to leave it alone
  * @param {{reach: string, userId?: string|null}} scope The reach of the request
- * @returns {Promise<{accessPointId: string, bookableIds: string[]}>}
+ * @returns {Promise<{accessPointId: string, bookableIds: string[], amount?: number}>}
+ *   `amount` only when the request names one: the amount stored now
  * @throws {NotFoundError} `access_point_not_found`
- * @throws {ValidationError} `invalid_bookable_ids`, `unknown_bookable`,
+ * @throws {ValidationError} `invalid_bookable_ids`, `invalid_amount`,
+ *   `amount_needs_one_locker_bookable`, `unknown_bookable`,
  *   `locker_system_one_bookable`
  * @throws {ForbiddenError} when a bookable that changes is out of reach
  */
-async function assignBookables(tenantId, accessPointId, bookableIds, scope) {
+async function assignBookables(
+  tenantId,
+  accessPointId,
+  { bookableIds, amount },
+  scope,
+) {
   const wanted = requestedIds(bookableIds);
 
   const accessPoint = await AccessPointManager.getAccessPoint(
@@ -67,6 +110,8 @@ async function assignBookables(tenantId, accessPointId, bookableIds, scope) {
     throw new NotFoundError("access_point_not_found", { accessPointId });
   }
   const linkId = String(accessPoint.id);
+
+  checkAmount(amount, accessPoint, wanted);
 
   // The assignment is read whole, by the domain: the bookables listed and
   // every one that carries the access point, out of reach too. A scoped
@@ -110,7 +155,12 @@ async function assignBookables(tenantId, accessPointId, bookableIds, scope) {
     (bookable) => !linksOf(bookable).includes(linkId),
   );
   const toRemove = holders.filter((bookable) => !known.has(bookable.id));
-  const changing = [...toAdd, ...toRemove];
+  // A bookable whose amount changes counts as changed, whether or not it
+  // carries the access point already (tickets#1167).
+  const amountChanging = listed.filter(
+    (bookable) => amount !== undefined && bookable.amount !== amount,
+  );
+  const changing = [...new Set([...toAdd, ...toRemove, ...amountChanging])];
 
   // The read `PUT bookables` makes of the bookable it changes, under the
   // reach of the request. A bookable that changes but lies out of reach is
@@ -125,21 +175,30 @@ async function assignBookables(tenantId, accessPointId, bookableIds, scope) {
     }
   }
 
-  for (const bookable of toAdd) {
+  for (const bookable of listed) {
+    const added = toAdd.includes(bookable);
+    if (!added && !amountChanging.includes(bookable)) {
+      continue;
+    }
     const links = linksOf(bookable);
-    await BookableManager.storeAccessPointLinks(tenantId, bookable.id, {
-      accessPointIds: [...links, linkId],
-      active: links.length === 0 ? true : !!bookable.accessPointDetails?.active,
+    await BookableManager.storeAssignment(tenantId, bookable.id, {
+      accessPointIds: added ? [...links, linkId] : links,
+      active:
+        added && links.length === 0
+          ? true
+          : !!bookable.accessPointDetails?.active,
+      amount,
     });
   }
   for (const bookable of toRemove) {
-    await BookableManager.storeAccessPointLinks(tenantId, bookable.id, {
+    await BookableManager.storeAssignment(tenantId, bookable.id, {
       accessPointIds: linksOf(bookable).filter((id) => id !== linkId),
       active: !!bookable.accessPointDetails?.active,
     });
   }
 
-  return { accessPointId: linkId, bookableIds: wanted };
+  // `amount` left out stays undefined and so out of the answer.
+  return { accessPointId: linkId, bookableIds: wanted, amount };
 }
 
 module.exports = { assignBookables };

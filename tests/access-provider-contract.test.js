@@ -195,18 +195,20 @@ const IMPLEMENTATIONS = [
     },
   },
   {
-    // Open Locker declares no grant and no revoke either: a compartment is
-    // a door opened remotely, and Biletado alone decides who may open it.
+    // Open Locker declares no grant and no revoke either: the assigned Fach
+    // of a Schließfachanlage is opened remotely, and Biletado alone decides
+    // who may open it. The service hands it over as the Anlage's row, the
+    // Fach's UUID as `externalId`.
     name: "open-locker",
     Provider: OpenLockerAccessProvider,
     secretBearing: false,
     accessPoint: {
-      id: "compartment-1",
+      id: `anlage-1:${OPEN_LOCKER_COMPARTMENT_ID}`,
       tenantId: TENANT,
-      type: "door",
+      type: "locker",
       provider: "open-locker",
       externalId: OPEN_LOCKER_COMPARTMENT_ID,
-      label: "Fach 1",
+      label: "Fächer Bahnhof",
       mode: AccessPointMode.REMOTE,
     },
     bookingContext: bookingContext(),

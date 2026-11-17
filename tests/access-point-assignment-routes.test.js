@@ -98,15 +98,23 @@ describe("assignment of an access point to bookables over HTTP", function () {
     // assignment, nothing else.
     restub(
       BookableManager,
-      "storeAccessPointLinks",
-      async (tenantId, id, { accessPointIds, active }) => {
-        writes.push([id, { accessPointIds, active }]);
+      "storeAssignment",
+      async (tenantId, id, { accessPointIds, active, amount }) => {
+        writes.push([
+          id,
+          amount === undefined
+            ? { accessPointIds, active }
+            : { accessPointIds, active, amount },
+        ]);
         const record = h.bookables[id];
         record.accessPointDetails = {
           ...record.accessPointDetails,
           accessPointIds: [...accessPointIds],
           active,
         };
+        if (amount !== undefined) {
+          record.amount = amount;
+        }
       },
     );
   });
@@ -322,6 +330,140 @@ describe("assignment of an access point to bookables over HTTP", function () {
     expect(res.status).to.equal(200);
     expect(details("saal").accessPointIds).to.deep.equal([ANLAGE]);
     expect(details("foyer").accessPointIds).to.deep.equal([]);
+  });
+
+  describe("with the amount (tickets#1167)", function () {
+    it("assigns as before without the amount and leaves the amount alone", async function () {
+      const res = await assign(ANLAGE, OWNER, { bookableIds: ["saal"] });
+
+      expect(res.status).to.equal(200);
+      expect(res.body).to.deep.equal({
+        accessPointId: ANLAGE,
+        bookableIds: ["saal"],
+      });
+      expect(h.bookables.saal.amount).to.equal(10);
+      expect(writes).to.deep.equal([
+        ["saal", { accessPointIds: [ANLAGE], active: true }],
+      ]);
+    });
+
+    it("writes the assignment and the amount in one call and answers the stored amount", async function () {
+      const res = await assign(ANLAGE, OWNER, {
+        bookableIds: ["saal"],
+        amount: 4,
+      });
+
+      expect(res.status).to.equal(200);
+      expect(res.body).to.deep.equal({
+        accessPointId: ANLAGE,
+        bookableIds: ["saal"],
+        amount: 4,
+      });
+      expect(details("saal").accessPointIds).to.deep.equal([ANLAGE]);
+      expect(h.bookables.saal.amount).to.equal(4);
+      expect(writes).to.deep.equal([
+        ["saal", { accessPointIds: [ANLAGE], active: true, amount: 4 }],
+      ]);
+    });
+
+    it("writes the amount alone at a bookable that already carries the locker system", async function () {
+      linked("saal", [ANLAGE], false);
+
+      const res = await assign(ANLAGE, OWNER, {
+        bookableIds: ["saal"],
+        amount: 3,
+      });
+
+      expect(res.status).to.equal(200);
+      expect(res.body.amount).to.equal(3);
+      expect(h.bookables.saal.amount).to.equal(3);
+      expect(details("saal")).to.include({ active: false });
+      expect(details("saal").accessPointIds).to.deep.equal([ANLAGE]);
+    });
+
+    it("writes nothing when the amount is the stored one", async function () {
+      linked("saal", [ANLAGE]);
+      h.bookables.saal.amount = 2;
+
+      const res = await assign(ANLAGE, OWNER, {
+        bookableIds: ["saal"],
+        amount: 2,
+      });
+
+      expect(res.status).to.equal(200);
+      expect(res.body.amount).to.equal(2);
+      expect(writes).to.deep.equal([]);
+    });
+
+    it("refuses a new amount without bookable.update at a bookable that already carries the locker system, and writes nothing", async function () {
+      linked("foyer", [ANLAGE]);
+
+      const res = await assign(ANLAGE, READ_OWN_HOLDER, {
+        bookableIds: ["foyer"],
+        amount: 3,
+      });
+
+      expect(res.status).to.equal(403);
+      expect(res.body).to.deep.equal(FORBIDDEN);
+      expect(writes).to.deep.equal([]);
+      expect(h.bookables.foyer.amount).to.equal(10);
+    });
+
+    it("does not ask about a bookable out of reach whose amount stays", async function () {
+      linked("foyer", [ANLAGE]);
+
+      const res = await assign(ANLAGE, READ_OWN_HOLDER, {
+        bookableIds: ["foyer"],
+        amount: 10,
+      });
+
+      expect(res.status).to.equal(200);
+      expect(res.body).to.deep.equal({
+        accessPointId: ANLAGE,
+        bookableIds: ["foyer"],
+        amount: 10,
+      });
+      expect(writes).to.deep.equal([]);
+    });
+
+    const NEEDS_ONE_LOCKER_BOOKABLE = [
+      { field: "amount", code: "amount_needs_one_locker_bookable", params: {} },
+    ];
+
+    it("refuses the amount for two bookables, for none and at a door, and writes nothing", async function () {
+      for (const [accessPointId, bookableIds] of [
+        [ANLAGE, ["saal", "foyer"]],
+        [ANLAGE, []],
+        [DOOR, ["saal"]],
+      ]) {
+        const res = await assign(accessPointId, OWNER, {
+          bookableIds,
+          amount: 2,
+        });
+
+        expect(res.status).to.equal(400);
+        expect(res.body.details).to.deep.equal(NEEDS_ONE_LOCKER_BOOKABLE);
+      }
+      expect(writes).to.deep.equal([]);
+      expect(h.bookables.saal.amount).to.equal(10);
+    });
+
+    it("refuses an amount that is no whole number from 1, 0 and empty included, and writes nothing", async function () {
+      // 0 and empty both mean unlimited, which this way never sets.
+      for (const amount of [0, null, "", -1, 2.5, "3", true]) {
+        const res = await assign(ANLAGE, OWNER, {
+          bookableIds: ["saal"],
+          amount,
+        });
+
+        expect(res.status, JSON.stringify(amount)).to.equal(400);
+        expect(res.body.details).to.deep.equal([
+          { field: "amount", code: "invalid_amount", params: {} },
+        ]);
+      }
+      expect(writes).to.deep.equal([]);
+      expect(h.bookables.saal.amount).to.equal(10);
+    });
   });
 
   it("writes nothing when the list is the stored assignment", async function () {

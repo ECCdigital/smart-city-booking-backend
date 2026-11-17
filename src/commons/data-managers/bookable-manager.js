@@ -405,16 +405,23 @@ class BookableManager {
 
   /**
    * Store the assignment of a bookable to its access points: the list of
-   * `accessPointDetails.accessPointIds` and the switch
-   * `accessPointDetails.active`, nothing else of the bookable. Written
-   * through the document, so the iFBS entry of `externalProviders` follows
-   * the locker system as on a whole-bookable write.
+   * `accessPointDetails.accessPointIds`, the switch
+   * `accessPointDetails.active` and, where given, the `amount` that goes
+   * with a locker system (tickets#1167), nothing else of the bookable.
+   * Written through the document in one save, so the iFBS entry of
+   * `externalProviders` follows the locker system as on a whole-bookable
+   * write.
    * @param {string} tenantId Tenant ID
    * @param {string} id Bookable ID
-   * @param {{accessPointIds: string[], active: boolean}} links
+   * @param {{accessPointIds: string[], active: boolean, amount?: number}} assignment
+   *   `amount` left out keeps the stored one
    * @returns {Promise<void>}
    */
-  static async storeAccessPointLinks(tenantId, id, { accessPointIds, active }) {
+  static async storeAssignment(
+    tenantId,
+    id,
+    { accessPointIds, active, amount },
+  ) {
     const doc = await BookableModel.findOne({ tenantId: tenantId, id: id });
     if (!doc) {
       return;
@@ -425,6 +432,9 @@ class BookableManager {
       active: active,
     };
     doc.markModified("accessPointDetails");
+    if (amount !== undefined) {
+      doc.amount = amount;
+    }
     await doc.save({ validateModifiedOnly: true });
   }
 

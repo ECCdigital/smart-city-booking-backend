@@ -50,11 +50,11 @@ describe("locker system compartments", () => {
         carries: false,
       },
       {
-        name: "a fixed Open Locker Fach",
+        name: "a door, whatever its config says",
         accessPoint: {
           type: "door",
-          provider: "open-locker",
-          externalId: COMPARTMENT.id,
+          provider: "nuki",
+          externalId: "lock-1",
           config: { compartments: [COMPARTMENT] },
         },
         carries: false,

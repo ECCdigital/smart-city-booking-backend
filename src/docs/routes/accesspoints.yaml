@@ -44,9 +44,8 @@
       to their default, and `provider` has to be part of the body.
       `validationRules` therefore distinguishes an omitted field from an
       explicitly empty list: omitting it on create requires a QR scan -
-      except at a provider whose doors open from the list, `open-locker`,
-      where it requires none -, submitting `[]` means no evidence is
-      required.
+      except at `open-locker`, where it requires none -, submitting `[]`
+      means no evidence is required.
 
       A validation rule may require other fields of the access point (a geo
       rule would need `location`). Those preconditions are checked against the
@@ -79,16 +78,12 @@
       as sent rather than normalised away, and an access point the provider
       does not list is not restricted.
 
-      An Open Locker compartment (`open-locker`) is checked against the same
-      listing, which names only the compartments the tenant's technical
-      account holds a permission on: a compartment it does not name is
-      answered with a `compartment_not_accessible` validation error at
-      `externalId`, carrying the `externalId`. So no compartment is stored
-      that the account cannot open - also when an existing one is saved
-      again after Open Locker took the permission away. A compartment
-      without `externalId` is refused with a `required` validation error at
-      `externalId`, without asking Open Locker, so also while the listing is
-      not available.
+      Open Locker (`open-locker`) knows only the locker system, one with a
+      single compartment included: an access point of any other type - a
+      `door` - is refused with an `open_locker_locker_only` validation error
+      at `type`, on a create and on an update, without asking Open Locker,
+      so also while the listing is not available. A `door` of Nuki or
+      Salto KS is stored as before.
 
       An Open Locker locker system (`type: locker`, mode `remote`) carries
       its own compartments in `config.compartments` and needs no
@@ -101,13 +96,10 @@
       `config.compartments.<i>`, carrying `compartmentId`. While the tenant's
       Open Locker application is not active the compartments are stored as
       the request names them. One compartment stands in at most one locker
-      system and is then no fixed compartment, across all access points of
-      the tenant: a compartment another locker system holds is refused with
-      `compartment_in_locker_system`, a fixed compartment with
-      `compartment_is_fixed`, both at `config.compartments.<i>` with
-      `compartmentId` and the holder's `accessPointId` and `label`; a fixed
-      compartment a locker system holds is refused with
-      `compartment_in_locker_system` at `externalId`. A compartment named
+      system across all access points of the tenant: a compartment another
+      locker system holds is refused with `compartment_in_locker_system` at
+      `config.compartments.<i>`, with `compartmentId` and the holder's
+      `accessPointId` and `label`. A compartment named
       twice is refused with `duplicate_compartment`, a list on the locker of
       a provider that assigns the compartment itself with
       `unsupported_by_provider` at `config.compartments`.
@@ -144,7 +136,8 @@
 
       The provider's listing is fetched once per save. While the tenant has no
       active application for the provider, there is no listing: the access
-      point is stored unchecked - an Open Locker compartment too -, and the
+      point is stored unchecked - the compartments of an Open Locker locker
+      system as the request names them -, and the
       checks that need the listing run on the first save once the provider
       is active. A provider that cannot be asked is answered as such and nothing
       is stored: an HTTP 401 or 403
@@ -868,6 +861,16 @@
       not asked about, so a list that keeps a bookable out of reach goes
       through. A locker system with its own compartments (Open Locker) hangs
       at one bookable at most.
+
+      With `amount`, the same call also writes the bookable's `amount`, so
+      the administration can match it to the compartments in service of the
+      locker system. Allowed only at a locker system with its own
+      compartments and with exactly one bookable in `bookableIds`, and only
+      a whole number from 1 - 0 and empty both mean unlimited, which this
+      way never sets. A bookable whose amount changes counts as changed: it
+      needs `update` on `manageBookables` within reach, also when it carries
+      the access point already. Without `amount` the assignment works as
+      described above and leaves every amount alone.
     security:
       - bearerAuth: []
     parameters:
@@ -895,6 +898,15 @@
                 items:
                   type: string
                 example: [b-saal, b-foyer]
+              amount:
+                type: integer
+                minimum: 1
+                description: |
+                  Optional. The amount of the one bookable in `bookableIds`,
+                  written with the assignment; only at a locker system with
+                  its own compartments. Left out, every amount stays as
+                  stored
+                example: 4
     responses:
       "200":
         description: The access point and the bookables that carry it now
@@ -911,9 +923,20 @@
                   items:
                     type: string
                   example: [b-saal, b-foyer]
+                amount:
+                  type: integer
+                  description: |
+                    Only when the request names `amount`: the amount the
+                    bookable has stored now
+                  example: 4
       "400":
         description: |
           `invalid_bookable_ids` - `bookableIds` is no list of ids.
+          `invalid_amount` - `amount` is given but no whole number from 1
+          (0, `null` and `""` included). `amount_needs_one_locker_bookable`
+          - `amount` is given, but the access point is no locker system with
+          its own compartments (a door, a locker system of iFBS or Pareva) or
+          `bookableIds` does not name exactly one bookable.
           `unknown_bookable` - the tenant has no bookable of that id
           (`params.bookableId`). `locker_system_one_bookable` - a locker
           system with its own compartments is to hang at more than one
@@ -928,7 +951,8 @@
       "403":
         description: |
           No `update` on `manageBookables`, or a bookable that would change
-          lies out of the user's reach; nothing is stored. The one JSON form
+          - its assignment or its amount - lies out of the user's reach;
+          nothing is stored. The one JSON form
           of the central error handler (`ForbiddenError`, code `forbidden`).
       "404":
         description: |
@@ -1053,7 +1077,8 @@ components:
             `providerLocationId` the iFBS location or the Pareva locker
             system. An Open Locker locker system instead carries its own
             compartments (`config.compartments`) and the platform assigns
-            them. Capacity is the bookable's `amount`, never the row's.
+            them; Open Locker knows no `door`. Capacity is the bookable's
+            `amount`, never the row's.
           example: door
         provider:
           type: string
@@ -1118,6 +1143,9 @@ components:
         type:
           type: string
           enum: [door, locker]
+          description: |
+            `locker` alone at `open-locker`: a `door` there is refused with
+            `open_locker_locker_only` at `type`.
         provider:
           type: string
         externalId:
