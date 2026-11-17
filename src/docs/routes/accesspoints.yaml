@@ -861,6 +861,16 @@
       not asked about, so a list that keeps a bookable out of reach goes
       through. A locker system with its own compartments (Open Locker) hangs
       at one bookable at most.
+
+      With `amount`, the same call also writes the bookable's `amount`, so
+      the administration can match it to the compartments in service of the
+      locker system. Allowed only at a locker system with its own
+      compartments and with exactly one bookable in `bookableIds`, and only
+      a whole number from 1 - 0 and empty both mean unlimited, which this
+      way never sets. A bookable whose amount changes counts as changed: it
+      needs `update` on `manageBookables` within reach, also when it carries
+      the access point already. Without `amount` the assignment works as
+      described above and leaves every amount alone.
     security:
       - bearerAuth: []
     parameters:
@@ -888,6 +898,15 @@
                 items:
                   type: string
                 example: [b-saal, b-foyer]
+              amount:
+                type: integer
+                minimum: 1
+                description: |
+                  Optional. The amount of the one bookable in `bookableIds`,
+                  written with the assignment; only at a locker system with
+                  its own compartments. Left out, every amount stays as
+                  stored
+                example: 4
     responses:
       "200":
         description: The access point and the bookables that carry it now
@@ -904,9 +923,20 @@
                   items:
                     type: string
                   example: [b-saal, b-foyer]
+                amount:
+                  type: integer
+                  description: |
+                    Only when the request names `amount`: the amount the
+                    bookable has stored now
+                  example: 4
       "400":
         description: |
           `invalid_bookable_ids` - `bookableIds` is no list of ids.
+          `invalid_amount` - `amount` is given but no whole number from 1
+          (0, `null` and `""` included). `amount_needs_one_locker_bookable`
+          - `amount` is given, but the access point is no locker system with
+          its own compartments (a door, a locker system of iFBS or Pareva) or
+          `bookableIds` does not name exactly one bookable.
           `unknown_bookable` - the tenant has no bookable of that id
           (`params.bookableId`). `locker_system_one_bookable` - a locker
           system with its own compartments is to hang at more than one
@@ -921,7 +951,8 @@
       "403":
         description: |
           No `update` on `manageBookables`, or a bookable that would change
-          lies out of the user's reach; nothing is stored. The one JSON form
+          - its assignment or its amount - lies out of the user's reach;
+          nothing is stored. The one JSON form
           of the central error handler (`ForbiddenError`, code `forbidden`).
       "404":
         description: |
