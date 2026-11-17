@@ -331,6 +331,7 @@ class AccessPointController {
         tenantId,
         request.params.id,
         request.body?.bookableIds,
+        request.body?.amount,
         scopeOf(request),
       );
       logger.info(
