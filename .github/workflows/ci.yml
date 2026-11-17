@@ -99,15 +99,103 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
 
+  # Gate "protected files" (ECCdigital/tickets#425): a pull request must not
+  # weaken tests or change accepted ADRs or the CI configuration unless its
+  # ticket names the file; new tests are free. The rule lives in the private
+  # ECCdigital/portolan, whose reusable workflow a public repo cannot call, so
+  # this job checks portolan out with a read-only token of the GitHub App
+  # "Portolan Gate" and runs the rule from there. The ticket comes from the
+  # pull request's `Refs ECCdigital/tickets#<n>`. Pull requests from forks get
+  # no secrets, so the gate stays red there until an admin bypasses it.
+  # On push the job passes without checking, so `ci-ok` stays green.
+  # Rule and setup: docs/betrieb.md in ECCdigital/portolan.
+  protected-files:
+    name: protected files
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      # A full commit of portolan, not a tag: a moved tag must not change what
+      # runs here with the app's key. Raise it on purpose, in its own PR.
+      PORTOLAN_REF: 46bfbaa8444c0c0a380eb1a6396674361557a58d
+    steps:
+      - name: Pull requests only
+        if: github.event_name != 'pull_request'
+        run: echo "The gate checks pull requests only, nothing to do on ${{ github.event_name }}."
+
+      - name: Check the app's secrets
+        if: github.event_name == 'pull_request'
+        env:
+          APP_ID: ${{ secrets.GATE_APP_ID }}
+          APP_KEY: ${{ secrets.GATE_PRIVATE_KEY }}
+        run: |
+          if [ -z "$APP_ID" ] || [ -z "$APP_KEY" ]; then
+            echo "::error title=Protected files::The secrets GATE_APP_ID and GATE_PRIVATE_KEY are missing. Pull requests from forks do not get them; an admin bypasses the gate there."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Pinned to a commit: this action handles the app's private key.
+      - id: token
+        if: github.event_name == 'pull_request'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.GATE_APP_ID }}
+          private-key: ${{ secrets.GATE_PRIVATE_KEY }}
+          owner: ECCdigital
+          repositories: portolan,tickets
+          permission-contents: read
+          permission-issues: read
+
+      - uses: actions/checkout@v4
+        if: github.event_name == 'pull_request'
+        with:
+          repository: ECCdigital/portolan
+          ref: ${{ env.PORTOLAN_REF }}
+          token: ${{ steps.token.outputs.token }}
+          path: .portolan
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        if: github.event_name == 'pull_request'
+        with:
+          node-version: 24.x
+
+      - id: diff
+        name: Check the diff
+        if: github.event_name == 'pull_request'
+        env:
+          BASIS: ${{ github.event.pull_request.base.sha }}
+          KOPF: ${{ github.event.pull_request.head.sha }}
+        run: node .portolan/gates/geschuetzte-dateien-ci.mjs diff
+
+      - name: Check against the ticket
+        if: steps.diff.outputs.ticket_noetig == 'true'
+        env:
+          BASIS: ${{ github.event.pull_request.base.sha }}
+          KOPF: ${{ github.event.pull_request.head.sha }}
+          PR_NUMMER: ${{ github.event.pull_request.number }}
+          ANFORDERUNGS_REPO: ECCdigital/tickets
+          GITHUB_TOKEN: ${{ github.token }}
+          TICKET_TOKEN: ${{ steps.token.outputs.token }}
+        run: node .portolan/gates/geschuetzte-dateien-ci.mjs ticket
+
   ci-ok:
     if: ${{ always() }}
-    needs: [lint, test, build, security]
+    needs: [lint, test, build, security, protected-files]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Fail unless every gate passed
         if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
         run: |
-          echo "lint=${{ needs.lint.result }} test=${{ needs.test.result }} build=${{ needs.build.result }} security=${{ needs.security.result }}"
+          echo "lint=${{ needs.lint.result }} test=${{ needs.test.result }} build=${{ needs.build.result }} security=${{ needs.security.result }} protected-files=${{ needs.protected-files.result }}"
           exit 1
       - run: echo "All gates passed"
