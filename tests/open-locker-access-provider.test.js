@@ -36,7 +36,6 @@ const {
   AccessPointMode,
 } = require("../src/commons/entities/access/access-point");
 const { AccessOpenError } = require("../src/errors/AccessOpenError");
-const { ValidationError } = require("../src/errors/ValidationError");
 const {
   FakeOpenLockerApiClient,
   brokenOpenLockerApiClient,
@@ -112,14 +111,13 @@ describe("Open Locker access provider", () => {
       ).to.be.instanceOf(OpenLockerAccessApplication);
     });
 
-    it("declares open, getOpenProgress, listAccessPoints and both save checks, and neither grant, revoke nor hold", () => {
+    it("declares open, getOpenProgress, listAccessPoints and the save check before the listing, and neither grant, revoke nor hold", () => {
       const capabilities = getAccessProviderCapabilities("open-locker");
 
       expect(capabilities).to.include.members([
         "open",
         "getOpenProgress",
         "listAccessPoints",
-        "validateAccessPoint",
         "validateAccessPointWithoutListing",
       ]);
       for (const capability of [
@@ -634,62 +632,6 @@ describe("Open Locker access provider", () => {
 
       expect(points).to.have.length(2);
       expect(client.logins).to.have.length(2);
-    });
-  });
-
-  describe("validateAccessPointWithoutListing", () => {
-    it("refuses a compartment without a UUID", () => {
-      for (const externalId of [undefined, null, ""]) {
-        expect(() =>
-          provider.validateAccessPointWithoutListing({
-            ...COMPARTMENT,
-            externalId,
-          }),
-        )
-          .to.throw(ValidationError)
-          .with.property("errors")
-          .that.deep.equals([{ field: "externalId", code: "required" }]);
-      }
-    });
-
-    it("lets a compartment with its UUID through to the listing", () => {
-      expect(() =>
-        provider.validateAccessPointWithoutListing(COMPARTMENT),
-      ).not.to.throw();
-    });
-  });
-
-  describe("validateAccessPoint", () => {
-    it("lets a compartment through that the listing names", async () => {
-      const points = await provider.listAccessPoints(TENANT);
-      const listed = points.find((p) => p.externalId === COMPARTMENT_ID);
-
-      expect(() =>
-        provider.validateAccessPoint(COMPARTMENT, listed, { asked: true }),
-      ).not.to.throw();
-    });
-
-    it("refuses a compartment the technical account holds no permission on", () => {
-      const neighbours = { ...COMPARTMENT, externalId: OTHER_COMPARTMENT_ID };
-
-      expect(() =>
-        provider.validateAccessPoint(neighbours, null, { asked: true }),
-      )
-        .to.throw(ValidationError)
-        .with.property("errors")
-        .that.deep.equals([
-          {
-            field: "externalId",
-            code: "compartment_not_accessible",
-            params: { externalId: OTHER_COMPARTMENT_ID },
-          },
-        ]);
-    });
-
-    it("lets a compartment through when Open Locker could not be asked - the tenant has not switched it on (tickets#311)", () => {
-      expect(() =>
-        provider.validateAccessPoint(COMPARTMENT, null, { asked: false }),
-      ).not.to.throw();
     });
   });
 

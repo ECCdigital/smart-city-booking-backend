@@ -148,18 +148,15 @@ function withScanCodes(compartments, storedCompartments = []) {
 }
 
 /**
- * Refuses a Fach that another access point of the tenant already holds: one
- * Fach stands in at most one Anlage, and a Fach in an Anlage is no fixed
- * Fach (a `door` of the same provider with the Fach's UUID as `externalId`).
- * Checked on saving an Anlage, at each of its Fächer, and on saving a fixed
- * Fach, at its `externalId`.
+ * Refuses a Fach that another Anlage of the tenant already holds: one Fach
+ * stands in at most one Anlage. Checked on saving an Anlage, at each of its
+ * Fächer; an access point without its own list holds no Fach.
  *
  * @param {Object} accessPoint The access point as it would be stored
  * @param {Object[]} tenantAccessPoints Every access point of the tenant; the
  *   one being saved (same `id`) is skipped
- * @throws {ValidationError} `compartment_in_locker_system` or
- *   `compartment_is_fixed`, naming the Fach and the access point that holds
- *   it
+ * @throws {ValidationError} `compartment_in_locker_system`, naming the Fach
+ *   and the Anlage that holds it
  */
 function assertCompartmentsUnclaimed(accessPoint, tenantAccessPoints) {
   const others = tenantAccessPoints.filter(
@@ -168,54 +165,28 @@ function assertCompartmentsUnclaimed(accessPoint, tenantAccessPoints) {
   );
   const errors = [];
 
-  if (carriesOwnCompartments(accessPoint)) {
-    accessPoint.config.compartments.forEach((compartment, index) => {
-      const claim = claimOf(compartment.id, others);
-      if (claim) {
-        errors.push(refusal(`${FIELD}.${index}`, compartment.id, claim));
-      }
-    });
-  } else if (
-    accessPoint.type === AccessPointType.DOOR &&
-    accessPoint.externalId
-  ) {
-    const compartmentId = String(accessPoint.externalId);
-    const claim = claimOf(compartmentId, others, { fixed: false });
-    if (claim) {
-      errors.push(refusal("externalId", compartmentId, claim));
+  compartmentsOf(accessPoint).forEach((compartment, index) => {
+    const holder = others.find((other) =>
+      compartmentsOf(other).some((c) => c.id === compartment.id),
+    );
+    if (holder) {
+      errors.push(refusal(`${FIELD}.${index}`, compartment.id, holder));
     }
-  }
+  });
 
   if (errors.length > 0) {
     throw new ValidationError(errors);
   }
 }
 
-/** The other access point that holds the Fach, and how. */
-function claimOf(compartmentId, others, { fixed = true } = {}) {
-  for (const other of others) {
-    if (compartmentsOf(other).some((c) => c.id === compartmentId)) {
-      return { code: "compartment_in_locker_system", accessPoint: other };
-    }
-    if (
-      fixed &&
-      other.type === AccessPointType.DOOR &&
-      String(other.externalId) === compartmentId
-    ) {
-      return { code: "compartment_is_fixed", accessPoint: other };
-    }
-  }
-  return null;
-}
-
-function refusal(field, compartmentId, claim) {
+function refusal(field, compartmentId, holder) {
   return {
     field,
-    code: claim.code,
+    code: "compartment_in_locker_system",
     params: {
       compartmentId,
-      accessPointId: claim.accessPoint.id,
-      label: claim.accessPoint.label || "",
+      accessPointId: holder.id,
+      label: holder.label || "",
     },
   };
 }
