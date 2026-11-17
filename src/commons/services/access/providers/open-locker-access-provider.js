@@ -52,11 +52,10 @@ const STATES_FAILED = {
 };
 
 /**
- * Open Locker compartments, in mode `remote`: a fixed compartment is a door,
- * its `externalId` the UUID of the compartment, bound to one bookable; a
- * locker system is a `locker` that carries its own compartments, picked
- * from the listing (`resolveCompartments`), and the platform assigns them.
- * The
+ * Open Locker compartments, in mode `remote`: the only access point is the
+ * locker system, a `locker` that carries its own compartments, picked from
+ * the listing (`resolveCompartments`), and the platform assigns them - one
+ * with a single compartment included (tickets#1162). The
  * tenant's technical account (role `user`) holds a standing permission on
  * the tenant's compartments; whether a booking may open one right now is
  * Biletado's decision alone, so Open Locker learns of no booking, and a
@@ -93,20 +92,34 @@ class OpenLockerAccessProvider extends AccessProvider {
   }
 
   /**
-   * Asks Open Locker to open the compartment. The answer is always
+   * Asks Open Locker to open the compartment the platform assigned at a
+   * locker system (`openCompartment` with its UUID). The answer is always
    * `pending`, with Open Locker's `command_id` as the process to poll - the
    * audit stores it with the open, so the end state can be looked up in
-   * Open Locker.
+   * Open Locker. Anything else - a door stored before tickets#1162, a
+   * locker system without an assigned compartment - opens nothing.
    *
-   * @param {Object} accessPoint The compartment, its `externalId` the UUID
+   * @param {Object} accessPoint The assigned compartment as the service
+   *   hands it: the locker system's row, its `externalId` the UUID of the
+   *   compartment
    * @param {Object} bookingContext The booking it is opened for
    * @returns {Promise<import("./access-provider").OpenOutcome>}
    * @throws {AccessOpenError} `configuration` for everything the tenant's
    *   setup is to blame for - no application, wrong credentials, a blocked
    *   account, a compartment the account may not open or Open Locker does
-   *   not know; `temporary` for the network, throttling and server errors
+   *   not know, an access point that is no compartment of a locker system;
+   *   `temporary` for the network, throttling and server errors
    */
   async open(accessPoint, bookingContext) {
+    if (
+      accessPoint.type !== AccessPointType.LOCKER ||
+      !accessPoint.externalId
+    ) {
+      throw AccessOpenError.configuration(
+        `Open Locker opens only the assigned compartment of a Schließfachanlage, not access point '${accessPoint.id}' of type '${accessPoint.type}'`,
+      );
+    }
+
     const client = await this._getClientForOpen(bookingContext.tenant);
     const compartmentId = String(accessPoint.externalId);
 

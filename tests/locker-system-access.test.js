@@ -82,17 +82,17 @@ const anlage = () => ({
   },
 });
 
-/** A fixed Fach of Open Locker: a door with the Fach's UUID. */
-const FIXED_FACH = {
-  id: "fixed-1",
+/** A door of another provider, beside the Anlage. */
+const TUER = {
+  id: "tuer-1",
   tenantId: TENANT,
   type: "door",
-  provider: "open-locker",
-  externalId: SECOND_COMPARTMENT_ID,
-  label: "Quartiersschrank Hafen · Fach 3",
+  provider: "nuki",
+  externalId: "nuki-lock-1",
+  label: "Haupteingang",
   mode: "remote",
   validationRules: [],
-  scanCode: "code-fixed-1",
+  scanCode: "code-tuer-1",
 };
 
 describe("Zugeteiltes Fach: provisioned, revoked, opened and projected", function () {
@@ -130,7 +130,7 @@ describe("Zugeteiltes Fach: provisioned, revoked, opened and projected", functio
       },
     );
     store = new Map();
-    accessPoints = [anlage(), FIXED_FACH];
+    accessPoints = [anlage(), TUER];
     bookables = {
       faecher: {
         id: "faecher",
@@ -138,11 +138,11 @@ describe("Zugeteiltes Fach: provisioned, revoked, opened and projected", functio
         amount: 2,
         accessPointDetails: { active: true, accessPointIds: ["anlage-1"] },
       },
-      fixed: {
-        id: "fixed",
-        title: "Festes Fach",
+      raum: {
+        id: "raum",
+        title: "Raum",
         amount: 1,
-        accessPointDetails: { active: true, accessPointIds: ["fixed-1"] },
+        accessPointDetails: { active: true, accessPointIds: ["tuer-1"] },
       },
     };
     installInMemoryLockerSystemHolds();
@@ -631,10 +631,10 @@ describe("Zugeteiltes Fach: provisioned, revoked, opened and projected", functio
     });
 
     it("keeps an unpaid booking at a door out of view, as before", async function () {
-      storeBooking("f1", "fixed", 1, { status: "payment_due", isPayed: false });
+      storeBooking("t1", "raum", 1, { status: "payment_due", isPayed: false });
 
       expect(
-        await AccessService.canView("user-1", TENANT, "f1", { reach: "own" }),
+        await AccessService.canView("user-1", TENANT, "t1", { reach: "own" }),
       ).to.equal(false);
     });
 
@@ -685,22 +685,45 @@ describe("Zugeteiltes Fach: provisioned, revoked, opened and projected", functio
       ).to.deep.equal([`anlage-1:${COMPARTMENT_ID}`]);
     });
 
-    it("keeps the fixed Fach a door with its label", async function () {
-      storeBooking("f1", "fixed");
-      await AccessService.provisionForBooking(TENANT, "f1");
+    it("names the Fach of an Anlage with a single Fach by Anlage, Schließfachschrank and number, like any Anlage", async function () {
+      accessPoints.push({
+        ...anlage(),
+        id: "schluessel-1",
+        label: "Schlüssel Raum 1",
+        scanCode: "code-schluessel-1",
+        config: {
+          compartments: [
+            {
+              id: OTHER_COMPARTMENT_ID,
+              number: 2,
+              lockerBank: LABOR,
+              outOfService: false,
+            },
+          ],
+        },
+      });
+      bookables.schluessel = {
+        id: "schluessel",
+        title: "Raum 1",
+        amount: 1,
+        accessPointDetails: { active: true, accessPointIds: ["schluessel-1"] },
+      };
+      storeBooking("s1", "schluessel");
+      await AccessService.holdForBooking(TENANT, "s1");
+      await AccessService.provisionForBooking(TENANT, "s1");
 
-      const points = await AccessService.getByBooking(TENANT, "f1", {
+      const points = await AccessService.getByBooking(TENANT, "s1", {
         userId: "user-1",
       });
 
       expect(points).to.have.length(1);
-      expect(points[0]).to.include({
-        id: "fixed-1",
-        type: "door",
-        label: "Quartiersschrank Hafen · Fach 3",
+      expect(points[0]).to.deep.include({
+        id: `schluessel-1:${OTHER_COMPARTMENT_ID}`,
+        type: "locker",
+        label: "Schlüssel Raum 1",
         isProvisioned: true,
+        assignedCompartment: { number: 2, lockerBankName: "Labor Fachbank 1" },
       });
-      expect(points[0]).to.not.have.property("assignedCompartment");
     });
   });
 
@@ -928,11 +951,10 @@ describe("Zugeteiltes Fach: provisioned, revoked, opened and projected", functio
     });
 
     it("answers 404 for an access point of the booking that is no zugeteiltes Fach", async function () {
-      storeBooking("f1", "fixed");
-      await AccessService.provisionForBooking(TENANT, "f1");
+      storeBooking("t1", "raum");
 
       await assert.rejects(
-        AccessService.freeCompartmentsToReassign(TENANT, "f1", "fixed-1", {
+        AccessService.freeCompartmentsToReassign(TENANT, "t1", "tuer-1", {
           scope: MANAGER,
         }),
         { statusCode: 404, code: "compartment_not_in_booking" },
@@ -1160,7 +1182,7 @@ describe("Zugeteiltes Fach: provisioned, revoked, opened and projected", functio
     });
 
     it("notes nothing without a booking in the Anlage", async function () {
-      storeBooking("f1", "fixed");
+      storeBooking("t1", "raum");
 
       await scan("code-fach-3");
 
