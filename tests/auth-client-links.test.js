@@ -35,6 +35,9 @@ const {
 } = require("./helpers/in-memory-rate-limit-events");
 const { installMailStackStore } = require("./helpers/mail-stack-fixtures");
 const {
+  installBlacklistCollection,
+} = require("./helpers/blacklist-collection");
+const {
   installInMemoryMailTransport,
 } = require("./helpers/in-memory-mail-transport");
 const {
@@ -56,6 +59,8 @@ const NEW = "neu@example.test";
 const RESET_SUBJECT = "Kennwort zurücksetzen";
 const VERIFICATION_SUBJECT = "Bestätigen Sie Ihre E-Mail-Adresse";
 const LINK_CARD_SUBJECT = "Karte mit Ihrem Account verknüpfen";
+const ACCOUNT_EXISTS_SUBJECT =
+  "Mit Ihrer E-Mail-Adresse besteht bereits ein Konto";
 
 const CARD_APP = "stadtkarte";
 const CARD = { publicId: "karte-1", secret: "geheim-1" };
@@ -84,8 +89,16 @@ describe("auth: mail links lead to the instance's own pages (ECCdigital/tickets#
       FRONTEND_URL: process.env.FRONTEND_URL,
       STORE_FRONT_URL: process.env.STORE_FRONT_URL,
       BACKEND_URL: process.env.BACKEND_URL,
+      RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_SHORT:
+        process.env.RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_SHORT,
     };
-    Object.assign(process.env, { FRONTEND_URL, STORE_FRONT_URL, BACKEND_URL });
+    Object.assign(process.env, {
+      FRONTEND_URL,
+      STORE_FRONT_URL,
+      BACKEND_URL,
+      // The tests ask for several reset mails of one account in a row.
+      RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_SHORT: "100",
+    });
   });
 
   after(function () {
@@ -98,6 +111,8 @@ describe("auth: mail links lead to the instance's own pages (ECCdigital/tickets#
   beforeEach(function () {
     installInMemoryRateLimitEvents();
     installMailStackStore();
+    // An empty blacklist: the signup asks it.
+    installBlacklistCollection();
     // The mail stack fixture answers `getUser` itself; the store below the
     // manager answers it here.
     UserManager.getUser.restore();
@@ -201,6 +216,45 @@ describe("auth: mail links lead to the instance's own pages (ECCdigital/tickets#
       }
       assert.strictEqual(own.status, 200);
     });
+  });
+
+  describe("POST /auth/signup with the address of a verified account (ECCdigital/tickets#600)", function () {
+    const signup = (forgotPasswordUrl) =>
+      request(app).post("/auth/signup").send({
+        id: OWNER,
+        password: "neu-1234",
+        firstName: "Neu",
+        lastName: "Nutzer",
+        forgotPasswordUrl,
+      });
+
+    it("links the own forgot password page, path and language prefix as named", async function () {
+      const page = `${STORE_FRONT_URL}/en/password/forgot`;
+      const res = await signup(page);
+      await whenIdle();
+
+      assert.strictEqual(res.status, 201);
+      const mail = lastMail(OWNER, ACCOUNT_EXISTS_SUBJECT);
+      assert.ok(mail.html.includes(`href="${inMail(page)}"`));
+    });
+
+    for (const [name, page] of [
+      ["a foreign host", ATTACKER],
+      ["no page", undefined],
+    ]) {
+      it(`links the Admin UI's page for ${name}`, async function () {
+        await signup(page);
+        await whenIdle();
+
+        const mail = lastMail(OWNER, ACCOUNT_EXISTS_SUBJECT);
+        assert.ok(
+          mail.html.includes(
+            `href="${inMail(`${FRONTEND_URL}/password/reset`)}"`,
+          ),
+        );
+        assert.ok(!mail.html.includes("angreifer"));
+      });
+    }
   });
 
   describe("POST /auth/signup and /auth/resend-verification", function () {

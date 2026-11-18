@@ -5,6 +5,7 @@ const { RoleManager } = require("../../data-managers/role-manager");
 const { User } = require("../../entities/user/user");
 const MembershipManager = require("../../data-managers/membership-manager");
 const KeycloakVerifier = require("../../utilities/keycloak-verifier");
+const BlacklistService = require("../blacklist/blacklist-service");
 
 const SSO_PROVIDER = "keycloak";
 
@@ -49,6 +50,8 @@ class SsoService {
     if (kcResponse.active === false) {
       throw { message: "User not active", status: 404 };
     }
+
+    await BlacklistService.assertMayRegister(kcResponse.email);
 
     try {
       await UserManager.resolveKeycloakUser(kcResponse, {

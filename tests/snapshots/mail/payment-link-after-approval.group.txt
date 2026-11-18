@@ -146,7 +146,7 @@ Attachments:
 </p>
 <p><strong>Artikel:</strong></p>
 <ul>
-    <li>Konzertkarte (x2)</li>
+    <li>Konzertkarte (x2)<br />Format: Präsenz</li>
 </ul>
 
   <a
@@ -185,6 +185,7 @@ Attachments:
   >
     Buchung abschließen
   </a>
+
 
       
         <hr />

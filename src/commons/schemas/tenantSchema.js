@@ -2,6 +2,7 @@ const { customFieldDefinitionSchema } = require("./customFieldDefinition");
 const { Schema } = require("mongoose");
 const {
   getCancellationRefundTiersError,
+  getRefundPercentageWithoutTimeSpanError,
 } = require("../utilities/cancellation-refund-tiers");
 const {
   LEGAL_DOCUMENT_TYPES,
@@ -39,6 +40,9 @@ const legalDocumentSchema = new Schema(
 const tenantSchemaDefinition = {
   id: { type: String, required: true, unique: true },
   name: { type: String, required: true },
+  // The short description the storefront shows next to the name: plain
+  // text, one language, at most 300 characters (checked by the controller).
+  description: { type: String, default: "" },
   contactName: { type: String, default: "" },
   location: { type: String, default: "" },
   mail: { type: String, default: "" },
@@ -77,10 +81,19 @@ const tenantSchemaDefinition = {
   cancellationCount: { type: Object, default: {} },
   cancellationTemplate: { type: String, default: "" },
   cancellationNumberPrefix: { type: String, default: "" },
+  withdrawalCount: { type: Object, default: {} },
+  withdrawalTemplate: { type: String, default: "" },
+  withdrawalNumberPrefix: { type: String, default: "" },
   cancellationRefundTiers: {
     type: [cancellationRefundTierSchema],
     default: [],
     validate: (tiers) => !getCancellationRefundTiersError(tiers),
+  },
+  cancellationRefundPercentageWithoutTimeSpan: {
+    type: Number,
+    default: 100,
+    validate: (percentage) =>
+      !getRefundPercentageWithoutTimeSpanError(percentage),
   },
   pdfBookingLayout: {
     type: String,
@@ -103,6 +116,7 @@ const tenantSchemaDefinition = {
   enablePublicStatusView: { type: Boolean, default: false },
   notifyOnNewBooking: { type: Boolean, default: true },
   notifySupervisorsOnBooking: { type: Boolean, default: false },
+  notifyOwnersOnInvitationAccepted: { type: Boolean, default: true },
   catalogParticipation: {
     type: Object,
     default: {

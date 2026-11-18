@@ -125,6 +125,17 @@ class Event {
     }));
   }
 
+  /**
+   * Whether the participation link (`eventLocation.url`) is for the bookers
+   * alone: with registration only they see it, in their booking; without,
+   * everyone does (ECCdigital/tickets#180).
+   *
+   * @returns {boolean}
+   */
+  get participationLinkIsForBookersOnly() {
+    return this.attendees?.needsRegistration === true;
+  }
+
   getStartDateTime() {
     const date = this.information?.startDate;
     if (!date) return null;

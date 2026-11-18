@@ -2,6 +2,7 @@ const assert = require("assert");
 const {
   computeCapacityIntervals,
   computeTicketParentCapacityIntervals,
+  computeWindowAvailability,
 } = require("../src/commons/services/availability/capacity-interval-calculator");
 const {
   intersectAvailability,
@@ -156,6 +157,54 @@ describe("capacity-interval-calculator", () => {
       { timeBegin: 0, timeEnd: 2000, available: true },
       { timeBegin: 2000, timeEnd: 3000, available: false },
       { timeBegin: 3000, timeEnd: 5000, available: true },
+    ]);
+  });
+
+  it("blocks the parent while a child is partly booked", () => {
+    const bookingsByBookableId = {
+      room: [],
+      "desk-1": [],
+      "desk-2": [
+        {
+          id: "b1",
+          isRejected: false,
+          timeBegin: 1000,
+          timeEnd: 2000,
+          bookableItems: [{ bookableId: "desk-2", amount: 1 }],
+        },
+      ],
+      "ticket-child": [
+        {
+          id: "b2",
+          isRejected: false,
+          timeBegin: 3000,
+          timeEnd: 4000,
+          bookableItems: [{ bookableId: "ticket-child", amount: 1 }],
+        },
+      ],
+    };
+    const context = {
+      parentBookables: [],
+      relatedBookables: [
+        { id: "desk-1" },
+        { id: "desk-2", amount: 4 },
+        { id: "ticket-child", type: "ticket", amount: 5 },
+      ],
+      getConcurrentBookings: (bookableId) => bookingsByBookableId[bookableId],
+    };
+
+    const intervals = computeWindowAvailability(
+      context,
+      { id: "room", amount: 1, isScheduleRelated: true },
+      0,
+      5000,
+      1,
+    );
+
+    assert.deepStrictEqual(intervals, [
+      { timeBegin: 0, timeEnd: 1000, available: true },
+      { timeBegin: 1000, timeEnd: 2000, available: false },
+      { timeBegin: 2000, timeEnd: 5000, available: true },
     ]);
   });
 });

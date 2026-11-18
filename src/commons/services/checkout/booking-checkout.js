@@ -22,7 +22,12 @@ const { GroupBooking } = require("../../entities/groupBooking/groupBooking");
 const { BundleCheckoutService } = require("./bundle-checkout-service");
 const checkoutPolicy = require("./checkout-policy");
 const { CheckoutPolicy } = checkoutPolicy;
+const { BookedVia, bookedViaOf } = require("./booked-via");
+const { isBusinessOf } = require("./business-booking");
 const { CustomFieldService } = require("../custom-field/custom-field-service");
+const BlacklistService = require("../blacklist/blacklist-service");
+const InstanceManager = require("../../data-managers/instance-manager");
+const { parseEmails } = require("../../utilities/mail-utils");
 const { CheckoutError } = require("../../../errors/CheckoutError");
 const { CHECKOUT_REASONS } = require("./checkout-reasons");
 const {
@@ -32,6 +37,7 @@ const {
   NotFoundError,
 } = require("../../../errors/BaseError");
 const {
+  primaryEmailFromMail,
   resolveCheckoutId,
   resolveCheckoutItems,
 } = require("../../utilities/checkout-utils");
@@ -191,6 +197,35 @@ async function assertSignedInWhereRequired({
 }
 
 /**
+ * A self-booking refuses an address on the blacklist (glossary
+ * „Blacklist“): each address of `mail` is asked
+ * for itself, and one hit refuses the whole booking - before anything is
+ * stored and before any payment. The answer names no entry and no reason,
+ * only the instance's `mailAddress` to write to with questions (empty
+ * where the instance has none). The administration's manual booking is
+ * not asked.
+ *
+ * @param {{ mail?: string, policy: string }} params
+ * @returns {Promise<void>}
+ * @throws {CheckoutError} `checkout.address_blacklisted`
+ */
+async function assertNoAddressBlacklisted({ mail, policy }) {
+  if (!checkoutPolicy.runsChecks(policy)) {
+    return;
+  }
+
+  for (const address of parseEmails(mail)) {
+    if (await BlacklistService.match(address)) {
+      const instance = await InstanceManager.getInstance();
+      throw new CheckoutError({
+        reason: CHECKOUT_REASONS.ADDRESS_BLACKLISTED,
+        params: { mailAddress: instance?.mailAddress || "" },
+      });
+    }
+  }
+}
+
+/**
  * The checkout up to the store write (spec part 1, 5.1): the booking is
  * prepared under the policy, validated, stored in its initial state and
  * the coupon consumed. No effect of the lifecycle runs here; the caller
@@ -217,6 +252,7 @@ async function createBooking({
     couponCode,
     name,
     company,
+    isBusiness,
     street,
     zipCode,
     location,
@@ -235,6 +271,8 @@ async function createBooking({
     customFieldValues: rawCustomFieldValues,
     cancellationPolicy,
   } = bookingAttempt;
+
+  await assertNoAddressBlacklisted({ mail, policy });
 
   const customFieldValues = await resolveCheckoutCustomFieldValues({
     tenantId,
@@ -305,6 +343,12 @@ async function createBooking({
   if (!(booking instanceof Booking)) {
     booking = new Booking(booking);
   }
+
+  // The Buchungsweg is set here and nowhere else (GLOSSARY.md), from the
+  // policy and the sign-in; a value the client sends is never read.
+  booking.bookedVia = bookedViaOf(policy, user);
+  // Private or business: the booker's answer, else read off the company.
+  booking.isBusiness = isBusinessOf(isBusiness, company);
 
   booking.validate();
 
@@ -454,7 +498,7 @@ async function generateGroupBookingReference(
  * deleted, the coupons given back and what caused the abort thrown.
  *
  * @param {{ tenantId: string, user?: Object, contactData: Object, bookingAttempts: Object[], paymentProvider: string, simulate: boolean, policy?: string }} params
- * @returns {Promise<GroupBooking>} The group with its members as stored after the admission
+ * @returns {Promise<GroupBooking>} The group with its members as stored after the admission; under `simulate` the group it would book, unstored, with the computed members
  */
 async function createGroupBooking({
   tenantId,
@@ -497,6 +541,7 @@ async function createGroupBooking({
     bookingAttempt.mail = contactData.mail;
     bookingAttempt.name = contactData.name;
     bookingAttempt.company = contactData.company;
+    bookingAttempt.isBusiness = contactData.isBusiness;
     bookingAttempt.street = contactData.street;
     bookingAttempt.zipCode = contactData.zipCode;
     bookingAttempt.location = contactData.location;
@@ -525,23 +570,28 @@ async function createGroupBooking({
     mail: contactData.mail,
   });
 
+  // A simulation stores no member, so it stores no group either: it
+  // answers the group it would book, with the members it computed.
+  if (simulate) {
+    groupBooking.bookings = allBookings;
+    return groupBooking;
+  }
+
   await GroupBookingManager.storeGroupBooking(groupBooking);
 
-  if (!simulate) {
-    try {
-      await groupBookingLifecycle.admit(tenantId, uniqueId, {
-        trigger: triggerOf(policy),
-      });
-    } catch (err) {
-      logger.error(
-        `${tenantId} -- admission of group booking ${uniqueId} aborted, rolling back: ${err.message}`,
-      );
-      for (const booking of allBookings) {
-        await rollback(tenantId, booking);
-      }
-      await GroupBookingManager.deleteGroupBooking(tenantId, uniqueId);
-      throw causeOf(err);
+  try {
+    await groupBookingLifecycle.admit(tenantId, uniqueId, {
+      trigger: triggerOf(policy),
+    });
+  } catch (err) {
+    logger.error(
+      `${tenantId} -- admission of group booking ${uniqueId} aborted, rolling back: ${err.message}`,
+    );
+    for (const booking of allBookings) {
+      await rollback(tenantId, booking);
     }
+    await GroupBookingManager.deleteGroupBooking(tenantId, uniqueId);
+    throw causeOf(err);
   }
 
   return await GroupBookingManager.getGroupBooking(
@@ -594,6 +644,26 @@ async function runUpdateTransition(tenantId, transition, { booking, userId }) {
     default:
       throw new Error(`updateBooking: no way to run ${transition}`);
   }
+}
+
+/**
+ * Whom a booking belongs to after an admin edit. An edit keeps the owner the
+ * booking was created with, with one exception: a booking of the Buchungsweg
+ * Admin belongs to its first mail, so when the admin corrects that mail, the
+ * booking moves to the corrected address. A booking of an account, a guest
+ * booking and one without a Buchungsweg keep their owner.
+ *
+ * @param {Booking} oldBooking The booking as it is stored
+ * @param {string} [mail] The mail of the form
+ * @returns {string} The owner (`assignedUserId`)
+ */
+function ownerAfterEdit(oldBooking, mail) {
+  const primary = primaryEmailFromMail(mail);
+  const corrected =
+    oldBooking.bookedVia === BookedVia.ADMIN &&
+    primary &&
+    primary !== primaryEmailFromMail(oldBooking.mail);
+  return corrected ? primary : oldBooking.assignedUserId;
 }
 
 /**
@@ -662,7 +732,7 @@ async function updateBooking(
   // booking is in, so the checkout prepares it without them.
   const bundleCheckoutService = new BundleCheckoutService(
     {
-      user: updatedBooking.assignedUserId,
+      user: ownerAfterEdit(oldBooking, updatedBooking.mail),
       tenant: tenantId,
       timeBegin: updatedBooking.timeBegin,
       timeEnd: updatedBooking.timeEnd,
@@ -706,6 +776,19 @@ async function updateBooking(
 
   if (!(booking instanceof Booking)) {
     booking = new Booking(booking);
+  }
+
+  // An edit keeps the Buchungsweg the booking was created with, and one
+  // without stays without; the form's value is never read.
+  if (oldBooking.bookedVia) {
+    booking.bookedVia = oldBooking.bookedVia;
+  }
+  // The private-or-business answer stays what the booker gave, unless the
+  // form names one; a booking without it stays without.
+  if (typeof updatedBooking.isBusiness === "boolean") {
+    booking.isBusiness = updatedBooking.isBusiness;
+  } else if (typeof oldBooking.isBusiness === "boolean") {
+    booking.isBusiness = oldBooking.isBusiness;
   }
 
   if (onUnreject) {

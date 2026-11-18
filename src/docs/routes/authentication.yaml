@@ -63,3 +63,40 @@
                   $ref: "#/components/schemas/SignInPermissions"
       "401":
         description: Not authenticated
+
+/auth/forgot-password:
+  post:
+    tags:
+      - Authentication
+    summary: Ask for a reset link by mail
+    description: |
+      Answers every address alike and before the mail goes out, so the answer
+      does not tell whether the address has an account. An account gets at
+      most 1 reset mail per minute and 5 per hour
+      (`RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_SHORT`, `_LONG`); past that the
+      answer is the same and no mail goes out.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [id]
+            properties:
+              id:
+                type: string
+                description: The address
+              resetUrl:
+                type: string
+                description: The client's own reset page, kept only on an own origin
+    responses:
+      "200":
+        description: "`If the email exists, a reset link has been sent` (text)"
+      "400":
+        description: No address
+      "429":
+        description: |
+          `too_many_requests`: 30 requests per client IP and hour
+          (`RATE_LIMIT_FORGOT_PASSWORD_PER_IP`) are spent; `Retry-After`
+          (seconds) and `params.retryAfterSeconds` say when the next one is
+          possible.

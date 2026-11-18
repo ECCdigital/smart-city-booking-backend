@@ -5,7 +5,6 @@ const BookingManager = require("../../data-managers/booking-manager");
 const { BookableManager } = require("../../data-managers/bookable-manager");
 const AccessPointManager = require("../../data-managers/access-point-manager");
 const SecurityUtils = require("../../utilities/security-utils");
-const GrantCleanupService = require("./grant-cleanup-service");
 const AccessLogService = require("./access-log-service");
 const { decide, satisfy } = require("./access-decision");
 const { projectAccessPoint } = require("./access-point-projection");
@@ -22,6 +21,11 @@ const logger = bunyan.createLogger({
   name: "access-service.js",
   level: process.env.LOG_LEVEL,
 });
+
+// What an entry records when the provider took the grant back but could not
+// remove its external principal.
+const PRINCIPAL_NOT_REMOVED_ERROR =
+  "The provider could not remove the external principal of the grant";
 
 /**
  * The hold of a provider that holds nothing on its side: the stored booking
@@ -1204,7 +1208,7 @@ class AccessService {
               : entry.principalRemovedAt || null,
           principalCleanupError:
             revocation.principalRemoved === false
-              ? GrantCleanupService.PRINCIPAL_NOT_REMOVED_ERROR
+              ? PRINCIPAL_NOT_REMOVED_ERROR
               : null,
         });
 
@@ -1282,7 +1286,7 @@ class AccessService {
               : bookingContext.principalRemovedAt || null,
           principalCleanupError:
             revocation.principalRemoved === false
-              ? GrantCleanupService.PRINCIPAL_NOT_REMOVED_ERROR
+              ? PRINCIPAL_NOT_REMOVED_ERROR
               : null,
         });
 
@@ -3066,8 +3070,7 @@ class AccessService {
    *   grant: { authorizationId, externalPrincipalId, secret } | null
    *     - the Grant as the provider answered it, `secret` encrypted
    *   principalRemovedAt, principalCleanupAttemptedAt, principalCleanupError
-   *     - what became of the grant's external principal after the revoke;
-   *       the cleanup job works on these
+   *     - what became of the grant's external principal after the revoke
    *   lastEvent - the last webhook event at this lock
    *
    * A compartment of a locker system (`accessPointType: locker`) has one
@@ -3260,5 +3263,7 @@ class AccessService {
     }
   }
 }
+
+AccessService.PRINCIPAL_NOT_REMOVED_ERROR = PRINCIPAL_NOT_REMOVED_ERROR;
 
 module.exports = AccessService;

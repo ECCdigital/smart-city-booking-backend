@@ -23,10 +23,22 @@ const DOCUMENT_ID_FIELD = {
   receipt: "receiptId",
   invoice: "invoiceId",
   cancellation: "cancellationId",
+  withdrawal: "withdrawalId",
 };
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+/**
+ * A booking entity as `updateOne` stores it: the own fields of its hooks,
+ * not their API form (`BookingHook#toJSON` masks the bank details).
+ */
+function toDocument(booking) {
+  return clone({
+    ...booking,
+    hooks: (booking.hooks || []).map((hook) => ({ ...hook })),
+  });
 }
 
 /**
@@ -129,7 +141,7 @@ function inMemoryStore(seed = [], tenant = DEFAULT_TENANT, groups = []) {
         });
       }
       const previous = clone(row);
-      const next = clone(booking);
+      const next = toDocument(booking);
       for (const field of unset) {
         delete next[field];
       }

@@ -11,6 +11,12 @@ const ENV_KEYS = [
   "RATE_LIMIT_VERIFICATION_MAIL_PER_ACCOUNT_LONG_WINDOW_SECONDS",
   "RATE_LIMIT_VERIFICATION_MAIL_PER_IP",
   "RATE_LIMIT_VERIFICATION_MAIL_PER_IP_WINDOW_SECONDS",
+  "RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_SHORT",
+  "RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_SHORT_WINDOW_SECONDS",
+  "RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_LONG",
+  "RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_LONG_WINDOW_SECONDS",
+  "RATE_LIMIT_FORGOT_PASSWORD_PER_IP",
+  "RATE_LIMIT_FORGOT_PASSWORD_PER_IP_WINDOW_SECONDS",
   "RATE_LIMIT_TENANT_SELF_CREATION_PER_USER",
   "RATE_LIMIT_TENANT_SELF_CREATION_PER_USER_WINDOW_SECONDS",
   "RATE_LIMIT_GEO_PER_USER",
@@ -83,6 +89,37 @@ describe("rate-limit limits", function () {
       limit: 300,
       windowMs: 60_000,
     });
+  });
+
+  it("carries the forgot-password defaults, those of the verification mail on keys of their own", function () {
+    assert.deepStrictEqual(
+      limits.forgotPasswordPerAccount("Max@Example.test"),
+      [
+        {
+          key: "forgot-password:account:short:max@example.test",
+          limit: 1,
+          windowMs: 60_000,
+        },
+        {
+          key: "forgot-password:account:long:max@example.test",
+          limit: 5,
+          windowMs: 3_600_000,
+        },
+      ],
+    );
+    assert.deepStrictEqual(limits.forgotPasswordPerIp("203.0.113.7"), {
+      key: "forgot-password:ip:203.0.113.7",
+      limit: 30,
+      windowMs: 3_600_000,
+    });
+  });
+
+  it("reads the forgot-password limits from the environment", function () {
+    process.env.RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_LONG = "7";
+    process.env.RATE_LIMIT_FORGOT_PASSWORD_PER_IP_WINDOW_SECONDS = "120";
+
+    assert.strictEqual(limits.forgotPasswordPerAccount("a@b.c")[1].limit, 7);
+    assert.strictEqual(limits.forgotPasswordPerIp("1.1.1.1").windowMs, 120_000);
   });
 
   it("reads the geo limits from the environment", function () {

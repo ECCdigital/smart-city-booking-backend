@@ -7,6 +7,9 @@ const {
   CustomFieldService,
 } = require("../services/custom-field/custom-field-service");
 const { BookableManager } = require("./bookable-manager");
+const {
+  releaseSaltoKsClient,
+} = require("../services/access/clients/salto-ks-clients");
 const { ownCondition } = require("../services/authorization/reach");
 const { REACH } = require("../services/authorization/policy");
 const {
@@ -26,7 +29,12 @@ const {
  * draw (`incrementDocumentCounter`) alone: a whole-tenant write never
  * carries them, so a stale copy of the tenant cannot roll a counter back.
  */
-const DOCUMENT_COUNTERS = ["receiptCount", "invoiceCount", "cancellationCount"];
+const DOCUMENT_COUNTERS = [
+  "receiptCount",
+  "invoiceCount",
+  "cancellationCount",
+  "withdrawalCount",
+];
 
 /**
  * The supervision fields (glossary "Aufsichtsstufe"). They belong to the
@@ -94,6 +102,22 @@ class TenantManager {
           : supervisionLevel;
     }
     return condition;
+  }
+
+  /**
+   * Whether any tenant within a reach uses digital keys, using the condition
+   * of `Tenant#usesDigitalKeys` as a query. Under `public`, only tenants
+   * visible in the storefront are considered.
+   *
+   * @param {{reach: string, userId?: string|null, tenantIds?: string[]}} scope
+   * @returns {Promise<boolean>}
+   */
+  static async hasTenantWithDigitalKeys(scope) {
+    const found = await TenantModel.exists({
+      ...TenantManager._condition(scope, {}),
+      applications: { $elemMatch: { type: "access", active: true } },
+    });
+    return Boolean(found);
   }
 
   /**
@@ -237,6 +261,7 @@ class TenantManager {
     }
 
     CustomFieldCache.invalidateTenant(tenantEntity.id);
+    releaseSaltoKsClient(tenantEntity.id, tenantEntity);
 
     return tenantEntity;
   }
@@ -275,6 +300,7 @@ class TenantManager {
    */
   static async removeTenant(id) {
     await TenantModel.deleteOne({ id: id });
+    releaseSaltoKsClient(id);
   }
 
   /**

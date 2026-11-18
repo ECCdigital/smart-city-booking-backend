@@ -61,10 +61,9 @@
 /**
  * The authorization a provider made for a booking at an access point: the
  * handle to take it back by, the principal the provider keeps for it where
- * it keeps one - a Salto guest - and the secret the person at the door
- * types. The secret is one-way: it exists in clear only in this answer, the
- * service encrypts it before storing and mails it once. Provider names
- * never appear in it.
+ * it keeps one, and the secret the person at the door types. The secret is
+ * one-way: it exists in clear only in this answer, the service encrypts it
+ * before storing and mails it once. Provider names never appear in it.
  *
  * A locker provider additionally names the compartment the grant is for,
  * where it chooses one - iFBS' box number - so the person knows which box
@@ -354,9 +353,9 @@ class AccessProvider {
 
   /**
    * Grants the booking an authorization at the lock - a keypad code, a
-   * guest with a PIN, a compartment of a locker system - for its access
-   * window. A locker provider consumes the `hold` the context brings and
-   * takes a new one where it lapsed.
+   * compartment of a locker system - for its access window. A locker
+   * provider consumes the `hold` the context brings and takes a new one
+   * where it lapsed.
    *
    * @param {Object} accessPoint The access point to grant access to
    * @param {BookingContext} bookingContext The booking that gets access;
@@ -441,6 +440,20 @@ class AccessProvider {
    *   field; nothing else
    */
   validateAccessPoint(_accessPoint, _listedAccessPoint) {}
+
+  /**
+   * Refuse an access point by a rule that holds for every lock of the
+   * provider, before the listing is fetched - so the rule holds when the
+   * provider cannot be asked, and is answered with its `400` rather than a
+   * `503`. Optional capability, like `validateAccessPoint`; this base
+   * implementation checks nothing.
+   *
+   * @param {Object} _accessPoint The access point as it would be stored
+   * @returns {void}
+   * @throws {ValidationError} What the provider will not store, field by
+   *   field; nothing else
+   */
+  validateAccessPointWithoutListing(_accessPoint) {}
 
   /**
    * Where the physical lock stands, as far as the provider knows it. Optional

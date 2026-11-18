@@ -5,11 +5,16 @@ const SsoService = require("../../../commons/services/sso/sso-service");
 const UserService = require("../../../commons/services/user-service");
 const RegistrationService = require("../../../commons/services/user/registration-service");
 const ApiResponse = require("../../../commons/utilities/api-response");
-const { TooManyRequestsError } = require("../../../errors/BaseError");
+const {
+  ConflictError,
+  TooManyRequestsError,
+} = require("../../../errors/BaseError");
+const {
+  CHECKOUT_REASONS,
+} = require("../../../commons/services/checkout/checkout-reasons");
 const CardAuthService = require("../../../commons/services/card-auth/card-auth-service");
 
 const JwtHelper = require("../../../commons/utilities/jwt-helper");
-const { afterAnswer } = require("../../../commons/services/user/after-answer");
 
 const logger = bunyan.createLogger({
   name: "authentication-controller.js",
@@ -22,6 +27,24 @@ const VERIFICATION_MAIL_ANSWER = {
   message:
     "If the address is not verified yet, a verification mail has been sent",
 };
+
+/**
+ * Answers the refusal of an address on the blacklist
+ * as the legacy checkout does: `409` with `{ error, params }`, the
+ * reason and the instance's `mailAddress`.
+ *
+ * @returns {boolean} Whether the error was that refusal and is answered
+ */
+function answeredAddressBlacklisted(response, error) {
+  if (
+    !(error instanceof ConflictError) ||
+    error.code !== CHECKOUT_REASONS.ADDRESS_BLACKLISTED
+  ) {
+    return false;
+  }
+  response.status(409).json({ error: error.code, params: error.params });
+  return true;
+}
 
 /**
  * Controller for user authentication.
@@ -184,7 +207,8 @@ class AuthenticationController {
   /**
    * Public signup. Answers account-neutrally (spec §6.3): 201 whether or not
    * the address already has an account - an existing account is never
-   * duplicated and, if still unverified, gets its verification mail again.
+   * duplicated and, if still unverified, gets its verification mail again;
+   * a verified one gets a hint that links `forgotPasswordUrl`.
    * The answer does not wait for the account or its mail
    * (ECCdigital/tickets#259); a failing mail is only logged. The per-IP
    * signup limit answers 429 with `Retry-After`.
@@ -200,6 +224,7 @@ class AuthenticationController {
         vatId,
         nextUrl,
         verifyUrl,
+        forgotPasswordUrl,
         legalAcceptance,
         invitationToken,
         invitationTenantId,
@@ -229,6 +254,7 @@ class AuthenticationController {
         user,
         nextUrl,
         verifyUrl,
+        forgotPasswordUrl,
         invitation,
         ip: request.ip,
       });
@@ -238,6 +264,7 @@ class AuthenticationController {
       if (error instanceof TooManyRequestsError) {
         return ApiResponse.fail(response, error);
       }
+      if (answeredAddressBlacklisted(response, error)) return;
       logger.error("Could not sign up user", error);
       if (error.status) {
         return response.status(error.status).send(error.message);
@@ -284,6 +311,7 @@ class AuthenticationController {
       await SsoService.handleSignup(token, legalAcceptance);
       response.sendStatus(201);
     } catch (error) {
+      if (answeredAddressBlacklisted(response, error)) return;
       response.status(error.status).send(error.message);
     }
   }
@@ -352,7 +380,7 @@ class AuthenticationController {
   /**
    * Mails a reset link to a local account. Answers every address alike and
    * before the mail goes out (ECCdigital/tickets#259); a failure is only
-   * logged.
+   * logged. Only the per-IP limit answers 429 with `Retry-After`.
    */
   static async forgotPassword(request, response) {
     const { id, resetUrl } = request.body;
@@ -361,13 +389,22 @@ class AuthenticationController {
       return response.status(400).send("Email is required");
     }
 
-    afterAnswer(
-      () => UserService.requestForgotPassword(id, resetUrl),
-      `forgot password request for ${id}`,
-    );
-    return response
-      .status(200)
-      .send("If the email exists, a reset link has been sent");
+    try {
+      await RegistrationService.requestForgotPassword({
+        id,
+        resetUrl,
+        ip: request.ip,
+      });
+      return response
+        .status(200)
+        .send("If the email exists, a reset link has been sent");
+    } catch (error) {
+      if (error instanceof TooManyRequestsError) {
+        return ApiResponse.fail(response, error);
+      }
+      logger.error("Forgot password request failed:", error);
+      return response.status(500).send("Internal server error");
+    }
   }
 
   static async resetPasswordWithToken(request, response) {
@@ -594,6 +631,7 @@ class AuthenticationController {
           "Account created. Please verify your email to complete signup.",
       });
     } catch (error) {
+      if (answeredAddressBlacklisted(response, error)) return;
       logger.error("Card signup failed:", error);
       response.status(error.status || 500).json({
         message: error.message || "Card registration failed",

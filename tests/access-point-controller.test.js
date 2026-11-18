@@ -7,6 +7,21 @@ const { ValidationError } = require("../src/errors/ValidationError");
 const { BaseError, NotFoundError } = require("../src/errors/BaseError");
 const { TEST_GEO_RULE } = require("./helpers/test-validation-rule");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
+const SaltoKsAccessProvider = require("../src/commons/services/access/providers/salto-ks-access-provider");
+const {
+  registerAccessProvider,
+} = require("../src/commons/services/access/providers/access-provider-registry");
+const {
+  FakeSaltoKsApiClient,
+  FAKE_SITE_ID,
+} = require("./helpers/fake-salto-ks-api-client");
+const {
+  SALTO_LOCK_ID,
+  SALTO_IQ_ID,
+  saltoLock,
+  saltoIq,
+  tenantWithSaltoApp,
+} = require("./helpers/access-provider-fixtures");
 
 function createAccessPoint(overrides = {}) {
   return AccessPoint.create({
@@ -350,6 +365,7 @@ describe("AccessPointController", () => {
           label: "Neuer Name",
           provider: "salto-ks",
           externalId: "lock-42",
+          mode: "remote",
         };
 
         await AccessPointController.storeAccessPoint(request, response, next);
@@ -359,6 +375,7 @@ describe("AccessPointController", () => {
           label: "Neuer Name",
           provider: "salto-ks",
           externalId: "lock-42",
+          mode: "remote",
         });
         expect(response.status.calledWith(200)).to.be.true;
       });
@@ -403,6 +420,7 @@ describe("AccessPointController", () => {
           id: "point-1",
           provider: "salto-ks",
           externalId: "lock-42",
+          mode: "remote",
         };
 
         await AccessPointController.storeAccessPoint(request, response, next);
@@ -480,6 +498,20 @@ describe("AccessPointController", () => {
         expect(storeAccessPoint.called).to.be.false;
       });
 
+      it("does not refuse when the lock can do nothing right now", async () => {
+        findListedAccessPoint.resolves(listedAccessPoint([]));
+        request.body = {
+          provider: "nuki",
+          externalId: "lock-1",
+          mode: "authorization",
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.called).to.be.false;
+        expect(storeAccessPoint.calledOnce).to.be.true;
+      });
+
       it("accepts a mode the provider reports as supported", async () => {
         findListedAccessPoint.resolves(
           listedAccessPoint(["remote", "authorization", "both"]),
@@ -514,7 +546,7 @@ describe("AccessPointController", () => {
         request.body = {
           provider: "salto-ks",
           externalId: "lock-9",
-          mode: "both",
+          mode: "remote",
         };
 
         await AccessPointController.storeAccessPoint(request, response, next);
@@ -524,7 +556,7 @@ describe("AccessPointController", () => {
         expect(accessPoint).to.include({
           provider: "salto-ks",
           externalId: "lock-9",
-          mode: "both",
+          mode: "remote",
         });
       });
 
@@ -596,6 +628,306 @@ describe("AccessPointController", () => {
 
         expect(next.called).to.be.false;
         expect(storeAccessPoint.calledOnce).to.be.true;
+      });
+    });
+
+    /**
+     * A Salto door opens remotely or not at all (tickets#499), and that holds
+     * without asking Salto (tickets#311): while the tenant's Salto KS
+     * application is not active, and for a lock Salto does not list. The
+     * provider runs for real, over the fake Connect API.
+     */
+    describe("Salto KS mode", () => {
+      after(() => {
+        registerAccessProvider("salto-ks", SaltoKsAccessProvider);
+      });
+
+      beforeEach(() => {
+        findListedAccessPoint.restore();
+        installSalto(saltoIq());
+      });
+
+      /**
+       * Salto KS over the fake Connect API, with one lock on the given IQ.
+       *
+       * @returns {FakeSaltoKsApiClient} The client the provider asks
+       */
+      function installSalto(iq) {
+        const saltoClient = new FakeSaltoKsApiClient({
+          locks: [
+            saltoLock({ iq: { id: iq.id, otp_enabled: iq.otp_enabled } }),
+          ],
+          iqs: [iq],
+        });
+        registerAccessProvider(
+          "salto-ks",
+          class extends SaltoKsAccessProvider {
+            constructor() {
+              super({ client: saltoClient });
+            }
+          },
+        );
+        return saltoClient;
+      }
+
+      function saltoApp(active, iqActivations = []) {
+        const tenant = tenantWithSaltoApp();
+        tenant.applications[0].active = active;
+        tenant.applications[0].iqActivations = iqActivations;
+        return tenant;
+      }
+
+      ["authorization", "both"].forEach((mode) => {
+        it(`refuses ${mode} at a Salto door while the tenant's Salto KS application is not active`, async () => {
+          sandbox.stub(TenantManager, "getTenant").resolves(saltoApp(false));
+          request.body = {
+            provider: "salto-ks",
+            externalId: SALTO_LOCK_ID,
+            mode,
+          };
+
+          await AccessPointController.storeAccessPoint(request, response, next);
+
+          const error = next.firstCall.args[0];
+          expect(error).to.be.instanceOf(ValidationError);
+          expect(error.statusCode).to.equal(400);
+          expect(error.errors).to.deep.equal([
+            {
+              field: "mode",
+              code: "unsupported_mode",
+              params: { mode, supportedModes: ["remote"] },
+            },
+          ]);
+          expect(storeAccessPoint.called).to.be.false;
+        });
+
+        it(`refuses ${mode} at a Salto door Salto does not list`, async () => {
+          sandbox.stub(TenantManager, "getTenant").resolves(saltoApp(true));
+          request.body = {
+            provider: "salto-ks",
+            externalId: "lock-unknown-to-salto",
+            mode,
+          };
+
+          await AccessPointController.storeAccessPoint(request, response, next);
+
+          const error = next.firstCall.args[0];
+          expect(error).to.be.instanceOf(ValidationError);
+          expect(error.errors[0]).to.include({
+            field: "mode",
+            code: "unsupported_mode",
+          });
+          expect(storeAccessPoint.called).to.be.false;
+        });
+      });
+
+      /**
+       * The rule needs no listing, so it holds when Salto cannot be asked
+       * (tickets#311, tickets#570): a 400 for the mode, not a 503 for Salto.
+       */
+      describe("Salto not reachable", () => {
+        beforeEach(() => {
+          const saltoClient = installSalto(saltoIq());
+          sandbox.stub(saltoClient, "_send").rejects(
+            Object.assign(new Error("connect ECONNREFUSED"), {
+              code: "ECONNREFUSED",
+            }),
+          );
+          sandbox.stub(TenantManager, "getTenant").resolves(saltoApp(true));
+        });
+
+        ["authorization", "both"].forEach((mode) => {
+          it(`refuses ${mode} at a new Salto door with 400 unsupported_mode`, async () => {
+            request.body = {
+              provider: "salto-ks",
+              externalId: SALTO_LOCK_ID,
+              mode,
+            };
+
+            await AccessPointController.storeAccessPoint(
+              request,
+              response,
+              next,
+            );
+
+            const error = next.firstCall.args[0];
+            expect(error).to.be.instanceOf(ValidationError);
+            expect(error.statusCode).to.equal(400);
+            expect(error.errors).to.deep.equal([
+              {
+                field: "mode",
+                code: "unsupported_mode",
+                params: { mode, supportedModes: ["remote"] },
+              },
+            ]);
+            expect(storeAccessPoint.called).to.be.false;
+          });
+        });
+
+        it("refuses a rename of a Salto door still stored with both with 400 unsupported_mode", async () => {
+          sandbox.stub(AccessPointManager, "getAccessPoint").resolves(
+            createAccessPoint({
+              provider: "salto-ks",
+              externalId: SALTO_LOCK_ID,
+              mode: "both",
+            }),
+          );
+          request.body = { id: "point-1", label: "Labortür" };
+
+          await AccessPointController.storeAccessPoint(request, response, next);
+
+          const error = next.firstCall.args[0];
+          expect(error).to.be.instanceOf(ValidationError);
+          expect(error.errors[0]).to.include({ code: "unsupported_mode" });
+          expect(storeAccessPoint.called).to.be.false;
+        });
+
+        it("answers 503 access_provider_unreachable for remote, storing nothing", async () => {
+          request.body = {
+            provider: "salto-ks",
+            externalId: SALTO_LOCK_ID,
+            mode: "remote",
+          };
+
+          await AccessPointController.storeAccessPoint(request, response, next);
+
+          const error = next.firstCall.args[0];
+          expect(error.statusCode).to.equal(503);
+          expect(error.code).to.equal("access_provider_unreachable");
+          expect(storeAccessPoint.called).to.be.false;
+        });
+      });
+
+      it("refuses a rename of a Salto door still stored with both", async () => {
+        sandbox.stub(TenantManager, "getTenant").resolves(saltoApp(false));
+        sandbox.stub(AccessPointManager, "getAccessPoint").resolves(
+          createAccessPoint({
+            provider: "salto-ks",
+            externalId: SALTO_LOCK_ID,
+            mode: "both",
+          }),
+        );
+        request.body = { id: "point-1", label: "Labortür" };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.firstCall.args[0]).to.be.instanceOf(ValidationError);
+        expect(storeAccessPoint.called).to.be.false;
+      });
+
+      it("stores remote at a Salto door while the tenant's Salto KS application is not active", async () => {
+        sandbox.stub(TenantManager, "getTenant").resolves(saltoApp(false));
+        request.body = {
+          provider: "salto-ks",
+          externalId: SALTO_LOCK_ID,
+          mode: "remote",
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.called).to.be.false;
+        const [created] = storeAccessPoint.firstCall.args;
+        expect(created.mode).to.equal("remote");
+      });
+
+      it("stores remote at a Salto door Salto does not list", async () => {
+        sandbox.stub(TenantManager, "getTenant").resolves(saltoApp(true));
+        request.body = {
+          provider: "salto-ks",
+          externalId: "lock-unknown-to-salto",
+          mode: "remote",
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.called).to.be.false;
+        expect(storeAccessPoint.calledOnce).to.be.true;
+      });
+
+      /**
+       * A lock whose IQ is not activated lists no modes: it can do nothing
+       * right now, which is no mode it can never do (tickets#570). It opens
+       * once the IQ is activated; until then opening fails on its own.
+       */
+      describe("IQ not activated", () => {
+        beforeEach(() => {
+          installSalto(saltoIq({ otp_enabled: true }));
+        });
+
+        it("stores remote at a Salto door whose IQ was never activated", async () => {
+          sandbox.stub(TenantManager, "getTenant").resolves(saltoApp(true));
+          request.body = {
+            provider: "salto-ks",
+            externalId: SALTO_LOCK_ID,
+            mode: "remote",
+          };
+
+          await AccessPointController.storeAccessPoint(request, response, next);
+
+          expect(next.called).to.be.false;
+          const [created] = storeAccessPoint.firstCall.args;
+          expect(created.mode).to.equal("remote");
+          expect(response.status.calledWith(201)).to.be.true;
+        });
+
+        it("renames a Salto door whose IQ requires re-activation", async () => {
+          sandbox.stub(TenantManager, "getTenant").resolves(
+            saltoApp(true, [
+              {
+                iqId: SALTO_IQ_ID,
+                siteId: FAKE_SITE_ID,
+                username: "system-user@example.test",
+                environment: "accept",
+                state: "reactivation_required",
+                failureCount: 0,
+                blockedUntil: null,
+              },
+            ]),
+          );
+          sandbox.stub(AccessPointManager, "getAccessPoint").resolves(
+            createAccessPoint({
+              provider: "salto-ks",
+              externalId: SALTO_LOCK_ID,
+              mode: "remote",
+            }),
+          );
+          request.body = { id: "point-1", label: "Labortür" };
+
+          await AccessPointController.storeAccessPoint(request, response, next);
+
+          expect(next.called).to.be.false;
+          const [updated] = storeAccessPoint.firstCall.args;
+          expect(updated).to.include({ label: "Labortür", mode: "remote" });
+          expect(response.status.calledWith(200)).to.be.true;
+        });
+
+        ["authorization", "both"].forEach((mode) => {
+          it(`still refuses ${mode} at a Salto door whose IQ was never activated`, async () => {
+            sandbox.stub(TenantManager, "getTenant").resolves(saltoApp(true));
+            request.body = {
+              provider: "salto-ks",
+              externalId: SALTO_LOCK_ID,
+              mode,
+            };
+
+            await AccessPointController.storeAccessPoint(
+              request,
+              response,
+              next,
+            );
+
+            const error = next.firstCall.args[0];
+            expect(error).to.be.instanceOf(ValidationError);
+            expect(error.errors).to.deep.equal([
+              {
+                field: "mode",
+                code: "unsupported_mode",
+                params: { mode, supportedModes: ["remote"] },
+              },
+            ]);
+            expect(storeAccessPoint.called).to.be.false;
+          });
+        });
       });
     });
 
@@ -723,6 +1055,7 @@ describe("AccessPointController", () => {
         request.body = {
           provider: "salto-ks",
           externalId: "lock-9",
+          mode: "remote",
           config: { openAction: "flip" },
         };
 
@@ -842,7 +1175,11 @@ describe("AccessPointController", () => {
         const failure = new Error("connect ECONNREFUSED");
         failure.code = "ECONNREFUSED";
         findListedAccessPoint.rejects(failure);
-        request.body = { provider: "salto-ks", externalId: "lock-9" };
+        request.body = {
+          provider: "salto-ks",
+          externalId: "lock-9",
+          mode: "remote",
+        };
 
         await AccessPointController.storeAccessPoint(request, response, next);
 
@@ -879,17 +1216,42 @@ describe("AccessPointController", () => {
         expect(storeAccessPoint.called).to.be.false;
       });
 
-      it("hands a not-found through, a tenant without the provider's application is not an unreachable provider", async () => {
-        const failure = new NotFoundError("nuki_application_not_found", {
-          tenant: "tenant-1",
-        });
-        findListedAccessPoint.rejects(failure);
-        request.body = { provider: "nuki", externalId: "lock-1" };
+      it("stores an access point whose provider the tenant has not switched on, like one the provider does not list", async () => {
+        findListedAccessPoint.rejects(
+          new NotFoundError("nuki_application_not_found", {
+            tenant: "tenant-1",
+          }),
+        );
+        request.body = {
+          provider: "nuki",
+          externalId: "lock-1",
+          mode: "remote",
+        };
 
         await AccessPointController.storeAccessPoint(request, response, next);
 
-        expect(next.calledOnceWithExactly(failure)).to.be.true;
-        expect(storeAccessPoint.called).to.be.false;
+        expect(next.called).to.be.false;
+        expect(storeAccessPoint.calledOnce).to.be.true;
+        expect(response.status.calledWith(201)).to.be.true;
+      });
+
+      it("renames an access point whose provider the tenant has not switched on", async () => {
+        sandbox
+          .stub(AccessPointManager, "getAccessPoint")
+          .resolves(createAccessPoint());
+        findListedAccessPoint.rejects(
+          new NotFoundError("nuki_application_not_found", {
+            tenant: "tenant-1",
+          }),
+        );
+        request.body = { id: "point-1", label: "Nebeneingang" };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.called).to.be.false;
+        const [updated] = storeAccessPoint.firstCall.args;
+        expect(updated.label).to.equal("Nebeneingang");
+        expect(response.status.calledWith(200)).to.be.true;
       });
 
       it("keeps the mode check a 400 unsupported_mode, not a provider failure", async () => {
@@ -982,6 +1344,27 @@ describe("AccessPointController", () => {
         expect(next.called).to.be.false;
         expect(storeAccessPoint.calledOnce).to.be.true;
         expect(response.status.calledWith(201)).to.be.true;
+      });
+
+      // tickets#311: every provider that lists its locks refuses to list them
+      // for a tenant without its active application. That is no answer about
+      // the lock, so the save goes through unchecked, to be checked on the
+      // first save once the provider is active.
+      ["nuki", "ifbs", "salto-ks"].forEach((provider) => {
+        it(`stores a ${provider} access point while the tenant's ${provider} application is not active`, async () => {
+          findListedAccessPoint.restore();
+          sandbox.stub(TenantManager, "getTenant").resolves({
+            id: "tenant-1",
+            applications: [{ type: "access", id: provider, active: false }],
+          });
+          request.body = { provider, externalId: "lock-1", mode: "remote" };
+
+          await AccessPointController.storeAccessPoint(request, response, next);
+
+          expect(next.called).to.be.false;
+          expect(storeAccessPoint.calledOnce).to.be.true;
+          expect(response.status.calledWith(201)).to.be.true;
+        });
       });
     });
 

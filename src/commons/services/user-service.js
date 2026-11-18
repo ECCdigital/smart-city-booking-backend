@@ -11,6 +11,7 @@ const GroupBookingManager = require("../data-managers/group-booking-manager");
 const { BookableManager } = require("../data-managers/bookable-manager");
 const EventManager = require("../data-managers/event-manager");
 const CouponManager = require("../data-managers/coupon-manager");
+const FavoriteManager = require("../data-managers/favorite-manager");
 const MembershipManager = require("../data-managers/membership-manager");
 const InstanceManager = require("../data-managers/instance-manager");
 const TokenSessionService = require("./token-session-service");
@@ -96,28 +97,27 @@ class UserService {
   }
 
   static async verifyEmail(token, id) {
+    // A wrong token gets one answer, whatever account the id names: an
+    // unknown token, the token of another account and a token of another
+    // kind alike, so the answer tells nothing about the account
+    const invalidToken = { message: "Invalid verification token", status: 400 };
+
     const user = await UserManager.getUserByHookID(token);
 
     if (!user) {
-      const secondaryUser = await UserManager.getUser(id);
-      if (secondaryUser.isVerified) {
-        throw { message: "User already verified", status: 410 };
-      } else {
-        throw { message: "User not found", status: 404 };
-      }
+      throw invalidToken;
     }
 
     // The account id as given, compared exactly but trimmed and without
     // regard to case, as every lookup of an account by its id
-    // (ECCdigital/tickets#259).
     if (!userIdsMatch(user.id, id)) {
-      throw { message: "User ID does not match token", status: 400 };
+      throw invalidToken;
     }
 
     const hook = user.hooks.find((hook) => hook.id === token);
 
     if (!hook || hook.type !== USER_HOOK_TYPES.VERIFY) {
-      throw { message: "Invalid verification token", status: 400 };
+      throw invalidToken;
     }
 
     user.releaseHook(token);
@@ -125,31 +125,6 @@ class UserService {
     await UserManager.updateUser(user);
 
     return { success: true, nextUrl: hook.payload?.nextUrl ?? null };
-  }
-
-  static async requestForgotPassword(email, resetUrl) {
-    const user = await UserManager.getUser(email, true);
-
-    if (!user || user.authType !== "local" || user.isSuspended) {
-      return { success: true };
-    }
-
-    const userEntity = user instanceof User ? user : new User(user);
-
-    userEntity.revokeActiveHooks(USER_HOOK_TYPES.FORGOT_PASSWORD);
-
-    const ownResetUrl = normalizeClientPage(resetUrl);
-    const hook = userEntity.addForgotPasswordHook(ownResetUrl);
-    await UserManager.updateUser(userEntity);
-    await notify("FORGOT_PASSWORD_REQUEST", {
-      to: userEntity.id,
-      hookId: hook.id,
-      resetUrl: ownResetUrl,
-    });
-
-    logger.info(`Forgot password request sent to user ${userEntity.id}`);
-
-    return { success: true };
   }
 
   /**
@@ -260,7 +235,6 @@ class UserService {
     if (previousId !== normalizedNewId) {
       // The account the new id names, found as every account by its id:
       // an older one stored in another case is taken too
-      // (ECCdigital/tickets#259).
       const existingTargetUser = await UserManager.getRawUser(normalizedNewId);
       if (
         existingTargetUser &&
@@ -320,6 +294,11 @@ class UserService {
           session,
         );
         await InstanceManager.reassignOwnerUserId(
+          previousId,
+          normalizedNewId,
+          session,
+        );
+        await FavoriteManager.reassignUserId(
           previousId,
           normalizedNewId,
           session,
@@ -399,6 +378,19 @@ class UserService {
       firstName: updated.firstName,
       lastName: updated.lastName,
     };
+  }
+
+  /**
+   * Removes a user and what is the user's alone: their favorites go with
+   * them (glossary "Favorit"), the first cascade of a user removal. The
+   * bookings, memberships and owned offers stay as they are.
+   *
+   * @param {string} userId
+   * @returns {Promise<void>}
+   */
+  static async deleteUser(userId) {
+    await FavoriteManager.removeFavoritesOfUser(userId);
+    await UserManager.deleteUser(userId);
   }
 }
 

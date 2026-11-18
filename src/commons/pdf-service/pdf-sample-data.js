@@ -242,6 +242,37 @@ function buildCancellationSampleData(
   };
 }
 
+function buildWithdrawalSampleData(
+  layout = DEFAULT_PDF_BOOKING_LAYOUT,
+  tableMeta = null,
+) {
+  const { items, totals, coupon, booking, renderedTable, bruttoEur } =
+    buildBaseSampleData(layout, tableMeta, {
+      negative: true,
+      tableClass: "booked-items",
+    });
+
+  return {
+    title: "Widerrufbeleg",
+    withdrawalNumber: "WB-1042-1",
+    hasOriginalDocument: true,
+    originalInvoiceNumber: "RE-1042-1",
+    originalInvoiceDate: formatters.formatDate(new Date()),
+    withdrawalDate: formatters.formatDate(new Date()),
+    alreadyPaid: true,
+    refundAmount: formatters.formatCurrency(bruttoEur),
+    invoiceAddress: SAMPLE_ADDRESS,
+    mainContent: renderedTable,
+    location: "Musterstadt",
+    totalAmount: formatters.formatNegativeCurrency(bruttoEur),
+    bookingId: SAMPLE_BOOKING.id,
+    booking,
+    items,
+    coupon,
+    totals,
+  };
+}
+
 function buildSampleData(
   templateType,
   layout = DEFAULT_PDF_BOOKING_LAYOUT,
@@ -254,6 +285,8 @@ function buildSampleData(
       return buildInvoiceSampleData(layout, tableMetaOverride);
     case "cancellation":
       return buildCancellationSampleData(layout, tableMetaOverride);
+    case "withdrawal":
+      return buildWithdrawalSampleData(layout, tableMetaOverride);
     default:
       throw new Error(`Unknown template type: ${templateType}`);
   }

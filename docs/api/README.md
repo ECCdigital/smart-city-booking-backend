@@ -9,7 +9,7 @@ Routes are mounted as follows:
 
 - `/api/...` — instance-level (`src/platform/api/api-router.js`)
 - `/api/:tenant/...` — tenant-scoped (`src/platform/api/api-router-tenant-related.js`)
-- `/api/v2/...` — checkout, coupons, booking status, dashboard KPIs (v2 controllers)
+- `/api/v2/...` — checkout, coupons, booking status, dashboard KPIs, favorites (v2 controllers)
 
 Authentication details: [authentication.md](authentication.md)
 
@@ -33,6 +33,8 @@ Each tenant carries `accessApps[]`: the customer-service contact of every active
 ]
 ```
 
+Each tenant also carries `usesDigitalKeys`: `true` when it has at least one active access application, lockers included, whether or not it has a customer-service contact. The public instance (`GET /api/instances/public`) carries the same field, `true` as soon as one public tenant has it.
+
 ### GET /api/tenants
 
 Returns tenants visible to the authenticated user. **Requires JWT.**
@@ -51,7 +53,7 @@ A tenant can only be created if one of the following conditions is met:
 - The user is included in `instance.allowedUsersToCreateTenant`, or
 - The user is listed in `instance.ownerUserIds`.
 
-The body needs `name`, `contactName` and a formally valid `mail` (the tenant's contact, not the creator's account address); `phone`, `website` and `location` are optional. Answers `201` with an empty body, or:
+The body needs `name`, `contactName` and a formally valid `mail` (the tenant's contact, not the creator's account address); `phone`, `website`, `location` and `description` (the short description, plain text, at most 300 characters) are optional. Answers `201` with an empty body, or:
 
 | Status | `code`                                                 | When                                                                                                                                                                                                                                                   |
 | ------ | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

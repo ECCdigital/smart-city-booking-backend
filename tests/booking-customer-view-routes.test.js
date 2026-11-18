@@ -54,6 +54,8 @@ const EVENT_SNAPSHOT = {
   title: "Sommerkonzert",
   timeBegin: new Date("2027-06-21T19:00").getTime(),
   timeEnd: new Date("2027-06-21T22:00").getTime(),
+  format: 0,
+  participationLink: null,
 };
 
 /** A tenant awaiting approval (pending), with everything the snapshot leaves out. */
@@ -82,10 +84,11 @@ function tenant(overrides = {}) {
   });
 }
 
-function event() {
+function event(overrides = {}) {
   return new Event({
     id: "E1",
     tenantId: TENANT,
+    ...overrides,
     information: {
       name: "Sommerkonzert",
       description: "A long description that stays home",
@@ -94,6 +97,15 @@ function event() {
       endDate: "2027-06-21",
       endTime: "22:00",
     },
+  });
+}
+
+/** An online event with registration: its link is its bookers' alone. */
+function onlineEventWithRegistration() {
+  return event({
+    format: 2,
+    attendees: { needsRegistration: true },
+    eventLocation: { url: "https://meet.example.test/sommer" },
   });
 }
 
@@ -218,12 +230,105 @@ describe("booking-bound customer routes: tenant snapshot and event core data", f
       });
     });
 
+    // ECCdigital/tickets#180: the booker finds the participation link of an
+    // online or hybrid event in their booking once it is confirmed - with
+    // registration too, which the public projection hides it for.
+    it("carries the participation link of an online event once the booking is confirmed", async function () {
+      const link = "https://meet.example.test/sommer";
+      installWorld({
+        events: [
+          event({
+            format: 2,
+            attendees: { needsRegistration: true },
+            eventLocation: { url: link },
+          }),
+        ],
+      });
+
+      const [confirmed, due] = await assignedOf([
+        ticketBooking(),
+        ticketBooking({ id: "B-4", status: "payment_due" }),
+      ]);
+
+      expect(confirmed.event).to.include({
+        format: 2,
+        participationLink: link,
+      });
+      expect(due.event).to.include({ format: 2, participationLink: null });
+    });
+
     it("answers tenant: null for a booking of a deleted tenant", async function () {
       installWorld({ tenants: [] });
 
       const [item] = await assignedOf([roomBooking()]);
 
       expect(item.tenant).to.equal(null);
+      expect(item.withdrawalUrl).to.equal(null);
+    });
+
+    // The withdrawal of a private customer: the mail to the tenant, for a
+    // booking without a company within 14 days of the booking.
+    it("carries the withdrawal link of a private customer's booking within 14 days, else null", async function () {
+      installWorld();
+      const DAY = 24 * 60 * 60 * 1000;
+      const now = Date.now();
+
+      const [fresh, company, old] = await assignedOf([
+        roomBooking({
+          name: "Erika Musterfrau",
+          company: "",
+          timeCreated: now - DAY,
+        }),
+        roomBooking({
+          id: "B-5",
+          company: "Musterfirma GmbH",
+          timeCreated: now,
+        }),
+        roomBooking({ id: "B-6", company: "", timeCreated: now - 15 * DAY }),
+      ]);
+
+      expect(fresh.withdrawalUrl).to.match(
+        /^mailto:amt@stadt\.de\?subject=Widerruf%20der%20Buchung%20B-1&body=/,
+      );
+      expect(fresh.withdrawalUrl).to.include("Erika%20Musterfrau");
+      expect(company.withdrawalUrl).to.equal(null);
+      expect(old.withdrawalUrl).to.equal(null);
+    });
+
+    it("answers each booking without its internal fields (ECCdigital/tickets#255)", async function () {
+      installWorld();
+      const booking = roomBooking({
+        comment: "Bitte Beamer bereitstellen",
+        rejectionReason: "",
+        internalComments: "Kunde zahlt immer spät",
+        bookedVia: "user",
+        _couponUsed: { id: "C-1", discount: 10, maxAmount: 5 },
+        hooks: [{ id: "H-1", type: "REJECT", payload: { reason: "krank" } }],
+      });
+      booking._populated = { bookable: { id: "room" }, workflowStatus: "wf" };
+
+      const [item] = await assignedOf([booking], { populate: "true" });
+
+      expect(item).to.include({
+        id: "B-1",
+        tenantId: TENANT,
+        mail: "erika@example.test",
+        comment: "Bitte Beamer bereitstellen",
+        status: "confirmed",
+        priceEur: 40,
+      });
+      expect(item.hooks).to.have.length(1);
+      expect(item.cancellationPolicy).to.be.an("object");
+      expect(item).to.not.have.any.keys(
+        "internalComments",
+        "assignedUserId",
+        "bookedVia",
+        "_couponUsed",
+        "_populated",
+      );
+      expect(
+        BookingManager.getAssignedBookings.firstCall.args[3],
+      ).to.deep.equal({ populate: false });
     });
   });
 
@@ -327,6 +432,16 @@ describe("booking-bound customer routes: tenant snapshot and event core data", f
 
       expect(item.tenant).to.equal(null);
     });
+
+    // The lookup answers whoever knows a booking number, signed in or not:
+    // the participation link stays with the booker's account and mails.
+    it("hands out no participation link, even for a confirmed booking", async function () {
+      installWorld({ events: [onlineEventWithRegistration()] });
+
+      const [item] = await statusOf("B-2", [ticketBooking()]);
+
+      expect(item.event).to.include({ format: 2, participationLink: null });
+    });
   });
 
   describe("GET /api/v2/:tenant/bookings/:ids/status", function () {
@@ -367,6 +482,8 @@ describe("booking-bound customer routes: tenant snapshot and event core data", f
         "title",
         "timeBegin",
         "timeEnd",
+        "format",
+        "participationLink",
       ]);
       expect(room).to.not.have.property("event");
     });
@@ -395,6 +512,16 @@ describe("booking-bound customer routes: tenant snapshot and event core data", f
 
       expect(tenantsByIds.callCount).to.equal(1);
       expect(tenantsByIds.firstCall.args[0]).to.deep.equal([TENANT]);
+    });
+
+    // The lookup answers whoever knows a booking number, signed in or not:
+    // the participation link stays with the booker's account and mails.
+    it("hands out no participation link, even for a confirmed booking", async function () {
+      installWorld({ events: [onlineEventWithRegistration()] });
+
+      const [item] = await statusOf("B-2", [ticketBooking()]);
+
+      expect(item.event).to.include({ format: 2, participationLink: null });
     });
   });
 });

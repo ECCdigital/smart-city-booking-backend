@@ -1,0 +1,12 @@
+<p>
+  Über eine Einladung ist eine neue Person Mitglied Ihres Mandanten
+  <strong>{{tenantName}}</strong> geworden.
+</p>
+<br />
+{{#if memberName}}
+  <p><strong>Name:</strong> {{memberName}}</p>
+{{/if}}
+<p><strong>E-Mail-Adresse:</strong> {{memberEmail}}</p>
+<p><strong>Rollen:</strong> {{#if roleNames}}{{roleNames}}{{else}}keine{{/if}}</p>
+<br />
+<p><a href="{{membersUrl}}">Zur Benutzerverwaltung Ihres Mandanten</a></p>

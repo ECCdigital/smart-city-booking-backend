@@ -47,6 +47,8 @@ class CancellationRefundService {
     const { daysBeforeStart, appliedTierDays, suggestedRefundPercentage } =
       this.resolvePolicy({
         tiers: tenant?.cancellationRefundTiers || [],
+        withoutTimeSpanPercentage:
+          tenant?.cancellationRefundPercentageWithoutTimeSpan,
         timeBegin: booking.timeBegin,
         cancelledAt,
       });
@@ -105,7 +107,7 @@ class CancellationRefundService {
    * The refund audit a booking carries from its cancellation on: the
    * calculation, the state it was cancelled from where it is cancelled
    * (glossary "Wiederherstellung" returns to it; a rejected request has
-   * none), and the open refund state where a refund is due.
+   * none) or withdrawn, and the open refund state where a refund is due.
    *
    * @param {Object} calculation What `calculate` answered
    * @param {{ status: string, cancelledFrom: string }} transition The state
@@ -115,7 +117,9 @@ class CancellationRefundService {
   static toBookingAudit(calculation, { status, cancelledFrom }) {
     return {
       ...calculation,
-      ...(status === STATUS.CANCELLED && { cancelledFrom }),
+      ...((status === STATUS.CANCELLED || status === STATUS.WITHDRAWN) && {
+        cancelledFrom,
+      }),
       ...(this.isRefundDue(calculation, cancelledFrom) && {
         refundState: REFUND_STATE.OPEN,
       }),
@@ -132,14 +136,32 @@ class CancellationRefundService {
     }
   }
 
-  static resolvePolicy({ tiers, timeBegin, cancelledAt }) {
+  /**
+   * The tier that applies to the cancellation and its refund. A booking
+   * without a time span falls under no tier: it gets the tenant's
+   * `withoutTimeSpanPercentage`, 100 where the tenant names none.
+   */
+  static resolvePolicy({
+    tiers,
+    withoutTimeSpanPercentage,
+    timeBegin,
+    cancelledAt,
+  }) {
     const normalizedTiers = normalizeCancellationRefundTiers(tiers || []);
     const daysBeforeStart = this.calculateDaysBeforeStart(
       timeBegin,
       cancelledAt,
     );
 
-    if (normalizedTiers.length === 0 || daysBeforeStart === null) {
+    if (daysBeforeStart === null) {
+      return {
+        daysBeforeStart,
+        appliedTierDays: null,
+        suggestedRefundPercentage: withoutTimeSpanPercentage ?? 100,
+      };
+    }
+
+    if (normalizedTiers.length === 0) {
       return {
         daysBeforeStart,
         appliedTierDays: null,
@@ -296,10 +318,25 @@ function sanitizeBankDetails(bankDetails) {
   return { accountHolder, bankName, iban, bic };
 }
 
+/**
+ * The bank details a cancellation keeps (glossary "Storno"): sanitized for
+ * a paid booking - one cancelled from, or asked to be cancelled in,
+ * `confirmed` - and `null` for an unpaid one, whatever was sent. The one
+ * rule of the direct cancellation, the cancellation request and the
+ * rejection, of a single booking and a group.
+ *
+ * @param {Object|null} [bankDetails]
+ * @param {string} status The state the booking is cancelled from
+ * @returns {{ accountHolder: string, bankName: string, iban: string, bic: string }|null}
+ */
+function refundBankDetails(bankDetails, status) {
+  return status === STATUS.CONFIRMED ? sanitizeBankDetails(bankDetails) : null;
+}
+
 module.exports = {
   CancellationRefundService,
   CANCELLATION_ORIGINS,
   CANCELLATION_TIME_ZONE,
   REFUND_STATE,
-  sanitizeBankDetails,
+  refundBankDetails,
 };

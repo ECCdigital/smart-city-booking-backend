@@ -14,29 +14,42 @@ const {
 } = require("../../../commons/services/documents/document-issuance");
 const {
   BaseError,
+  BadRequestError,
   ConflictError,
   ForbiddenError,
   NotFoundError,
 } = require("../../../errors/BaseError");
 const ApiResponse = require("../../../commons/utilities/api-response");
+const {
+  decryptBankDetails,
+} = require("../../../commons/utilities/bank-details");
 const BookingService = require("../../../commons/services/checkout/booking-service");
 const BookingCheckout = require("../../../commons/services/checkout/booking-checkout");
 const {
   bookingLifecycle,
   bookingDeletion,
+  STATUS,
   TRANSITION,
   TRIGGER,
 } = require("../../../commons/services/booking-lifecycle");
 const { answerTransitionError } = require("./transition-error-answer");
 const {
+  findReinstatementConflicts,
+} = require("../../../commons/services/checkout/reinstatement-conflicts");
+const {
   CheckoutPolicy,
 } = require("../../../commons/services/checkout/checkout-policy");
 const WorkflowService = require("../../../commons/services/workflow/workflow-service");
-const { scopeOf, PUBLIC } = require("../../../commons/services/authorization");
+const {
+  scopeOf,
+  PUBLIC,
+  REACH,
+} = require("../../../commons/services/authorization");
 const {
   resolveCheckoutId,
 } = require("../../../commons/utilities/checkout-utils");
 const CancellationReceiptService = require("../../../commons/services/payment/cancellation-service");
+const WithdrawalService = require("../../../commons/services/payment/withdrawal-service");
 const mailService = require("../../../commons/mail-service");
 const {
   withCustomerView,
@@ -164,21 +177,22 @@ class BookingController {
       const user = request.user;
 
       // "My bookings" is the domain's read by the user (`self` reaches no
-      // record, ticket 22).
+      // record, ticket 22). Not populated: `_populated` names the workflow
+      // status, which is the administration's (ECCdigital/tickets#255).
       const bookings = await BookingService.getAssignedBookings(
         request.principal.userId,
-        {
-          tenantId: tenant ?? null,
-          populate: request.query.populate === "true",
-        },
+        { tenantId: tenant ?? null },
       );
 
       // The tenant snapshot and the event core data a customer's pages
       // render from (tenant supervision spec §5.2), whatever the level of
-      // the tenant - the booking is the customer's contract with it.
-      const view = await withCustomerView(bookings, (booking) => ({
-        ...booking,
-      }));
+      // the tenant - the booking is the customer's contract with it. Each
+      // booking only in its customer fields (ECCdigital/tickets#255).
+      const view = await withCustomerView(
+        bookings,
+        (booking) => booking.exportCustomer(),
+        { withWithdrawalUrl: true },
+      );
 
       logger.info(
         `${tenant} -- sending ${bookings.length} assigned bookings to user ${user?.id}`,
@@ -356,8 +370,11 @@ class BookingController {
         );
         // The tenant snapshot and the event core data a customer's page
         // renders from (tenant supervision spec §5.2), whatever the level.
-        const bookingsStatus = await withCustomerView(bookings, (booking) =>
-          booking.exportStatus(),
+        // A lookup by booking number, so without the participation link.
+        const bookingsStatus = await withCustomerView(
+          bookings,
+          (booking) => booking.exportStatus(),
+          { withParticipationLink: false },
         );
 
         logger.info(
@@ -564,12 +581,39 @@ class BookingController {
    * The reinstatement of a rejected or cancelled booking (glossary
    * "Wiederherstellung"): the lifecycle transition `reinstate` by the
    * administration, on a route of its own since the booking strand's
-   * ticket 1. Answer and errors as `pay`.
+   * ticket 1. Answer and errors as `pay`. A booking whose period other
+   * bookings took in the meantime is not reinstated but answered 409
+   * `booking_reinstatement_conflict`, its params naming the positions and
+   * the bookings in the way; the body's `ignoreConflicts: true`
+   * reinstates it anyway.
    */
   static async reinstateBooking(request, response) {
     try {
       const { tenant, id } = request.params;
       const { user } = request;
+
+      if (request.body?.ignoreConflicts !== true) {
+        const booking = await BookingManager.getBooking(
+          id,
+          tenant,
+          scopeOf(request),
+        );
+        // A booking that is not cancelled or rejected is the lifecycle's
+        // `invalid_transition`, one it does not find its 404.
+        if (booking?.isRejected) {
+          const conflicts = await findReinstatementConflicts(booking);
+          if (conflicts.length > 0) {
+            const error = new ConflictError("booking_reinstatement_conflict", {
+              bookingId: id,
+              conflicts,
+            });
+            logger.info(
+              `${tenant} -- booking ${id} not reinstated, its period is taken: ${JSON.stringify(conflicts)}`,
+            );
+            return response.status(error.statusCode).json(error.toJSON());
+          }
+        }
+      }
 
       logger.info(`${tenant} -- reinstating booking ${id} by user ${user?.id}`);
       // A booking the lifecycle does not find is its `NotFoundError`, the
@@ -586,6 +630,36 @@ class BookingController {
       answerTransitionError(err, response, {
         code: "booking_reinstatement_failed",
         fallback: "Could not reinstate booking",
+      });
+    }
+  }
+
+  /**
+   * The acceptance of a private customer's withdrawal:
+   * the lifecycle transition `acceptWithdrawal` by the administration, for
+   * good. Answer and errors as `reinstate`.
+   */
+  static async acceptWithdrawal(request, response) {
+    try {
+      const { tenant, id } = request.params;
+      const { user } = request;
+
+      logger.info(
+        `${tenant} -- accepting the withdrawal of booking ${id} by user ${user?.id}`,
+      );
+      await bookingLifecycle.acceptWithdrawal(tenant, id, {
+        trigger: TRIGGER.ADMIN,
+        cancelledByUserId: user?.id || null,
+      });
+      return response.status(200).send({
+        success: true,
+        data: null,
+        errors: [],
+      });
+    } catch (err) {
+      answerTransitionError(err, response, {
+        code: "booking_withdrawal_failed",
+        fallback: "Could not accept the withdrawal of the booking",
       });
     }
   }
@@ -772,6 +846,64 @@ class BookingController {
     }
   }
 
+  /**
+   * The direct cancellation of the signed-in booker's own booking (glossary
+   * "Storno", trigger customer): no cancellation request, no mail to
+   * confirm - the lifecycle transition `cancel` as the release of a request
+   * runs it. Checked in this order: a reason, before any booking is read
+   * (400 `reason_required`); the booking, the user's own only, whoever
+   * they are (404 `booking_not_found`); its cancellation policy (403
+   * `booking_user_cancellation_disabled`); its state (the lifecycle's 409
+   * `invalid_transition`). The bank details go to the lifecycle, which
+   * keeps them for a paid booking only. Answers 200 without a body.
+   */
+  static async cancelBooking(request, response) {
+    try {
+      const { tenant, id } = request.params;
+      const { reason, bankDetails } = request.body || {};
+      const trimmedReason = typeof reason === "string" ? reason.trim() : "";
+      if (!trimmedReason) {
+        return ApiResponse.fail(
+          response,
+          new BadRequestError("reason_required"),
+        );
+      }
+
+      // Own only, even for the administration: a booking of someone else
+      // is cancelled by the administration's rejection, with its own rules.
+      const { userId } = scopeOf(request);
+      const booking = await BookingManager.getBooking(id, tenant, {
+        reach: REACH.OWN,
+        userId,
+      });
+      if (!booking) {
+        return BookingController._notFound(response, id);
+      }
+      if (booking.cancellationPolicy?.userCancellable !== true) {
+        return ApiResponse.fail(
+          response,
+          new ForbiddenError("booking_user_cancellation_disabled", {
+            bookingId: id,
+          }),
+        );
+      }
+
+      logger.info(`${tenant} -- cancelling booking ${id} by user ${userId}`);
+      await bookingLifecycle.cancel(tenant, id, {
+        trigger: TRIGGER.CUSTOMER,
+        reason: trimmedReason,
+        bankDetails: bankDetails || null,
+        cancelledByUserId: userId,
+      });
+      return response.sendStatus(200);
+    } catch (err) {
+      answerTransitionError(err, response, {
+        code: "booking_cancellation_failed",
+        fallback: "Could not cancel booking",
+      });
+    }
+  }
+
   static async releaseBookingHook(request, response) {
     try {
       const tenant = request.params.tenant;
@@ -797,7 +929,7 @@ class BookingController {
             trigger: TRIGGER.CUSTOMER,
             reason,
             hookId,
-            bankDetails: bankDetails || null,
+            bankDetails: decryptBankDetails(bankDetails),
           });
         } else {
           return response.sendStatus(400);
@@ -957,9 +1089,10 @@ class BookingController {
 
   /**
    * Reprints the cancellation document of a cancelled booking as a further
-   * revision, from the refund audit the cancellation left behind. Same
-   * right as the receipt reprint; a booking without a cancellation answers
-   * 409 `not_cancelled`. Nothing is mailed.
+   * revision, from the refund audit the cancellation left behind - for a
+   * withdrawn booking its withdrawal receipt (glossary "Widerrufbeleg")
+   * instead. Same right as the receipt reprint; a booking without a
+   * cancellation answers 409 `not_cancelled`. Nothing is mailed.
    */
   static async createCancellationReceipt(request, response) {
     try {
@@ -980,15 +1113,22 @@ class BookingController {
         return response.status(error.statusCode).json(error.toJSON());
       }
 
+      const withdrawn = booking.status === STATUS.WITHDRAWN;
       await issueDocument({
         tenantId,
         bookingIds: [booking.id],
-        type: "cancellation",
-        options: {
-          alreadyPaid: booking.isPayed,
-          cancellationReason: booking.rejectionReason,
-          refundCalculation: booking.cancellationRefund,
-        },
+        type: withdrawn ? "withdrawal" : "cancellation",
+        options: withdrawn
+          ? {
+              alreadyPaid:
+                booking.cancellationRefund.cancelledFrom === STATUS.CONFIRMED,
+              refundCalculation: booking.cancellationRefund,
+            }
+          : {
+              alreadyPaid: booking.isPayed,
+              cancellationReason: booking.rejectionReason,
+              refundCalculation: booking.cancellationRefund,
+            },
       });
 
       const updatedBooking = await BookingManager.getBooking(
@@ -1167,6 +1307,50 @@ class BookingController {
       return response.status(500).send("Could not get cancellation receipt");
     }
   }
+  /** The withdrawal receipt (glossary "Widerrufbeleg") of a booking, by file name. */
+  static async getWithdrawalReceipt(request, response) {
+    const {
+      params: { tenant, id: bookingId, withdrawalReceiptId },
+      user,
+    } = request;
+
+    try {
+      if (!tenant || !bookingId || !withdrawalReceiptId) {
+        logger.warn(`${tenant} -- Missing required parameters.`);
+        return response.status(400).send("Missing required parameters.");
+      }
+
+      // The booking within the reach of the request; none there is a 404.
+      const booking = await BookingManager.getBooking(
+        bookingId,
+        tenant,
+        scopeOf(request),
+      );
+      if (!booking) {
+        return BookingController._notFound(response, bookingId);
+      }
+
+      const withdrawalReceipt = await WithdrawalService.getWithdrawal(
+        tenant,
+        withdrawalReceiptId,
+        bookingId,
+      );
+
+      logger.info(
+        `${tenant} -- sending withdrawal receipt ${withdrawalReceiptId} to user ${user?.id}`,
+      );
+      response.setHeader("Content-Type", "application/pdf");
+      response.setHeader(
+        "Content-Disposition",
+        `attachment; filename=${withdrawalReceiptId}`,
+      );
+
+      return response.status(200).send(withdrawalReceipt);
+    } catch (err) {
+      logger.error(err);
+      return response.status(500).send("Could not get withdrawal receipt");
+    }
+  }
 
   static async getPublicBookingStatus(request, response) {
     const {
@@ -1191,7 +1375,7 @@ class BookingController {
     } catch (err) {
       logger.error(err);
       return response
-        .status(err.code || 500)
+        .status(err.statusCode || 500)
         .send("Could not get public booking status");
     }
   }

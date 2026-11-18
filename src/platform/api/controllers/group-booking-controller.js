@@ -24,6 +24,9 @@ const {
   NotFoundError,
 } = require("../../../errors/BaseError");
 const ApiResponse = require("../../../commons/utilities/api-response");
+const {
+  findReinstatementConflicts,
+} = require("../../../commons/services/checkout/reinstatement-conflicts");
 
 const logger = bunyan.createLogger({
   name: "group-booking-controller.js",
@@ -395,6 +398,87 @@ class GroupBookingController {
     } catch (error) {
       answerTransitionError(error, res, {
         code: "booking_rejection_failed",
+        fallback: (mapped) => ({ message: mapped.message }),
+      });
+    }
+  }
+
+  /**
+   * The reinstatement of a group (glossary "Wiederherstellung"): the
+   * transition `reinstate` of the group lifecycle as the administration,
+   * over the members that are rejected or cancelled; the others stay as
+   * they are. A member whose period other bookings took in the meantime
+   * keeps the group from being reinstated: 409
+   * `group_booking_reinstatement_conflict`, its params naming per member
+   * the positions and the bookings in the way. The body's
+   * `ignoreConflicts: true` reinstates every member anyway,
+   * `skipConflicts: true` only those without a conflict. Answers the
+   * group.
+   */
+  static async reinstateGroupBooking(req, res) {
+    const tenantId = req.params.tenant;
+    try {
+      const groupBookingId = req.params.id;
+      const { ignoreConflicts, skipConflicts } = req.body || {};
+
+      const groupBooking = await GroupBookingController._loadGroup(req, res);
+      if (!groupBooking) {
+        return;
+      }
+
+      // Members not rejected or cancelled are the lifecycle's business: it
+      // leaves them as they are, and refuses a group with none.
+      const candidates = groupBooking.bookings.filter(
+        (booking) => booking.isRejected,
+      );
+      let bookingIds;
+      if (ignoreConflicts !== true && candidates.length > 0) {
+        const conflicts = [];
+        for (const booking of candidates) {
+          const found = await findReinstatementConflicts(booking);
+          if (found.length > 0) {
+            conflicts.push({ bookingId: booking.id, conflicts: found });
+          }
+        }
+        const free = candidates.filter(
+          (booking) => !conflicts.some((c) => c.bookingId === booking.id),
+        );
+        if (conflicts.length > 0 && (skipConflicts !== true || !free.length)) {
+          const error = new ConflictError(
+            "group_booking_reinstatement_conflict",
+            { groupBookingId, conflicts },
+          );
+          logger.info(
+            `${tenantId} -- group-booking ${groupBookingId} not reinstated, periods are taken: ${JSON.stringify(conflicts)}`,
+          );
+          return res.status(error.statusCode).json(error.toJSON());
+        }
+        bookingIds = free.map((booking) => booking.id);
+      }
+
+      logger.info(
+        `${tenantId} -- reinstating group-booking ${groupBookingId} by user ${req.user?.id}`,
+      );
+      await groupBookingLifecycle.reinstate(tenantId, groupBookingId, {
+        trigger: TRIGGER.ADMIN,
+        bookingIds,
+      });
+
+      const updatedGroupBooking = await GroupBookingManager.getGroupBooking(
+        tenantId,
+        groupBookingId,
+        true,
+        scopeOf(req),
+      );
+
+      return res.status(200).json({
+        success: true,
+        data: updatedGroupBooking,
+        errors: [],
+      });
+    } catch (error) {
+      answerTransitionError(error, res, {
+        code: "booking_reinstatement_failed",
         fallback: (mapped) => ({ message: mapped.message }),
       });
     }

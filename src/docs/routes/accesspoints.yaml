@@ -59,7 +59,10 @@
       the provider reports. Like the preconditions, this is checked against the
       state this request would leave behind, so pointing the access point at
       other hardware is judged by the new one. A provider that reports no
-      supported modes does not restrict the mode.
+      supported modes does not restrict the mode. A Salto KS access point
+      (`salto-ks`) is refused with `unsupported_mode` for any mode but
+      `remote`, without asking Salto, so also while the listing is not
+      available.
 
       `config.openAction` - the Öffnungsart of a Nuki access point - is checked
       against the same listing: a word outside
@@ -91,8 +94,12 @@
       soon as it is saved again. Whether the tenant has switched the provider
       on does not matter here.
 
-      The provider's listing is fetched once per save. A provider that cannot
-      be asked is answered as such and nothing is stored: an HTTP 401 or 403
+      The provider's listing is fetched once per save. While the tenant has no
+      active application for the provider, there is no listing: the access
+      point is stored like one the provider does not list, and the checks
+      that need the listing run on the first save once the provider is
+      active. A provider that cannot be asked is answered as such and nothing
+      is stored: an HTTP 401 or 403
       from the provider (token rejected) is a `502 access_provider_rejected`,
       a network error, timeout or 5xx a `503 access_provider_unreachable`,
       both with `params.provider`. The checks themselves stay `400`.

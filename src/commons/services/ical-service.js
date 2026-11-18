@@ -6,6 +6,9 @@ const { BookableManager } = require("../data-managers/bookable-manager");
 const { DateTime } = require("luxon");
 const { DOMAIN } = require("./authorization/reach");
 const { NotFoundError } = require("../../errors/BaseError");
+const {
+  participationLinkForBooking,
+} = require("../entities/event/event-format");
 
 /**
  * The calendars of a tenant: its events and its bookings as iCal. A
@@ -297,6 +300,9 @@ class ICalService {
 
     const bookableNames = [];
     let location = null;
+    // The participation link of a confirmed ticket booking's online or
+    // hybrid event (ECCdigital/tickets#180).
+    let participationLink = null;
 
     const read = ICalService._lookups(tenantID, lookups);
     for (const item of booking.bookableItems || []) {
@@ -304,6 +310,17 @@ class ICalService {
         item._bookableUsed || (await read.bookable(item.bookableId));
       if (bookable?.title) {
         bookableNames.push(bookable.title);
+      }
+
+      if (
+        !participationLink &&
+        bookable?.type === "ticket" &&
+        bookable.eventId
+      ) {
+        participationLink = participationLinkForBooking(
+          await read.event(bookable.eventId),
+          booking,
+        );
       }
 
       if (!location && bookable?.location) {
@@ -345,6 +362,9 @@ class ICalService {
     descriptionParts.push(`Buchungsnr.: ${booking.id}`);
     if (booking.name) descriptionParts.push(`Name: ${booking.name}`);
     if (booking.company) descriptionParts.push(`Firma: ${booking.company}`);
+    if (participationLink) {
+      descriptionParts.push(`Teilnahme-Link: ${participationLink}`);
+    }
 
     const eventData = {
       id: `Buchung-${booking.id}`,
@@ -353,6 +373,10 @@ class ICalService {
       summary,
       description: descriptionParts.join("\n"),
     };
+
+    if (participationLink) {
+      eventData.url = participationLink;
+    }
 
     if (location) {
       eventData.location = location;

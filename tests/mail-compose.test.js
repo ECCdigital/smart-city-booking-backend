@@ -22,6 +22,8 @@ const {
 const EventManager = require("../src/commons/data-managers/event-manager");
 const { BadRequestError } = require("../src/errors/BaseError");
 const InstanceManager = require("../src/commons/data-managers/instance-manager");
+const MembershipManager = require("../src/commons/data-managers/membership-manager");
+const UserManager = require("../src/commons/data-managers/user-manager");
 const {
   TENANT,
   TENANT_MAIL,
@@ -40,6 +42,7 @@ const {
   concert,
   groupMembers,
   membership,
+  user,
   installMailStackStore,
   issuedFile,
 } = require("./helpers/mail-stack-fixtures");
@@ -120,6 +123,60 @@ describe("compose: a notice as mail values", function () {
       expect(filenames(mail)).to.deep.equal(["ST-1.pdf"]);
       expect(mail.html).to.include("Der Saal wird renoviert.");
       expect(mail.html).to.include("90,38");
+    });
+
+    it("a withdrawal: the cancellation document, a copy to the tenant, the full refund of a paid booking", async function () {
+      installMailStackStore({
+        bookings: [
+          booking({
+            id: "B-withdrawn",
+            status: "withdrawn",
+            cancellationRefund: {
+              originalAmountEur: 40,
+              refundAmountEur: 40,
+              cancellationFeeEur: 0,
+              appliedRefundPercentage: 100,
+              cancelledFrom: "confirmed",
+              refundState: "open",
+            },
+          }),
+        ],
+      });
+
+      const [mail] = await compose("BOOKING_WITHDRAWAL", {
+        ...single("B-withdrawn"),
+        attachments: [issuedFile("ST-1.pdf")],
+      });
+
+      expect(mail.to).to.equal(CUSTOMER);
+      expect(mail.bcc).to.equal(TENANT_MAIL);
+      expect(mail.subject).to.include("Widerruf");
+      expect(filenames(mail)).to.deep.equal(["ST-1.pdf"]);
+      expect(mail.html).to.include("Die Buchung ist widerrufen");
+      expect(mail.html).to.include("erstatten wir Ihnen vollständig");
+    });
+
+    it("a withdrawal of an unpaid booking: the open payment lapses, nothing to refund", async function () {
+      installMailStackStore({
+        bookings: [
+          booking({
+            id: "B-withdrawn",
+            status: "withdrawn",
+            cancellationRefund: {
+              originalAmountEur: 40,
+              refundAmountEur: 40,
+              cancellationFeeEur: 0,
+              appliedRefundPercentage: 100,
+              cancelledFrom: "payment_due",
+            },
+          }),
+        ],
+      });
+
+      const [mail] = await compose("BOOKING_WITHDRAWAL", single("B-withdrawn"));
+
+      expect(mail.html).to.include("Eine noch offene Zahlung entfällt");
+      expect(mail.html).to.not.include("erstatten wir Ihnen");
     });
 
     it("the copy of a confirmation stays away where the tenant does not want receipts copied", async function () {
@@ -477,6 +534,66 @@ describe("compose: a notice as mail values", function () {
       expect(mail.html).to.include(
         link(`${FRONTEND_URL}/auth/invitation/${TENANT}?token=invite-token-1`),
       );
+    });
+
+    describe("the owners' notice of an invitation accepted", function () {
+      const OWNERS = ["chefin@stadthalle.example.test", SUPERVISOR];
+      const MEMBER = "neu@example.test";
+
+      function givenOwners(tenantOverrides = {}) {
+        installMailStackStore({
+          tenant: tenant(tenantOverrides),
+          users: [user({ id: MEMBER, firstName: "Nora", lastName: "Neumann" })],
+        });
+        sinon
+          .stub(MembershipManager, "getOwnerMembershipsByTenantID")
+          .resolves(OWNERS.map((userId) => ({ tenantId: TENANT, userId })));
+        sinon
+          .stub(UserManager, "getUsersById")
+          .callsFake(async (ids) => ids.map((id) => ({ id })));
+      }
+
+      const accepted = () => ({
+        tenantId: TENANT,
+        userId: MEMBER,
+        roleNames: ["Sekretariat", "Hausmeister"],
+      });
+
+      it("is a tenant mail to every owner naming the tenant, the new member with name, address and roles, and linking the tenant's members in the Admin UI", async function () {
+        givenOwners();
+
+        const mails = await compose("INVITATION_ACCEPTED", accepted());
+
+        expect(mails.map((mail) => mail.to)).to.deep.equal(OWNERS);
+        expect(mails[0]).to.include({
+          type: "INVITATION_ACCEPTED",
+          tenantId: TENANT,
+          subject: "Neues Mitglied im Mandanten Stadthalle Musterstadt",
+        });
+        expect(mails[0].html).to.include("Stadthalle Musterstadt");
+        expect(mails[0].html).to.include("Nora Neumann");
+        expect(mails[0].html).to.include(MEMBER);
+        expect(mails[0].html).to.include("Sekretariat, Hausmeister");
+        expect(mails[0].html).to.include(
+          link(`${FRONTEND_URL}/tenant/members?tenant=${TENANT}`),
+        );
+      });
+
+      it("is on for a tenant that never set the switch", async function () {
+        givenOwners({ notifyOwnersOnInvitationAccepted: undefined });
+
+        expect(await compose("INVITATION_ACCEPTED", accepted())).to.have.length(
+          2,
+        );
+      });
+
+      it("is nothing where the tenant has the switch off", async function () {
+        givenOwners({ notifyOwnersOnInvitationAccepted: false });
+
+        expect(await compose("INVITATION_ACCEPTED", accepted())).to.deep.equal(
+          [],
+        );
+      });
     });
 
     it("a workflow notification names the booking in its subject and reads the tenant only, never the booking", async function () {

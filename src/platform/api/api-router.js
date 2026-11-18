@@ -11,7 +11,9 @@ const MailTemplateController = require("./controllers/mail-template-controller")
 const { BookingController } = require("./controllers/booking-controller");
 const AccessController = require("./controllers/access-controller");
 const InstanceController = require("./controllers/instance-controller");
+const BlacklistController = require("./controllers/blacklist-controller");
 const SupervisionController = require("./controllers/supervision-controller");
+const ReportController = require("./controllers/report-controller");
 const {
   authorize,
   publicRoute,
@@ -73,6 +75,44 @@ router.post(
   "/instances/supervision/notifications/:id/retry",
   authorize("instance", "supervisionNotificationRetry"),
   SupervisionController.retryNotification,
+);
+// The blacklist of the instance (glossary „Blacklist“).
+router.get(
+  "/instances/blacklist",
+  authorize("blacklist", "read"),
+  BlacklistController.getEntries,
+);
+router.get(
+  "/instances/blacklist/preview",
+  authorize("blacklist", "read"),
+  BlacklistController.getPreview,
+);
+router.post(
+  "/instances/blacklist",
+  authorize("blacklist", "write"),
+  BlacklistController.createEntry,
+);
+router.put(
+  "/instances/blacklist/:id",
+  authorize("blacklist", "write"),
+  BlacklistController.updateEntry,
+);
+router.delete(
+  "/instances/blacklist/:id",
+  authorize("blacklist", "write"),
+  BlacklistController.removeEntry,
+);
+// The reports to the instance (glossary „Meldung“):
+// read, and settle every open one about a user.
+router.get(
+  "/instances/reports",
+  authorize("report", "read"),
+  ReportController.getReports,
+);
+router.post(
+  "/instances/reports/resolve",
+  authorize("report", "resolve"),
+  ReportController.resolveReports,
 );
 
 // RULES
@@ -195,6 +235,36 @@ router.get(
   authorize("tenantUser", "read"),
   TenantController.getUsers,
 );
+// The warning before adding or inviting an address on the blacklist.
+router.post(
+  "/tenants/:tenant/users/blacklist-match",
+  authorize("tenantUser", "manage"),
+  BlacklistController.match,
+);
+// Reporting a member or a booker to the instance (glossary „Meldung“);
+// a tenant owner only by a tenant owner, which
+// the marker decides too.
+router.post(
+  "/tenants/:tenant/reports",
+  authorize("tenantUser", "report", { also: ["owner"] }),
+  ReportController.createReport,
+);
+// The tenant's own reports, to read, add to and withdraw.
+router.get(
+  "/tenants/:tenant/reports",
+  authorize("tenantUser", "report"),
+  ReportController.getTenantReports,
+);
+router.post(
+  "/tenants/:tenant/reports/:id/additions",
+  authorize("tenantUser", "report", { also: ["owner"] }),
+  ReportController.addReason,
+);
+router.post(
+  "/tenants/:tenant/reports/:id/withdraw",
+  authorize("tenantUser", "report", { also: ["owner"] }),
+  ReportController.withdrawReport,
+);
 router.post(
   "/tenants/:tenant/add-user",
   authorize("tenantUser", "manage"),
@@ -243,6 +313,14 @@ router.post(
 router.get("/users", authorize("user", "read"), UserController.getUsers);
 router.get("/users/ids", authorize("user", "read"), UserController.getUserIds);
 router.get("/users/:id", authorize("user", "read"), UserController.getUser);
+// The warning before creating a user or changing a user id to an address
+// on the blacklist; both ways are the instance
+// owner's, as `user.create` is.
+router.post(
+  "/users/blacklist-match",
+  authorize("user", "create"),
+  BlacklistController.match,
+);
 router.post(
   "/users/:id/change-id",
   authorize("user", "changeId"),
@@ -253,6 +331,21 @@ router.put(
   "/users",
   authorize("user", "update", { also: ["create"] }),
   UserController.storeUser,
+);
+router.get(
+  "/users/:id/suspension-preview",
+  authorize("user", "suspend"),
+  UserController.getSuspensionPreview,
+);
+router.post(
+  "/users/:id/suspension",
+  authorize("user", "suspend"),
+  UserController.suspendUser,
+);
+router.delete(
+  "/users/:id/suspension",
+  authorize("user", "suspend"),
+  UserController.unsuspendUser,
 );
 router.put("/user", authorize("user", "updateSelf"), UserController.updateMe);
 router.delete(

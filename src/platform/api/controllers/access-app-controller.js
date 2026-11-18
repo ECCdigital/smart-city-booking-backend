@@ -4,7 +4,8 @@ const SaltoKsIqActivationService = require("../../../commons/services/access/sal
 const {
   hasTestHandler,
 } = require("../../../commons/services/access/clients/access-test-registry");
-const { BaseError } = require("../../../errors/BaseError");
+const { BaseError, NotFoundError } = require("../../../errors/BaseError");
+const ApiResponse = require("../../../commons/utilities/api-response");
 
 const logger = bunyan.createLogger({
   name: "access-app-controller.js",
@@ -29,12 +30,23 @@ class AccessAppController {
     }
   }
 
+  /**
+   * The locks the provider lists for the tenant. A tenant without an active
+   * application for the provider is answered `404
+   * <provider>_application_not_found` (tickets#311), so the admin UI can say
+   * that lock and mode are checked once the provider is active; every other
+   * failure stays a 500.
+   */
   static async getAccessPoints(request, response) {
     try {
       const { tenant, provider } = request.params;
       const points = await AccessInfoService.getAccessPoints(tenant, provider);
       return response.status(200).send(points);
     } catch (err) {
+      if (err instanceof NotFoundError) {
+        return ApiResponse.fail(response, err);
+      }
+
       logger.error(err);
       return response.status(500).send("Could not get access points");
     }

@@ -58,6 +58,18 @@ function offerPassesReview(tenant, offer) {
 }
 
 /**
+ * Whether an offer asks to be listed (glossary "Veröffentlichungswunsch",
+ * `isPublic`): the offer's own wish, before the tenant and the review have
+ * their say. An offer without it is reached by a direct link alone.
+ *
+ * @param {Object} offer - A bookable or an event.
+ * @returns {boolean}
+ */
+function asksToBeListed(offer) {
+  return offer?.isPublic === true;
+}
+
+/**
  * Whether an offer goes out on list-type delivery: public lists, catalog
  * bundles, feeds, calendar and occupancy aggregates, tag and counter
  * aggregates.
@@ -68,7 +80,7 @@ function offerPassesReview(tenant, offer) {
 function isOfferListable({ tenant, offer }) {
   return (
     isTenantPubliclyVisible(tenant) &&
-    offer?.isPublic === true &&
+    asksToBeListed(offer) &&
     offerPassesReview(tenant, offer)
   );
 }
@@ -95,6 +107,7 @@ function isOfferReachable({ tenant, offer, event = null }) {
 
 module.exports = {
   isTenantPubliclyVisible,
+  asksToBeListed,
   isOfferListable,
   isOfferReachable,
 };

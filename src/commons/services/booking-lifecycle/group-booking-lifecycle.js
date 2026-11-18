@@ -45,9 +45,10 @@ const {
 } = require("./booking-lifecycle");
 const {
   CancellationRefundService,
-  sanitizeBankDetails,
+  refundBankDetails,
 } = require("../payment/cancellation-refund-service");
 const { ConflictError, NotFoundError } = require("../../../errors/BaseError");
+const { BOOKING_HOOK_TYPES } = require("../../entities/booking/bookingHook");
 
 /** Whether the group as a whole has a price. */
 function isPricedGroup(bookings) {
@@ -119,6 +120,13 @@ function createGroupBookingLifecycle(adapters) {
    * shared state.
    */
   async function load(tenantId, groupBookingId, transition) {
+    const { group, bookings } = await loadMembers(tenantId, groupBookingId);
+    const from = sharedStatusOf(transition, groupBookingId, bookings);
+    return { group, bookings, from };
+  }
+
+  /** The group and its members in the group's order, in whatever state. */
+  async function loadMembers(tenantId, groupBookingId) {
     const group = await store.getGroup(tenantId, groupBookingId);
     if (!group) {
       throw new NotFoundError("group_booking_not_found", { groupBookingId });
@@ -133,8 +141,7 @@ function createGroupBookingLifecycle(adapters) {
       });
     }
     const bookings = group.bookingIds.map((id) => byId.get(id));
-    const from = sharedStatusOf(transition, groupBookingId, bookings);
-    return { group, bookings, from };
+    return { group, bookings };
   }
 
   async function loadTenant(tenantId) {
@@ -502,7 +509,7 @@ function createGroupBookingLifecycle(adapters) {
             bookings,
             options: {
               alreadyPaid: from === STATUS.CONFIRMED,
-              bankDetails: sanitizeBankDetails(bankDetails) || undefined,
+              bankDetails: refundBankDetails(bankDetails, from) || undefined,
               cancellationReason: reason,
               refundCalculations: refunds,
             },
@@ -526,7 +533,90 @@ function createGroupBookingLifecycle(adapters) {
     ]);
   }
 
-  return { admit, confirm, pay, cancel };
+  /**
+   * The reinstatement of a group (glossary "Wiederherstellung"): the
+   * members that are rejected or cancelled - all of them, or those of
+   * `bookingIds` - each back to its own state as the single `reinstate`
+   * does it: `rejected → requested`, `cancelled → ` the state it was
+   * cancelled from, the reason cleared, the refund audit and an open
+   * cancellation request dropped. The other members stay as they are; the
+   * group needs no shared state. Written one by one, then granted at
+   * `confirmed`, held otherwise. A write or a hold that fails aborts, the
+   * members written before it restored: the group stands as before. The
+   * documents stay, no workflow event, no mail.
+   *
+   * @param {string} tenantId
+   * @param {string} groupBookingId
+   * @param {{ trigger: string, bookingIds?: string[] }} options
+   * @returns {Promise<Object>} The outcome, `bookingIds` and `bookings`
+   *   the members reinstated
+   * @throws {ConflictError} `invalid_transition` where no member named is
+   *   rejected or cancelled
+   */
+  async function reinstate(
+    tenantId,
+    groupBookingId,
+    { trigger, bookingIds } = {},
+  ) {
+    const transition = TRANSITION.REINSTATE;
+    assertTrigger(transition, trigger);
+
+    const { group, bookings } = await loadMembers(tenantId, groupBookingId);
+    const named = (booking) => !bookingIds || bookingIds.includes(booking.id);
+    const members = bookings.filter(
+      (booking) =>
+        named(booking) &&
+        [STATUS.REJECTED, STATUS.CANCELLED].includes(booking.status),
+    );
+    if (members.length === 0) {
+      throw new ConflictError("invalid_transition", {
+        groupBookingId,
+        transition,
+        bookingIds: bookingIds ?? group.bookingIds,
+      });
+    }
+
+    const from = new Map();
+    for (const booking of members) {
+      from.set(booking.id, booking.status);
+      booking.status = nextState(booking.status, transition, booking);
+      booking.rejectionReason = "";
+      delete booking.cancellationRefund;
+      // An open cancellation request from before the cancellation goes: its
+      // old link must not cancel the reinstated booking again.
+      booking.hooks = (booking.hooks || []).filter(
+        (hook) => hook.type !== BOOKING_HOOK_TYPES.REJECT,
+      );
+    }
+    const confirmed = (booking) => booking.status === STATUS.CONFIRMED;
+
+    // A reinstatement tells the booker nothing; the failed grant is the
+    // one notice it can send.
+    const notice = noticeOf(tenantId, group);
+    const reinstated = { ...group, bookingIds: members.map((b) => b.id) };
+
+    return runPipeline(ctxOf(transition, tenantId, reinstated, members), [
+      ...members.map((booking) =>
+        step(
+          PHASE.PERSIST,
+          "store",
+          "save",
+          () =>
+            store.save(booking, {
+              expectStatus: from.get(booking.id),
+              transition,
+              unset: ["cancellationRefund"],
+            }),
+          { bookingId: booking.id },
+        ),
+      ),
+      ...accessEach(members, "hold", (booking) => !confirmed(booking)),
+      ...accessEach(members, "provision", confirmed),
+      provisionFailureNotice(notice),
+    ]);
+  }
+
+  return { admit, confirm, pay, cancel, reinstate };
 }
 
 /** The group lifecycle over the production adapters. */

@@ -4,10 +4,12 @@ const { mediaReferenceSchema } = require("./mediaSchema");
 const {
   STATUSES,
   CANCELLED_FROM_STATUSES,
+  WITHDRAWN_FROM_STATUSES,
 } = require("../services/booking-lifecycle/booking-state");
 const {
   REFUND_STATE,
 } = require("../services/payment/cancellation-refund-service");
+const { BOOKED_VIA } = require("../services/checkout/booked-via");
 
 const bookingHookSchemaDefinition = {
   id: { type: String, required: true },
@@ -59,11 +61,14 @@ const cancellationAuditSchema = new Schema(
     },
     adminOverride: { type: Boolean, required: true },
     cancelledByUserId: { type: String, default: null },
-    // The state the booking was cancelled from; `reinstate` returns to it
-    // and the entity derives `isPayed` of a cancelled booking from it.
+    // The state the booking was cancelled or withdrawn from; `reinstate`
+    // returns a cancelled one to it and the entity derives `isPayed` of
+    // either from it. A withdrawal can also come from `requested`.
     cancelledFrom: {
       type: String,
-      enum: CANCELLED_FROM_STATUSES,
+      enum: [
+        ...new Set([...CANCELLED_FROM_STATUSES, ...WITHDRAWN_FROM_STATUSES]),
+      ],
       default: undefined,
     },
     originalDocumentRef: {
@@ -104,6 +109,7 @@ const attachmentSchemaDefinition = {
   invoiceId: { type: String },
   receiptId: { type: String },
   cancellationId: { type: String },
+  withdrawalId: { type: String },
   revision: { type: Number },
   timeCreated: { type: Double },
   mailAttach: { type: Boolean },
@@ -114,6 +120,9 @@ const bookingSchemaDefinition = {
   id: { type: String, required: true, unique: true },
   tenantId: { type: String, required: true, ref: "Tenant" },
   assignedUserId: { type: String, ref: "User", default: "" },
+  // The Buchungsweg (booked-via.js), set once when the checkout creates the
+  // booking. No default: a booking from before it has none.
+  bookedVia: { type: String, enum: BOOKED_VIA },
   attachments: {
     type: [new Schema(attachmentSchemaDefinition, { _id: false })],
     default: [],
@@ -128,6 +137,10 @@ const bookingSchemaDefinition = {
   internalComments: { type: String, default: "" },
   rejectionReason: { type: String, default: "" },
   company: { type: String, default: "" },
+  // Private or business booking, as the booker answers it at the checkout
+  // (business-booking.js). No default: a booking from before has none and
+  // reads off `company`.
+  isBusiness: { type: Boolean },
   couponCode: { type: String, default: "" },
   // The booking state, the one source of truth (booking-state.js). The
   // three flags below are derived from it by the entity on every write and
