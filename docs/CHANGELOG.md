@@ -9,6 +9,7 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ### Changed
 
+- Index for the tickets of an event ([ECCdigital/tickets#740](https://github.com/ECCdigital/tickets/issues/740)): `bookables` gets the index `tenantId_1_eventId_1_type_1`, so the query for the tickets of an event (`{tenantId, eventId, type: "ticket"}`, e.g. in the checkout of a ticket) reads only that event's bookables instead of every bookable of the tenant. The migration `18-11-2026-add-bookable-event-index` builds it on existing instances and skips an index with the same keys. No API change
 - CI gate „protected files“ ([ECCdigital/tickets#425](https://github.com/ECCdigital/tickets/issues/425)): the new job `protected-files`, required by `ci-ok`, blocks a pull request that deletes or changes an existing test, adds `.skip`, `.only` or `.todo`, or changes an accepted ADR or the CI configuration, unless the ticket it references (`Refs ECCdigital/tickets#<n>`) names the file; new tests are free. It runs the rule from ECCdigital/portolan with the read-only GitHub App „Portolan Gate“ (org secrets `GATE_APP_ID`, `GATE_PRIVATE_KEY`); pull requests from forks get no secrets and stay blocked until an admin bypasses the gate. No code change
 
 ## [4.4.1] — 2026-11-16
