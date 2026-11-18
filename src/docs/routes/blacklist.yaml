@@ -1,0 +1,444 @@
+# swagger/routes/blacklist.yaml
+
+/api/instances/blacklist:
+  get:
+    tags:
+      - Instance
+    summary: The blacklist of the instance
+    description: |
+      Every entry of the blacklist (glossary "Blacklist"),
+      newest first. It holds for every tenant of
+      the instance. The instance owner's alone (`blacklist.read`); tenant
+      owners do not see it.
+    security:
+      - bearerAuth: []
+    responses:
+      "200":
+        description: The entries
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/BlacklistEntry"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+  post:
+    tags:
+      - Instance
+    summary: Add an entry to the blacklist
+    description: |
+      Adds an exact address or a domain with a leading `@`, trimmed and in
+      lower case as the user ids. A domain hits only itself, no subdomain;
+      a plus address is an address of its own. The entry suspends the
+      matching accounts (matched by the user id) at once with the origin
+      `blacklist`, the entry's reason, time and person - except instance
+      owners and accounts already suspended. The instance owner's alone
+      (`blacklist.write`).
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [value, reason]
+            properties:
+              value:
+                type: string
+                example: "@wegwerf.de"
+              reason:
+                type: string
+    responses:
+      "201":
+        description: The stored entry
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BlacklistEntry"
+      "400":
+        description: "`blacklist_reason_required` or `blacklist_value_invalid`"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+      "409":
+        description: "`blacklist_entry_exists`: an entry of this value is stored"
+
+/api/instances/blacklist/preview:
+  get:
+    tags:
+      - Instance
+    summary: The accounts a new entry would hit
+    description: |
+      Before adding an entry: the accounts it would suspend, the instance
+      owners it leaves out and the accounts already suspended, apart.
+      Nothing changes. The instance owner's alone (`blacklist.read`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: value
+        in: query
+        required: true
+        description: An address or a domain with a leading `@`
+        schema:
+          type: string
+    responses:
+      "200":
+        description: The preview
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                value:
+                  type: string
+                  description: The value as an entry would store it
+                kind:
+                  type: string
+                  enum: [address, domain]
+                exists:
+                  type: boolean
+                  description: An entry of this value is stored already
+                accounts:
+                  type: object
+                  properties:
+                    suspend:
+                      $ref: "#/components/schemas/BlacklistAccounts"
+                    instanceOwners:
+                      $ref: "#/components/schemas/BlacklistAccounts"
+                    alreadySuspended:
+                      $ref: "#/components/schemas/BlacklistAccounts"
+      "400":
+        description: "`blacklist_value_invalid`"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+
+/api/instances/blacklist/{id}:
+  put:
+    tags:
+      - Instance
+    summary: Change the reason of an entry
+    description: |
+      Changes the reason alone; value and kind of an entry are fixed. The
+      suspensions the entry made keep the reason they were made with. The
+      instance owner's alone (`blacklist.write`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/BlacklistEntryId"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [reason]
+            properties:
+              reason:
+                type: string
+    responses:
+      "200":
+        description: The entry after the change
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BlacklistEntry"
+      "400":
+        description: "`blacklist_reason_required`"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+      "404":
+        description: "`blacklist_entry_not_found`"
+  delete:
+    tags:
+      - Instance
+    summary: Remove an entry
+    description: |
+      Removes the entry. With `unsuspend=true` it lifts the suspensions
+      this entry made and that still point to it; a suspension by hand or
+      by another entry stays. The instance owner's alone
+      (`blacklist.write`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/BlacklistEntryId"
+      - name: unsuspend
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+    responses:
+      "200":
+        description: The accounts whose suspension was lifted
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                unsuspendedUserIds:
+                  type: array
+                  items:
+                    type: string
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+      "404":
+        description: "`blacklist_entry_not_found`"
+
+components:
+  parameters:
+    BlacklistEntryId:
+      name: id
+      in: path
+      required: true
+      description: The id of the entry
+      schema:
+        type: string
+  schemas:
+    BlacklistEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        value:
+          type: string
+          description: The address, or the domain with a leading `@`
+        kind:
+          type: string
+          enum: [address, domain]
+        reason:
+          type: string
+        createdAt:
+          type: number
+          description: Milliseconds since the epoch
+        createdBy:
+          type: string
+          description: The instance owner who added it
+        origin:
+          type: string
+          enum: [manual, suspension, reports]
+          description: |
+            By hand, `suspension` when suspending a user put their
+            address on the blacklist, or `reports`
+            when the instance owner settled reports about an address with
+            it
+        suspendedUserIds:
+          type: array
+          description: The accounts the entry suspended when it was added
+          items:
+            type: string
+        suspensionUserId:
+          type: string
+          nullable: true
+          description: With origin `suspension`, the user whose suspension added the entry
+        reportIds:
+          type: array
+          description: |
+            The open reports about an address it hits that the entry settled
+            as `blacklisted` when it was added, whatever its origin
+          items:
+            type: string
+    BlacklistAccounts:
+      type: array
+      items:
+        type: object
+        properties:
+          id:
+            type: string
+          firstName:
+            type: string
+          lastName:
+            type: string
+          tenants:
+            type: array
+            description: The tenants the account is an active member of
+            items:
+              type: object
+              properties:
+                id:
+                  type: string
+                name:
+                  type: string
+
+# The warning of the administration's ways: one
+# route per way, under the marker of the way, the same answer everywhere.
+/api/{tenant}/bookings/blacklist-match:
+  post:
+    tags:
+      - Instance
+    summary: Does the blacklist hit this address? (manual booking)
+    description: |
+      The warning before an address on the blacklist is saved.
+      Tells only whether an entry hits the
+      address - never the entry or its reason. A list as in `mail` of a
+      booking is asked address by address; one hit is a hit. Saving
+      anyway is no refusal and suspends no account. Open to every role
+      that may go the way (`booking.create`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - in: path
+        name: tenant
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              address:
+                type: string
+                example: "max@firma.de"
+    responses:
+      "200":
+        description: Whether an entry hits the address
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                blacklisted:
+                  type: boolean
+      "401":
+        description: Not authenticated
+      "403":
+        description: May not go the way
+/api/{tenant}/bookings/blacklist-match/mail:
+  post:
+    tags:
+      - Instance
+    summary: Does the blacklist hit this address? (mail of a booking)
+    description: |
+      The warning before an address on the blacklist is saved.
+      Tells only whether an entry hits the
+      address - never the entry or its reason. A list as in `mail` of a
+      booking is asked address by address; one hit is a hit. Saving
+      anyway is no refusal and suspends no account. Open to every role
+      that may go the way (`booking.update`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - in: path
+        name: tenant
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              address:
+                type: string
+                example: "max@firma.de"
+    responses:
+      "200":
+        description: Whether an entry hits the address
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                blacklisted:
+                  type: boolean
+      "401":
+        description: Not authenticated
+      "403":
+        description: May not go the way
+/api/tenants/{tenant}/users/blacklist-match:
+  post:
+    tags:
+      - Instance
+    summary: Does the blacklist hit this address? (add or invite into a tenant)
+    description: |
+      The warning before an address on the blacklist is saved.
+      Tells only whether an entry hits the
+      address - never the entry or its reason. A list as in `mail` of a
+      booking is asked address by address; one hit is a hit. Saving
+      anyway is no refusal and suspends no account. Open to every role
+      that may go the way (`tenantUser.manage`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - in: path
+        name: tenant
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              address:
+                type: string
+                example: "max@firma.de"
+    responses:
+      "200":
+        description: Whether an entry hits the address
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                blacklisted:
+                  type: boolean
+      "401":
+        description: Not authenticated
+      "403":
+        description: May not go the way
+/api/users/blacklist-match:
+  post:
+    tags:
+      - Instance
+    summary: Does the blacklist hit this address? (create a user, change a user id)
+    description: |
+      The warning before an address on the blacklist is saved.
+      Tells only whether an entry hits the
+      address - never the entry or its reason. A list as in `mail` of a
+      booking is asked address by address; one hit is a hit. Saving
+      anyway is no refusal and suspends no account. Open to every role
+      that may go the way (`user.create`).
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              address:
+                type: string
+                example: "max@firma.de"
+    responses:
+      "200":
+        description: Whether an entry hits the address
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                blacklisted:
+                  type: boolean
+      "401":
+        description: Not authenticated
+      "403":
+        description: May not go the way

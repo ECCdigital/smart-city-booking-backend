@@ -1204,3 +1204,150 @@ describe("group booking lifecycle: admit", function () {
     expect(outcome.failure).to.equal(null);
   });
 });
+
+describe("group booking lifecycle: reinstate", function () {
+  const cancelledFrom = (from) => ({
+    status: "cancelled",
+    rejectionReason: "Halle gesperrt",
+    cancellationRefund: { cancelledFrom: from },
+  });
+
+  it("reinstates a cancelled paid group: write without the reason and the refund audit, then the grant per member; no document, no event, no mail", async function () {
+    const { adapters, lifecycle } = groupOf("cancelled", {
+      members: cancelledFrom("confirmed"),
+    });
+
+    const outcome = await lifecycle.reinstate(TENANT, GROUP, {
+      trigger: TRIGGER.ADMIN,
+    });
+
+    expect(effectTable(outcome)).to.deep.equal([
+      "persist store.save B-1 ok",
+      "persist store.save B-2 ok",
+      "provision access.hold B-1 skipped",
+      "provision access.hold B-2 skipped",
+      "provision access.provision B-1 ok",
+      "provision access.provision B-2 ok",
+      "notify mail.ACCESS_PROVISION_FAILED skipped",
+    ]);
+    expect(outcome.status).to.equal("confirmed");
+    expect(states(adapters)).to.deep.equal(["confirmed", "confirmed"]);
+    for (const id of ["B-1", "B-2"]) {
+      const row = adapters.store.rows.get(id);
+      expect(row.rejectionReason).to.equal("");
+      expect(row.cancellationRefund).to.equal(undefined);
+    }
+    expect(adapters.documents.calls).to.deep.equal([]);
+    expect(adapters.workflow.calls).to.deep.equal([]);
+    expect(adapters.mail.calls).to.deep.equal([]);
+  });
+
+  it("brings each member back to its own state: a rejected request requested and held, a member cancelled from payment_due awaiting payment again", async function () {
+    const adapters = inMemoryAdapters({
+      bookings: [
+        member("B-1", { status: "rejected", rejectionReason: "Kein Platz" }),
+        member("B-2", cancelledFrom("payment_due")),
+      ],
+      groups: [group(["B-1", "B-2"])],
+    });
+    const lifecycle = createGroupBookingLifecycle(adapters);
+
+    const outcome = await lifecycle.reinstate(TENANT, GROUP, {
+      trigger: TRIGGER.ADMIN,
+    });
+
+    expect(states(adapters)).to.deep.equal(["requested", "payment_due"]);
+    expect(outcome.status).to.equal(null);
+    expect(adapters.access.calls.map((call) => call.op)).to.deep.equal([
+      "hold",
+      "hold",
+    ]);
+  });
+
+  it("leaves the members that are not cancelled or rejected as they are", async function () {
+    const adapters = inMemoryAdapters({
+      bookings: [
+        member("B-1", cancelledFrom("confirmed")),
+        member("B-2", { status: "confirmed" }),
+      ],
+      groups: [group(["B-1", "B-2"])],
+    });
+    const lifecycle = createGroupBookingLifecycle(adapters);
+
+    const outcome = await lifecycle.reinstate(TENANT, GROUP, {
+      trigger: TRIGGER.ADMIN,
+    });
+
+    expect(outcome.bookingIds).to.deep.equal(["B-1"]);
+    expect(states(adapters)).to.deep.equal(["confirmed", "confirmed"]);
+    expect(adapters.store.writes).to.deep.equal([
+      { id: "B-1", status: "confirmed" },
+    ]);
+  });
+
+  it("reinstates only the members the caller names", async function () {
+    const { adapters, lifecycle } = groupOf("cancelled", {
+      members: cancelledFrom("confirmed"),
+    });
+
+    const outcome = await lifecycle.reinstate(TENANT, GROUP, {
+      trigger: TRIGGER.ADMIN,
+      bookingIds: ["B-2"],
+    });
+
+    expect(outcome.bookingIds).to.deep.equal(["B-2"]);
+    expect(states(adapters)).to.deep.equal(["cancelled", "confirmed"]);
+  });
+
+  it("refuses a group without a cancelled or rejected member: 409 invalid_transition before any effect", async function () {
+    const { adapters, lifecycle } = groupOf("confirmed");
+
+    const error = await failing(
+      lifecycle.reinstate(TENANT, GROUP, { trigger: TRIGGER.ADMIN }),
+    );
+
+    expect(error).to.be.instanceOf(ConflictError);
+    expect(error.code).to.equal("invalid_transition");
+    expect(adapters.store.writes).to.deep.equal([]);
+  });
+
+  it("a write that fails at member 2 restores member 1: the group stays cancelled", async function () {
+    const { adapters, lifecycle } = groupOf("cancelled", {
+      members: cancelledFrom("confirmed"),
+      failOn: { store: ["save B-2"] },
+    });
+
+    const error = await failing(
+      lifecycle.reinstate(TENANT, GROUP, { trigger: TRIGGER.ADMIN }),
+    );
+
+    expect(error).to.be.instanceOf(LifecycleError);
+    expect(error.outcome.failure.compensated).to.deep.equal(["B-1"]);
+    expect(states(adapters)).to.deep.equal(["cancelled", "cancelled"]);
+    expect(adapters.access.calls).to.deep.equal([]);
+  });
+
+  it("a hold that fails aborts: every member written before is restored", async function () {
+    const { adapters, lifecycle } = groupOf("rejected", {
+      failOn: { access: ["hold"] },
+    });
+
+    const error = await failing(
+      lifecycle.reinstate(TENANT, GROUP, { trigger: TRIGGER.ADMIN }),
+    );
+
+    expect(error).to.be.instanceOf(LifecycleError);
+    expect(error.outcome.failure.compensated).to.deep.equal(["B-2", "B-1"]);
+    expect(states(adapters)).to.deep.equal(["rejected", "rejected"]);
+  });
+
+  it("demands a trigger", async function () {
+    const { lifecycle } = groupOf("cancelled", {
+      members: cancelledFrom("confirmed"),
+    });
+
+    const error = await failing(lifecycle.reinstate(TENANT, GROUP, {}));
+
+    expect(error).to.be.an("error");
+  });
+});

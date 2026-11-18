@@ -4,6 +4,7 @@ const InstanceManager = require("../../data-managers/instance-manager");
 const UserManager = require("../../data-managers/user-manager");
 const mailService = require("../../mail-service");
 const { normalizeClientPage } = require("../user/client-page");
+const BlacklistService = require("../blacklist/blacklist-service");
 
 const logger = bunyan.createLogger({
   name: "card-auth-service",
@@ -130,6 +131,9 @@ class CardAuthService {
         reason: verification.reason,
       };
     }
+
+    // Neither a new account nor a link to a known one.
+    await BlacklistService.assertMayRegister(email);
 
     const existingCardUser = await UserManager.getUserByCard(appId, publicId);
     if (existingCardUser) {

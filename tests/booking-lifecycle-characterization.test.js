@@ -41,6 +41,7 @@ const {
   BookingStatusAction,
 } = require("../src/commons/services/workflow/workflow-action");
 const BookingCheckout = require("../src/commons/services/checkout/booking-checkout");
+const { decryptBankDetails } = require("../src/commons/utilities/bank-details");
 
 describe("booking lifecycle today: what each state change does at the seam", function () {
   let h;
@@ -1013,7 +1014,9 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         },
       });
 
-      expect(h.stored(id).hooks[0].payload.bankDetails).to.deep.equal({
+      expect(
+        decryptBankDetails(h.stored(id).hooks[0].payload.bankDetails),
+      ).to.deep.equal({
         accountHolder: "Erika Muster",
         bankName: "",
         iban: "DE123456",
@@ -1173,6 +1176,104 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(h.stored(id).hooks.map((stored) => stored.id)).to.deep.equal([
         hook.id,
       ]);
+    });
+
+    // The owner (`assignedUserId`) is set when the booking is created and
+    // an edit keeps it (ECCdigital/tickets#484). Before, the PUT took the
+    // first mail of the form as owner, like a manual booking: a guest
+    // booking fell silently to the account of that mail, and a booking of
+    // an account left the customer's list when the admin changed the mail.
+    // Only a booking of the Buchungsweg Admin follows a corrected first mail.
+    describe("the owner stays the one the booking was created with, unless the admin corrects the first mail of a Buchungsweg-Admin booking", function () {
+      const OTHER = "max@example.test";
+
+      it("a guest booking stays without owner when the admin changes the mail", async function () {
+        const res = await api()
+          .post(`/api/v2/${TENANT}/checkout`)
+          .send(checkoutBody("room"));
+        expect(res.status).to.equal(200);
+        const id = res.body.data.booking.id;
+        expect(h.stored(id).assignedUserId).to.not.be.ok;
+
+        const put = await update(id, { mail: OTHER });
+
+        expect(put.status).to.equal(201);
+        expect(h.stored(id).mail).to.equal(OTHER);
+        expect(h.stored(id).assignedUserId).to.not.be.ok;
+      });
+
+      it("a booking of an account stays the account's when the admin changes the mail", async function () {
+        const id = await bookingIn("requested");
+        expect(h.stored(id).assignedUserId).to.equal(CUSTOMER);
+
+        const put = await update(id, { mail: OTHER, assignedUserId: OTHER });
+
+        expect(put.status).to.equal(201);
+        expect(h.stored(id).mail).to.equal(OTHER);
+        expect(h.stored(id).assignedUserId).to.equal(CUSTOMER);
+      });
+
+      it("a manual booking belongs to the first mail it is created with", async function () {
+        const booking = await h.manualBooking(
+          "room",
+          {},
+          { mail: `Max@Example.test, ${CUSTOMER}` },
+        );
+
+        expect(h.stored(booking.id).assignedUserId).to.equal(OTHER);
+      });
+
+      // A booking of the Buchungsweg Admin belongs to its first mail, so the
+      // admin correcting that mail moves the booking along: the account of
+      // the mistyped address no longer sees it, the corrected one does.
+      it("a Buchungsweg-Admin booking moves to the corrected first mail", async function () {
+        const booking = await h.manualBooking(
+          "room",
+          {},
+          { mail: "max@exmaple.test" },
+        );
+        expect(h.stored(booking.id).assignedUserId).to.equal(
+          "max@exmaple.test",
+        );
+
+        const put = await update(booking.id, {
+          mail: `Max@Example.test, ${CUSTOMER}`,
+        });
+
+        expect(put.status).to.equal(201);
+        expect(h.stored(booking.id).assignedUserId).to.equal(OTHER);
+      });
+
+      it("a Buchungsweg-Admin booking keeps its owner when only a further mail changes", async function () {
+        const booking = await h.manualBooking(
+          "room",
+          {},
+          { mail: `${OTHER}, ${CUSTOMER}` },
+        );
+
+        const put = await update(booking.id, {
+          mail: `${OTHER}, anna@example.test`,
+        });
+
+        expect(put.status).to.equal(201);
+        expect(h.stored(booking.id).assignedUserId).to.equal(OTHER);
+      });
+
+      it("a booking without Buchungsweg keeps its owner when the admin corrects the first mail", async function () {
+        const booking = await h.manualBooking(
+          "room",
+          {},
+          { mail: "max@exmaple.test" },
+        );
+        delete h.stored(booking.id).bookedVia;
+
+        const put = await update(booking.id, { mail: OTHER });
+
+        expect(put.status).to.equal(201);
+        expect(h.stored(booking.id).assignedUserId).to.equal(
+          "max@exmaple.test",
+        );
+      });
     });
 
     // The PUT is the plan of spec part 1, section 6 (`update-plan.js`):

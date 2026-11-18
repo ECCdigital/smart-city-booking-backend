@@ -116,3 +116,35 @@ describe("Tenant.exportPublic access apps", function () {
     expect(exported).to.not.have.property("applications");
   });
 });
+
+describe("Tenant.exportPublic usesDigitalKeys", function () {
+  it("says yes for an active access app without a customer service", function () {
+    const exported = tenantFixture([
+      ifbsApp({ customerService: null }),
+    ]).exportPublic();
+
+    expect(exported.usesDigitalKeys).to.equal(true);
+    expect(exported.accessApps).to.deep.equal([]);
+  });
+
+  it("says yes for lockers alone", function () {
+    const exported = tenantFixture([ifbsApp()]).exportPublic();
+
+    expect(exported.usesDigitalKeys).to.equal(true);
+  });
+
+  it("says no for an inactive access app or other kinds of app", function () {
+    const exported = tenantFixture([
+      ifbsApp({ active: false }),
+      ifbsApp({ type: "payment", id: "stripe" }),
+    ]).exportPublic();
+
+    expect(exported.usesDigitalKeys).to.equal(false);
+  });
+
+  it("says no for a tenant without applications", function () {
+    const exported = new Tenant({ id: TENANT, name: "Stadt" }).exportPublic();
+
+    expect(exported.usesDigitalKeys).to.equal(false);
+  });
+});

@@ -28,6 +28,7 @@ const {
 } = require("../../../commons/pdf-service/pdf-booking-table-meta");
 const {
   getCancellationRefundTiersError,
+  getRefundPercentageWithoutTimeSpanError,
 } = require("../../../commons/utilities/cancellation-refund-tiers");
 const {
   getLegalDocumentsError,
@@ -35,9 +36,11 @@ const {
 const MediaReferenceGuard = require("../../../commons/services/media/media-reference-guard");
 const {
   BaseError,
+  BadRequestError,
   ForbiddenError,
   NotFoundError,
 } = require("../../../errors/BaseError");
+const membershipSchemaDefinition = require("../../../commons/schemas/membershipSchema");
 const {
   PUBLIC,
   tenantsOf,
@@ -58,6 +61,7 @@ const PDF_TEMPLATE_FIELDS = {
   receiptTemplate: "receipt",
   invoiceTemplate: "invoice",
   cancellationTemplate: "cancellation",
+  withdrawalTemplate: "withdrawal",
 };
 
 /**
@@ -115,6 +119,35 @@ function validateCancellationRefundTiersField(body) {
     return null;
   }
   return getCancellationRefundTiersError(body.cancellationRefundTiers);
+}
+
+function validateRefundPercentageWithoutTimeSpanField(body) {
+  if (
+    !Object.prototype.hasOwnProperty.call(
+      body,
+      "cancellationRefundPercentageWithoutTimeSpan",
+    )
+  ) {
+    return null;
+  }
+  return getRefundPercentageWithoutTimeSpanError(
+    body.cancellationRefundPercentageWithoutTimeSpan,
+  );
+}
+
+const TENANT_DESCRIPTION_MAX_LENGTH = 300;
+
+function validateDescriptionField(body) {
+  if (!Object.prototype.hasOwnProperty.call(body, "description")) {
+    return null;
+  }
+  if (typeof body.description !== "string") {
+    return "Invalid description. Must be plain text";
+  }
+  if (body.description.length > TENANT_DESCRIPTION_MAX_LENGTH) {
+    return `Invalid description. At most ${TENANT_DESCRIPTION_MAX_LENGTH} characters`;
+  }
+  return null;
 }
 
 function validateLegalDocumentsField(body) {
@@ -331,9 +364,20 @@ class TenantController {
         return response.status(400).send(cancellationRefundTiersError);
       }
 
+      const refundPercentageWithoutTimeSpanError =
+        validateRefundPercentageWithoutTimeSpanField(request.body);
+      if (refundPercentageWithoutTimeSpanError) {
+        return response.status(400).send(refundPercentageWithoutTimeSpanError);
+      }
+
       const legalDocumentsError = validateLegalDocumentsField(request.body);
       if (legalDocumentsError) {
         return response.status(400).send(legalDocumentsError);
+      }
+
+      const descriptionError = validateDescriptionField(request.body);
+      if (descriptionError) {
+        return response.status(400).send(descriptionError);
       }
 
       // `storeTenant` routes an unknown id here too: both creation paths
@@ -371,6 +415,7 @@ class TenantController {
 
       const fields = [
         "name",
+        "description",
         "contactName",
         "location",
         "mail",
@@ -407,11 +452,15 @@ class TenantController {
         "enablePublicStatusView",
         "notifyOnNewBooking",
         "notifySupervisorsOnBooking",
+        "notifyOwnersOnInvitationAccepted",
         "catalogParticipation",
         "bookableCustomFields",
         "cancellationTemplate",
         "cancellationNumberPrefix",
+        "withdrawalTemplate",
+        "withdrawalNumberPrefix",
         "cancellationRefundTiers",
+        "cancellationRefundPercentageWithoutTimeSpan",
         "pdfBookingLayout",
         "pdfBookingTableMeta",
         "legalDocuments",
@@ -462,9 +511,20 @@ class TenantController {
         return response.status(400).send(cancellationRefundTiersError);
       }
 
+      const refundPercentageWithoutTimeSpanError =
+        validateRefundPercentageWithoutTimeSpanField(request.body);
+      if (refundPercentageWithoutTimeSpanError) {
+        return response.status(400).send(refundPercentageWithoutTimeSpanError);
+      }
+
       const legalDocumentsError = validateLegalDocumentsField(request.body);
       if (legalDocumentsError) {
         return response.status(400).send(legalDocumentsError);
+      }
+
+      const descriptionError = validateDescriptionField(request.body);
+      if (descriptionError) {
+        return response.status(400).send(descriptionError);
       }
 
       // Checked is what the request brings, not what is already stored: a
@@ -491,7 +551,6 @@ class TenantController {
       // Backend-owned access-app state (e.g. Salto IQ activations) is
       // neither written by a tenant update nor sent back in the answer.
       AccessAppLifecycleService.preserveBackendState(previousTenant, tenant);
-      await AccessAppLifecycleService.syncWebhooks(previousTenant, tenant);
 
       const updatedTenant = await TenantManager.storeTenant(tenant);
       logger.info(`updated tenant ${tenant.id} by user ${user?.id}`);
@@ -555,10 +614,16 @@ class TenantController {
         return response.status(400).send(tableMetaError);
       }
 
-      if (!["receipt", "invoice", "cancellation"].includes(templateType)) {
+      if (
+        !["receipt", "invoice", "cancellation", "withdrawal"].includes(
+          templateType,
+        )
+      ) {
         return response
           .status(400)
-          .send("templateType must be one of: receipt, invoice, cancellation");
+          .send(
+            "templateType must be one of: receipt, invoice, cancellation, withdrawal",
+          );
       }
 
       if (template) {
@@ -767,9 +832,7 @@ class TenantController {
         return next(new ForbiddenError());
       }
 
-      await InvitationService.deleteUserInvitations(tenantId, userId);
-
-      await MembershipManager.removeMembership(tenantId, userId);
+      await MembershipService.endMembership(tenantId, userId);
 
       const updatedMemberships =
         await MembershipManager.getMembershipsByTenantID(tenantId);
@@ -955,11 +1018,20 @@ class TenantController {
     }
   }
 
-  static async updateUserStatus(request, response) {
+  static async updateUserStatus(request, response, next) {
     try {
       const tenantId = request.params.tenant;
       const { userId, status } = request.body;
       const user = request.user;
+
+      // The update of the manager writes without the schema's validation;
+      // a status the membership does not know (`suspended` is gone)
+      // is refused here.
+      if (!membershipSchemaDefinition.status.enum.includes(status)) {
+        return next(
+          new BadRequestError("membership_status_invalid", { status }),
+        );
+      }
 
       await MembershipManager.updateMembership(tenantId, userId, {
         status,

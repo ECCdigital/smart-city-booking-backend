@@ -7,6 +7,9 @@
  * the state cancelled from with the grant or the hold.
  */
 
+process.env.CRYPTO_SECRET =
+  process.env.CRYPTO_SECRET || "0123456789abcdef0123456789abcdef";
+
 const { expect } = require("chai");
 
 const {
@@ -27,6 +30,7 @@ const {
   inMemoryAdapters,
   effectTable,
 } = require("./helpers/in-memory-lifecycle-adapters");
+const { decryptBankDetails } = require("../src/commons/utilities/bank-details");
 
 const TENANT = "tenant-1";
 const NOW = 1_756_800_000_000;
@@ -296,6 +300,54 @@ describe("booking lifecycle: cancel", function () {
     ]);
   });
 
+  it("a request the customer withdraws without a hook reads as a cancellation: the cancel mail, not the rejection", async function () {
+    const { adapters, lifecycle } = lifecycleOver({
+      bookings: [booking({ status: "requested" })],
+    });
+
+    const outcome = await lifecycle.cancel(TENANT, "B-1", {
+      trigger: TRIGGER.CUSTOMER,
+      reason: "Doch nicht",
+      cancelledByUserId: "erika",
+    });
+
+    expect(effectTable(outcome)).to.deep.equal([
+      "persist store.save ok",
+      "provision access.revoke ok",
+      "document documents.issue ok",
+      "notify workflow.emit ok",
+      "notify mail.BOOKING_REJECTION skipped",
+      "notify mail.BOOKING_CANCEL ok",
+    ]);
+    const stored = adapters.store.rows.get("B-1");
+    expect(stored.status).to.equal("rejected");
+    expect(stored.cancellationRefund).to.include({
+      origin: "user",
+      cancelledByUserId: "erika",
+    });
+    const [mail] = adapters.mail.calls;
+    expect(mail.args[0]).to.equal("BOOKING_CANCEL");
+    expect(mail.args[1].reason).to.equal("Doch nicht");
+    expect(mail.args[1].attachments.map((f) => f.name)).to.deep.equal([
+      "cancellation-1.pdf",
+    ]);
+  });
+
+  it("a request turned down by the administration or the system still mails the rejection", async function () {
+    for (const trigger of [TRIGGER.ADMIN, TRIGGER.SYSTEM]) {
+      const { adapters, lifecycle } = lifecycleOver({
+        bookings: [booking({ status: "requested" })],
+      });
+
+      await lifecycle.cancel(TENANT, "B-1", { trigger, reason: "Kein Platz" });
+
+      expect(
+        adapters.mail.calls.map((call) => call.args[0]),
+        trigger,
+      ).to.deep.equal(["BOOKING_REJECTION"]);
+    }
+  });
+
   it("cancels a free booking without a document", async function () {
     const { adapters, lifecycle } = lifecycleOver({
       bookings: [booking({ priceEur: 0 })],
@@ -379,6 +431,23 @@ describe("booking lifecycle: cancel", function () {
       appliedRefundPercentage: 50,
       refundAmountEur: 20,
     });
+    // A request is not paid: its bank details are dropped.
+    expect(adapters.documents.calls[0].args[0].options.bankDetails).to.equal(
+      undefined,
+    );
+  });
+
+  it("hands the bank details of a paid booking to the document, sanitized", async function () {
+    const { adapters, lifecycle } = lifecycleOver({
+      bookings: [booking()],
+    });
+
+    await lifecycle.cancel(TENANT, "B-1", {
+      trigger: TRIGGER.CUSTOMER,
+      reason: "Krank",
+      bankDetails: { accountHolder: " Erika ", iban: "de12 3456", bic: "" },
+    });
+
     expect(
       adapters.documents.calls[0].args[0].options.bankDetails,
     ).to.deep.equal({
@@ -637,14 +706,14 @@ describe("booking lifecycle: requestCancel", function () {
     expect(stored.status).to.equal("confirmed");
     expect(stored.hooks).to.have.length(1);
     expect(stored.hooks[0]).to.include({ type: "REJECT" });
-    expect(stored.hooks[0].payload).to.deep.equal({
-      reason: "Krank",
-      bankDetails: {
-        accountHolder: "Erika",
-        bankName: "",
-        iban: "DE123456",
-        bic: "ABC",
-      },
+    expect(stored.hooks[0].payload.reason).to.equal("Krank");
+    expect(
+      decryptBankDetails(stored.hooks[0].payload.bankDetails),
+    ).to.deep.equal({
+      accountHolder: "Erika",
+      bankName: "",
+      iban: "DE123456",
+      bic: "ABC",
     });
     expect(adapters.store.calls).to.deep.equal([
       { op: "save", args: ["B-1", "confirmed"] },
@@ -858,7 +927,31 @@ describe("booking lifecycle: reinstate", function () {
     });
   });
 
-  it("a hold that fails aborts: the booking is cancelled again, with its refund audit", async function () {
+  it("drops an open cancellation request: its old link no longer cancels the reinstated booking", async function () {
+    const { adapters, lifecycle } = lifecycleOver({ bookings: [booking()] });
+    await lifecycle.requestCancel(TENANT, "B-1", {
+      trigger: TRIGGER.CUSTOMER,
+      reason: "Krank",
+    });
+    const hookId = adapters.store.rows.get("B-1").hooks[0].id;
+    await lifecycle.cancel(TENANT, "B-1", {
+      trigger: TRIGGER.CUSTOMER,
+      reason: "Verhindert",
+    });
+    expect(adapters.store.rows.get("B-1").hooks).to.have.length(1);
+
+    await lifecycle.reinstate(TENANT, "B-1", { trigger: TRIGGER.ADMIN });
+
+    expect(adapters.store.rows.get("B-1")).to.include({ status: "confirmed" });
+    expect(adapters.store.rows.get("B-1").hooks).to.deep.equal([]);
+    const error = await failing(
+      lifecycle.cancel(TENANT, "B-1", { trigger: TRIGGER.CUSTOMER, hookId }),
+    );
+    expect(error.message).to.equal(`Hook with ID ${hookId} not found`);
+    expect(adapters.store.rows.get("B-1").status).to.equal("confirmed");
+  });
+
+  it("a hold that fails aborts: the booking is cancelled again, with its refund audit and its open cancellation request", async function () {
     const { adapters, lifecycle } = lifecycleOver({
       bookings: [
         cancelled({
@@ -866,6 +959,7 @@ describe("booking lifecycle: reinstate", function () {
             ...cancelled().cancellationRefund,
             cancelledFrom: "payment_due",
           },
+          hooks: [{ id: "H-1", type: "REJECT", payload: { reason: "Krank" } }],
         }),
       ],
       failOn: { access: ["hold"] },
@@ -887,6 +981,7 @@ describe("booking lifecycle: reinstate", function () {
     expect(stored.cancellationRefund).to.include({
       cancelledFrom: "payment_due",
     });
+    expect(stored.hooks.map((hook) => hook.id)).to.deep.equal(["H-1"]);
     expect(adapters.store.writes).to.deep.equal([
       { id: "B-1", status: "payment_due" },
       { id: "B-1", status: "cancelled", restored: true },

@@ -4,6 +4,7 @@ const InvitationManager = require("../../data-managers/invitation-manager");
 const ChallengeManager = require("../../data-managers/challenge-manager");
 const UserManager = require("../../data-managers/user-manager");
 const { RoleManager } = require("../../data-managers/role-manager");
+const InvitationService = require("../invitation-service");
 const {
   MAX_BOOKING_NOTIFICATION_RECIPIENTS,
   isValidBookingNotificationRecipient,
@@ -82,6 +83,20 @@ class MembershipService {
     });
   }
 
+  /**
+   * „Mitgliedschaft beenden“: removes the membership of the user in the
+   * tenant together with the user's open invitations there, so no old
+   * invitation brings the user back. The account stays. Who may end whose
+   * membership is the caller's to decide.
+   *
+   * @param {string} tenantId
+   * @param {string} userId
+   */
+  static async endMembership(tenantId, userId) {
+    await InvitationService.deleteUserInvitations(tenantId, userId);
+    await MembershipManager.removeMembership(tenantId, userId);
+  }
+
   static async getPendingMembershipByUserId(userId) {
     const memberships = await MembershipManager.getMembershipsByUserID(userId);
     return (memberships || []).filter((m) => m?.status === "pending");
@@ -91,10 +106,8 @@ class MembershipService {
     const memberships = await MembershipManager.getMembershipsByUserID(userId);
     if (!memberships?.length) return [];
 
-    const pending = memberships.filter(
-      (m) =>
-        m?.invitations?.some((i) => i?.status === "pending_approval") &&
-        m?.status !== "suspended",
+    const pending = memberships.filter((m) =>
+      m?.invitations?.some((i) => i?.status === "pending_approval"),
     );
     if (!pending.length) return [];
 

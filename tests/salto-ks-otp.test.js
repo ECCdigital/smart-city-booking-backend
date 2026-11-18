@@ -6,8 +6,8 @@ const {
 
 describe("computeSaltoOtp", () => {
   // Expected values computed independently with the md5 CLI over the
-  // documented input `UTC "YYYYmmDDHHMMSS" + secret + pin` (door proof
-  // 2026-08-25, docs/research/salto-ks-remote-open-door-proof.md).
+  // documented input `UTC "YYYYmmDDHHMMSS" + secret + pin` (proven at the
+  // door on 2026-08-25).
   it("takes the first 5 hex characters of MD5(timestamp + secret + pin)", () => {
     const otp = computeSaltoOtp(
       "ABCDEFGHIJKLMNOP",

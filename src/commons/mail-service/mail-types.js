@@ -19,6 +19,12 @@
  *   tenant takes precedence.
  * - `includeQRCode(ctx)`, `sendBCC(ctx)`, `addRejectionLink`: as before.
  * - `attachICal`: the calendar file of the bookings goes with it.
+ * - `showsParticipationLink`: the booking details name the participation
+ *   link of an online or hybrid event, for a confirmed booking
+ *   (ECCdigital/tickets#180) - the confirmations alone.
+ * - `showsWithdrawalHint`: the withdrawal hint with `withdrawalUrl` stands
+ *   under the booking details, where that link is filled - the
+ *   confirmations, the receipt of a request and the invoices.
  * - `mergeMailAttach`: the `mailAttach` documents of the bookings go
  *   with it.
  * - `gate({ tenant })`: the audience only gets it where this holds.
@@ -28,22 +34,26 @@
  * Of a booking notice, `ctx` of `subject`, `includeQRCode` and `sendBCC`
  * is `{ tenant, hasAttachments, bookings }`, and `templateData` gets the
  * type-specific part of the caller's context and the loaded bookings.
- * `includeQRCode`, `sendBCC`, `addRejectionLink`, `attachICal`,
- * `mergeMailAttach` and `gate` are of the booking family only.
+ * `includeQRCode`, `sendBCC`, `addRejectionLink`, `attachICal` and
+ * `mergeMailAttach` are of the booking family only; `gate` is of every
+ * family with a tenant.
  *
  * Of a tenant or instance notice (verification, password, user created,
- * card link, invitation, workflow), `templateData` gets the whole context
- * and `{ tenant, instance, user }`, and `subject` gets `{ tenant }` joined
- * by the template data. The links these notices carry are built here: the
- * storefront's route where the caller names one, the backend's own
- * otherwise.
+ * card link, invitation, invitation accepted, workflow), `templateData`
+ * gets the whole context and `{ tenant, instance, user }`, and `subject`
+ * gets `{ tenant }` joined by the template data. The links these notices
+ * carry are built here: the storefront's route where the caller names
+ * one, the backend's own otherwise.
  */
 
 const {
   CancellationRefundService,
+  REFUND_STATE,
 } = require("../services/payment/cancellation-refund-service");
 
 const { SupervisionMailType } = require("./supervision-mail-types");
+const { adminTenantMembersUrl } = require("./mail-links");
+const Formatters = require("../utilities/formatters");
 const { STATUS } = require("../services/booking-lifecycle/booking-state");
 
 /** Whether the bookings still wait for the tenant's decision. */
@@ -65,7 +75,9 @@ const MailType = Object.freeze({
     includeQRCode: (ctx) => ctx.tenant.enablePublicStatusView,
     sendBCC: (ctx) => ctx.hasAttachments && ctx.tenant.receiptEnableBCC,
     addRejectionLink: true,
+    showsWithdrawalHint: true,
     attachICal: true,
+    showsParticipationLink: true,
     mergeMailAttach: true,
   },
 
@@ -77,7 +89,9 @@ const MailType = Object.freeze({
     includeQRCode: (ctx) => ctx.tenant.enablePublicStatusView,
     sendBCC: false,
     addRejectionLink: true,
+    showsWithdrawalHint: true,
     attachICal: true,
+    showsParticipationLink: true,
     mergeMailAttach: true,
   },
 
@@ -111,6 +125,27 @@ const MailType = Object.freeze({
     }),
   },
 
+  // The confirmation of a withdrawal the staff accepted; not a
+  // tenant-editable text.
+  BOOKING_WITHDRAWAL: {
+    family: "booking",
+    templateName: "booking-withdrawal",
+    audience: "booker",
+    subject: (ctx) =>
+      `Widerruf: Ihr Widerruf der Buchung im ${ctx.tenant.name} ist bestätigt`,
+    includeQRCode: false,
+    sendBCC: true,
+    addRejectionLink: false,
+    // `refundDue`: the booking was paid, the amount goes back in full.
+    templateData: (ctx, { bookings }) => ({
+      ...CancellationRefundService.toMailTemplateData(
+        bookings[0].cancellationRefund,
+      ),
+      refundDue:
+        bookings[0].cancellationRefund?.refundState === REFUND_STATE.OPEN,
+    }),
+  },
+
   BOOKING_REQUEST_CONFIRMATION: {
     family: "booking",
     templateName: "booking-request-confirmation",
@@ -120,6 +155,7 @@ const MailType = Object.freeze({
     includeQRCode: (ctx) => ctx.tenant.enablePublicStatusView,
     sendBCC: false,
     addRejectionLink: true,
+    showsWithdrawalHint: true,
     mergeMailAttach: true,
   },
 
@@ -131,6 +167,7 @@ const MailType = Object.freeze({
     includeQRCode: (ctx) => ctx.tenant.enablePublicStatusView,
     sendBCC: false,
     addRejectionLink: true,
+    showsWithdrawalHint: true,
   },
 
   BOOKING_CONFIRMED_INVOICE_PENDING: {
@@ -141,6 +178,7 @@ const MailType = Object.freeze({
     includeQRCode: (ctx) => ctx.tenant.enablePublicStatusView,
     sendBCC: false,
     addRejectionLink: true,
+    showsWithdrawalHint: true,
     attachICal: true,
   },
 
@@ -153,6 +191,7 @@ const MailType = Object.freeze({
     includeQRCode: (ctx) => ctx.tenant.enablePublicStatusView,
     sendBCC: false,
     addRejectionLink: true,
+    showsWithdrawalHint: true,
     templateData: ({ paymentUrl }) => ({ paymentUrl }),
   },
 
@@ -165,6 +204,7 @@ const MailType = Object.freeze({
     includeQRCode: (ctx) => ctx.tenant.enablePublicStatusView,
     sendBCC: false,
     addRejectionLink: false,
+    showsWithdrawalHint: true,
   },
 
   INCOMING_BOOKING: {
@@ -275,6 +315,24 @@ const MailType = Object.freeze({
     }),
   },
 
+  // To the owners when somebody became an active member by an invitation
+  // (ECCdigital/tickets#36); `userId` is the new member, `roleNames` the
+  // names of their roles. On unless the tenant switched it off.
+  INVITATION_ACCEPTED: {
+    family: "tenant",
+    templateName: "invitation-accepted",
+    audience: "tenantOwners",
+    subject: (ctx) => `Neues Mitglied im Mandanten ${ctx.tenant.name}`,
+    gate: (ctx) => ctx.tenant.notifyOwnersOnInvitationAccepted !== false,
+    templateData: ({ tenantId, userId, roleNames = [] }, { tenant, user }) => ({
+      tenantName: tenant.name,
+      memberName: Formatters.formatUserName(user),
+      memberEmail: user?.id ?? userId,
+      roleNames: roleNames.join(", "),
+      membersUrl: adminTenantMembersUrl(tenantId),
+    }),
+  },
+
   VERIFICATION_REQUEST: {
     family: "instance",
     templateName: "verification-request",
@@ -313,6 +371,21 @@ const MailType = Object.freeze({
         hookId,
         to,
       ),
+    }),
+  },
+
+  // The hint of a signup with an address that already has a verified
+  // account: it links the client's „Passwort vergessen“ page, the Admin
+  // UI's by default.
+  ACCOUNT_EXISTS: {
+    family: "instance",
+    templateName: "account-exists",
+    audience: "named",
+    subject: () => "Mit Ihrer E-Mail-Adresse besteht bereits ein Konto",
+    templateData: ({ firstName, forgotPasswordUrl }) => ({
+      firstName,
+      forgotPasswordUrl:
+        forgotPasswordUrl || `${process.env.FRONTEND_URL}/password/reset`,
     }),
   },
 

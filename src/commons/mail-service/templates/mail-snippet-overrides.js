@@ -1,7 +1,11 @@
 const crypto = require("crypto");
 const Handlebars = require("handlebars");
 const { MAIL_HELPER_NAMES } = require("./mail-helpers");
-const { bookingStatusUrl, cancellationUrl } = require("../mail-links");
+const {
+  bookingStatusUrl,
+  cancellationUrl,
+  withdrawalUrl,
+} = require("../mail-links");
 const { BadRequestError } = require("../../../errors/BaseError");
 
 const MAX_SNIPPET_OVERRIDE_LENGTH = 50 * 1024;
@@ -28,6 +32,8 @@ const SAMPLE_BOOKING = Object.freeze({
   id: SAMPLE_BOOKING_ID,
   name: SAMPLE_CUSTOMER_NAME,
 });
+const SAMPLE_GROUP_BOOKING_ID = "GB-123456";
+const SAMPLE_SUPPORT_EMAIL = "support@beispiel.de";
 const SAMPLE_GROUP_BOOKING_IDS = Object.freeze([
   SAMPLE_BOOKING_ID,
   "BK-987655",
@@ -65,7 +71,7 @@ function templateVariableCatalog({ tenantId }) {
       label: "Support-E-Mail",
       description: "Support-E-Mail-Adresse des Mandanten",
       kind: "text",
-      sample: "support@beispiel.de",
+      sample: SAMPLE_SUPPORT_EMAIL,
     },
     {
       name: "customerName",
@@ -174,7 +180,7 @@ function templateVariableCatalog({ tenantId }) {
         "Nummer der Buchungsgruppe; nur in einer Sammelmitteilung gefüllt",
       kind: "text",
       sample: "",
-      sampleAggregated: "GB-123456",
+      sampleAggregated: SAMPLE_GROUP_BOOKING_ID,
     },
     {
       name: "isAggregated",
@@ -230,6 +236,26 @@ function templateVariableCatalog({ tenantId }) {
       sample: `${frontendUrl}/payment/redirection?ids=${SAMPLE_BOOKING_ID}&tenant=${tenantId}&aggregated=false`,
       sampleAggregated: `${frontendUrl}/payment/redirection?ids=${SAMPLE_GROUP_BOOKING_IDS.join(",")}&tenant=${tenantId}&aggregated=true`,
       snippets: Object.freeze(["payment-link-after-approval"]),
+    },
+    {
+      name: "withdrawalUrl",
+      label: "Widerrufs-Link",
+      description:
+        "E-Mail an den Mandanten, mit der ein Privatkunde seine Buchung widerruft; die Zulässigkeit prüft der Mandant. Leer bei einer Buchung mit Firmenangabe oder nach 14 Tagen seit der Buchung, darum in einem {{#if withdrawalUrl}}...{{/if}}-Block einsetzen",
+      kind: "url",
+      sample: withdrawalUrl(
+        SAMPLE_SUPPORT_EMAIL,
+        SAMPLE_BOOKING_ID,
+        SAMPLE_CUSTOMER_NAME,
+      ),
+      sampleAggregated: withdrawalUrl(
+        SAMPLE_SUPPORT_EMAIL,
+        SAMPLE_GROUP_BOOKING_ID,
+        SAMPLE_CUSTOMER_NAME,
+      ),
+      requires: {
+        text: "leer bei einer Buchung mit Firmenangabe oder wenn die Buchung länger als 14 Tage zurückliegt",
+      },
     },
   ];
 }

@@ -22,14 +22,18 @@
  * created it (`ownerUserId`, a mail address, ECCdigital/tickets#260): the
  * module decides records, not fields, and these are the two fields it
  * removes - once, here, so no public answer carries a status, a private
- * reason or a person and asking twice answers the same. Nothing outside this module asks the offer
- * gate - the media rights ask `reached` too: a handler that reads through a manager
+ * reason or a person and asking twice answers the same. It also empties
+ * the participation link of an event with registration
+ * (ECCdigital/tickets#180): only its bookers see it, in their booking,
+ * never the public. Nothing outside this module asks the offer gate - the
+ * media rights ask `reached` too: a handler that reads through a manager
  * under `public` inherits the projection without a line of its own.
  *
  * The rules themselves are `offer-gate.js`; this module applies them.
  */
 
 const { BOOKABLE_TYPES } = require("../../entities/bookable/bookable");
+const { Event } = require("../../entities/event/event");
 const { NotFoundError } = require("../../../errors/BaseError");
 const { DOMAIN } = require("../authorization/reach");
 const {
@@ -108,9 +112,10 @@ const hangsOnEvent = (offer) =>
 
 /**
  * The offer as the public gets it: the same entity, without its review
- * and without the member who created it. A copy, so the record the
- * manager read keeps what the review service wrote; the same prototype,
- * so the handlers' entity methods still work.
+ * and without the member who created it, and an event with registration
+ * without its participation link. A copy, so the record the manager read
+ * keeps what the review service wrote; the same prototype, so the
+ * handlers' entity methods still work.
  */
 function publicCopy(offer) {
   const copy = Object.assign(
@@ -119,6 +124,9 @@ function publicCopy(offer) {
   );
   delete copy.review;
   delete copy.ownerUserId;
+  if (copy instanceof Event && copy.participationLinkIsForBookersOnly) {
+    copy.eventLocation = { ...copy.eventLocation, url: "" };
+  }
   return copy;
 }
 

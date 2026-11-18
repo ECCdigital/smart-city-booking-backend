@@ -84,6 +84,62 @@
       "500":
         description: "`set_aggregated_booking_payed_failed` - the payment aborted"
 
+/api/{tenant}/group-bookings/{groupBookingId}/reinstate:
+  post:
+    tags:
+      - Group bookings
+    summary: Reinstate the cancelled and rejected members of a group booking
+    description: |
+      Brings every member of the group that is rejected or cancelled back to
+      its own state of before, as the single reinstatement does: a rejected
+      member to `requested`, a cancelled one to the state it was cancelled
+      from; the refund audit is removed and the reason cleared. The other
+      members stay as they are. Access is granted again at `confirmed`, held
+      at `requested` or `payment_due`. The documents stay, no mail. A state
+      write or a hold that fails restores the members written before it: the
+      group stays as it was. A member whose period other bookings took in
+      the meantime is answered 409 `group_booking_reinstatement_conflict`
+      and nothing is reinstated, unless the body says `ignoreConflicts:
+      true` (every member) or `skipConflicts: true` (only the members
+      without a conflict). Needs the right to cancel a group booking.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/GroupBookingTenantParam"
+      - $ref: "#/components/parameters/GroupBookingIdParam"
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              ignoreConflicts:
+                type: boolean
+                description: Reinstate every member even where its period is taken
+              skipConflicts:
+                type: boolean
+                description: Reinstate only the members whose period is free
+    responses:
+      "200":
+        description: "Members reinstated (`success: true`, `data` the group with its members)"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Missing group booking permission (`groupBooking.reject`)
+      "404":
+        description: Group booking not found, or a member of it
+      "409":
+        description: >-
+          `invalid_transition` - no member is rejected or cancelled, or a
+          cancelled one does not know what it was cancelled from; or
+          `group_booking_reinstatement_conflict` - periods are taken (params
+          carry `groupBookingId` and `conflicts`, one entry per member in
+          conflict: `bookingId` and `conflicts` in the form of
+          `booking_reinstatement_conflict`)
+      "500":
+        description: "`booking_reinstatement_failed` - the reinstatement aborted, the group stays as it was"
+
 /api/{tenant}/group-bookings/{groupBookingId}:
   put:
     tags:

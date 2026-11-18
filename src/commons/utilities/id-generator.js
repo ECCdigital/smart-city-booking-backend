@@ -9,6 +9,7 @@ const COUNTERS = Object.freeze({
   receipt: "receiptCount",
   invoice: "invoiceCount",
   cancellation: "cancellationCount",
+  withdrawal: "withdrawalCount",
 });
 
 /**
@@ -23,7 +24,7 @@ class IdGenerator {
    *
    * @param {string} tenantId The tenant
    * @param {number} leadingZeros Width the counter is padded to (0: none)
-   * @param {"receipt"|"invoice"|"cancellation"} idType The document type
+   * @param {"receipt"|"invoice"|"cancellation"|"withdrawal"} idType The document type
    * @returns {Promise<string>} The number as `<year>-<counter>`
    */
   static async next(tenantId, leadingZeros = 0, idType) {

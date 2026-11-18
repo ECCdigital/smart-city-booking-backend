@@ -121,9 +121,11 @@ const IMPLEMENTATIONS = [
     },
   },
   {
+    // Salto KS declares no grant and no revoke: its doors open remotely
+    // only, so the tests of both skip it.
     name: "salto-ks",
     Provider: SaltoKsAccessProvider,
-    secretBearing: true,
+    secretBearing: false,
     accessPoint: {
       id: "door-2",
       tenantId: TENANT,
@@ -131,7 +133,7 @@ const IMPLEMENTATIONS = [
       provider: "salto-ks",
       externalId: SALTO_LOCK_ID,
       label: "Tür 01",
-      mode: AccessPointMode.AUTHORIZATION,
+      mode: AccessPointMode.REMOTE,
     },
     bookingContext: bookingContext(),
     create() {
@@ -142,7 +144,6 @@ const IMPLEMENTATIONS = [
       return {
         provider: new SaltoKsAccessProvider({ client }),
         client,
-        grantsHeld: () => client.accesses.size + client.users.size,
       };
     },
     createBroken() {
@@ -315,6 +316,19 @@ for (const implementation of IMPLEMENTATIONS) {
           { ...accessPoint, config: { openAction: "not-an-open-action" } },
           { ...accessPoint, metadata: { type: 2 } },
         ),
+      );
+    });
+
+    it("refuses nothing before the listing unless it declares validateAccessPointWithoutListing", function () {
+      if (declares("validateAccessPointWithoutListing")) {
+        return this.skip();
+      }
+
+      assert.doesNotThrow(() =>
+        provider.validateAccessPointWithoutListing({
+          ...accessPoint,
+          mode: "not-a-mode",
+        }),
       );
     });
 

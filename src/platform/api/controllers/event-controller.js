@@ -6,6 +6,7 @@ const BookingService = require("../../../commons/services/checkout/booking-servi
 const MediaReferenceGuard = require("../../../commons/services/media/media-reference-guard");
 const LocationGuard = require("../../../commons/services/location/location-guard");
 const { BaseError, NotFoundError } = require("../../../errors/BaseError");
+const { answerMetaValues } = require("./meta-values-answer");
 const {
   scopeOf,
   reachesOf,
@@ -163,6 +164,13 @@ class EventController {
         throw new NotFoundError("event_not_found", { eventId: event.id });
       }
 
+      // A client that names no owner (field left out, null, empty or blank)
+      // keeps the stored one, so the owner does not lose the event.
+      const namedOwner = request.body.ownerUserId;
+      if (typeof namedOwner !== "string" || namedOwner.trim() === "") {
+        event.ownerUserId = existingEvent.ownerUserId;
+      }
+
       if (!existingEvent.isPublic && event.isPublic) {
         if ((await EventManager.checkPublicEventCount(tenant)) === false) {
           throw new Error(`Maximum number of public events reached.`);
@@ -220,31 +228,31 @@ class EventController {
     }
   }
 
+  /**
+   * `GET /events/_meta/tags`: each tag of the events within the reach once
+   * (`event.meta`): those of the public's list, or of the tenant's whole for
+   * the staff.
+   */
   static async getTags(request, response, next) {
-    try {
-      const tenant = request.params.tenant;
-      const user = request.user;
-
-      // The aggregate over the events within the reach: the public's
-      // list, or the tenant's whole for the staff (`event.meta`).
-      const events = await EventManager.getEvents(tenant, scopeOf(request));
-      const tags = events
-        .map((e) => e.information?.tags || [])
-        .flat()
-        .filter((value, index, self) => self.indexOf(value) === index);
-
-      logger.info(
-        `${tenant} -- sending ${tags.length} tags to user ${user?.id}`,
-      );
-      response.status(200).send(tags);
-    } catch (err) {
-      if (err instanceof BaseError) {
-        return next(err);
-      }
-      logger.error(err);
-      response.status(500).send("could not get tags");
-    }
+    return answerMetaValues(request, response, next, {
+      name: "tags",
+      offersOf: (tenant, scope) => EventManager.getEvents(tenant, scope),
+      valuesOf: (e) => e.information?.tags || [],
+    });
   }
+
+  /**
+   * `GET /events/_meta/flags`: each flag of the events within the reach once,
+   * as `getTags` (ECCdigital/tickets#1114).
+   */
+  static async getFlags(request, response, next) {
+    return answerMetaValues(request, response, next, {
+      name: "flags",
+      offersOf: (tenant, scope) => EventManager.getEvents(tenant, scope),
+      valuesOf: (e) => e.information?.flags || [],
+    });
+  }
+
   static async countCheck(request, response) {
     try {
       const tenant = request.params.tenant;

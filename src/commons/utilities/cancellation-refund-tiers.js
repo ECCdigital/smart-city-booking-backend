@@ -39,6 +39,17 @@ function getCancellationRefundTiersError(tiers) {
   return null;
 }
 
+/**
+ * The refund of a booking without a time span: no tier of the scale applies
+ * to it, so the tenant names one percentage of its own (default 100).
+ */
+function getRefundPercentageWithoutTimeSpanError(percentage) {
+  if (!Number.isInteger(percentage) || percentage < 0 || percentage > 100) {
+    return "cancellationRefundPercentageWithoutTimeSpan must be an integer between 0 and 100";
+  }
+  return null;
+}
+
 function normalizeCancellationRefundTiers(tiers) {
   const error = getCancellationRefundTiersError(tiers);
   if (error) {
@@ -55,5 +66,6 @@ function normalizeCancellationRefundTiers(tiers) {
 
 module.exports = {
   getCancellationRefundTiersError,
+  getRefundPercentageWithoutTimeSpanError,
   normalizeCancellationRefundTiers,
 };

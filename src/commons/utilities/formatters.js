@@ -64,6 +64,11 @@ class Formatters {
     return formatter.format(new Date(value));
   }
 
+  /** A user's first and last name as one string; null without either. */
+  static formatUserName(user) {
+    return [user?.firstName, user?.lastName].filter(Boolean).join(" ") || null;
+  }
+
   static formatCurrency(value) {
     if (!value) return "-";
     const formatter = new Intl.NumberFormat("de-DE", {
@@ -138,6 +143,20 @@ class Formatters {
         return "SOFORT-Überweisung";
       case "BLUECODE":
         return "Bluecode";
+      default:
+        return "Unbekannt";
+    }
+  }
+
+  /** The Buchungsweg of a booking in words; a booking without one is "Unbekannt". */
+  static translateBookedVia(value) {
+    switch (value) {
+      case "user":
+        return "Benutzer";
+      case "guest":
+        return "Gast";
+      case "admin":
+        return "Admin";
       default:
         return "Unbekannt";
     }

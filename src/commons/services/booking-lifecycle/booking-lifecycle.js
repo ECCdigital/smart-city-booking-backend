@@ -38,9 +38,11 @@ const {
 const {
   CancellationRefundService,
   CANCELLATION_ORIGINS,
-  sanitizeBankDetails,
+  refundBankDetails,
 } = require("../payment/cancellation-refund-service");
 const { BOOKING_HOOK_TYPES } = require("../../entities/booking/bookingHook");
+const { isPrivateBooking } = require("../checkout/business-booking");
+const { encryptBankDetails } = require("../../utilities/bank-details");
 const { NotFoundError, ForbiddenError } = require("../../../errors/BaseError");
 
 const WORKFLOW_EVENT = Object.freeze({
@@ -62,6 +64,9 @@ const REFUND_ORIGIN = Object.freeze({
   [TRIGGER.WORKFLOW]: CANCELLATION_ORIGINS.SYSTEM,
   [TRIGGER.SYSTEM]: CANCELLATION_ORIGINS.SYSTEM,
 });
+
+/** A withdrawal costs nothing: what was paid is refunded in full. */
+const FULL_REFUND_PERCENTAGE = 100;
 
 function isPriced(booking) {
   return (Number(booking.priceEur) || 0) > 0;
@@ -215,8 +220,7 @@ function createBookingLifecycle(adapters) {
   }
 
   /**
-   * The admission (spec part 1, 5.2; part 2, section 8, `admit`; glossary
-   * "Aufnahme"): the checkout stored the booking in the state it chose,
+   * The admission: the checkout stored the booking in the state it chose,
    * the lifecycle runs the effects of that state. Nothing is written: the
    * compartments are held - in every state, the hold being the one step
    * that checks their capacity and aborts, so a booking that finds none
@@ -316,7 +320,7 @@ function createBookingLifecycle(adapters) {
   }
 
   /**
-   * The confirmation (spec part 2, section 8, `confirm`): `requested →
+   * The confirmation: `requested →
    * payment_due` for a priced booking, which is then asked to pay
    * (glossary "Zahlungsaufforderung") in the form the payment provider
    * answers, `requested → confirmed` for a free one, which is granted and
@@ -376,7 +380,7 @@ function createBookingLifecycle(adapters) {
   }
 
   /**
-   * The payment (spec part 2, section 8, `pay`): `payment_due → confirmed`.
+   * The payment: `payment_due → confirmed`.
    *
    * @param {string} tenantId
    * @param {string} bookingId
@@ -441,16 +445,18 @@ function createBookingLifecycle(adapters) {
   }
 
   /**
-   * The cancellation (spec part 2, section 8, `cancel`): `requested →
+   * The cancellation: `requested →
    * rejected`, `payment_due | confirmed → cancelled`. The state write
    * carries the reason, the refund audit with the state cancelled from
    * (glossary "Wiederherstellung" returns to it) and, where a refund is
    * due, the open refund state (glossary "Erstattungsstand"), and drops the
    * hook of a cancellation request; then the access is revoked, the cancellation
    * document issued for a priced booking unless the caller leaves it out,
-   * the workflow told and the customer mailed - the rejection of a request,
-   * the cancellation otherwise (a request the customer withdrew through a
-   * hook reads as a cancellation, as before).
+   * with the bank details of a paid one (`refundBankDetails`), the workflow
+   * told and the customer mailed - the rejection of a request
+   * the administration or the system turned down, the cancellation
+   * otherwise (a request the customer withdrew, directly or through a hook,
+   * reads as a cancellation).
    *
    * @param {string} tenantId
    * @param {string} bookingId
@@ -498,7 +504,10 @@ function createBookingLifecycle(adapters) {
       { status: booking.status, cancelledFrom: from },
     );
 
-    const rejection = booking.status === STATUS.REJECTED && !hookId;
+    const rejection =
+      booking.status === STATUS.REJECTED &&
+      trigger !== TRIGGER.CUSTOMER &&
+      !hookId;
     const files = [];
 
     const notice = noticeOf(tenantId, bookingId);
@@ -522,7 +531,7 @@ function createBookingLifecycle(adapters) {
             bookings: [booking],
             options: {
               alreadyPaid: from === STATUS.CONFIRMED,
-              bankDetails: sanitizeBankDetails(bankDetails) || undefined,
+              bankDetails: refundBankDetails(bankDetails, from) || undefined,
               cancellationReason: reason,
               refundCalculation: refund,
             },
@@ -553,9 +562,9 @@ function createBookingLifecycle(adapters) {
   }
 
   /**
-   * The cancellation request (spec part 2, section 8, `requestCancel`;
-   * glossary "Stornoanfrage"): the state stays, a hook `REJECT` with the
-   * reason and the bank details is written, and the customer is asked to
+   * The cancellation request: the state stays, a hook `REJECT` with the
+   * reason and the bank details of a paid booking (`refundBankDetails`)
+   * is written, and the customer is asked to
    * verify, with the refund the customer's cancellation would bring. Only
    * where the booking's cancellation policy allows it: otherwise
    * `ForbiddenError booking_user_cancellation_disabled`, the answer of
@@ -584,9 +593,9 @@ function createBookingLifecycle(adapters) {
     nextState(status, transition, booking);
 
     const payload = { reason };
-    const sanitizedBankDetails = sanitizeBankDetails(bankDetails);
+    const sanitizedBankDetails = refundBankDetails(bankDetails, status);
     if (sanitizedBankDetails) {
-      payload.bankDetails = sanitizedBankDetails;
+      payload.bankDetails = encryptBankDetails(sanitizedBankDetails);
     }
     const hook = booking.addHook(BOOKING_HOOK_TYPES.REJECT, payload);
 
@@ -618,11 +627,11 @@ function createBookingLifecycle(adapters) {
   }
 
   /**
-   * The reinstatement (spec part 2, section 8, `reinstate`; glossary
-   * "Wiederherstellung"): `rejected → requested`, `cancelled → ` the state
+   * The reinstatement: `rejected → requested`, `cancelled → ` the state
    * it was cancelled from. Price, positions and coupon are what the stored
    * booking still carries from before the cancellation; the reason is
-   * cleared and the refund audit removed. The access is granted again at
+   * cleared, the refund audit removed and an open cancellation request
+   * (hook `REJECT`) dropped. The access is granted again at
    * `confirmed`, held at `requested | payment_due` - a hold that fails
    * aborts, the booking is cancelled again. No document, no workflow
    * event, no mail.
@@ -641,6 +650,11 @@ function createBookingLifecycle(adapters) {
     booking.status = nextState(from, transition, booking);
     booking.rejectionReason = "";
     delete booking.cancellationRefund;
+    // An open cancellation request from before the cancellation goes: its
+    // old link must not cancel the reinstated booking again.
+    booking.hooks = booking.hooks.filter(
+      (hook) => hook.type !== BOOKING_HOOK_TYPES.REJECT,
+    );
     const confirmed = () => booking.status === STATUS.CONFIRMED;
 
     // A reinstatement tells the booker nothing; the failed grant is the
@@ -746,7 +760,111 @@ function createBookingLifecycle(adapters) {
     ]);
   }
 
-  return { admit, confirm, pay, cancel, requestCancel, reinstate, amend };
+  /**
+   * The acceptance of a withdrawal: a private
+   * customer withdrew the booking by mail, the tenant's staff found it
+   * admissible. `requested | payment_due | confirmed → withdrawn`, for
+   * good - no transition leaves `withdrawn`. A withdrawal costs nothing:
+   * what is still to pay lapses with `payment_due`, what was paid is
+   * refunded in full - the refund audit records 100 % and the state left,
+   * and the open refund state where the booking was paid (glossary
+   * "Erstattungsstand"). Then the access is revoked, the withdrawal
+   * receipt (glossary "Widerrufbeleg") issued for a priced booking, the
+   * workflow told as of a
+   * cancellation and the customer sent the confirmation of the withdrawal.
+   * Only a private booking has a withdrawal (glossary "Geschäftliche
+   * Buchung"): a business one is `ForbiddenError
+   * booking_withdrawal_not_private`, in front of the state guard.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {{ trigger: string, cancelledByUserId?: string|null }} options
+   * @returns {Promise<Object>} The outcome
+   */
+  async function acceptWithdrawal(
+    tenantId,
+    bookingId,
+    { trigger, cancelledByUserId = null } = {},
+  ) {
+    const transition = TRANSITION.ACCEPT_WITHDRAWAL;
+    assertTrigger(transition, trigger);
+
+    const [booking, tenant] = await Promise.all([
+      load(tenantId, bookingId),
+      loadTenant(tenantId),
+    ]);
+    if (!isPrivateBooking(booking)) {
+      throw new ForbiddenError("booking_withdrawal_not_private", {
+        bookingId,
+      });
+    }
+    const from = booking.status;
+    booking.status = nextState(from, transition, booking);
+
+    const refund = CancellationRefundService.calculate({
+      tenant,
+      booking,
+      cancelledAt: clock(),
+      origin: REFUND_ORIGIN[trigger],
+      refundPercentage: FULL_REFUND_PERCENTAGE,
+      cancelledByUserId,
+    });
+    booking.cancellationRefund = CancellationRefundService.toBookingAudit(
+      refund,
+      { status: booking.status, cancelledFrom: from },
+    );
+    const files = [];
+
+    const notice = noticeOf(tenantId, bookingId);
+
+    return runPipeline({ transition, tenantId, bookingId, booking, store }, [
+      step(PHASE.PERSIST, "store", "save", () =>
+        store.save(booking, { expectStatus: from, transition }),
+      ),
+      step(PHASE.PROVISION, "access", "revoke", () =>
+        access.revoke(tenantId, bookingId),
+      ),
+      step(
+        PHASE.DOCUMENT,
+        "documents",
+        "issue",
+        async () => {
+          const issued = await documents.issue({
+            tenantId,
+            bookingIds: [bookingId],
+            type: "withdrawal",
+            bookings: [booking],
+            options: {
+              alreadyPaid: from === STATUS.CONFIRMED,
+              refundCalculation: refund,
+            },
+          });
+          files.push(issued.file);
+          return issued;
+        },
+        { when: () => isPriced(booking) },
+      ),
+      step(
+        PHASE.NOTIFY,
+        "workflow",
+        "emit",
+        () => workflow.emit(tenantId, bookingId, WORKFLOW_EVENT.REJECT),
+        { when: () => trigger !== TRIGGER.WORKFLOW },
+      ),
+      notice("BOOKING_WITHDRAWAL", { attachments: files }),
+    ]);
+  }
+
+  return {
+    admit,
+    confirm,
+    pay,
+    cancel,
+    requestCancel,
+    reinstate,
+    amend,
+    acceptWithdrawal,
+  };
 }
 
 /** The lifecycle over the production adapters. */

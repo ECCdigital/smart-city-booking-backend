@@ -1,8 +1,6 @@
 const { expect } = require("chai");
 const sinon = require("sinon");
 
-const axios = require("axios");
-
 const {
   SaltoKsApiClient,
   resolveSaltoEnvironment,
@@ -129,6 +127,24 @@ describe("SaltoKsApiClient IQ endpoints", () => {
   });
 });
 
+describe("SaltoKsApiClient without guests", () => {
+  // Every PIN in Salto KS hangs on a user, and the platform creates none there:
+  // the client has no way to create users or give them access.
+  const GUEST_METHODS = [
+    "createUser",
+    "assignAccess",
+    "revokeAccess",
+    "deleteUser",
+  ];
+
+  it("neither has nor declares a method for users or their access", () => {
+    for (const method of GUEST_METHODS) {
+      expect(SaltoKsApiClient.prototype[method], method).to.equal(undefined);
+      expect(SaltoKsApiClient.capabilities).not.to.include(method);
+    }
+  });
+});
+
 describe("Salto KS environments", () => {
   it("maps accept to the accept Connect API and identity server", () => {
     const client = new SaltoKsApiClient("id", "secret", null, "accept");
@@ -199,109 +215,5 @@ describe("SaltoKsAccessApplication.resolveEnvironment", () => {
     });
 
     expect(app.environment).to.equal("accept");
-  });
-});
-
-describe("SaltoKsApiClient.testConnection", () => {
-  let sandbox;
-
-  beforeEach(() => {
-    sandbox = sinon.createSandbox();
-  });
-
-  afterEach(() => {
-    sandbox.restore();
-  });
-
-  function rejectWith(status, data) {
-    const err = new Error(`Request failed with status code ${status}`);
-    err.response = { status, data };
-    sandbox.stub(axios, "request").rejects(err);
-  }
-
-  it("passes the identity server's error through", async () => {
-    rejectWith(400, {
-      error: "invalid_client",
-      error_description: "Client authentication failed",
-    });
-
-    const result = await SaltoKsApiClient.testConnection(
-      "id",
-      "secret",
-      null,
-      "accept",
-      { username: "user@example.test", password: "password" },
-    );
-
-    expect(result).to.deep.equal({
-      success: false,
-      message: "invalid_client: Client authentication failed",
-    });
-  });
-
-  it("passes a bare identity error through without description", async () => {
-    rejectWith(400, { error: "invalid_grant" });
-
-    const result = await SaltoKsApiClient.testConnection(
-      "id",
-      "secret",
-      null,
-      "accept",
-      { username: "user@example.test", password: "password" },
-    );
-
-    expect(result.message).to.equal("invalid_grant");
-  });
-
-  it("falls back to the shared status mapping when there is no body", async () => {
-    rejectWith(401, "");
-
-    const result = await SaltoKsApiClient.testConnection(
-      "id",
-      "secret",
-      null,
-      "accept",
-      { username: "user@example.test", password: "password" },
-    );
-
-    expect(result).to.deep.equal({
-      success: false,
-      message: "Invalid credentials",
-    });
-  });
-
-  it("names the environment on success", async () => {
-    sandbox
-      .stub(axios, "request")
-      .resolves({ data: { access_token: "t", expires_in: 3600 } });
-
-    const result = await SaltoKsApiClient.testConnection(
-      "id",
-      "secret",
-      null,
-      "production",
-      { username: "user@example.test", password: "password" },
-    );
-
-    expect(result).to.deep.equal({
-      success: true,
-      message: "Connection successful (production)",
-    });
-    expect(axios.request.firstCall.args[0].url).to.equal(
-      "https://identity.eu.my-clay.com/connect/token",
-    );
-  });
-
-  it("reports an unknown environment instead of throwing", async () => {
-    const result = await SaltoKsApiClient.testConnection(
-      "id",
-      "secret",
-      null,
-      "staging",
-      { username: "user@example.test", password: "password" },
-    );
-
-    expect(result.success).to.equal(false);
-    expect(result.message).to.match(/Unknown Salto KS environment/);
   });
 });

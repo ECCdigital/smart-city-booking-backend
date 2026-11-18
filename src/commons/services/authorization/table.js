@@ -121,6 +121,7 @@ const TABLE = {
     commit: { any: "manageBookings.updateAny" },
     pay: { any: "manageBookings.updateAny" },
     reject: { any: "manageBookings.updateAny" },
+    acceptWithdrawal: { any: "manageBookings.updateAny" },
     delete: { any: "manageBookings.deleteAny" },
     cancel: { own: "signedIn", any: "manageBookings.updateAny" },
     operate: { own: "signedIn", any: "manageBookings.updateAny" },
@@ -190,6 +191,15 @@ const TABLE = {
     read: { any: "manageBookings.readAny" },
   },
 
+  // A favorite (glossary "Favorit") is the signed-in user's alone: `self`
+  // at both entries, no owner key, no `any` - no other principal, the
+  // instance owner included, reads or writes it over these routes. The
+  // service reads for the user under `DOMAIN`, as "my bookings" does.
+  favorite: {
+    readMine: { self: "signedIn" },
+    write: { self: "signedIn" },
+  },
+
   // The geo services of the location input - search, reverse search, the
   // start view and the tiles of the map: every member.
   geo: {
@@ -219,6 +229,9 @@ const TABLE = {
     read: { any: "manageUsers.readAny" },
     manage: { any: "manageUsers.updateAny" },
     owner: { any: "tenantOwner" },
+    // Reporting a member or a booker to the instance (glossary „Meldung“);
+    // a tenant owner only with `owner`.
+    report: { any: "manageUsers.updateAny" },
   },
 
   tenant: {
@@ -277,6 +290,20 @@ const TABLE = {
     checkRealm: { any: "instanceOwner" },
   },
 
+  // The blacklist of the instance (glossary „Blacklist“):
+  // tenant owners neither see nor keep it.
+  blacklist: {
+    read: { any: "instanceOwner" },
+    write: { any: "instanceOwner" },
+  },
+
+  // The reports to the instance (glossary „Meldung“):
+  // the instance owner reads and settles them.
+  report: {
+    read: { any: "instanceOwner" },
+    resolve: { any: "instanceOwner" },
+  },
+
   rule: {
     read: { any: "instanceOwner" },
     write: { any: "instanceOwner" },
@@ -291,6 +318,9 @@ const TABLE = {
     update: { any: "instanceOwner" },
     delete: { any: "instanceOwner" },
     changeId: { any: "instanceOwner" },
+    // Suspend, lift and preview a suspension (glossary „Sperre (eines
+    // Users)“).
+    suspend: { any: "instanceOwner" },
   },
 
   membership: {

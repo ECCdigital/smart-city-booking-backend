@@ -1,7 +1,5 @@
-const crypto = require("crypto");
-const bunyan = require("bunyan");
 const AccessProvider = require("./access-provider");
-const { createClient } = require("../clients/access-client-registry");
+const { saltoKsClientFor } = require("../clients/salto-ks-clients");
 const {
   classifySaltoError,
   extractSaltoList,
@@ -10,19 +8,11 @@ const SaltoKsIqActivationService = require("../salto-ks-iq-activation-service");
 const { AccessPointMode } = require("../../../entities/access/access-point");
 const { AccessOpenError } = require("../../../../errors/AccessOpenError");
 const { NotFoundError } = require("../../../../errors/BaseError");
+const { ValidationError } = require("../../../../errors/ValidationError");
 
 require("../clients");
 
 const PROVIDER_ID = "salto-ks";
-
-const logger = bunyan.createLogger({
-  name: "salto-ks-access-provider.js",
-  level: process.env.LOG_LEVEL,
-});
-
-// The lock types with a keypad - the only ones that know the Salto-Guest+PIN
-// path (ADR 0001). Remote open is open to every door hanging on an IQ.
-const KEYPAD_LOCK_TYPES = Object.freeze(["escutcheon_pin", "wall_reader_pin"]);
 
 class SaltoKsAccessProvider extends AccessProvider {
   constructor(options = {}) {
@@ -45,7 +35,10 @@ class SaltoKsAccessProvider extends AccessProvider {
    *   read it already
    */
   async _getClient(tenant, app = null) {
-    return this._client || createClient(app || (await this._getApp(tenant)));
+    return (
+      this._client ||
+      saltoKsClientFor(tenant, app || (await this._getApp(tenant)))
+    );
   }
 
   /**
@@ -89,8 +82,9 @@ class SaltoKsAccessProvider extends AccessProvider {
    */
   async _attemptOpen(tenant, lockId) {
     // A lock whose IQ is already known can be refused - backoff after
-    // otp_blocked, missing activation - without any Salto call (§4/§7 of the
-    // spec). When this passes, the attempt continues on live data.
+    // otp_blocked, missing activation - without any Salto call, so a refused
+    // attempt spends no OTP. When this passes, the attempt continues on live
+    // data.
     const knownIq = this._knownIqByLock.get(`${tenant}:${lockId}`);
     if (knownIq) {
       await SaltoKsIqActivationService.resolveOtpForOpen(tenant, knownIq);
@@ -122,7 +116,7 @@ class SaltoKsAccessProvider extends AccessProvider {
         (candidate) => String(candidate.id) === iq.id,
       );
       if (liveIq?.restore_required) {
-        // §7: the IQ was reset - the stored ingredients are dead. Book it so
+        // The IQ was reset - the stored ingredients are dead. Book it so
         // the capability is withdrawn and the admin sees why.
         await SaltoKsIqActivationService.markReactivationRequired(
           tenant,
@@ -155,7 +149,7 @@ class SaltoKsAccessProvider extends AccessProvider {
   /**
    * @private
    * Books a failed locking call on the IQ's activation and turns it into the
-   * failure class the guest sees (§7 of the spec): OTP rejections and an
+   * failure class the guest sees: OTP rejections and an
    * offline lock are temporary, a missing right of the system user - which
    * only ever shows itself here - is configurative.
    */
@@ -169,9 +163,15 @@ class SaltoKsAccessProvider extends AccessProvider {
     }
 
     if (kind === "otp_blocked" && iq) {
-      await SaltoKsIqActivationService.recordOtpBlocked(tenant, iq.id, detail);
+      const blockedUntil = await SaltoKsIqActivationService.recordOtpBlocked(
+        tenant,
+        iq.id,
+        detail,
+      );
       return AccessOpenError.temporary(
         `Salto KS blocked OTP submissions: ${detail}`,
+        {},
+        { retryAfter: blockedUntil },
       );
     }
 
@@ -243,145 +243,30 @@ class SaltoKsAccessProvider extends AccessProvider {
   }
 
   /**
-   * Creates a Salto guest for the booking and gives it access to the lock
-   * with a PIN for the access window. The guest is the grant's external
-   * principal: it has to go when the grant goes.
-   *
-   * @param {Object} accessPoint The access point to grant access to
-   * @param {Object} bookingContext The booking that gets access
-   * @returns {Promise<import("./access-provider").Grant>}
-   * @throws {Error} Salto's own error, or one of our own when Salto answers
-   *   without the ids the grant needs
-   */
-  async grantAuthorization(accessPoint, bookingContext) {
-    const client = await this._getClient(bookingContext.tenant);
-    const secret = bookingContext.pin || this._generatePin();
-
-    const userResponse = await client.createUser(
-      this._buildUser(bookingContext),
-    );
-    const externalPrincipalId =
-      userResponse?.id || userResponse?.userId || userResponse?.user?.id;
-
-    if (!externalPrincipalId) {
-      throw new Error("Salto KS createUser returned no user id");
-    }
-
-    const accessResponse = await client.assignAccess(
-      externalPrincipalId,
-      [accessPoint.externalId],
-      this._formatDate(bookingContext.accessFrom ?? bookingContext.timeBegin),
-      this._formatDate(bookingContext.accessTo ?? bookingContext.timeEnd),
-      secret,
-    );
-    const authorizationId =
-      accessResponse?.id ||
-      accessResponse?.accessId ||
-      accessResponse?.access?.id ||
-      null;
-
-    if (!authorizationId) {
-      throw new Error("Salto KS assignAccess returned no access id");
-    }
-
-    return {
-      authorizationId: String(authorizationId),
-      externalPrincipalId: String(externalPrincipalId),
-      secret,
-    };
-  }
-
-  /**
-   * Revokes the access and deletes the guest. An access or guest Salto no
-   * longer has is nothing to do, so a repeated revoke only finishes what
-   * is left. A guest that could not be deleted does not fail the revoke:
-   * the access is gone, and the cleanup job retries the guest.
-   *
-   * @param {Object} accessPoint The access point the grant was made for
-   * @param {import("./access-provider").Grant} grant The grant to revoke
-   * @returns {Promise<import("./access-provider").Revocation>}
-   * @throws {Error} Salto's own error when the access could not be revoked
-   */
-  async revokeAuthorization(accessPoint, grant) {
-    const authorizationId = grant?.authorizationId || null;
-    const externalPrincipalId = grant?.externalPrincipalId || null;
-
-    if (!authorizationId && !externalPrincipalId) {
-      return { principalRemoved: null };
-    }
-
-    const client = await this._getClient(accessPoint.tenantId);
-
-    if (authorizationId) {
-      try {
-        await client.revokeAccess(authorizationId);
-      } catch (err) {
-        if (!this._isGone(err)) {
-          throw err;
-        }
-      }
-    }
-
-    if (!externalPrincipalId) {
-      return { principalRemoved: null };
-    }
-
-    try {
-      await client.deleteUser(externalPrincipalId);
-      return { principalRemoved: true };
-    } catch (err) {
-      if (this._isGone(err)) {
-        return { principalRemoved: true };
-      }
-      logger.warn(
-        `Salto KS guest ${externalPrincipalId} of access ${authorizationId} could not be deleted, leaving it to the cleanup job: ${err.message}`,
-      );
-      return { principalRemoved: false };
-    }
-  }
-
-  /**
-   * @private
-   * Whether Salto answers that the thing to delete is already gone.
-   */
-  _isGone(err) {
-    return err?.response?.status === 404;
-  }
-
-  /**
    * The access points of the site, each with the modes its lock really
-   * supports right now (§6 of the spec): the keypad path follows the lock
-   * type, remote open additionally needs the lock's IQ to be locally
-   * activated (IQs without `otp_enabled` need no activation) and not in
-   * `restore_required`. Deliberately no condition on `online` - an offline IQ
+   * supports right now. Remote open is the only mode, at
+   * every lock type, keypad or not: it needs the lock's IQ to be locally
+   * activated under the tenant's current identity (IQs without `otp_enabled`
+   * need no activation) and not in `restore_required`. Deliberately no condition on `online` - an offline IQ
    * is a runtime failure of the open attempt, not a capability.
    */
   async listAccessPoints(tenant) {
     const app = await this._getApp(tenant);
     const client = await this._getClient(tenant, app);
-    const [locks, iqs] = await Promise.all([
+    const [locks, iqs, activations] = await Promise.all([
       client.getLocks(),
       client.getIqs(),
+      SaltoKsIqActivationService.currentActivations(app, client),
     ]);
     const iqList = extractSaltoList(iqs);
-    const activations = Array.isArray(app.iqActivations)
-      ? app.iqActivations
-      : [];
 
     return extractSaltoList(locks).map((lock) => {
       const externalId = String(lock.id || lock.lockId);
-      const supportedModes = this._deriveSupportedModes(
+      const { supportedModes, capabilities } = this._deriveOffer(
         lock,
         iqList,
         activations,
       );
-      const capabilities = [];
-      if (supportedModes.includes(AccessPointMode.REMOTE)) {
-        capabilities.push("remote");
-      }
-      if (supportedModes.includes(AccessPointMode.AUTHORIZATION)) {
-        capabilities.push("authorization");
-      }
 
       return {
         id: externalId,
@@ -405,29 +290,46 @@ class SaltoKsAccessProvider extends AccessProvider {
   }
 
   /**
-   * @private
-   * The capability rule for one lock. `lock_type` stays provider runtime
-   * knowledge - it is read from the live lock, never persisted.
+   * Refuse `authorization` and `both` at every Salto door, without asking
+   * Salto: the rule of `_deriveOffer` holds for every lock, so it needs no
+   * listing and runs before it is fetched. A save the listing cannot judge -
+   * the tenant's application is not active, Salto does not list the lock or
+   * cannot be reached - still gets the mode Salto doors have, `remote`.
+   * `remote` itself passes here; whether the lock can do it right now is the
+   * listing's to say.
+   *
+   * @param {Object} accessPoint The access point as it would be stored
+   * @returns {void}
+   * @throws {ValidationError} `unsupported_mode` for any mode but `remote`
    */
-  _deriveSupportedModes(lock, iqList, activations) {
-    const modes = [];
-
-    if (KEYPAD_LOCK_TYPES.includes(lock.lock_type)) {
-      modes.push(AccessPointMode.AUTHORIZATION);
+  validateAccessPointWithoutListing(accessPoint) {
+    if (accessPoint.mode === AccessPointMode.REMOTE) {
+      return;
     }
 
-    if (this._supportsRemoteOpen(lock, iqList, activations)) {
-      modes.unshift(AccessPointMode.REMOTE);
-    }
+    throw new ValidationError([
+      {
+        field: "mode",
+        code: "unsupported_mode",
+        params: {
+          mode: accessPoint.mode,
+          supportedModes: [AccessPointMode.REMOTE],
+        },
+      },
+    ]);
+  }
 
-    if (
-      modes.includes(AccessPointMode.REMOTE) &&
-      modes.includes(AccessPointMode.AUTHORIZATION)
-    ) {
-      modes.push(AccessPointMode.BOTH);
-    }
-
-    return modes;
+  /**
+   * @private
+   * The capability rule for one lock, for its modes and capabilities alike:
+   * remote open or nothing. The platform creates no users in Salto KS, and
+   * every Salto PIN hangs on a user, so no lock - not even one with a
+   * keypad - offers `authorization` or `both`.
+   */
+  _deriveOffer(lock, iqList, activations) {
+    return this._supportsRemoteOpen(lock, iqList, activations)
+      ? { supportedModes: [AccessPointMode.REMOTE], capabilities: ["remote"] }
+      : { supportedModes: [], capabilities: [] };
   }
 
   /**
@@ -462,124 +364,17 @@ class SaltoKsAccessProvider extends AccessProvider {
   // only its country code and time zone, a lock only its floor inside the
   // building. Leaving the optional capability undeclared is what tells an admin
   // UI not to offer a location prefill that could never fill anything in.
-
-  async registerWebhook(tenant, callbackUrl) {
-    const client = await this._getClient(tenant);
-    return client.subscribeNotifications(callbackUrl);
-  }
-
-  async unregisterWebhook(tenant, id) {
-    if (!id) {
-      return { success: true, skipped: true, reason: "missing subscriptionId" };
-    }
-
-    const client = await this._getClient(tenant);
-    return client.unsubscribeNotifications(id);
-  }
-
-  parseWebhook(rawPayload, _headers = {}) {
-    const payload =
-      typeof rawPayload === "string" ? JSON.parse(rawPayload) : rawPayload;
-
-    return {
-      provider: PROVIDER_ID,
-      externalId: String(payload.lockId || payload.lock_id || payload.id || ""),
-      eventType:
-        payload.eventType ||
-        payload.event ||
-        payload.type ||
-        payload.name ||
-        null,
-      timestamp:
-        payload.timestamp || payload.eventTime || payload.date || Date.now(),
-      payload,
-    };
-  }
-
-  verifyWebhookSignature(rawPayload, headers = {}, secret = null) {
-    if (!secret) {
-      return true;
-    }
-
-    const signature =
-      headers["x-salto-signature"] ||
-      headers["X-Salto-Signature"] ||
-      headers["x-signature"];
-
-    if (!signature) {
-      return false;
-    }
-
-    const body =
-      typeof rawPayload === "string"
-        ? rawPayload
-        : JSON.stringify(rawPayload || {});
-    const expected = crypto
-      .createHmac("sha256", secret)
-      .update(body)
-      .digest("hex");
-
-    return this._safeEqual(signature.replace(/^sha256=/, ""), expected);
-  }
-
-  _buildUser(bookingContext) {
-    const booking = bookingContext.booking || {};
-    const fullName = (booking.name || "").trim();
-    const parts = fullName.split(/\s+/).filter(Boolean);
-    const firstName =
-      parts.length > 1 ? parts.slice(0, -1).join(" ") : fullName;
-    const lastName = parts.length > 1 ? parts[parts.length - 1] : "";
-
-    return {
-      firstName: firstName || `Booking ${bookingContext.bookingId}`,
-      lastName,
-      email: booking.mail || "",
-    };
-  }
-
-  _formatDate(value) {
-    if (!value) {
-      return null;
-    }
-
-    if (value instanceof Date) {
-      return value.toISOString();
-    }
-
-    if (typeof value === "number") {
-      return new Date(value).toISOString();
-    }
-
-    return value;
-  }
-
-  _generatePin() {
-    return String(crypto.randomInt(100000, 1000000));
-  }
-
-  _safeEqual(a, b) {
-    const left = Buffer.from(a);
-    const right = Buffer.from(b);
-
-    if (left.length !== right.length) {
-      return false;
-    }
-
-    return crypto.timingSafeEqual(left, right);
-  }
+  //
+  // No webhooks either: Salto KS sends no events, so there is nothing to
+  // register when a tenant is saved and nothing to receive.
 
   static get capabilities() {
     return [
       "open",
       "getStatus",
-      "grantAuthorization",
-      "revokeAuthorization",
       "listAccessPoints",
       "getSupportedModes",
-      "registerWebhook",
-      "unregisterWebhook",
-      "parseWebhook",
-      "verifyWebhookSignature",
+      "validateAccessPointWithoutListing",
     ];
   }
 }
