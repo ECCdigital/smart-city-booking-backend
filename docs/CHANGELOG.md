@@ -13,6 +13,7 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ### Fixed
 
+- The attendee list CSV of an event (`GET /csv/:tenant/events/:id/bookings`) keeps its columns and rows: a value with `;` or `"` is quoted, with inner quotes doubled, and a line break becomes a space. Before, a semicolon in a name or address moved the following columns of that row, and a line break split the row.
 - The booking and invoice dates of PDF documents read in Europe/Berlin, whatever the server's time zone: `formatDate` of the PDF service followed the server, unlike `formatDateTime` beside it, so on a server in UTC, as in the Docker image, a receipt or invoice from shortly after midnight carried the previous day.
 
 ## [4.4.1] — 2026-11-16
