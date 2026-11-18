@@ -40,6 +40,15 @@ describe("BundleCheckoutService.generateBookingReference", function () {
     ]);
   });
 
+  it("draws the characters from a cryptographically secure source", async function () {
+    sinon.stub(BookingManager, "getBooking").resolves(null);
+    const mathRandom = sinon.spy(Math, "random");
+
+    await bundleService().generateBookingReference();
+
+    assert.strictEqual(mathRandom.callCount, 0);
+  });
+
   it("draws again when the tenant already has a booking under the reference", async function () {
     const getBooking = sinon
       .stub(BookingManager, "getBooking")
