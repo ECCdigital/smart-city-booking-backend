@@ -229,29 +229,34 @@ describe("tenant controllers on the reach", function () {
       expect(list.called).to.equal(false);
     });
 
-    it("GET /events/:id/bookings: nothing for the public, the reach's for the rest", async function () {
-      const list = sinon.stub(BookingManager, "getEventBookings").resolves([]);
+    it("GET /events/:id/bookings: the event within the reach, its bookings whole", async function () {
+      const list = sinon
+        .stub(BookingService, "getEventBookings")
+        .resolves([{ id: "b1" }]);
       const res = response();
       await BookingController.getEventBookings(
-        request({
-          reach: "public",
-          principal: anonymous,
-          params: { id: "e1" },
-        }),
+        request({ reach: "own", principal: customer, params: { id: "e1" } }),
         res,
       );
-      expect(res.body).to.deep.equal([]);
-      expect(list.called).to.equal(false);
-
-      await BookingController.getEventBookings(
-        request({ reach: "own", principal: customer, params: { id: "e1" } }),
-        response(),
-      );
+      expect(res.body).to.deep.equal([{ id: "b1" }]);
       expect(list.firstCall.args).to.deep.equal([
         "t1",
         "e1",
         { reach: "own", userId: "erika" },
       ]);
+    });
+
+    it("GET /events/:id/bookings: 404 for an event out of reach", async function () {
+      sinon
+        .stub(BookingService, "getEventBookings")
+        .rejects(new NotFoundError("event_not_found", { eventId: "e1" }));
+      const res = response();
+      await BookingController.getEventBookings(
+        request({ reach: "own", principal: customer, params: { id: "e1" } }),
+        res,
+      );
+      expect(res.statusCode).to.equal(404);
+      expect(res.body).to.include({ code: "event_not_found" });
     });
 
     it("GET /bookables/:id/bookings: the reach's bookings without the flag", async function () {

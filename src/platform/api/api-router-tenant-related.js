@@ -161,12 +161,6 @@ router.get(
   publicRoute("event", "read"),
   EventController.getEvent,
 );
-router.get(
-  "/events/:id/bookings",
-  publicRoute("booking", "list"),
-  BookingController.getEventBookings,
-);
-
 // Protected
 router.post(
   "/events",
@@ -208,6 +202,11 @@ router.get(
   "/events/:id/count",
   authorize("event", "seatCount"),
   EventController.getBookedSeatsCount,
+);
+router.get(
+  "/events/:id/bookings",
+  authorize("event", "bookings"),
+  BookingController.getEventBookings,
 );
 
 // BOOKINGS

@@ -46,7 +46,7 @@ const SECOND_DECISIONS = {};
  */
 const REACH_BRANCHES = {
   platform: {
-    "api/controllers/booking-controller.js": { reach: 3 }, // stays: ?public=true
+    "api/controllers/booking-controller.js": { reach: 2 }, // stays: ?public=true
     "api/controllers/ical-controller.js": { readsRecords: 1 }, // stays: ?includePrivate
     "api/controllers/role-controller.js": { reach: 1 }, // 05
   },

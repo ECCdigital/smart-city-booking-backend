@@ -101,6 +101,12 @@ const TABLE = {
       own: "manageBookables.readOwn",
       any: "manageBookables.readAny",
     },
+    // The bookings of the event, whole, for whoever may change it - the
+    // levels of its attendee list (`exporter.export`).
+    bookings: {
+      own: "manageBookables.updateOwn",
+      any: "manageBookables.updateAny",
+    },
     meta: { public: true, any: "manageBookables.readAny" },
     reviewSubmit: { own: "tenantOwner", any: "instanceOwner" },
     reviewDecide: { any: "instanceOwner" },
