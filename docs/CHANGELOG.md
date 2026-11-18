@@ -11,6 +11,10 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 - Agent docs refreshed to stand `ecc-12` of the ECC skills setup: `docs/agents/issue-tracker.md` follows the template „GitHub Portolan, Produkt-Repo“ and reads the Ablauf (`v1`/`v2`) of `ECCdigital/tickets`, with sub-tickets, the extended Definition of Ready and `Refs` instead of `Closes` under `v2`; the `## Agent skills` block in `CLAUDE.md` names it. No code change
 
+### Fixed
+
+- The attendee list CSV of an event (`GET /csv/:tenant/events/:id/bookings`) keeps its columns and rows: a value with `;` or `"` is quoted, with inner quotes doubled, and a line break becomes a space. Before, a semicolon in a name or address moved the following columns of that row, and a line break split the row.
+
 ## [4.4.1] — 2026-11-16
 
 ### Changed
