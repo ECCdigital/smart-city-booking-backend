@@ -1,0 +1,11 @@
+<p>Ein Mandant hat {{targetKind}} an die Plattform gemeldet.</p>
+<br />
+<p><strong>Gemeldet:</strong> {{target}}</p>
+<p><strong>Mandant:</strong> {{tenantName}}</p>
+<p><strong>Gemeldet von:</strong> {{reportedBy}}</p>
+<p><strong>Grund:</strong> {{reason}}</p>
+{{#if bookingId}}
+  <p><strong>Buchung:</strong> {{bookingId}}</p>
+{{/if}}
+<br />
+<p><a href="{{adminUrl}}">Offene Meldungen in der Verwaltung öffnen</a></p>

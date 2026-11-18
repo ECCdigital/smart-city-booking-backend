@@ -336,6 +336,7 @@ async function runChildBookingsCheck({
       childAmountBooked: amountBooked,
       capacity: childBookable.amount,
       requestedAmount: Number(amount),
+      isTicketChild: childBookable.type === "ticket",
     });
 
     childAmount.push({

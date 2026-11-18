@@ -44,6 +44,8 @@ const CANDIDATE_PATHS = Object.freeze({
   [STATUS.CONFIRMED]: [[TRANSITION.CANCEL]],
   [STATUS.REJECTED]: [[TRANSITION.REINSTATE]],
   [STATUS.CANCELLED]: [[TRANSITION.REINSTATE]],
+  // A withdrawal cannot be taken back, and a PUT does not withdraw.
+  [STATUS.WITHDRAWN]: [],
 });
 
 /**

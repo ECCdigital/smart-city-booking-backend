@@ -2,6 +2,8 @@ const UserManager = require("../../../commons/data-managers/user-manager");
 const { User } = require("../../../commons/entities/user/user");
 const bunyan = require("bunyan");
 const UserService = require("../../../commons/services/user-service");
+const SuspensionService = require("../../../commons/services/user/suspension-service");
+const BlacklistService = require("../../../commons/services/blacklist/blacklist-service");
 const ApiResponse = require("../../../commons/utilities/api-response");
 const { ForbiddenError, NotFoundError } = require("../../../errors/BaseError");
 
@@ -9,6 +11,13 @@ const logger = bunyan.createLogger({
   name: "user-controller.js",
   level: process.env.LOG_LEVEL,
 });
+
+/**
+ * A user as the instance owner's user routes answer them: with the
+ * blacklist entry that hits the address.
+ */
+const withMatch = async (user) =>
+  (await BlacklistService.withMatches([user]))[0];
 
 /**
  * Web Controller for the users of the instance. The right is the router's
@@ -40,7 +49,12 @@ class UserController {
     try {
       const user = request.user;
 
-      const userObjects = await UserManager.getUsers();
+      const users = await UserManager.getUsers(true, {
+        suspended: request.query.suspended === "true",
+      });
+      const userObjects = await BlacklistService.withMatches(
+        users.map((entity) => entity.exportForInstance()),
+      );
 
       logger.info(
         `Instance -- sending ${userObjects.length} users to user ${user?.id}`,
@@ -68,7 +82,7 @@ class UserController {
         return response.sendStatus(400);
       }
 
-      const userObject = await UserManager.getUser(id);
+      const userObject = await UserManager.getUserForInstance(id);
       if (!userObject) {
         return UserController._notFound(response, id);
       }
@@ -76,7 +90,7 @@ class UserController {
       logger.info(
         `Instance -- Sending user ${userObject.id} to user ${user?.id}`,
       );
-      response.status(200).send(userObject);
+      response.status(200).send(await withMatch(userObject));
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not get user");
@@ -119,6 +133,10 @@ class UserController {
     try {
       const user = request.user;
       const userObject = new User(request.body);
+      // Suspending is an action of its own: a new
+      // user is never suspended, and no client writes the record.
+      userObject.isSuspended = false;
+      userObject.suspension = null;
       userObject.setPassword(userObject.secret);
       const newUser = await UserManager.createUser(userObject);
       logger.info(
@@ -157,7 +175,6 @@ class UserController {
         "zipCode",
         "city",
         "isVerified",
-        "isSuspended",
       ];
 
       fields.forEach((field) => {
@@ -241,6 +258,58 @@ class UserController {
       response
         .status(error.status || 500)
         .send(error.message || "could not change user id");
+    }
+  }
+
+  /**
+   * Suspends a user at once, with a reason and on
+   * request their address on the blacklist.
+   */
+  static async suspendUser(request, response, next) {
+    try {
+      const user = await SuspensionService.suspend(request.params.id, {
+        reason: request.body?.reason,
+        by: request.user.id,
+        blacklist: request.body?.blacklist === true,
+      });
+      logger.info(
+        `Instance -- suspended user ${user.id} by user ${request.user.id}`,
+      );
+      response.status(200).send(await withMatch(user));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * The consequences of a suspension for its dialog: the user's bookings
+   * and memberships.
+   */
+  static async getSuspensionPreview(request, response, next) {
+    try {
+      response
+        .status(200)
+        .send(await SuspensionService.preview(request.params.id));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Lifts the suspension of a user, on request
+   * with the exact blacklist entry of their address.
+   */
+  static async unsuspendUser(request, response, next) {
+    try {
+      const user = await SuspensionService.unsuspend(request.params.id, {
+        removeBlacklistEntry: request.query.removeBlacklistEntry === "true",
+      });
+      logger.info(
+        `Instance -- lifted the suspension of user ${user.id} by user ${request.user.id}`,
+      );
+      response.status(200).send(await withMatch(user));
+    } catch (error) {
+      next(error);
     }
   }
 

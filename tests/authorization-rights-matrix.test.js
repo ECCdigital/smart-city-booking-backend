@@ -733,6 +733,169 @@ describe("authorization rights matrix: the core routes by principal, stage and t
       admin: 200,
       foreignOwner: 403,
     }),
+    // --- the suspension of a user: the instance owner's alone;
+    // without a reason the admin gets 400 ------
+    row("post", `/api/users/${CUSTOMER}/suspension`, {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 403,
+      owner: 403,
+      admin: 400,
+      foreignOwner: 403,
+    }),
+    row("delete", `/api/users/${CUSTOMER}/suspension`, {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 403,
+      owner: 403,
+      admin: 200,
+      foreignOwner: 403,
+    }),
+    row("get", `/api/users/${CUSTOMER}/suspension-preview`, {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 403,
+      owner: 403,
+      admin: 200,
+      foreignOwner: 403,
+    }),
+    // --- the blacklist: the instance owner's alone, tenant owners do not
+    // see it; an empty body or an unknown entry
+    // gets the admin 400 or 404, the list is empty ---------------------------
+    row("get", "/api/instances/blacklist", {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 403,
+      owner: 403,
+      admin: [],
+      foreignOwner: 403,
+    }),
+    row("get", "/api/instances/blacklist/preview?value=max%40firma.test", {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 403,
+      owner: 403,
+      admin: 200,
+      foreignOwner: 403,
+    }),
+    row("post", "/api/instances/blacklist", {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 403,
+      owner: 403,
+      admin: 400,
+      foreignOwner: 403,
+    }),
+    row("put", `/api/instances/blacklist/${FIXTURE_ID}`, {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 403,
+      owner: 403,
+      admin: 400,
+      foreignOwner: 403,
+    }),
+    row("delete", `/api/instances/blacklist/${FIXTURE_ID}`, {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 403,
+      owner: 403,
+      admin: 404,
+      foreignOwner: 403,
+    }),
+    // --- the warning of the administration's ways:
+    // open to every role that may go the way, under the way's marker -----
+    ...[
+      `/api/${A}/bookings/blacklist-match`,
+      `/api/${A}/bookings/blacklist-match/mail`,
+      `/api/tenants/${A}/users/blacklist-match`,
+    ].map((path) =>
+      row("post", path, {
+        anonymous: 401,
+        customer: 403,
+        reader: 403,
+        staff: 200,
+        owner: 200,
+        admin: 200,
+        foreignOwner: 403,
+      }),
+    ),
+    row("post", "/api/users/blacklist-match", {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 403,
+      owner: 403,
+      admin: 200,
+      foreignOwner: 403,
+    }),
+    // --- the reports to the instance: a role with
+    // `manageUsers.updateAny` reports (an empty report fails at its
+    // reason), the instance owner reads and settles ----------------------
+    row("post", `/api/tenants/${A}/reports`, {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 400,
+      owner: 400,
+      admin: 400,
+      foreignOwner: 403,
+    }),
+    // --- the tenant's own reports: the same role
+    // reads them, adds to and withdraws one (an unknown one is not found,
+    // an empty addition fails at its reason) -----------------------------
+    row("get", `/api/tenants/${A}/reports`, {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: [],
+      owner: [],
+      admin: [],
+      foreignOwner: 403,
+    }),
+    row("post", `/api/tenants/${A}/reports/R-unknown/additions`, {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 400,
+      owner: 400,
+      admin: 400,
+      foreignOwner: 403,
+    }),
+    row("post", `/api/tenants/${A}/reports/R-unknown/withdraw`, {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 404,
+      owner: 404,
+      admin: 404,
+      foreignOwner: 403,
+    }),
+    row("get", "/api/instances/reports", {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 403,
+      owner: 403,
+      admin: [],
+      foreignOwner: 403,
+    }),
+    row("post", "/api/instances/reports/resolve", {
+      anonymous: 401,
+      customer: 403,
+      reader: 403,
+      staff: 403,
+      owner: 403,
+      admin: 400,
+      foreignOwner: 403,
+    }),
   ];
 
   /**

@@ -36,6 +36,10 @@ _Avoid_: maxAmount (so heißt die Grenze eines externen Anbieters und die des Co
 Wie eine Buchung angelegt wurde: als _Benutzer_ über ein Userkonto, als _Gast_ oder durch die Verwaltung als manuelle Buchung (_Admin_). Er wird einmal beim Anlegen festgelegt und ändert sich nie. Er hängt am Vorgang, nicht an der Person: Ein Admin, der selbst angemeldet über den Checkout bucht, bucht als _Benutzer_. Alte Buchungen haben keinen Buchungsweg.
 _Avoid_: Herkunft, Origin, Kanal, Buchungsart, Angemeldet als Wert (er heißt _Benutzer_)
 
+**Geschäftliche Buchung**:
+Ob eine Buchung privat oder geschäftlich ist, wie der Buchende es im Checkout angibt (`isBusiness`). Die Angabe folgt zunächst der Firma — mit Firma geschäftlich, ohne Firma privat — und der Buchende kann sie umstellen. Eine Buchung ohne Angabe, von vorher oder aus einem Checkout, der sie nicht sendet, gilt nach der Firma. Nur eine private Buchung bekommt den Widerruf (einer Buchung) angeboten.
+_Avoid_: Firmenbuchung, B2B, Privatkunde (als gespeicherter Wert — das ist die Lesart der Angabe)
+
 ### Mediathek
 
 **Medium**:
@@ -65,6 +69,10 @@ _Avoid_: protected (das ist der Alt-Pfad im Storage), accessLevel (Alt-Feldname)
 **Buchungsdokument**:
 Ein Dokument-Medium mit Verknüpfung zu einer oder mehreren Buchungen — allein diese Verknüpfung zeichnet es aus, es gibt keine eigene Dateiart. Ein aggregierter Beleg ist ein einziges Medium, das alle zugehörigen Buchungen verknüpft — nie eine Kopie je Buchung. Erscheint nicht im Mediathek-Picker; lesbar, wer mindestens eine der verknüpften Buchungen sehen darf (Berechtigte wie Eigentümer). Verliert eine gelöschte Buchung als Verknüpfung und verschwindet mit der letzten — ein Buchungsdokument ohne Buchung gibt es nicht.
 _Avoid_: Rechnung (als Oberbegriff — Rechnungen sind eine Sorte Buchungsdokument), Invoice-File, Sammelbeleg-Kopie (aggregierte Belege sind ein Medium, keine Kopien)
+
+**Widerrufbeleg**:
+Das Buchungsdokument zur Annahme des Widerrufs (einer Buchung): bestätigt den Widerruf, nennt keine Kosten und schreibt die Positionen voll gut — erstattet, wo bezahlt war, sonst entfällt der Rechnungsbetrag. Eigener Nummernkreis (`WB-…`), eigene Vorlage; ersetzt beim Widerruf die Stornorechnung.
+_Avoid_: Stornorechnung, Stornobeleg (das sind die Dokumente des Stornos), Widerrufsbeleg
 
 **Instanz-Medium**:
 Ein Medium ohne Tenant-Zuordnung — instanzweite Inhalte wie Branding und Rechts-Dokumente. Gleiches Datenmodell, keine eigene Entität; _intern_ bedeutet hier „jeder angemeldete Nutzer der Instanz" (es gibt keinen Tenant, dessen Mitgliedschaft zählen könnte). Strikt von Tenant-Kontexten getrennt: Instanz-Medien sind nur in Instanz-Kontexten referenzierbar und erscheinen nie in Tenant-Pickern — wer ein Instanz-Bild im Tenant nutzen will, lädt es dort neu hoch. Verwaltet allein vom Instance-Owner.
@@ -218,11 +226,11 @@ _Avoid_: Aktiver Grant, offener Zugang, Live-Zugriff
 ### Buchungslebenszyklus
 
 **Buchungszustand**:
-Der eine gespeicherte Wert, der sagt, wo eine Buchung in ihrem Leben steht: _angefragt_ (noch nicht bestätigt), _Zahlung offen_ (bestätigt, Preis größer null, unbezahlt), _bestätigt_ (bestätigt und bezahlt, oder bestätigt und kostenlos), _abgelehnt_ (aus „angefragt" heraus storniert) oder _storniert_ (aus „Zahlung offen" oder „bestätigt" heraus storniert). „Bezahlt, aber nicht bestätigt" gibt es nicht. Die drei Flags bestätigt/bezahlt/storniert sind Ableitungen des Zustands, nie seine Quelle.
+Der eine gespeicherte Wert, der sagt, wo eine Buchung in ihrem Leben steht: _angefragt_ (noch nicht bestätigt), _Zahlung offen_ (bestätigt, Preis größer null, unbezahlt), _bestätigt_ (bestätigt und bezahlt, oder bestätigt und kostenlos), _abgelehnt_ (aus „angefragt" heraus storniert), _storniert_ (aus „Zahlung offen" oder „bestätigt" heraus storniert) oder _widerrufen_ (ein angenommener Widerruf einer Buchung, endgültig). „Bezahlt, aber nicht bestätigt" gibt es nicht. Die drei Flags bestätigt/bezahlt/storniert sind Ableitungen des Zustands, nie seine Quelle.
 _Avoid_: isCommitted/isPayed/isRejected (als Sprechbegriffe — das sind die abgeleiteten Flags), Status-Key (das ist die Frontend-Übersetzung), Buchungsstatus (unqualifiziert)
 
 **Lebenszyklus-Übergang**:
-Ein benannter Wechsel des Buchungszustands mit seinen Effekten: Aufnahme, Bestätigung, Zahlung, Storno, Wiederherstellung, Änderung und Stornoanfrage. Welcher Übergang aus welchem Zustand erlaubt ist, steht in einer Tabelle; alles andere ist ein Fehler, keine stille Annahme. Ein Übergang gilt immer einer Buchung; eine Gruppenbuchung durchläuft ihre Übergänge als eigener Lebenszyklus über den Übergängen ihrer Mitglieder.
+Ein benannter Wechsel des Buchungszustands mit seinen Effekten: Aufnahme, Bestätigung, Zahlung, Storno, Wiederherstellung, Änderung, Stornoanfrage und Annahme des Widerrufs. Welcher Übergang aus welchem Zustand erlaubt ist, steht in einer Tabelle; alles andere ist ein Fehler, keine stille Annahme. Ein Übergang gilt immer einer Buchung; eine Gruppenbuchung durchläuft ihre Übergänge als eigener Lebenszyklus über den Übergängen ihrer Mitglieder.
 _Avoid_: Aktion, Statuswechsel, Flag setzen, Übergang (unqualifiziert)
 
 **Effekt (eines Übergangs)**:
@@ -245,8 +253,12 @@ _Avoid_: Reject-Hook (das ist die Speicherform), Kündigung, Stornierung (das is
 Der Lebenszyklus-Übergang, der eine abgelehnte oder stornierte Buchung in den Zustand zurückholt, den sie vor dem Storno hatte, mit Preis und Positionen von damals; die Erstattung fällt weg, der Zugang wird neu gewährt. Der Zustand vor dem Storno wird beim Storno festgehalten.
 _Avoid_: Unreject, Reaktivierung, Rücknahme des Stornos (das ist die Handlung, nicht der Übergang)
 
+**Widerruf (einer Buchung)**:
+Ein Privatkunde (eine private Buchung, siehe Geschäftliche Buchung) widerruft seine Buchung innerhalb von 14 Tagen per Mail; die Verwaltung prüft, ob der Widerruf zulässig ist, und nimmt ihn mit dem Lebenszyklus-Übergang „Annahme des Widerrufs" an. Aus _angefragt_, _Zahlung offen_ oder _bestätigt_ wird die Buchung _widerrufen_, endgültig: keine Wiederherstellung. Ein Widerruf kostet nichts — eine offene Zahlung entfällt, eine geleistete wird voll erstattet (Erstattungsstand _offen_). Die Mail allein ändert an der Buchung nichts.
+_Avoid_: Widerruf (unqualifiziert — das ist der Widerruf eines Grants), Storno, Rücktritt, withdraw (als Übergangsname; der heißt acceptWithdrawal)
+
 **Erstattungsstand**:
-Der Vermerk an einer stornierten Buchung, ob das Geld schon zurückgezahlt wurde: _offen_ oder _erfolgt_. Entsteht beim Storno, und nur, wenn eine Erstattung fällig ist: die Buchung war bestätigt, die Zahlung ist eingegangen, und der Erstattungsbetrag liegt über null. Die Verwaltung setzt ihn von Hand auf _erfolgt_ und kann das zurücknehmen; die Plattform zahlt nichts aus und erfährt von keiner Auszahlung. Kein Buchungszustand und kein Lebenszyklus-Übergang: mit der Wiederherstellung fällt er weg, ein neues Storno beginnt wieder bei _offen_. Der Buchende sieht ihn nicht.
+Der Vermerk an einer stornierten oder widerrufenen Buchung, ob das Geld schon zurückgezahlt wurde: _offen_ oder _erfolgt_. Entsteht beim Storno, und nur, wenn eine Erstattung fällig ist: die Buchung war bestätigt, die Zahlung ist eingegangen, und der Erstattungsbetrag liegt über null. Die Verwaltung setzt ihn von Hand auf _erfolgt_ und kann das zurücknehmen; die Plattform zahlt nichts aus und erfährt von keiner Auszahlung. Kein Buchungszustand und kein Lebenszyklus-Übergang: mit der Wiederherstellung fällt er weg, ein neues Storno beginnt wieder bei _offen_. Der Buchende sieht ihn nicht.
 _Avoid_: Rückerstattungsstatus, Refund-Status, erstattet (als Buchungszustand)
 
 **Änderung (einer Buchung)**:
@@ -385,7 +397,7 @@ Die unveränderliche Folge der Startstufe, Stufenwechsel, erstmaligen und erneut
 _Avoid_: Audit-Log, Änderungsverlauf (unqualifiziert), Prüfstatus (das ist der aktuelle Stand)
 
 **Mitteilungsanlass**:
-Ein beim Eintreten eines Aufsichtsereignisses festgehaltener Grund für eine Aufsichtsmitteilung — Selbst-Anlage, tatsächlicher Stufenwechsel, tatsächlicher Eintritt in die aktive Prüfliste, Prüfentscheidung — mit den Angaben, die die Mitteilung braucht (alter und neuer Stand, Begründung). Wird zuerst nur aufgezeichnet (Outbox, Status _ausstehend_) und direkt danach getrennt versendet: ein fehlgeschlagener Versand rollt die Entscheidung nicht zurück und ist ohne erneutes Entscheiden wiederholbar. Ein Stufenwechsel mit mehreren neu wartenden Angeboten ist ein Anlass, nicht mehrere.
+Ein beim Eintreten eines Aufsichtsereignisses festgehaltener Grund für eine Aufsichtsmitteilung — Selbst-Anlage, tatsächlicher Stufenwechsel, tatsächlicher Eintritt in die aktive Prüfliste, Prüfentscheidung — mit den Angaben, die die Mitteilung braucht (alter und neuer Stand, Begründung). Wird zuerst nur aufgezeichnet (Outbox, Status _ausstehend_) und direkt danach getrennt versendet: ein fehlgeschlagener Versand rollt die Entscheidung nicht zurück und ist ohne erneutes Entscheiden wiederholbar. Ein Stufenwechsel mit mehreren neu wartenden Angeboten ist ein Anlass, nicht mehrere. Neben den Anlässen der Aufsicht laufen dieselben Wege für Meldungen (neue Meldung, Meldung erledigt) und, einmalig aus der Migration, „Mitgliedschaften beendet“: je Mandant an die Tenant-Owner, ohne Tenant-Owner an die Instanz-Owner mit Vermerk des Mandanten.
 _Avoid_: Mail (das ist der Versand), Notification (als Sprechbegriff), Event (das ist die Veranstaltung), Benachrichtigungs-Job
 
 **Aufsichtsmitteilung**:
@@ -461,6 +473,28 @@ _Avoid_: Policy (als Sprechbegriff), ACL, Permission-Matrix, Rollengruppe (das i
 **Berechtigung**:
 Die Prüfung an einer Route, ob der Prinzipal die Handlung an der Sache ausführen darf, und mit welcher Reichweite. Steht am Router, vor dem Handler: **jede** Route unter `src/platform` trägt genau einen der drei Marker — geprüft, ausdrücklich öffentlich, oder über ein Geheimnis (Token, Hook) autorisiert; ein Test hält das. Nicht zu verwechseln mit der Zugangsentscheidung, die das Bedienen von AccessPoints betrifft und nur das Verwaltungs-Ja der Berechtigung als Eingabe erhält.
 _Avoid_: Authorization (als Sprechbegriff), Berechtigungsprüfung (bei der Zugangsentscheidung als Altname gemeint), Rechteprüfung, Auth (das ist die Anmeldung)
+
+### Konten
+
+**Sperre (eines Users)**:
+Der instanzweite Ausschluss eines Users. Er blockiert jede Anmeldung und wirkt sofort. Seine Herkunft ist genau eine: von Hand durch den Instanz-Owner (auch aus Meldungen), mit Grund, Zeitpunkt und sperrender Person, oder ein Blacklist-Eintrag, der beim Eintragen auf die Adresse des Kontos passte. Die einzige Sperre, die es gibt. Ein Mandant kann nur melden, und die Blacklist sperrt nur über diese Sperre.
+_Avoid_: suspended (am Mandanten, entfallen), Suspendierung, Blockieren, Blacklist-Sperre (es gibt keinen zweiten Zustand)
+
+**Mitgliedschaft beenden**:
+Die eine Handlung eines Mandanten gegen einen User: Sie entfernt seine Mitgliedschaft im Mandanten samt seiner offenen Einladungen dort, und er verliert alle Rechte im Mandanten. Das Konto bleibt; Anmelden und Bestellen gehen weiter, und über eine Einladung für mehrere Personen oder einen öffentlichen Link kann er wieder eintreten. Sie schickt keine Mail. Dürfen Rollen mit `manageUsers.updateAny`, die Mitgliedschaft eines Tenant-Owners nur Tenant-Owner. Soll ein User dauerhaft draußen bleiben, meldet ihn der Mandant an die Instanz. Den Status `suspended` der Mitgliedschaft gibt es nicht mehr; die Mitgliedschaft ist _ausstehend_, _aktiv_ oder _abgelehnt_.
+_Avoid_: suspended (am Mandanten), Sperren (am Mandanten), Mitglied sperren, Mitglied entfernen (unqualifiziert)
+
+**Meldung (eines Users oder einer Adresse)**:
+Der Hinweis eines Mandanten an die Instanz, dass er einen User gesperrt oder eine Adresse auf der Blacklist sehen will: ein Mitglied, den Bucher einer seiner Buchungen, eine Adresse aus `mail` einer seiner Buchungen oder eine von Hand eingegebene Adresse, mit Grund (Pflicht) und gegebenenfalls der Buchung als Beleg. Die Adresse eines Kontos aus einer Buchung nur als User, von Hand jede einzelne Adresse, auch die eines Mitglieds, und eine Adresse, die schon ein Blacklist-Eintrag trifft, gar nicht. Je Mandant und Ziel ist höchstens eine offen; eine zweite ergänzt sie. Der Instanz-Owner erledigt alle offenen Meldungen zu einem User oder einer Adresse auf einmal, mit Sperre, mit Blacklist-Eintrag oder mit Ablehnung samt Begründung, und die Tenant-Owner des meldenden Mandanten erfahren das Ergebnis. Jede Sperre erledigt die offenen Meldungen zum User, jeder Blacklist-Eintrag die zu jeder Adresse, die er trifft. Solange sie offen ist, kann der meldende Mandant sie ergänzen oder zurückziehen; danach ist eine neue Meldung zum selben Ziel möglich. Der gemeldete User oder Gast erfährt nichts. Eine Meldung sperrt nie selbst.
+_Avoid_: Sperrantrag, Beschwerde, Report (als Sprechbegriff)
+
+**Blacklist**:
+Die Liste der Instanz aus Mailadressen und Domains, die der Instanz-Owner für alle Mandanten pflegt. Ihre eine Frage ist: Trifft ein Eintrag diese Adresse, und welcher? Sie sperrt Konten nur über die Sperre (eines Users). Tenant-Owner sehen sie nicht.
+_Avoid_: Sperrliste, Sperre einer Adresse, Blacklist-Sperre
+
+**Blacklist-Eintrag**:
+Eine exakte Adresse (`max@firma.de`) oder eine Domain mit führendem `@` (`@wegwerf.de`) auf der Blacklist, getrimmt und kleingeschrieben wie die User-Ids, mit Grund (Pflicht, änderbar), Zeitpunkt, eintragender Person und Herkunft (von Hand, aus einer Sperre oder aus Meldungen). Eine Domain trifft nur sich selbst, keine Subdomains; eine Plus-Adresse ist eine eigene Adresse. Wert und Art stehen nach dem Anlegen fest. Beim Anlegen sperrt er die passenden Konten außer Instanz-Ownern und schon gesperrten; beim Anlegen erledigt er außerdem die offenen Meldungen zu jeder Adresse, die er trifft, und verweist auf sie; beim Entfernen hebt er auf Wunsch genau diese Sperren wieder auf. Er läuft nicht ab.
+_Avoid_: Sperre einer Adresse, Blacklist-Sperre
 
 ### Favoriten
 

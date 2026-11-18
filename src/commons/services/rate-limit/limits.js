@@ -64,6 +64,31 @@ function verificationMailPerIp(ip) {
   };
 }
 
+/**
+ * Forgot-password mails per account: 1 per minute and 5 per hour, both at
+ * once.
+ */
+function forgotPasswordPerAccount(mail) {
+  return [
+    {
+      key: `forgot-password:account:short:${normalizeSubject(mail)}`,
+      ...limitFrom("RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_SHORT", 1, 60),
+    },
+    {
+      key: `forgot-password:account:long:${normalizeSubject(mail)}`,
+      ...limitFrom("RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_LONG", 5, 3600),
+    },
+  ];
+}
+
+/** Forgot-password requests per IP: 30 per hour, on top of the account limits. */
+function forgotPasswordPerIp(ip) {
+  return {
+    key: `forgot-password:ip:${ip}`,
+    ...limitFrom("RATE_LIMIT_FORGOT_PASSWORD_PER_IP", 30, 3600),
+  };
+}
+
 /** Successful tenant self-creations per user: 3 per rolling 24 hours. */
 function tenantSelfCreationPerUser(userId) {
   return {
@@ -110,6 +135,8 @@ module.exports = {
   signupPerIp,
   verificationMailPerAccount,
   verificationMailPerIp,
+  forgotPasswordPerAccount,
+  forgotPasswordPerIp,
   tenantSelfCreationPerUser,
   geoPerUser,
   geoOutbound,

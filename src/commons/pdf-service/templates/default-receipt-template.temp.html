@@ -1,43 +1,148 @@
+<!--MAILBLOCKS:v=1;b64=W3sidHlwZSI6InJvdyIsImNvbHVtbnMiOlt7IndpZHRoIjoxMiwiYmxvY2tzIjpbeyJ0eXBlIjoidGV4dCIsImh0bWwiOiI8cD5CZWxlZ251bW1lcjogPHNwYW4gZGF0YS12YXJpYWJsZT1cInJlY2VpcHROdW1iZXJcIiBkYXRhLXRyaXBsZT1cImZhbHNlXCIgZGF0YS1sYWJlbD1cIkJlbGVnbnVtbWVyXCIgY2xhc3M9XCJtYWlsLXZhcmlhYmxlLWNoaXBcIiBjb250ZW50ZWRpdGFibGU9XCJmYWxzZVwiPnt7cmVjZWlwdE51bWJlcn19PC9zcGFuPjxiciAvPkJ1Y2h1bmdzZGF0dW06IDxzcGFuIGRhdGEtdmFyaWFibGU9XCJib29raW5nRGF0ZVwiIGRhdGEtdHJpcGxlPVwiZmFsc2VcIiBkYXRhLWxhYmVsPVwiQnVjaHVuZ3NkYXR1bVwiIGNsYXNzPVwibWFpbC12YXJpYWJsZS1jaGlwXCIgY29udGVudGVkaXRhYmxlPVwiZmFsc2VcIj57e2Jvb2tpbmdEYXRlfX08L3NwYW4+PC9wPiIsImFsaWduIjoibGVmdCIsImlkIjoiMjA2NTQ5Y2QtN2I2Ny00Y2M0LWE1MDgtNjNlNGQyODhmMjAxIn0seyJ0eXBlIjoicmF3SHRtbCIsImh0bWwiOiI8cD57e3tyZWNlaXB0QWRkcmVzc319fTwvcD4iLCJpZCI6IjFlZGM1N2I2LTEyMzAtNDY1NC05Y2NmLTFmNTRlZjY0NzFjZCJ9LHsidHlwZSI6ImhlYWRpbmciLCJ0ZXh0IjoiSWhyIFphaGx1bmdzYmVsZWciLCJsZXZlbCI6MSwiYWxpZ24iOiJsZWZ0IiwiaWQiOiJkYThlY2YwOC04ZTFkLTRhY2QtYTk2OC04NzZiN2ViNDQwZDEifSx7InR5cGUiOiJ0ZXh0IiwiaHRtbCI6IjxwPnt7I2lmIGlzQWdncmVnYXRlZH19SGllcm1pdCBiZXN0w6R0aWdlbiB3aXIgZGVuIHZvbGxzdMOkbmRpZ2VuIFphaGx1bmdzZWluZ2FuZyBmw7xyIGRpZSBmb2xnZW5kZW4gQnVjaHVuZ2VuOnt7ZWxzZX19SGllcm1pdCBiZXN0w6R0aWdlbiB3aXIgSWhyZSBCdWNodW5nIHNvd2llIGRlbiB2b2xsc3TDpG5kaWdlbiBaYWhsdW5nc2VpbmdhbmcgZsO8ciBkaWUgZm9sZ2VuZGVuIEJ1Y2h1bmdzZGF0ZW46e3svaWZ9fTwvcD4iLCJhbGlnbiI6ImxlZnQiLCJpZCI6ImFkNjgyZWM2LTNmNjEtNGU2NC1iMmI3LWFkNmUwY2MwMjgzNSJ9LHsidHlwZSI6InJhd0h0bWwiLCJodG1sIjoie3t7Ym9va2luZ0VudHJpZXN9fX0iLCJpZCI6Ijc3MmY2ZDY2LTFmYmUtNGVhYy1hOTdjLWQwMzJkMzQzZWNkOCJ9LHsidHlwZSI6InRleHQiLCJodG1sIjoiPHAgc3R5bGU9XCJjb2xvcjojODg4O2ZvbnQtc2l6ZToxMnB4O1wiPkRpZXNlcyBTY2hyZWliZW4gd3VyZGUgbWFzY2hpbmVsbCBlcnN0ZWxsdCB1bmQgaXN0IG9obmUgVW50ZXJzY2hyaWZ0IGfDvGx0aWcuPC9wPiIsImFsaWduIjoibGVmdCIsImlkIjoiNjRmYmE5NzgtOTQyNC00ZWYxLTg0ZWMtODcyYWU1NzdkNWE2In1dfV0sImlkIjoiNmZkMDBjYmMtY2M2Mi00Y2VkLTk0YTQtY2YxODE0ODNjOWI5In1d-->
 <!doctype html>
 <html lang="de">
   <head>
     <meta charset="utf-8" />
     <title>Ihr Zahlungsbeleg</title>
     <style>
-      body {
-        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-        font-size: 1rem;
-      }
-      /* Die Positionstabelle ({{{bookingEntries}}}) bringt ihr kompaktes
-         Standard-Styling selbst mit (table.pdf-items). Eigene Anpassungen
-         sind mit spezifischeren Selektoren möglich, z. B.
-         table.pdf-items.booking-detail td { ... } */
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #222; font-size: 14px; line-height: 1.5; padding: 1cm; }
+      h1, h2, h3 { color: #1976d2; }
+      table { border-collapse: collapse; }
+      .meta { text-align: right; font-size: 12px; color: #666; margin-bottom: 16px; }
+      .info-box { padding: 12px; background: #f9f9f9; border-radius: 4px; margin: 12px 0; }
+      .cancellation-note { margin-top: 10px; padding: 10px; border-left: 4px solid #c0392b; background: #fdecea; font-size: 12px; line-height: 18px; }
+      .refund-note { margin-top: 10px; padding: 10px; border-left: 4px solid #2e7d32; background: #eaf5ea; font-size: 12px; line-height: 18px; }
+      .booking-detail, .booked-items { width: 100%; }
+      .booking-detail td, .booking-detail th,
+      .booked-items td, .booked-items th { padding: 8px; border-bottom: 1px solid #ddd; }
+      
+  table.pdf-items { width: 100%; border-collapse: collapse; }
+  table.pdf-items--summary td {
+    padding: 3px 6px;
+    font-size: 10px;
+    line-height: 1.4;
+    vertical-align: top;
+    border-bottom: 1px solid #ddd;
+  }
+  table.pdf-items--summary td.label { width: 40%; color: #333; }
+  table.pdf-items--summary td.value { text-align: right; }
+  table.pdf-items--summary tr.totals td { font-weight: bold; }
+  table.pdf-items--summary tr.objects td.value { line-height: 1.5; }
+  table.pdf-items--summary tr.booking-sep td {
+    border-top: 2px solid #bbb;
+    padding-top: 6px;
+    border-bottom: none;
+  }
+  table.pdf-items--compact th,
+  table.pdf-items--compact td {
+    padding: 2px 6px;
+    font-size: 9px;
+    line-height: 1.4;
+    vertical-align: top;
+    border: none;
+    text-align: left;
+  }
+  table.pdf-items--compact thead th {
+    background: #eee;
+    border-bottom: 1px solid #bbb;
+    font-weight: bold;
+  }
+  table.pdf-items--compact tbody tr.item:nth-child(even) td { background: #f5f5f5; }
+  table.pdf-items--compact .num { text-align: right; white-space: nowrap; }
+  table.pdf-items--compact td.sub {
+    color: #555;
+    font-size: 8px;
+    padding-top: 0;
+    padding-bottom: 4px;
+  }
+  table.pdf-items--compact tr.coupon td { color: #555; }
+  table.pdf-items--compact tr.totals-sub td {
+    padding-top: 4px;
+    border-top: 2px solid #000;
+    text-align: right;
+    color: #444;
+  }
+  table.pdf-items--compact tr.brutto td {
+    font-weight: bold;
+    font-size: 10px;
+    border-bottom: 2px solid #000;
+    padding-bottom: 4px;
+    background: none;
+    text-align: right;
+  }
+  table.pdf-items--compact tr.brutto td:first-child,
+  table.pdf-items--compact tr.totals-sub td:first-child { text-align: left; }
+  table.pdf-items--compact tr.meta td {
+    font-size: 10px;
+    color: #444;
+    background: none;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 4px;
+  }
+  table.pdf-items--detailed th,
+  table.pdf-items--detailed td {
+    padding: 4px 6px;
+    font-size: 10px;
+    line-height: 1.4;
+    vertical-align: top;
+    border: none;
+    text-align: left;
+  }
+  table.pdf-items--detailed thead th {
+    background: #eee;
+    border-bottom: 1px solid #bbb;
+    font-weight: bold;
+  }
+  table.pdf-items--detailed tbody tr.item:nth-child(even) td { background: #f5f5f5; }
+  table.pdf-items--detailed .num { text-align: right; white-space: nowrap; }
+  .pdf-booking-meta {
+    font-size: 10px;
+    color: #666;
+    line-height: 1.6;
+    margin: 0 0 8px;
+  }
+  table.pdf-items--detailed td.sub {
+    color: #555;
+    font-size: 9px;
+    padding-top: 0;
+    padding-bottom: 6px;
+  }
+  table.pdf-items--detailed ul.item-list {
+    margin: 4px 0 0;
+    padding-left: 18px;
+  }
+  table.pdf-items--detailed tr.coupon td { color: #555; }
+  table.pdf-items--detailed tr.netto td {
+    padding-top: 8px;
+    border-top: 2px solid #000;
+  }
+  table.pdf-items--detailed tr.netto td,
+  table.pdf-items--detailed tr.mwst td,
+  table.pdf-items--detailed tr.brutto td { text-align: right; }
+  table.pdf-items--detailed tr.netto td:first-child,
+  table.pdf-items--detailed tr.mwst td:first-child,
+  table.pdf-items--detailed tr.brutto td:first-child { text-align: left; }
+  table.pdf-items--detailed tr.brutto td {
+    font-weight: bold;
+    border-bottom: 2px solid #000;
+    padding-bottom: 4px;
+  }
+
     </style>
   </head>
   <body>
     <template data-pdf-footer>
-      <div style="display: flex; justify-content: space-between; width: 100%">
-        <span>Zahlungsbeleg {{receiptNumber}}</span>
-        <span>{{> pdfPageNumbers }}</span>
+      <div data-pdf-wrapper style="width: 100%; font-size: 8px; color: #666; padding: 0 10mm;">
+        <div style="display: flex; justify-content: space-between"><span>Zahlungsbeleg {{receiptNumber}}</span><span>Seite <span class="pageNumber"></span> von <span class="totalPages"></span></span></div>
       </div>
     </template>
-
-    <p class="receipt-data">
-      Belegnummer: {{receiptNumber}}<br />
-      Buchungsdatum: {{bookingDate}}
-    </p>
-    <p class="receipt-address">{{{receiptAddress}}}</p>
-    <h1>Ihr Zahlungsbeleg</h1>
-    <p>
-      {{#if isAggregated}} Hiermit bestätigen wir den vollständigen
-      Zahlungseingang für die folgenden Buchungen: {{else}} Hiermit bestätigen
-      wir Ihre Buchung sowie den vollständigen Zahlungseingang für die folgenden
-      Buchungsdaten: {{/if}}
-    </p>
-    {{{bookingEntries}}}
-    <p>
-      Dieses Schreiben wurde maschinell erstellt und ist ohne Unterschrift
-      gültig.
-    </p>
+<div style="font-family:inherit; color:#222222; line-height:1.5; font-size:16px;">
+<div style=""><table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%; border-collapse:collapse;"><tr><td style="vertical-align:top; width:100%;" width="100%"><div style="text-align:left; color:#222222; font-size:16px; line-height:1.5;"><p>Belegnummer: {{receiptNumber}}<br>Buchungsdatum: {{bookingDate}}</p></div>
+<p>{{{receiptAddress}}}</p>
+<h1 style="margin:0 0 12px; color:#222222; text-align:left; font-size:26px; line-height:1.3;">Ihr Zahlungsbeleg</h1>
+<div style="text-align:left; color:#222222; font-size:16px; line-height:1.5;"><p>{{#if isAggregated}}Hiermit bestätigen wir den vollständigen Zahlungseingang für die folgenden Buchungen:{{else}}Hiermit bestätigen wir Ihre Buchung sowie den vollständigen Zahlungseingang für die folgenden Buchungsdaten:{{/if}}</p></div>
+{{{bookingEntries}}}
+<div style="text-align:left; color:#222222; font-size:16px; line-height:1.5;"><p style="color:#888;font-size:12px;">Dieses Schreiben wurde maschinell erstellt und ist ohne Unterschrift gültig.</p></div></td></tr></table></div>
+</div>
   </body>
 </html>

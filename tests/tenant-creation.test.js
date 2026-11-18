@@ -29,6 +29,7 @@ const SupervisionHistoryManager = require("../src/commons/data-managers/supervis
 const SupervisionNotificationManager = require("../src/commons/data-managers/supervision-notification-manager");
 const Instance = require("../src/commons/entities/instance/instance");
 const Tenant = require("../src/commons/entities/tenant/tenant");
+const InvoiceApplication = require("../src/commons/entities/application/payment/invoiceApplication");
 const { User } = require("../src/commons/entities/user/user");
 const {
   TenantController,
@@ -144,6 +145,28 @@ describe("tenant creation", function () {
       expect(res.body.params.field).to.equal("mail");
     });
 
+    it("stores PDF templates the Admin UI opens in its visual editor", async function () {
+      // The editor opens a template visually only when it starts with the
+      // block list it was built from (parseMetadata.js in the Admin UI);
+      // without one it falls back to the expert mode.
+      const MARKER = /^<!--MAILBLOCKS:v=1;b64=([A-Za-z0-9+/=]+)-->/;
+
+      await create(ADMIN, VALID);
+
+      const stored = TenantManager.storeTenant.lastCall.args[0];
+      for (const field of [
+        "receiptTemplate",
+        "invoiceTemplate",
+        "cancellationTemplate",
+        "withdrawalTemplate",
+      ]) {
+        const match = String(stored[field]).match(MARKER);
+        expect(match, field).to.not.equal(null);
+        const blocks = JSON.parse(Buffer.from(match[1], "base64").toString());
+        expect(blocks, field).to.be.an("array").that.is.not.empty;
+      }
+    });
+
     it("creates with the required contact alone and makes the creator the owner", async function () {
       const res = await create(ADMIN, VALID);
 
@@ -155,6 +178,11 @@ describe("tenant creation", function () {
       expect(stored.genericMailTemplate).to.be.a("string").that.is.not.empty;
       expect(stored.receiptTemplate).to.be.a("string").that.is.not.empty;
       expect(stored.invoiceTemplate).to.be.a("string").that.is.not.empty;
+      expect(stored.cancellationTemplate).to.be.a("string").that.is.not.empty;
+      expect(stored.withdrawalTemplate).to.be.a("string").that.is.not.empty;
+      expect(stored.applications).to.deep.include({
+        ...new InvoiceApplication({ active: true }),
+      });
       expect(stored.mailSnippets).to.be.an("object");
       expect(stored.cancellationRefundTiers).to.be.an("array");
 
@@ -182,6 +210,22 @@ describe("tenant creation", function () {
         website: "https://stadthalle.example",
         location: "Rathausplatz 1",
       });
+    });
+
+    it("keeps an invoice app the body already names", async function () {
+      const invoice = {
+        type: "payment",
+        id: "invoice",
+        title: "Rechnung",
+        active: false,
+      };
+      const res = await create(ADMIN, { ...VALID, applications: [invoice] });
+
+      expect(res.status).to.equal(201);
+      const { applications } = TenantManager.storeTenant.lastCall.args[0];
+      expect(applications.filter((app) => app.id === "invoice")).to.deep.equal([
+        invoice,
+      ]);
     });
 
     it("updates an existing tenant without the new required contact", async function () {

@@ -182,7 +182,7 @@ describe("instance controllers on the reach", function () {
     });
 
     it("GET /users/:id answers 404", async function () {
-      sinon.stub(UserManager, "getUser").resolves(null);
+      sinon.stub(UserManager, "getUserForInstance").resolves(null);
       const res = response();
       await UserController.getUser(
         request({

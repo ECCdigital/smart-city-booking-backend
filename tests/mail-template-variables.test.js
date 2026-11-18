@@ -510,11 +510,31 @@ describe("Mail-Variable: withdrawalUrl", function () {
     );
   });
 
+  it("follows the booker's answer over the company: business without a company gets none", async function () {
+    expect(await renderFor({ company: "", isBusiness: true })).to.include(
+      "withdrawalUrl=[]",
+    );
+  });
+
+  it("follows the booker's answer over the company: private with a company gets it", async function () {
+    expect(
+      await renderFor({ company: "Musterfirma GmbH", isBusiness: false }),
+    ).to.include("withdrawalUrl=[mailto:");
+  });
+
   it("counts a company of blanks as none", async function () {
     expect(await renderFor({ company: "  " })).to.include(
       "withdrawalUrl=[mailto:",
     );
   });
+
+  for (const status of ["rejected", "cancelled", "withdrawn"]) {
+    it(`is empty for a ${status} booking: nothing left to withdraw`, async function () {
+      expect(await renderFor({ company: "", status })).to.include(
+        "withdrawalUrl=[]",
+      );
+    });
+  }
 
   it("is empty without a creation time", async function () {
     expect(await renderFor({ company: "", timeCreated: undefined })).to.include(

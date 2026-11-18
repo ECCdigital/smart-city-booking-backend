@@ -53,6 +53,9 @@ const { ConflictError, NotFoundError } = require("../src/errors/BaseError");
 const { Booking } = require("../src/commons/entities/booking/booking");
 const lifecycleMail = require("../src/commons/services/booking-lifecycle/adapters/mail");
 const lifecycleDocuments = require("../src/commons/services/booking-lifecycle/adapters/documents");
+const {
+  installBlacklistCollection,
+} = require("./helpers/blacklist-collection");
 
 const TENANT = "tenant-1";
 const COUPON = "SAVE10";
@@ -109,6 +112,8 @@ describe("checkout on the access seam", function () {
       // The mails of the admission are not this test's business.
       sinon.stub(TenantManager, "getTenant").resolves({ id: TENANT });
       sinon.stub(lifecycleMail, "send").resolves([]);
+      // The blacklist, empty: the checkout asks it for the address.
+      installBlacklistCollection();
       sinon.stub(PaymentUtils, "getPaymentService").resolves(null);
       sinon.stub(lifecycleDocuments, "issue").resolves({
         attachment: { type: "receipt" },

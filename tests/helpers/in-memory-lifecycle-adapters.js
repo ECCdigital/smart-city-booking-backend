@@ -23,6 +23,7 @@ const DOCUMENT_ID_FIELD = {
   receipt: "receiptId",
   invoice: "invoiceId",
   cancellation: "cancellationId",
+  withdrawal: "withdrawalId",
 };
 
 function clone(value) {

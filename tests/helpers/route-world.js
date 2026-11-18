@@ -44,6 +44,7 @@ const {
 } = require("../../src/commons/data-managers/file-manager");
 const EventManager = require("../../src/commons/data-managers/event-manager");
 const FavoriteManager = require("../../src/commons/data-managers/favorite-manager");
+const BlacklistManager = require("../../src/commons/data-managers/blacklist-manager");
 const GroupBookingManager = require("../../src/commons/data-managers/group-booking-manager");
 const InstanceManager = require("../../src/commons/data-managers/instance-manager");
 const InvitationManager = require("../../src/commons/data-managers/invitation-manager");
@@ -548,6 +549,8 @@ function installRouteWorld({
       getMediaUsage: async () => [],
     },
   });
+  // The blacklist of the instance: empty.
+  stubManager(BlacklistManager, { one: () => null, many: () => [] });
   // The favorites: an in-memory store with the semantics of the real
   // manager - one entry per user and target, a second store finds it, a
   // remove of nothing is nothing, a read without a reach throws. Empty at

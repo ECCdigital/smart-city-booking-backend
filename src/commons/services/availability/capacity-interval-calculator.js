@@ -214,7 +214,9 @@ function computeWindowAvailability(
     }
 
     const childBuffer = getBookingBufferMs(childBookable);
+    const isTicketChild = childBookable.type === "ticket";
 
+    // A non-ticket child blocks the parent with any booking, whatever its amount
     constraintSets.push(
       evaluateCapacityIntervals({
         windowStart,
@@ -227,9 +229,11 @@ function computeWindowAvailability(
           windowEnd,
         ),
         bookableId: childBookable.id,
-        capacity: childBookable.amount,
+        capacity: isTicketChild ? childBookable.amount : 1,
         requestedAmount: amount,
-        mode: CAPACITY_MODES.ADDITIVE,
+        mode: isTicketChild
+          ? CAPACITY_MODES.ADDITIVE
+          : CAPACITY_MODES.EXCLUSIVE,
         useTimeOverlap,
         bufferBeforeMs: childBuffer.beforeMs,
         bufferAfterMs: childBuffer.afterMs,

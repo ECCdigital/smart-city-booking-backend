@@ -80,6 +80,7 @@ const AccessService = require("../../src/commons/services/access/access-service"
 const AccessLogService = require("../../src/commons/services/access/access-log-service");
 const ReceiptService = require("../../src/commons/services/payment/receipt-service");
 const CancellationService = require("../../src/commons/services/payment/cancellation-service");
+const WithdrawalService = require("../../src/commons/services/payment/withdrawal-service");
 const InvoiceService = require("../../src/commons/services/payment/invoice-service");
 const MediaService = require("../../src/commons/services/media/media-service");
 const IdGenerator = require("../../src/commons/utilities/id-generator");
@@ -104,6 +105,8 @@ const {
 const {
   reached,
 } = require("../../src/commons/services/supervision/public-projection");
+const { installBlacklistCollection } = require("./blacklist-collection");
+const { installReportCollection } = require("./report-collection");
 const {
   isTenantPubliclyVisible,
 } = require("../../src/commons/services/supervision/offer-gate");
@@ -484,7 +487,7 @@ async function installHarness({
   const effects = [];
   /** Effect names that throw when called, e.g. "access.provision". */
   const failing = new Set();
-  const counters = { receipt: 0, cancellation: 0, invoice: 0 };
+  const counters = { receipt: 0, cancellation: 0, invoice: 0, withdrawal: 0 };
   const catalogue = { ...defaultBookables(), ...(bookables || {}) };
   const tenantRecord = tenant(tenantOverrides);
   const tenantBRecord = tenant({
@@ -835,6 +838,14 @@ async function installHarness({
     .stub(RoleManager, "getRolesByIds")
     .callsFake(async (ids) => ids.map((id) => ROLES[id]?.()).filter(Boolean));
   sinon.stub(MembershipManager, "getMembershipsByTenantAndRoles").resolves([]);
+  // The owners of a tenant, the audience of a tenant owner notice.
+  sinon
+    .stub(MembershipManager, "getOwnerMembershipsByTenantID")
+    .callsFake(async (tenantId) =>
+      [OWNER, OWNER_B]
+        .map((userId) => membershipOf(userId, tenantId))
+        .filter((membership) => membership.owner),
+    );
   // The event of the ticket, with what the organizer's notice prints -
   // as the manager answers it: projected under `public`.
   const eventOfTicket = () => ({
@@ -864,6 +875,11 @@ async function installHarness({
   sinon.stub(OpeningHoursManager, "hasOpeningHoursConflict").resolves(false);
   sinon.stub(AccessPointManager, "getAccessPointsByIds").resolves([]);
   sinon.stub(MediaManager, "getBookingDocuments").resolves([]);
+  // The blacklist of the instance, empty: the
+  // checkout asks it for every address.
+  const blacklist = installBlacklistCollection();
+  // The reports to the instance, none yet.
+  const reports = installReportCollection();
   sinon.stub(MediaManager, "getMedia").resolves({
     id: "M1",
     tenantId: TENANT,
@@ -947,7 +963,12 @@ async function installHarness({
 
   const pdf = (name) => ({ name, buffer: Buffer.from(`%PDF-${name}`) });
   /** The number draw: `RE-1`, `RG-2`, `ST-1`, ... per type. */
-  const PREFIX = { receipt: "RE", invoice: "RG", cancellation: "ST" };
+  const PREFIX = {
+    receipt: "RE",
+    invoice: "RG",
+    cancellation: "ST",
+    withdrawal: "WB",
+  };
   sinon
     .stub(IdGenerator, "next")
     .callsFake(
@@ -972,6 +993,15 @@ async function installHarness({
     };
   sinon.stub(ReceiptService, "render").callsFake(renderer("Receipt"));
   sinon.stub(InvoiceService, "render").callsFake(renderer("Invoice"));
+  sinon.stub(WithdrawalService, "render").callsFake(async (input) => {
+    const rendered = await renderer("Withdrawal")(input);
+    const withdrawnAt = input.options?.refundCalculation?.cancelledAt;
+    return {
+      ...rendered,
+      attachmentFields:
+        withdrawnAt !== undefined ? { timeCreated: withdrawnAt } : {},
+    };
+  });
   sinon.stub(CancellationService, "render").callsFake(async (input) => {
     const rendered = await renderer("Cancellation")(input);
     const { options = {} } = input;
@@ -1083,6 +1113,10 @@ async function installHarness({
      * may change it (`h.instance.applications`, `h.instance.portalUrl`).
      */
     instance: storedInstance,
+    /** The entries of the blacklist; a test pushes what it needs. */
+    blacklist,
+    /** The reports to the instance, as stored. */
+    reports,
     bookables: catalogue,
     as,
     manualBooking,

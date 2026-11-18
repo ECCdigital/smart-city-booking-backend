@@ -23,7 +23,11 @@ const { BundleCheckoutService } = require("./bundle-checkout-service");
 const checkoutPolicy = require("./checkout-policy");
 const { CheckoutPolicy } = checkoutPolicy;
 const { BookedVia, bookedViaOf } = require("./booked-via");
+const { isBusinessOf } = require("./business-booking");
 const { CustomFieldService } = require("../custom-field/custom-field-service");
+const BlacklistService = require("../blacklist/blacklist-service");
+const InstanceManager = require("../../data-managers/instance-manager");
+const { parseEmails } = require("../../utilities/mail-utils");
 const { CheckoutError } = require("../../../errors/CheckoutError");
 const { CHECKOUT_REASONS } = require("./checkout-reasons");
 const {
@@ -193,6 +197,35 @@ async function assertSignedInWhereRequired({
 }
 
 /**
+ * A self-booking refuses an address on the blacklist (glossary
+ * „Blacklist“): each address of `mail` is asked
+ * for itself, and one hit refuses the whole booking - before anything is
+ * stored and before any payment. The answer names no entry and no reason,
+ * only the instance's `mailAddress` to write to with questions (empty
+ * where the instance has none). The administration's manual booking is
+ * not asked.
+ *
+ * @param {{ mail?: string, policy: string }} params
+ * @returns {Promise<void>}
+ * @throws {CheckoutError} `checkout.address_blacklisted`
+ */
+async function assertNoAddressBlacklisted({ mail, policy }) {
+  if (!checkoutPolicy.runsChecks(policy)) {
+    return;
+  }
+
+  for (const address of parseEmails(mail)) {
+    if (await BlacklistService.match(address)) {
+      const instance = await InstanceManager.getInstance();
+      throw new CheckoutError({
+        reason: CHECKOUT_REASONS.ADDRESS_BLACKLISTED,
+        params: { mailAddress: instance?.mailAddress || "" },
+      });
+    }
+  }
+}
+
+/**
  * The checkout up to the store write (spec part 1, 5.1): the booking is
  * prepared under the policy, validated, stored in its initial state and
  * the coupon consumed. No effect of the lifecycle runs here; the caller
@@ -219,6 +252,7 @@ async function createBooking({
     couponCode,
     name,
     company,
+    isBusiness,
     street,
     zipCode,
     location,
@@ -237,6 +271,8 @@ async function createBooking({
     customFieldValues: rawCustomFieldValues,
     cancellationPolicy,
   } = bookingAttempt;
+
+  await assertNoAddressBlacklisted({ mail, policy });
 
   const customFieldValues = await resolveCheckoutCustomFieldValues({
     tenantId,
@@ -311,6 +347,8 @@ async function createBooking({
   // The Buchungsweg is set here and nowhere else (GLOSSARY.md), from the
   // policy and the sign-in; a value the client sends is never read.
   booking.bookedVia = bookedViaOf(policy, user);
+  // Private or business: the booker's answer, else read off the company.
+  booking.isBusiness = isBusinessOf(isBusiness, company);
 
   booking.validate();
 
@@ -503,6 +541,7 @@ async function createGroupBooking({
     bookingAttempt.mail = contactData.mail;
     bookingAttempt.name = contactData.name;
     bookingAttempt.company = contactData.company;
+    bookingAttempt.isBusiness = contactData.isBusiness;
     bookingAttempt.street = contactData.street;
     bookingAttempt.zipCode = contactData.zipCode;
     bookingAttempt.location = contactData.location;
@@ -743,6 +782,13 @@ async function updateBooking(
   // without stays without; the form's value is never read.
   if (oldBooking.bookedVia) {
     booking.bookedVia = oldBooking.bookedVia;
+  }
+  // The private-or-business answer stays what the booker gave, unless the
+  // form names one; a booking without it stays without.
+  if (typeof updatedBooking.isBusiness === "boolean") {
+    booking.isBusiness = updatedBooking.isBusiness;
+  } else if (typeof oldBooking.isBusiness === "boolean") {
+    booking.isBusiness = oldBooking.isBusiness;
   }
 
   if (onUnreject) {

@@ -36,9 +36,11 @@ const {
 const MediaReferenceGuard = require("../../../commons/services/media/media-reference-guard");
 const {
   BaseError,
+  BadRequestError,
   ForbiddenError,
   NotFoundError,
 } = require("../../../errors/BaseError");
+const membershipSchemaDefinition = require("../../../commons/schemas/membershipSchema");
 const {
   PUBLIC,
   tenantsOf,
@@ -59,6 +61,7 @@ const PDF_TEMPLATE_FIELDS = {
   receiptTemplate: "receipt",
   invoiceTemplate: "invoice",
   cancellationTemplate: "cancellation",
+  withdrawalTemplate: "withdrawal",
 };
 
 /**
@@ -454,6 +457,8 @@ class TenantController {
         "bookableCustomFields",
         "cancellationTemplate",
         "cancellationNumberPrefix",
+        "withdrawalTemplate",
+        "withdrawalNumberPrefix",
         "cancellationRefundTiers",
         "cancellationRefundPercentageWithoutTimeSpan",
         "pdfBookingLayout",
@@ -609,10 +614,16 @@ class TenantController {
         return response.status(400).send(tableMetaError);
       }
 
-      if (!["receipt", "invoice", "cancellation"].includes(templateType)) {
+      if (
+        !["receipt", "invoice", "cancellation", "withdrawal"].includes(
+          templateType,
+        )
+      ) {
         return response
           .status(400)
-          .send("templateType must be one of: receipt, invoice, cancellation");
+          .send(
+            "templateType must be one of: receipt, invoice, cancellation, withdrawal",
+          );
       }
 
       if (template) {
@@ -821,9 +832,7 @@ class TenantController {
         return next(new ForbiddenError());
       }
 
-      await InvitationService.deleteUserInvitations(tenantId, userId);
-
-      await MembershipManager.removeMembership(tenantId, userId);
+      await MembershipService.endMembership(tenantId, userId);
 
       const updatedMemberships =
         await MembershipManager.getMembershipsByTenantID(tenantId);
@@ -1009,11 +1018,20 @@ class TenantController {
     }
   }
 
-  static async updateUserStatus(request, response) {
+  static async updateUserStatus(request, response, next) {
     try {
       const tenantId = request.params.tenant;
       const { userId, status } = request.body;
       const user = request.user;
+
+      // The update of the manager writes without the schema's validation;
+      // a status the membership does not know (`suspended` is gone)
+      // is refused here.
+      if (!membershipSchemaDefinition.status.enum.includes(status)) {
+        return next(
+          new BadRequestError("membership_status_invalid", { status }),
+        );
+      }
 
       await MembershipManager.updateMembership(tenantId, userId, {
         status,

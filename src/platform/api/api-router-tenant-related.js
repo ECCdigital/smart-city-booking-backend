@@ -21,6 +21,7 @@ const WorkflowController = require("./controllers/workflow-controller");
 const InvitationController = require("./controllers/invitation-controller");
 const RoleController = require("./controllers/role-controller");
 const { TenantController } = require("./controllers/tenant-controller");
+const BlacklistController = require("./controllers/blacklist-controller");
 const {
   GroupBookingController,
 } = require("./controllers/group-booking-controller");
@@ -137,12 +138,17 @@ router.post(
   authorize("bookable", "reviewDecide"),
   SupervisionController.decideReview(OFFER_TYPES.BOOKABLE),
 );
-// The tags and counters: public aggregates over the public's list, the
+// The tags, flags and counters: public aggregates over the public's list, the
 // tenant's whole for the staff (`any`, ADR 0003).
 router.get(
   "/bookables/_meta/tags",
   publicRoute("bookable", "meta"),
   BookableController.getTags,
+);
+router.get(
+  "/bookables/_meta/flags",
+  publicRoute("bookable", "meta"),
+  BookableController.getFlags,
 );
 router.get(
   "/bookables/count/check",
@@ -199,6 +205,11 @@ router.get(
   EventController.getTags,
 );
 router.get(
+  "/events/_meta/flags",
+  publicRoute("event", "meta"),
+  EventController.getFlags,
+);
+router.get(
   "/events/count/check",
   publicRoute("event", "meta"),
   EventController.countCheck,
@@ -226,6 +237,18 @@ router.put(
   "/bookings",
   authorize("booking", "update"),
   BookingController.updateBooking,
+);
+// The warning before the manual booking or a changed mail of a booking
+// goes to an address on the blacklist.
+router.post(
+  "/bookings/blacklist-match",
+  authorize("booking", "create"),
+  BlacklistController.match,
+);
+router.post(
+  "/bookings/blacklist-match/mail",
+  authorize("booking", "update"),
+  BlacklistController.match,
 );
 router.get(
   "/bookings/assigned",
@@ -266,6 +289,11 @@ router.post(
   "/bookings/:id/reinstate",
   authorize("booking", "update"),
   BookingController.reinstateBooking,
+);
+router.post(
+  "/bookings/:id/accept-withdrawal",
+  authorize("booking", "acceptWithdrawal"),
+  BookingController.acceptWithdrawal,
 );
 router.put(
   "/bookings/:id/refund-state",
@@ -342,6 +370,11 @@ router.get(
   authorize("booking", "document"),
   BookingController.getCancellationReceipt,
 );
+router.get(
+  "/bookings/:id/withdrawal-receipt/:withdrawalReceiptId",
+  authorize("booking", "document"),
+  BookingController.getWithdrawalReceipt,
+);
 
 // USERS
 // =====
@@ -388,6 +421,12 @@ router.post(
   "/group-bookings/:id/reject",
   authorize("groupBooking", "reject"),
   GroupBookingController.rejectGroupBooking,
+);
+// The reinstatement takes the right of the cancellation it undoes.
+router.post(
+  "/group-bookings/:id/reinstate",
+  authorize("groupBooking", "reject"),
+  GroupBookingController.reinstateGroupBooking,
 );
 router.get(
   "/group-bookings/booking/:bookingId",

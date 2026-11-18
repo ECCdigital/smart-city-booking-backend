@@ -146,14 +146,6 @@ class InvitationService {
 
     validateInvitation(invitation, tenantID, userID);
 
-    const membership = await MembershipManager.getMembershipByTenantAndUserID(
-      tenantID,
-      userID,
-    );
-    if (membership && membership.status === "suspended") {
-      throw { message: "Membership suspended", code: 423 };
-    }
-
     return invitation;
   }
 
@@ -210,10 +202,6 @@ class InvitationService {
         message: "Invitation already completed",
         roles,
       };
-    }
-
-    if (membership && membership.status === "suspended") {
-      throw { message: "Membership suspended", code: 423 };
     }
 
     membershipInvite = membership.invitations.find((i) => i.token === token);
@@ -545,7 +533,6 @@ class InvitationService {
     const memberships = await MembershipManager.getMembershipsByUserID(userID);
     const membershipTokens = new Set();
     for (const membership of memberships) {
-      if (membership.status === "suspended") continue;
       for (const invite of membership.invitations || []) {
         if (
           invite.status === "pending" ||

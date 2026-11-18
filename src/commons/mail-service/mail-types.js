@@ -48,6 +48,7 @@
 
 const {
   CancellationRefundService,
+  REFUND_STATE,
 } = require("../services/payment/cancellation-refund-service");
 
 const { SupervisionMailType } = require("./supervision-mail-types");
@@ -121,6 +122,27 @@ const MailType = Object.freeze({
       ...CancellationRefundService.toMailTemplateData(
         bookings[0].cancellationRefund,
       ),
+    }),
+  },
+
+  // The confirmation of a withdrawal the staff accepted; not a
+  // tenant-editable text.
+  BOOKING_WITHDRAWAL: {
+    family: "booking",
+    templateName: "booking-withdrawal",
+    audience: "booker",
+    subject: (ctx) =>
+      `Widerruf: Ihr Widerruf der Buchung im ${ctx.tenant.name} ist bestätigt`,
+    includeQRCode: false,
+    sendBCC: true,
+    addRejectionLink: false,
+    // `refundDue`: the booking was paid, the amount goes back in full.
+    templateData: (ctx, { bookings }) => ({
+      ...CancellationRefundService.toMailTemplateData(
+        bookings[0].cancellationRefund,
+      ),
+      refundDue:
+        bookings[0].cancellationRefund?.refundState === REFUND_STATE.OPEN,
     }),
   },
 
@@ -349,6 +371,21 @@ const MailType = Object.freeze({
         hookId,
         to,
       ),
+    }),
+  },
+
+  // The hint of a signup with an address that already has a verified
+  // account: it links the client's „Passwort vergessen“ page, the Admin
+  // UI's by default.
+  ACCOUNT_EXISTS: {
+    family: "instance",
+    templateName: "account-exists",
+    audience: "named",
+    subject: () => "Mit Ihrer E-Mail-Adresse besteht bereits ein Konto",
+    templateData: ({ firstName, forgotPasswordUrl }) => ({
+      firstName,
+      forgotPasswordUrl:
+        forgotPasswordUrl || `${process.env.FRONTEND_URL}/password/reset`,
     }),
   },
 

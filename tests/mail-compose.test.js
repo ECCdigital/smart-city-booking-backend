@@ -125,6 +125,60 @@ describe("compose: a notice as mail values", function () {
       expect(mail.html).to.include("90,38");
     });
 
+    it("a withdrawal: the cancellation document, a copy to the tenant, the full refund of a paid booking", async function () {
+      installMailStackStore({
+        bookings: [
+          booking({
+            id: "B-withdrawn",
+            status: "withdrawn",
+            cancellationRefund: {
+              originalAmountEur: 40,
+              refundAmountEur: 40,
+              cancellationFeeEur: 0,
+              appliedRefundPercentage: 100,
+              cancelledFrom: "confirmed",
+              refundState: "open",
+            },
+          }),
+        ],
+      });
+
+      const [mail] = await compose("BOOKING_WITHDRAWAL", {
+        ...single("B-withdrawn"),
+        attachments: [issuedFile("ST-1.pdf")],
+      });
+
+      expect(mail.to).to.equal(CUSTOMER);
+      expect(mail.bcc).to.equal(TENANT_MAIL);
+      expect(mail.subject).to.include("Widerruf");
+      expect(filenames(mail)).to.deep.equal(["ST-1.pdf"]);
+      expect(mail.html).to.include("Die Buchung ist widerrufen");
+      expect(mail.html).to.include("erstatten wir Ihnen vollständig");
+    });
+
+    it("a withdrawal of an unpaid booking: the open payment lapses, nothing to refund", async function () {
+      installMailStackStore({
+        bookings: [
+          booking({
+            id: "B-withdrawn",
+            status: "withdrawn",
+            cancellationRefund: {
+              originalAmountEur: 40,
+              refundAmountEur: 40,
+              cancellationFeeEur: 0,
+              appliedRefundPercentage: 100,
+              cancelledFrom: "payment_due",
+            },
+          }),
+        ],
+      });
+
+      const [mail] = await compose("BOOKING_WITHDRAWAL", single("B-withdrawn"));
+
+      expect(mail.html).to.include("Eine noch offene Zahlung entfällt");
+      expect(mail.html).to.not.include("erstatten wir Ihnen");
+    });
+
     it("the copy of a confirmation stays away where the tenant does not want receipts copied", async function () {
       installMailStackStore({ tenant: tenant({ receiptEnableBCC: false }) });
 
