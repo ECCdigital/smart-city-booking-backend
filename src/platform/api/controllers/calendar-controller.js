@@ -35,14 +35,20 @@ class CalendarController {
   static async getOccupancies(request, response, next) {
     try {
       const tenant = request.params.tenant;
-      const bookableIds = request.query.ids;
+      // The ids come comma-separated (`ids=a,b`, as the embed sends them)
+      // or as a repeated parameter (`ids=a&ids=b`).
+      const bookableIds = []
+        .concat(request.query.ids ?? [])
+        .flatMap((ids) => String(ids).split(","))
+        .map((id) => id.trim())
+        .filter(Boolean);
       const occupancies = [];
 
       const bookables =
-        bookableIds && bookableIds.length > 0
+        bookableIds.length > 0
           ? await BookableManager.getBookablesByIds(
               tenant,
-              [].concat(bookableIds),
+              bookableIds,
               scopeOf(request),
             )
           : await BookableManager.getBookables(tenant, scopeOf(request));
