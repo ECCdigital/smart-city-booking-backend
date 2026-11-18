@@ -947,28 +947,34 @@ class BookingController {
     }
   }
 
+  /**
+   * GET /api/:tenant/events/:id/bookings
+   *
+   * The bookings of an event, for whoever may change it (`event.bookings`),
+   * as its attendee list (`GET /csv/:tenant/events/:id/bookings`): the reach
+   * applies to the event - under `own` only the events the caller owns, one
+   * out of reach is a 404 - and its bookings the domain reads whole (ADR
+   * 0002), whoever they are assigned to.
+   */
   static async getEventBookings(request, response) {
+    const {
+      params: { tenant: tenantId, id: eventId },
+      user,
+    } = request;
     try {
-      const tenantId = request.params.tenant;
-      const user = request.user;
-      const eventId = request.params.id;
-
-      // The public sees no bookings of an event; the rest is the reach's
-      // (glossary "Reichweite").
-      const allowedBookings =
-        request.reach === "public"
-          ? []
-          : await BookingManager.getEventBookings(
-              tenantId,
-              eventId,
-              scopeOf(request),
-            );
-
-      logger.info(
-        `${tenantId} -- sending ${allowedBookings.length} allowed event bookings to user ${user?.id}`,
+      const bookings = await BookingService.getEventBookings(
+        tenantId,
+        eventId,
+        scopeOf(request),
       );
-      response.status(200).send(allowedBookings);
+      logger.info(
+        `${tenantId} -- sending ${bookings.length} event bookings to user ${user?.id}`,
+      );
+      response.status(200).send(bookings);
     } catch (err) {
+      if (err instanceof BaseError) {
+        return response.status(err.statusCode).json(err.toJSON());
+      }
       logger.error(err);
       response.status(500).send("Could not get event bookings");
     }

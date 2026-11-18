@@ -1327,14 +1327,6 @@
     "instanceOwner": 200,
     "expiredToken": 401
   },
-  "GET /api/:tenant/events/:id/bookings": {
-    "anonymous": 200,
-    "signedIn": 200,
-    "roleHolder": 200,
-    "tenantOwner": 200,
-    "instanceOwner": 200,
-    "expiredToken": 401
-  },
   "POST /api/:tenant/events": {
     "anonymous": 401,
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
@@ -1392,6 +1384,14 @@
     "expiredToken": 401
   },
   "GET /api/:tenant/events/:id/count": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200,
+    "expiredToken": 401
+  },
+  "GET /api/:tenant/events/:id/bookings": {
     "anonymous": 401,
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
