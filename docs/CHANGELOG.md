@@ -7,6 +7,18 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ## [Unreleased]
 
+### Changed
+
+- CI gate „protected files“ ([ECCdigital/tickets#425](https://github.com/ECCdigital/tickets/issues/425)): the new job `protected-files`, required by `ci-ok`, blocks a pull request that deletes or changes an existing test, adds `.skip`, `.only` or `.todo`, or changes an accepted ADR or the CI configuration, unless the ticket it references (`Refs ECCdigital/tickets#<n>`) names the file; new tests are free. It runs the rule from ECCdigital/portolan with the read-only GitHub App „Portolan Gate“ (org secrets `GATE_APP_ID`, `GATE_PRIVATE_KEY`); pull requests from forks get no secrets and stay blocked until an admin bypasses the gate. No code change
+
+## [4.4.1] — 2026-11-16
+
+### Changed
+
+- The default PDF templates for receipts, invoices, cancellation and withdrawal receipts are the Admin UI's visual defaults, built from its default blocks and carrying them, so a new tenant's templates open in the visual editor instead of the expert mode. A tenant without a stored template gets this layout as well. Templates already stored stay as they are
+
+## [4.4.0] — 2026-11-16
+
 ### Security
 
 - Forgot password is rate-limited ([ECCdigital/tickets#302](https://github.com/ECCdigital/tickets/issues/302)): `POST /auth/forgot-password` answers `429 too_many_requests` with `Retry-After` past 30 requests per client IP and hour (`RATE_LIMIT_FORGOT_PASSWORD_PER_IP`); an account gets at most 1 reset mail per minute and 5 per hour (`RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_SHORT`, `_LONG`), silently, so the answer still does not tell whether the address has an account. Defaults in `.env-example`
@@ -16,6 +28,7 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ### Added
 
+- The flags of a tenant's offers as suggestions, like the tags ([ECCdigital/tickets#1114](https://github.com/ECCdigital/tickets/issues/1114)): `GET /api/:tenant/events/_meta/flags` and `GET /api/:tenant/bookables/_meta/flags` answer each flag once, with the rights of `…/_meta/tags`: the public gets the flags of the offers it sees in a list, the staff those of all the tenant's offers. Route snapshot updated
 - Private or business booking ([ECCdigital/tickets#621](https://github.com/ECCdigital/tickets/issues/621), glossary „Geschäftliche Buchung“): a booking stores `isBusiness`, the booker's answer from the checkout (v1, v2 and group checkout); a body without it is read off `company`. An admin edit keeps it unless the form names one; bookings from before have none and read off `company`. The withdrawal is offered for a private booking by this answer, and `POST /api/:tenant/bookings/:id/accept-withdrawal` refuses a business booking with `403 booking_withdrawal_not_private`
 - The tenant's withdrawal receipt ([ECCdigital/tickets#611](https://github.com/ECCdigital/tickets/issues/611)): `withdrawalTemplate` (validated like the other PDF templates, preview with `templateType: "withdrawal"`) replaces the default template, `withdrawalNumberPrefix` the prefix `WB`; both writable on the tenant. Variables in `docs/pdf-templates.md`
 - Withdrawal receipt „Widerrufbeleg“ ([ECCdigital/tickets#611](https://github.com/ECCdigital/tickets/issues/611)): accepting a withdrawal issues the new booking document type `withdrawal` instead of the cancellation document - its own counter (`withdrawalCount`), number `WB-<year>-<counter>-<revision>`, attachment field `withdrawalId`, its own default template (no fee, no tier calculation; a tenant's cancellation template does not apply). `POST /bookings/:id/cancellation-receipt` reissues it for a withdrawn booking; `GET /api/:tenant/bookings/:id/withdrawal-receipt/:withdrawalReceiptId` (`booking.document`) downloads it, route snapshot updated on purpose
@@ -47,7 +60,7 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ### Changed
 
-- CI gate „protected files“ ([ECCdigital/tickets#425](https://github.com/ECCdigital/tickets/issues/425)): the new job `protected-files`, required by `ci-ok`, blocks a pull request that deletes or changes an existing test, adds `.skip`, `.only` or `.todo`, or changes an accepted ADR or the CI configuration, unless the ticket it references (`Refs ECCdigital/tickets#<n>`) names the file; new tests are free. It runs the rule from ECCdigital/portolan with the read-only GitHub App „Portolan Gate“ (org secrets `GATE_APP_ID`, `GATE_PRIVATE_KEY`); pull requests from forks get no secrets and stay blocked until an admin bypasses the gate. No code change
+- A new tenant starts with the payment option „Rechnung“ active and with the default templates for invoices, cancellation and withdrawal receipts stored; an invoice app sent with the creation is kept as sent
 - The CSV of an event's attendee list (`GET /csv/:tenant/events/:id/bookings`) heads the column of `assignedUserId` „Zugewiesener Benutzer“ instead of „Angemeldeter Benutzer“ ([ECCdigital/tickets#562](https://github.com/ECCdigital/tickets/issues/562))
 - Bank details of a cancellation follow one rule ([ECCdigital/tickets#565](https://github.com/ECCdigital/tickets/issues/565)): they are kept only for a paid booking (cancelled from `confirmed`), for the direct cancellation, the cancellation request and the rejection by the administration alike, single and group. A cancellation request of an unpaid booking no longer stores them in its hook, and a rejection of an unpaid booking no longer prints them on the cancellation document
 - The connection test of Salto KS answers per check ([ECCdigital/tickets#576](https://github.com/ECCdigital/tickets/issues/576)): `POST /api/:tenant/access-apps/salto-ks/test` adds `checks` (`credentials`, `login`, `site`, `remoteAccess`, `remoteLockingRight`, `iqs`, each with a `status` and, for a failure Salto explains, a `code` such as `invalid_client` or `site_forbidden`), `testedWith`, `testedAt` and `environment`. A failure in credentials, login or site fails the test and skips the rest; OpenAPI documents the answer
@@ -80,6 +93,12 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 - A simulated group checkout (`?simulate=true`, the price preview of a group or series) no longer stores a group booking ([ECCdigital/tickets#488](https://github.com/ECCdigital/tickets/issues/488)): before, it left a group in the database whose members were never stored. It now answers the group it would book with the computed members in `bookings`, which were empty before
 - An admin edit of a booking (`PUT /api/:tenant/bookings`) keeps the owner `assignedUserId` the booking was created with ([ECCdigital/tickets#484](https://github.com/ECCdigital/tickets/issues/484)): before, the first mail of the form became the owner, so a guest booking fell silently to the account of that mail and a booking of an account left the customer's list when the mail changed. The first mail as owner applies only when a manual booking is created
 - A manual booking follows its corrected mail ([ECCdigital/tickets#563](https://github.com/ECCdigital/tickets/issues/563)): when an admin edit changes the first address of a manual booking's mail (`bookedVia: admin`), the owner `assignedUserId` moves to the new address, so the account of a mistyped address no longer sees the booking. Bookings of an account, guest bookings and bookings without a Buchungsweg keep their owner. See the [upgrade notes](migrations/v4.4-upgrade.md#owner-of-a-booking-after-an-admin-edit)
+
+## [4.3.3] — 2026-11-09
+
+### Security
+
+- `GET /api/:tenant/bookings/:id/status/public` answers its refusals instead of ending the server process (ECCdigital/tickets#927): a tenant without the public status view is `405 public_status_view_disabled`, a name that does not match is `401 booking_name_mismatch`, an unknown booking `404`. Before, the refusal of a tenant in the default configuration carried no HTTP status, and setting it on the answer threw outside the handler's `try`, so one unauthenticated request stopped the backend. The handler takes the status from `statusCode`, no longer from the error code
 
 ## [4.3.2] — 2026-11-03
 
