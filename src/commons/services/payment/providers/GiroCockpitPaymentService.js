@@ -12,6 +12,16 @@ const logger = bunyan.createLogger({
   level: process.env.LOG_LEVEL,
 });
 
+/**
+ * GiroCheckout's `test`: 1 shows the payment methods in test mode, 0 those in
+ * live mode. Only a tenant set to `paymentMode: "test"` asks for test mode;
+ * a live project in Girocockpit 2.0 has no test methods, and a page asked
+ * for with 1 offers none (ECCdigital/tickets#796).
+ */
+function paypageTestFlag(paymentApp) {
+  return paymentApp.paymentMode === "test" ? 1 : 0;
+}
+
 class GiroCockpitPaymentService extends PaymentService {
   static GIRO_SUCCESS_CODE = "4000";
 
@@ -35,7 +45,7 @@ class GiroCockpitPaymentService extends PaymentService {
       const GIRO_CHECKOUT_URL =
         "https://payment.girosolution.de/girocheckout/api/v2/paypage/init";
       const type = "SALE";
-      const test = 1;
+      const test = paypageTestFlag(paymentApp);
       const currency = "EUR";
 
       const merchantTxId = booking.id;
@@ -107,7 +117,7 @@ class GiroCockpitPaymentService extends PaymentService {
     const GIRO_CHECKOUT_URL =
       "https://payment.girosolution.de/girocheckout/api/v2/paypage/init";
     const type = "SALE";
-    const test = 1;
+    const test = paypageTestFlag(paymentApp);
     const currency = "EUR";
 
     const merchantTxId = this.groupBookingId

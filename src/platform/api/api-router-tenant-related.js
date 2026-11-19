@@ -138,12 +138,17 @@ router.post(
   authorize("bookable", "reviewDecide"),
   SupervisionController.decideReview(OFFER_TYPES.BOOKABLE),
 );
-// The tags and counters: public aggregates over the public's list, the
+// The tags, flags and counters: public aggregates over the public's list, the
 // tenant's whole for the staff (`any`, ADR 0003).
 router.get(
   "/bookables/_meta/tags",
   publicRoute("bookable", "meta"),
   BookableController.getTags,
+);
+router.get(
+  "/bookables/_meta/flags",
+  publicRoute("bookable", "meta"),
+  BookableController.getFlags,
 );
 router.get(
   "/bookables/count/check",
@@ -198,6 +203,11 @@ router.get(
   "/events/_meta/tags",
   publicRoute("event", "meta"),
   EventController.getTags,
+);
+router.get(
+  "/events/_meta/flags",
+  publicRoute("event", "meta"),
+  EventController.getFlags,
 );
 router.get(
   "/events/count/check",
