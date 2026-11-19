@@ -142,7 +142,7 @@ class StoredSecretService {
     if (!next) return next;
 
     const refused = [];
-    const take = (target, missing, app) => {
+    const keepOrRefuse = (target, missing, app) => {
       for (const { field, reason } of missing) {
         if (reason === "not_stored") {
           target[field] = null;
@@ -156,7 +156,7 @@ class StoredSecretService {
       }
     };
 
-    take(next, resolve(next, next, previous, OWN_SECRETS).missing);
+    keepOrRefuse(next, resolve(next, next, previous, OWN_SECRETS).missing);
     for (const app of Array.isArray(next.applications)
       ? next.applications
       : []) {
@@ -170,7 +170,7 @@ class StoredSecretService {
         stored ? asClass(stored) : null,
         secretsOf(app),
       );
-      take(app, missing, app);
+      keepOrRefuse(app, missing, app);
     }
 
     if (refused.length > 0) {

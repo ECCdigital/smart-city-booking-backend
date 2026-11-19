@@ -3,11 +3,7 @@ const PmPaymentApplication = require("./payment/pmPaymentApplication");
 const GiroCockpitApplication = require("./payment/giroCockpitApplication");
 const InvoiceApplication = require("./payment/invoiceApplication");
 const AuthApplication = require("./authApplication");
-const {
-  AccessApplication,
-  accessAppTypes,
-  createAccessApplication,
-} = require("./accessApplication");
+const { AccessApplication, accessAppTypes } = require("./accessApplication");
 const CardAuthApplication = require("./cardAuthApplication");
 
 const PAYMENT_CLASS_MAP = {
@@ -40,21 +36,13 @@ class ApplicationFactory {
   }
 
   static create(data) {
-    if (data.type === "payment") {
-      const PaymentClass = PAYMENT_CLASS_MAP[data.id];
-      if (!PaymentClass) {
-        throw new Error(`Unknown payment application id: ${data.id}`);
-      }
-      return new PaymentClass(data);
-    }
-
-    if (data.type === "access") {
-      return createAccessApplication(data);
-    }
-
-    const ApplicationClass = TYPE_CLASS_MAP[data.type];
+    const ApplicationClass = ApplicationFactory.classOf(data);
     if (!ApplicationClass) {
-      throw new Error(`Unknown application type: ${data.type}`);
+      throw new Error(
+        data.type === "payment"
+          ? `Unknown payment application id: ${data.id}`
+          : `Unknown application type: ${data.type}`,
+      );
     }
     return new ApplicationClass(data);
   }

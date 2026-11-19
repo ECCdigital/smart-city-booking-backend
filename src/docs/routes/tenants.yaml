@@ -166,7 +166,7 @@
     description: |
       Every tenant the caller owns, read the same way as a single one — each
       media reference of the legal documents carries the address it resolves
-      to. A declined tenant (glossary "abgewiesen") is not in it: its owner's
+      to, a stored secret is `__stored_secret__`. A declined tenant (glossary "abgewiesen") is not in it: its owner's
       membership rests (glossary "Ruhende Mitgliedschaft") and it appears to
       them, as to every member, in the public export only. With `publicTenants=true` the list switches to the public tenant
       export, which does not carry legal documents at all, but `accessApps`:
