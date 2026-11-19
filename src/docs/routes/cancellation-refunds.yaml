@@ -457,10 +457,10 @@ components:
           type: integer
           format: int64
           description: Calculation timestamp in epoch milliseconds.
-        daysBeforeStart:
+        hoursBeforeStart:
           type: integer
           nullable: true
-          description: Calendar days in Europe/Berlin.
+          description: Whole hours from the calculation to the start of the booking, rounded down; negative once it has begun.
         originalAmountEur:
           type: number
           format: double
@@ -478,9 +478,10 @@ components:
         cancellationFeeEur:
           type: number
           format: double
-        appliedTierDays:
+        appliedTierHours:
           type: integer
           nullable: true
+          description: Threshold of the applied tier in hours.
         origin:
           type: string
           enum:

@@ -1,4 +1,3 @@
-const { DateTime } = require("luxon");
 const { BadRequestError } = require("../../../errors/BaseError");
 const {
   normalizeCancellationRefundTiers,
@@ -11,7 +10,8 @@ const CANCELLATION_ORIGINS = Object.freeze({
   SYSTEM: "system",
 });
 
-const CANCELLATION_TIME_ZONE = "Europe/Berlin";
+const MS_PER_HOUR = 60 * 60 * 1000;
+const HOURS_PER_DAY = 24;
 
 /**
  * The refund state of a cancelled booking (glossary "Erstattungsstand"):
@@ -44,7 +44,7 @@ class CancellationRefundService {
       throw new BadRequestError("invalid_cancellation_time");
     }
 
-    const { daysBeforeStart, appliedTierDays, suggestedRefundPercentage } =
+    const { hoursBeforeStart, appliedTierHours, suggestedRefundPercentage } =
       this.resolvePolicy({
         tiers: tenant?.cancellationRefundTiers || [],
         withoutTimeSpanPercentage:
@@ -72,13 +72,13 @@ class CancellationRefundService {
 
     return {
       cancelledAt,
-      daysBeforeStart,
+      hoursBeforeStart,
       originalAmountEur: originalAmountCents / 100,
       suggestedRefundPercentage,
       appliedRefundPercentage,
       refundAmountEur: refundAmountCents / 100,
       cancellationFeeEur: cancellationFeeCents / 100,
-      appliedTierDays,
+      appliedTierHours,
       origin,
       adminOverride:
         origin === CANCELLATION_ORIGINS.ADMIN &&
@@ -148,44 +148,46 @@ class CancellationRefundService {
     cancelledAt,
   }) {
     const normalizedTiers = normalizeCancellationRefundTiers(tiers || []);
-    const daysBeforeStart = this.calculateDaysBeforeStart(
+    const hoursBeforeStart = this.calculateHoursBeforeStart(
       timeBegin,
       cancelledAt,
     );
 
-    if (daysBeforeStart === null) {
+    if (hoursBeforeStart === null) {
       return {
-        daysBeforeStart,
-        appliedTierDays: null,
+        hoursBeforeStart,
+        appliedTierHours: null,
         suggestedRefundPercentage: withoutTimeSpanPercentage ?? 100,
       };
     }
 
     if (normalizedTiers.length === 0) {
       return {
-        daysBeforeStart,
-        appliedTierDays: null,
+        hoursBeforeStart,
+        appliedTierHours: null,
         suggestedRefundPercentage: 100,
       };
     }
 
     const appliedTier =
-      normalizedTiers.find((tier) => daysBeforeStart >= tier.daysBeforeStart) ||
-      normalizedTiers[normalizedTiers.length - 1];
+      normalizedTiers.find(
+        (tier) => hoursBeforeStart >= tier.hoursBeforeStart,
+      ) || normalizedTiers[normalizedTiers.length - 1];
 
     return {
-      daysBeforeStart,
-      appliedTierDays: appliedTier.daysBeforeStart,
+      hoursBeforeStart,
+      appliedTierHours: appliedTier.hoursBeforeStart,
       suggestedRefundPercentage: appliedTier.refundPercentage,
     };
   }
 
   /**
-   * The calendar days from the cancellation to the start of the booking, in
-   * Berlin time; `null` for a booking without a time span (`Number(null)`
-   * would read it as 01.01.1970).
+   * The whole hours that pass from the cancellation to the start of the
+   * booking, rounded down; negative once it has begun. Counted on the elapsed
+   * time, so a change to or from summer time shifts nothing. `null` for a
+   * booking without a time span (`Number(null)` would read it as 01.01.1970).
    */
-  static calculateDaysBeforeStart(timeBegin, cancelledAt) {
+  static calculateHoursBeforeStart(timeBegin, cancelledAt) {
     if (timeBegin === null || timeBegin === undefined || timeBegin === "") {
       return null;
     }
@@ -195,18 +197,130 @@ class CancellationRefundService {
       return null;
     }
 
-    const bookingDay = DateTime.fromMillis(beginMs, {
-      zone: CANCELLATION_TIME_ZONE,
-    }).startOf("day");
-    const cancellationDay = DateTime.fromMillis(cancelledMs, {
-      zone: CANCELLATION_TIME_ZONE,
-    }).startOf("day");
+    return Math.floor((beginMs - cancelledMs) / MS_PER_HOUR);
+  }
 
-    if (!bookingDay.isValid || !cancellationDay.isValid) {
-      return null;
+  /**
+   * The time from the cancellation to the start of a calculation as it is
+   * read: whole days of 24 hours from one day on, hours below. An audit
+   * stored before 4.5 counted calendar days (`daysBeforeStart`) and keeps
+   * them. Once the booking has begun there is no time before the start: the
+   * numbers are 0 and the labels `null`.
+   *
+   * @param {Object} calculation A calculation, preview or stored audit
+   * @returns {{ hoursBeforeStart: number|null, daysBeforeStart: number|null, label: string|null, detailedLabel: string|null }}
+   *   `daysBeforeStart` in whole days of 24 hours; `label` such as
+   *   "13 Stunden" or "2 Tage"; `detailedLabel` as the booker reads it,
+   *   below three days in days and hours ("1 Tag und 22 Stunden"); both
+   *   `null` without a time span
+   */
+  static describeTimeBeforeStart(calculation) {
+    const hours = calculation?.hoursBeforeStart;
+    if (Number.isFinite(hours)) {
+      if (hours < 0) {
+        return {
+          hoursBeforeStart: 0,
+          daysBeforeStart: 0,
+          label: null,
+          detailedLabel: null,
+        };
+      }
+      const days = Math.floor(hours / HOURS_PER_DAY);
+      const rest = hours % HOURS_PER_DAY;
+      const label =
+        hours >= HOURS_PER_DAY ? formatDays(days) : formatHours(hours);
+      return {
+        hoursBeforeStart: hours,
+        daysBeforeStart: days,
+        label,
+        detailedLabel:
+          hours >= HOURS_PER_DAY && hours < 3 * HOURS_PER_DAY && rest > 0
+            ? `${formatDays(days)} und ${formatHours(rest)}`
+            : label,
+      };
     }
 
-    return Math.round(bookingDay.diff(cancellationDay, "days").days);
+    const legacyDays = calculation?.daysBeforeStart;
+    if (Number.isFinite(legacyDays)) {
+      const label = legacyDays < 0 ? null : formatDays(legacyDays);
+      return {
+        hoursBeforeStart: null,
+        daysBeforeStart: Math.max(legacyDays, 0),
+        label,
+        detailedLabel: label,
+      };
+    }
+
+    return {
+      hoursBeforeStart: null,
+      daysBeforeStart: null,
+      label: null,
+      detailedLabel: null,
+    };
+  }
+
+  /**
+   * The tier a calculation applied: its deadline in hours and in whole days
+   * of 24 hours, and as the booker reads it. The label reads "bis 36 Stunden
+   * vor Beginn", in days where the deadline divides by 24, "bis zum Beginn"
+   * at 0 hours. Below the lowest deadline that tier still applies: "unter
+   * 12 Stunden vor Beginn", or "nach Beginn" for a tier of 0 hours. An audit
+   * stored before 4.5 named the tier in calendar days (`appliedTierDays`).
+   * The label is `null` where no tier applied or the tier did not set the
+   * refund: a cancellation by the system or an override by the
+   * administration.
+   *
+   * @param {Object} calculation A calculation, preview or stored audit
+   * @returns {{ appliedTierHours: number|null, appliedTierDays: number|null, label: string|null }}
+   */
+  static describeAppliedTier(calculation) {
+    const tierHours = calculation?.appliedTierHours;
+    const tierDays = calculation?.appliedTierDays;
+    let tier = { appliedTierHours: null, appliedTierDays: null, label: null };
+    // "bis" takes the accusative ("bis 2 Tage"), "unter" the dative
+    // ("unter 2 Tagen"); hours read alike in both.
+    let deadline = null;
+    let atStart = false;
+    let belowLowestDeadline = false;
+
+    if (Number.isFinite(tierHours)) {
+      tier = {
+        appliedTierHours: tierHours,
+        appliedTierDays: Math.floor(tierHours / HOURS_PER_DAY),
+        label: null,
+      };
+      deadline = (dative) =>
+        tierHours % HOURS_PER_DAY === 0
+          ? formatDays(tierHours / HOURS_PER_DAY, dative)
+          : formatHours(tierHours);
+      atStart = tierHours === 0;
+      belowLowestDeadline = calculation.hoursBeforeStart < tierHours;
+    } else if (Number.isFinite(tierDays)) {
+      tier = { appliedTierHours: null, appliedTierDays: tierDays, label: null };
+      deadline = (dative) => formatDays(tierDays, dative);
+      atStart = tierDays === 0;
+      belowLowestDeadline = calculation.daysBeforeStart < tierDays;
+    } else {
+      return tier;
+    }
+
+    if (
+      calculation.origin === CANCELLATION_ORIGINS.SYSTEM ||
+      calculation.adminOverride
+    ) {
+      return tier;
+    }
+
+    if (belowLowestDeadline) {
+      tier.label = atStart
+        ? "nach Beginn"
+        : `unter ${deadline(true)} vor Beginn`;
+    } else {
+      tier.label = atStart
+        ? "bis zum Beginn"
+        : `bis ${deadline(false)} vor Beginn`;
+    }
+    return tier;
   }
 
   static validateRefundPercentage(refundPercentage) {
@@ -238,8 +352,8 @@ class CancellationRefundService {
       cancellationFeeEur: calculation.cancellationFeeEur,
       suggestedRefundPercentage: calculation.suggestedRefundPercentage,
       appliedRefundPercentage: calculation.appliedRefundPercentage,
-      daysBeforeStart: calculation.daysBeforeStart,
-      appliedTierDays: calculation.appliedTierDays,
+      hoursBeforeStart: calculation.hoursBeforeStart,
+      appliedTierHours: calculation.appliedTierHours,
     };
   }
 
@@ -255,7 +369,9 @@ class CancellationRefundService {
         refundAmountEur: 0,
         cancellationFeeEur: 0,
         refundPercentage: 0,
+        hoursBeforeStart: null,
         daysBeforeStart: null,
+        timeBeforeStartLabel: null,
         hasCancellationFee: false,
       };
     }
@@ -268,11 +384,7 @@ class CancellationRefundService {
         calculation.suggestedRefundPercentage ??
         0,
     );
-    const daysBeforeStart =
-      calculation.daysBeforeStart === undefined ||
-      calculation.daysBeforeStart === null
-        ? null
-        : Number(calculation.daysBeforeStart);
+    const timeBeforeStart = this.describeTimeBeforeStart(calculation);
 
     return {
       hasRefundPreview: originalAmountEur > 0,
@@ -280,10 +392,21 @@ class CancellationRefundService {
       refundAmountEur,
       cancellationFeeEur,
       refundPercentage,
-      daysBeforeStart,
+      hoursBeforeStart: timeBeforeStart.hoursBeforeStart,
+      daysBeforeStart: timeBeforeStart.daysBeforeStart,
+      timeBeforeStartLabel: timeBeforeStart.label,
       hasCancellationFee: cancellationFeeEur > 0,
     };
   }
+}
+
+function formatDays(days, dative = false) {
+  if (days === 1) return "1 Tag";
+  return `${days} ${dative ? "Tagen" : "Tage"}`;
+}
+
+function formatHours(hours) {
+  return `${hours} ${hours === 1 ? "Stunde" : "Stunden"}`;
 }
 
 /**
@@ -336,7 +459,6 @@ function refundBankDetails(bankDetails, status) {
 module.exports = {
   CancellationRefundService,
   CANCELLATION_ORIGINS,
-  CANCELLATION_TIME_ZONE,
   REFUND_STATE,
   refundBankDetails,
 };

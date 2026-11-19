@@ -16,6 +16,9 @@ const {
   buildCompactMetaHtml,
 } = require("./pdf-booking-table-meta");
 const { DOMAIN } = require("../services/authorization/reach");
+const {
+  CancellationRefundService,
+} = require("../services/payment/cancellation-refund-service");
 
 const logger = bunyan.createLogger({
   name: "pdf-service.js",
@@ -585,13 +588,13 @@ class PdfService {
 
     const calculation = refundCalculation || {
       cancelledAt: Date.now(),
-      daysBeforeStart: null,
+      hoursBeforeStart: null,
       originalAmountEur: booking.priceEur,
       suggestedRefundPercentage: 100,
       appliedRefundPercentage: 100,
       refundAmountEur: booking.priceEur,
       cancellationFeeEur: 0,
-      appliedTierDays: null,
+      appliedTierHours: null,
       origin: "system",
       adminOverride: false,
     };
@@ -795,13 +798,13 @@ class PdfService {
       bookings.map((booking) => ({
         bookingId: booking.id,
         cancelledAt: Date.now(),
-        daysBeforeStart: null,
+        hoursBeforeStart: null,
         originalAmountEur: booking.priceEur,
         suggestedRefundPercentage: 100,
         appliedRefundPercentage: 100,
         refundAmountEur: booking.priceEur,
         cancellationFeeEur: 0,
-        appliedTierDays: null,
+        appliedTierHours: null,
         origin: "system",
         adminOverride: false,
       }));
@@ -1467,6 +1470,8 @@ class PdfService {
           : "-";
       const tableTotals = PdfService._buildTableTotals(booking, bookingOptions);
       const coupon = PdfService._buildCoupon(booking, bookingOptions);
+      const timeBeforeStart =
+        CancellationRefundService.describeTimeBeforeStart(refundCalculation);
       bruttoEur += tableTotals.bruttoEur;
       vatEur += tableTotals.vatEur;
 
@@ -1482,7 +1487,8 @@ class PdfService {
         brutto: tableTotals.brutto,
         bruttoEur: tableTotals.bruttoEur,
         refundPercentage: refundCalculation?.appliedRefundPercentage,
-        daysBeforeStart: refundCalculation?.daysBeforeStart,
+        hoursBeforeStart: timeBeforeStart.hoursBeforeStart,
+        daysBeforeStart: timeBeforeStart.daysBeforeStart,
         coupon,
         items: PdfService._buildItems(booking, allBookables, bookingOptions),
         summaryItems: PdfService._buildSummaryItems(booking, allBookables),
@@ -1506,15 +1512,25 @@ class PdfService {
       calculationMode = "Manuell durch Administration";
     }
 
+    const timeBeforeStart =
+      CancellationRefundService.describeTimeBeforeStart(calculation);
+    const appliedTier =
+      CancellationRefundService.describeAppliedTier(calculation);
+
     return {
-      daysBeforeStart: calculation.daysBeforeStart,
+      hoursBeforeStart: timeBeforeStart.hoursBeforeStart,
+      daysBeforeStart: timeBeforeStart.daysBeforeStart,
       daysBeforeStartLabel:
-        calculation.daysBeforeStart === null
+        timeBeforeStart.daysBeforeStart === null
           ? "nicht verfügbar"
-          : String(calculation.daysBeforeStart),
+          : String(timeBeforeStart.daysBeforeStart),
+      timeBeforeStartLabel: timeBeforeStart.label ?? "nicht verfügbar",
+      timeBeforeStartText: timeBeforeStart.detailedLabel,
+      appliedTierLabel: appliedTier.label,
       suggestedRefundPercentage: calculation.suggestedRefundPercentage,
       refundPercentage: calculation.appliedRefundPercentage,
-      appliedTierDays: calculation.appliedTierDays,
+      appliedTierHours: appliedTier.appliedTierHours,
+      appliedTierDays: appliedTier.appliedTierDays,
       calculationMode,
       adminOverride: calculation.adminOverride,
       isFullRefund: calculation.appliedRefundPercentage === 100,
