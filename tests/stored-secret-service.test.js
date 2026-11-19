@@ -127,6 +127,16 @@ describe("StoredSecretService", function () {
       assert.strictEqual(appOf(answer, "ifbs").apiKeyID, "k-id");
     });
 
+    it("answers an empty secret as empty, also one stored as null", function () {
+      const answer = StoredSecretService.mask({
+        noreplyPassword: null,
+        applications: [{ type: "access", id: "nuki", apiToken: null }],
+      });
+
+      assert.strictEqual(answer.noreplyPassword, "");
+      assert.strictEqual(appOf(answer, "nuki").apiToken, "");
+    });
+
     it("keeps the secrets of the entity it masks", function () {
       const tenant = storedTenant();
 
@@ -287,6 +297,36 @@ describe("StoredSecretService", function () {
       const error = refusal(() => StoredSecretService.restore(previous, next));
 
       assert.strictEqual(error.params.missing[0].reason, "server_url_changed");
+    });
+
+    // The Keycloak and SSO code read the realm as it is: "city " is another
+    // realm path than "city".
+    it("refuses the Keycloak secret for a realm that differs only by spaces", function () {
+      const previous = {
+        applications: [
+          {
+            type: "auth",
+            id: "keycloak",
+            serverUrl: "https://kc.example",
+            realm: "city",
+            privateClient: "c",
+            privateClientSecret: "kc",
+          },
+        ],
+      };
+      const next = {
+        applications: [
+          {
+            ...previous.applications[0],
+            realm: "city ",
+            privateClientSecret: STORED_SECRET,
+          },
+        ],
+      };
+
+      const error = refusal(() => StoredSecretService.restore(previous, next));
+
+      assert.strictEqual(error.params.missing[0].reason, "realm_changed");
     });
 
     it("refuses the card auth token for another service", function () {

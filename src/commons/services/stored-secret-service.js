@@ -39,8 +39,13 @@ function secretsOf(app) {
   return ApplicationFactory.classOf(app)?.secrets || {};
 }
 
+/**
+ * Exact, as the consumers read a field: the class has normalised it already
+ * (a Keycloak URL without trailing slash, a Salto KS environment). Only an
+ * absent value and an empty one are the same.
+ */
 function same(a, b) {
-  return String(a ?? "").trim() === String(b ?? "").trim();
+  return String(a ?? "") === String(b ?? "");
 }
 
 /** `noreplyHost` → `noreply_host_changed`, `apiKeyID` → `api_key_id_changed`. */
@@ -55,7 +60,7 @@ function changedReason(field) {
 function masked(object, fields) {
   const copy = { ...object };
   for (const field of fields) {
-    if (copy[field]) copy[field] = STORED_SECRET;
+    copy[field] = copy[field] ? STORED_SECRET : "";
   }
   return copy;
 }
