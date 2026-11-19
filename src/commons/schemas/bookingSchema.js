@@ -38,7 +38,7 @@ const cancellationAuditSchema = new Schema(
   {
     cancelledAt: { type: Double, required: true },
     hoursBeforeStart: { type: Number, default: null },
-    // Calendar days of an audit stored before 4.4, with `appliedTierDays`.
+    // Calendar days of an audit stored before 4.5, with `appliedTierDays`.
     daysBeforeStart: { type: Number, default: null },
     originalAmountEur: { type: Number, required: true, min: 0 },
     suggestedRefundPercentage: {
