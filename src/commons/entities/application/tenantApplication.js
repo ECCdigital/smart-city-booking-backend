@@ -9,6 +9,18 @@ class TenantApplication {
   decrypt() {}
   encrypt() {}
 
+  /**
+   * The application's secrets, each with the fields it belongs to: the
+   * server it is sent to and the account it was issued for. The answers
+   * never carry a secret (see `StoredSecretService`), and a stored one is
+   * kept only while those fields stay the same.
+   *
+   * @returns {Object<string, string[]>}
+   */
+  static get secrets() {
+    return {};
+  }
+
   static get Schema() {
     return {
       type: {

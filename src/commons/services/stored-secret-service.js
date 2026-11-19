@@ -5,47 +5,51 @@
  * back keeps the stored value. An empty value removes it, any other value
  * replaces it.
  *
+ * A stored secret belongs to the fields it is bound to: the server it is
+ * sent to and the account it was issued for. The marker stands for it only
+ * while those are the stored ones; with another server or account the secret
+ * has to be typed again, so a changed address never gets the stored secret.
+ *
  * The models decrypt on every read, since the backend itself needs the
  * secrets (mail, payment, access); the marker is put in on the way out only.
  */
+const ApplicationFactory = require("../entities/application/applicationFactory");
+const { BadRequestError } = require("../../errors/BaseError");
 
 /** Stands in for a stored secret in every answer. */
 const STORED_SECRET = "__stored_secret__";
 
-/** The secrets on the tenant and the instance themselves. */
-const OWN_FIELDS = Object.freeze([
-  "noreplyPassword",
-  "noreplyGraphClientSecret",
-]);
-
-/** The secrets of an application, by type and, where it varies, by id. */
-const APP_FIELDS = Object.freeze({
-  auth: ["privateClientSecret"],
-  "card-auth": ["apiToken"],
-  payment: {
-    pmPayment: ["paymentSecret"],
-    giroCockpit: ["paymentSecret"],
-    ePayBL: ["certPassphrase", "notificationSecret", "clientP12"],
-  },
-  access: {
-    nuki: ["apiToken"],
-    "salto-ks": ["clientSecret", "password"],
-    ifbs: ["apiKey", "secretPhrase"],
-    pareva: ["password"],
-  },
+/**
+ * The secrets on the tenant and the instance themselves, each with the
+ * fields it is bound to. An application names its own (`secrets` of its
+ * class).
+ */
+const OWN_SECRETS = Object.freeze({
+  noreplyPassword: ["noreplyHost", "noreplyUser"],
+  noreplyGraphClientSecret: ["noreplyGraphTenantId", "noreplyGraphClientId"],
 });
 
-/**
- * Access providers whose connection test fills an empty secret from the
- * stored application itself, under its own rules: the marker becomes empty
- * for them.
- */
-const TESTS_COMPLETING_SECRETS = Object.freeze(["salto-ks"]);
+/** The application as its class reads it, so defaults compare as stored. */
+function asClass(app) {
+  const AppClass = ApplicationFactory.classOf(app);
+  return AppClass ? new AppClass(app) : app;
+}
 
-function appFields(app) {
-  const fields = APP_FIELDS[app?.type];
-  if (Array.isArray(fields)) return fields;
-  return fields?.[app?.id] || [];
+function secretsOf(app) {
+  return ApplicationFactory.classOf(app)?.secrets || {};
+}
+
+function same(a, b) {
+  return String(a ?? "").trim() === String(b ?? "").trim();
+}
+
+/** `noreplyHost` → `noreply_host_changed`, `apiKeyID` → `api_key_id_changed`. */
+function changedReason(field) {
+  const snake = field
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/([A-Z])([A-Z][a-z])/g, "$1_$2")
+    .toLowerCase();
+  return `${snake}_changed`;
 }
 
 function masked(object, fields) {
@@ -56,13 +60,44 @@ function masked(object, fields) {
   return copy;
 }
 
-function restored(object, stored, fields) {
-  for (const field of fields) {
-    if (object[field] === STORED_SECRET) {
-      object[field] = stored?.[field] || null;
+/**
+ * Puts the stored secret in for each marker in `target` while the fields it
+ * is bound to are the stored ones. A secret that cannot be taken is named in
+ * `missing` with the reason, its marker stays.
+ *
+ * @param {Object} target The object the markers are in, mutated
+ * @param {Object} next `target` as its class reads it
+ * @param {Object|null} stored The stored counterpart, decrypted
+ * @param {Object<string, string[]>} secrets
+ * @returns {{
+ *   sources: Object<string, "stored"|"form"|"missing">,
+ *   missing: {field: string, reason: string}[],
+ * }}
+ */
+function resolve(target, next, stored, secrets) {
+  const sources = {};
+  const missing = [];
+  for (const [field, boundTo] of Object.entries(secrets)) {
+    if (target[field] !== STORED_SECRET) {
+      sources[field] = "form";
+      continue;
     }
+
+    const changed = boundTo.find(
+      (bound) => !same(next[bound], stored?.[bound]),
+    );
+    if (!stored?.[field]) {
+      missing.push({ field, reason: "not_stored" });
+    } else if (changed) {
+      missing.push({ field, reason: changedReason(changed) });
+    } else {
+      sources[field] = "stored";
+      target[field] = stored[field];
+      continue;
+    }
+    sources[field] = "missing";
   }
-  return object;
+  return { sources, missing };
 }
 
 function sameApp(a, b) {
@@ -81,10 +116,10 @@ class StoredSecretService {
   static mask(exported) {
     if (!exported) return exported;
 
-    const result = masked(exported, OWN_FIELDS);
+    const result = masked(exported, Object.keys(OWN_SECRETS));
     if (Array.isArray(result.applications)) {
       result.applications = result.applications.map((app) =>
-        app ? masked(app, appFields(app)) : app,
+        app ? masked(app, Object.keys(secretsOf(app))) : app,
       );
     }
     return result;
@@ -99,11 +134,29 @@ class StoredSecretService {
    * @param {Object|null} previous The stored tenant or instance, decrypted
    * @param {Object} next The tenant or instance about to be stored, mutated
    * @returns {Object} `next`
+   * @throws {BadRequestError} `secret_required` when a marker comes with
+   *   another server or account than the stored secret's;
+   *   `params.missing` names each `{ type?, id?, field, reason }`
    */
   static restore(previous, next) {
     if (!next) return next;
 
-    restored(next, previous, OWN_FIELDS);
+    const refused = [];
+    const take = (target, missing, app) => {
+      for (const { field, reason } of missing) {
+        if (reason === "not_stored") {
+          target[field] = null;
+        } else {
+          refused.push(
+            app
+              ? { type: app.type, id: app.id, field, reason }
+              : { field, reason },
+          );
+        }
+      }
+    };
+
+    take(next, resolve(next, next, previous, OWN_SECRETS).missing);
     for (const app of Array.isArray(next.applications)
       ? next.applications
       : []) {
@@ -111,31 +164,47 @@ class StoredSecretService {
       const stored = (previous?.applications || []).find((candidate) =>
         sameApp(candidate, app),
       );
-      restored(app, stored, appFields(app));
+      const { missing } = resolve(
+        app,
+        asClass(app),
+        stored ? asClass(stored) : null,
+        secretsOf(app),
+      );
+      take(app, missing, app);
+    }
+
+    if (refused.length > 0) {
+      throw new BadRequestError("secret_required", { missing: refused });
     }
     return next;
   }
 
   /**
-   * The configuration of an access connection test with the marker resolved:
-   * the stored secret, or empty for a provider whose test completes secrets
-   * itself.
+   * The configuration of an access connection test with each marker
+   * resolved by the same rule as a save: the stored secret while the fields
+   * it is bound to are the stored ones. A secret that cannot be taken is
+   * named in `missing`; `sources` says per secret where the tested value
+   * comes from.
    *
    * @param {string} providerId
    * @param {Object} config The configuration as the admin form sent it
    * @param {Object|null} stored The tenant's stored application of the provider
-   * @returns {Object} A copy of `config`
+   * @returns {{
+   *   config: Object,
+   *   sources: Object<string, "stored"|"form"|"missing">,
+   *   missing: {field: string, reason: string}[],
+   * }} `config` is a copy
    */
-  static completeTestConfig(providerId, config, stored) {
-    const fields = appFields({ type: "access", id: providerId });
+  static completeSecrets(providerId, config, stored) {
+    const app = { ...config, type: "access", id: providerId };
     const completed = { ...config };
-    if (TESTS_COMPLETING_SECRETS.includes(providerId)) {
-      for (const field of fields) {
-        if (completed[field] === STORED_SECRET) completed[field] = "";
-      }
-      return completed;
-    }
-    return restored(completed, stored, fields);
+    const { sources, missing } = resolve(
+      completed,
+      asClass(app),
+      stored ? asClass(stored) : null,
+      secretsOf(app),
+    );
+    return { config: completed, sources, missing };
   }
 }
 

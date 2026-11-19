@@ -30,6 +30,10 @@ class CardAuthApplication extends TenantApplication {
     };
   }
 
+  static get secrets() {
+    return { apiToken: ["serviceUrl"] };
+  }
+
   decrypt() {
     if (this.apiToken) {
       this.apiToken = SecurityUtils.decrypt(this.apiToken);

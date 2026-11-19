@@ -10,6 +10,10 @@ class PmPaymentApplication extends PaymentApplication {
     this.paymentMode = params.paymentMode || "";
   }
 
+  static get secrets() {
+    return { paymentSecret: ["paymentMerchantId", "paymentProjectId"] };
+  }
+
   decrypt() {
     if (this.paymentSecret) {
       this.paymentSecret = SecurityUtils.decrypt(this.paymentSecret);

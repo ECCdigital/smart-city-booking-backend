@@ -215,13 +215,18 @@
       the provider; nothing is stored. Reserved for the tenant owner
       (`accessApp.manage`).
 
-      For `salto-ks` a secret left empty or out is taken from the tenant's
-      stored Salto KS application, but only while it belongs to what the body
-      names: the client secret while `clientId` and `environment` are the
-      stored ones, the password while `username` and `environment` are. The
-      site plays no part. Only then are the required fields checked. A secret
-      that is still missing stops the test before Salto is asked, with
-      `code: "missing_secret"` and the reason per secret.
+      A secret sent as `__stored_secret__`, as the tenant answer hands it
+      out, is taken from the tenant's stored application of the provider, by
+      the rule of a save: only while the fields it is bound to are the stored
+      ones, so a stored secret never goes to another server. `nuki`: the
+      token while `apiBaseUrl` is the stored one. `salto-ks`: the client
+      secret while `clientId` and `environment` are, the password while
+      `username` and `environment` are; the site plays no part. `ifbs`: the
+      API key while `serverUrl` and `apiKeyID` are, the secret phrase while
+      `serverUrl` is. `pareva`: the password while `serverUrl` and `user`
+      are. An empty secret is none. First the required fields are checked; a
+      secret that cannot be taken stops the test before the provider is
+      asked, with `code: "missing_secret"` and the reason per secret.
     security:
       - bearerAuth: []
     parameters:
@@ -384,34 +389,27 @@ components:
             - missing_fields
             - missing_secret
           description: |
-            `missing_fields` (`salto-ks`): `clientId` or `username` is empty or
-            left out; Salto was not asked. Checked before `missing_secret`.
-            `missing_secret` (`salto-ks`): a secret is neither in the body nor
-            stored for the identity the body names; Salto was not asked.
+            `missing_fields` (`salto-ks`): a required field is empty or left
+            out; Salto was not asked. Checked before `missing_secret`.
+            `missing_secret`: a secret sent as `__stored_secret__` is not
+            stored, or not for the server or account the body names; the
+            provider was not asked.
         missing:
           type: array
           description: |
-            With `missing_fields`, the required fields that are missing
-            (`clientId`, `username`), named as in the request, `field` only.
-            With `missing_secret`, the secrets that are missing (`clientSecret`,
-            `password`), with the `reason`.
+            With `missing_fields`, the required fields that are missing,
+            named as in the request, `field` only. With `missing_secret`, the
+            secrets that cannot be taken, with the `reason`:
+            `<bound field>_changed` in snake case (e.g. `server_url_changed`)
+            or `not_stored`.
           items:
             type: object
             properties:
               field:
                 type: string
-                enum:
-                  - clientId
-                  - clientSecret
-                  - username
-                  - password
               reason:
                 type: string
-                enum:
-                  - client_id_changed
-                  - username_changed
-                  - environment_changed
-                  - not_stored
+                example: client_id_changed
         environment:
           type: string
           enum:

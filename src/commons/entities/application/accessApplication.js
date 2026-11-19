@@ -42,6 +42,10 @@ class NukiAccessApplication extends AccessApplication {
     this.apiBaseUrl = params.apiBaseUrl || "https://api.nuki.io";
   }
 
+  static get secrets() {
+    return { apiToken: ["apiBaseUrl"] };
+  }
+
   decrypt() {
     if (this.apiToken?.iv != null && this.apiToken?.data != null) {
       this.apiToken = SecurityUtils.decrypt(this.apiToken);
@@ -121,6 +125,18 @@ class SaltoKsAccessApplication extends AccessApplication {
     return [...SALTO_KS_ENVIRONMENTS];
   }
 
+  /**
+   * A client secret is issued for a client id in one environment, a password
+   * belongs to a system user in one environment. The site plays no part - a
+   * new site needs no new secret.
+   */
+  static get secrets() {
+    return {
+      clientSecret: ["environment", "clientId"],
+      password: ["environment", "username"],
+    };
+  }
+
   decrypt() {
     if (this.clientSecret?.iv != null && this.clientSecret?.data != null) {
       this.clientSecret = SecurityUtils.decrypt(this.clientSecret);
@@ -183,6 +199,13 @@ class IfbsAccessApplication extends AccessApplication {
     this.secretPhrase = params.secretPhrase || "";
   }
 
+  static get secrets() {
+    return {
+      apiKey: ["serverUrl", "apiKeyID"],
+      secretPhrase: ["serverUrl"],
+    };
+  }
+
   decrypt() {
     if (isEncrypted(this.apiKey)) {
       this.apiKey = SecurityUtils.decrypt(this.apiKey);
@@ -225,6 +248,10 @@ class ParevaAccessApplication extends AccessApplication {
     this.lockerId = params.lockerId || "";
     this.user = params.user || "";
     this.password = params.password || null;
+  }
+
+  static get secrets() {
+    return { password: ["serverUrl", "user"] };
   }
 
   decrypt() {

@@ -98,6 +98,13 @@
       Stored secrets are write only: `__stored_secret__`, as the answer hands
       it out, keeps the stored secret; an empty value removes it, any other
       value replaces it.
+      The marker keeps it only while the fields the secret is bound to stay
+      the stored ones: the mail password `noreplyHost` and `noreplyUser`, the
+      Graph client secret `noreplyGraphTenantId` and `noreplyGraphClientId`,
+      an application's secret its server and account (`secrets` of its
+      class). Otherwise the save is refused, `400 secret_required`, with
+      `params.missing` naming `{ type?, id?, field, reason }` per secret;
+      the secret has to be typed again.
     security:
       - bearerAuth: []
     requestBody:
@@ -143,6 +150,8 @@
           `media_reference_not_public` for an `intern` one. A creation: a
           missing or invalid contact field (see `POST /api/tenants`). An update
           of an existing tenant needs no contact fields.
+          `secret_required`: `__stored_secret__` for a secret whose server or
+          account changed (`params.missing`).
       "403":
         description: Neither owner of the tenant named by `id` nor instance owner, or no right to pick the medium
       "409":

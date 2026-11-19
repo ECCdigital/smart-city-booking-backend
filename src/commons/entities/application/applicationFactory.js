@@ -3,7 +3,11 @@ const PmPaymentApplication = require("./payment/pmPaymentApplication");
 const GiroCockpitApplication = require("./payment/giroCockpitApplication");
 const InvoiceApplication = require("./payment/invoiceApplication");
 const AuthApplication = require("./authApplication");
-const { createAccessApplication } = require("./accessApplication");
+const {
+  AccessApplication,
+  accessAppTypes,
+  createAccessApplication,
+} = require("./accessApplication");
 const CardAuthApplication = require("./cardAuthApplication");
 
 const PAYMENT_CLASS_MAP = {
@@ -19,6 +23,22 @@ const TYPE_CLASS_MAP = {
 };
 
 class ApplicationFactory {
+  /**
+   * The class of an application, `null` for a type or payment id it does
+   * not know. An access provider without a class of its own is an
+   * `AccessApplication`, as `create` makes it.
+   *
+   * @param {{type: string, id: string}} data
+   * @returns {Function|null}
+   */
+  static classOf(data) {
+    if (data?.type === "payment") return PAYMENT_CLASS_MAP[data.id] || null;
+    if (data?.type === "access") {
+      return accessAppTypes[data.id] || AccessApplication;
+    }
+    return TYPE_CLASS_MAP[data?.type] || null;
+  }
+
   static create(data) {
     if (data.type === "payment") {
       const PaymentClass = PAYMENT_CLASS_MAP[data.id];
@@ -45,3 +65,5 @@ class ApplicationFactory {
 }
 
 module.exports = ApplicationFactory;
+module.exports.PAYMENT_CLASS_MAP = PAYMENT_CLASS_MAP;
+module.exports.TYPE_CLASS_MAP = TYPE_CLASS_MAP;
