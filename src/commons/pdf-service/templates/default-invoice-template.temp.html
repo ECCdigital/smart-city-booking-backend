@@ -1,99 +1,151 @@
+<!--MAILBLOCKS:v=1;b64=W3sidHlwZSI6InJvdyIsImNvbHVtbnMiOlt7IndpZHRoIjoxMiwiYmxvY2tzIjpbeyJ0eXBlIjoicmF3SHRtbCIsImh0bWwiOiI8ZGl2IGNsYXNzPVwibWV0YVwiPlJlY2hudW5nc251bW1lcjoge3tpbnZvaWNlTnVtYmVyfX08YnIgLz57e2xvY2F0aW9ufX0sIHt7aW52b2ljZURhdGV9fTwvZGl2PiIsImlkIjoiYjQ5NjJiNmUtMDIzNS00NTBiLTk1NTktZjJkODIwMjliMmVkIn0seyJ0eXBlIjoicmF3SHRtbCIsImh0bWwiOiI8ZGl2Pnt7e2ludm9pY2VBZGRyZXNzfX19PC9kaXY+IiwiaWQiOiI0OTgwNjdkMy1jZDJlLTQ4MDktYWEyZi1hMWNkOGI3OWJlYzYifSx7InR5cGUiOiJoZWFkaW5nIiwidGV4dCI6IklocmUgUmVjaG51bmciLCJsZXZlbCI6MSwiYWxpZ24iOiJsZWZ0IiwiaWQiOiJmY2RkMmY0ZC01NWNkLTQ3NmEtODdkMi01M2IxNzhlODQ0MjIifSx7InR5cGUiOiJ0ZXh0IiwiaHRtbCI6IjxwPlNlaHIgZ2VlaHJ0ZSBEYW1lbiB1bmQgSGVycmVuLDxiciAvPnZpZWxlbiBEYW5rIGbDvHIgSWhyZSBCdWNodW5nLiBCaXR0ZSDDvGJlcndlaXNlbiBTaWUgZGVuIEJldHJhZyBpbm5lcmhhbGIgdm9uIDxzcGFuIGRhdGEtdmFyaWFibGU9XCJkYXlzVW50aWxQYXltZW50RHVlXCIgZGF0YS10cmlwbGU9XCJmYWxzZVwiIGRhdGEtbGFiZWw9XCJaYWhsdW5nc2ZyaXN0IChUYWdlKVwiIGNsYXNzPVwibWFpbC12YXJpYWJsZS1jaGlwXCIgY29udGVudGVkaXRhYmxlPVwiZmFsc2VcIj57e2RheXNVbnRpbFBheW1lbnREdWV9fTwvc3Bhbj4gVGFnZW4gbWl0IGRlbSBWZXJ3ZW5kdW5nc3p3ZWNrIDxzdHJvbmc+PHNwYW4gZGF0YS12YXJpYWJsZT1cInB1cnBvc2VPZlBheW1lbnRcIiBkYXRhLXRyaXBsZT1cImZhbHNlXCIgZGF0YS1sYWJlbD1cIlZlcndlbmR1bmdzendlY2tcIiBjbGFzcz1cIm1haWwtdmFyaWFibGUtY2hpcFwiIGNvbnRlbnRlZGl0YWJsZT1cImZhbHNlXCI+e3twdXJwb3NlT2ZQYXltZW50fX08L3NwYW4+PC9zdHJvbmc+IGF1ZiBmb2xnZW5kZXMgS29udG86PC9wPiIsImFsaWduIjoibGVmdCIsImlkIjoiZmM3NWJhNzQtNTkwMC00ODg4LWE2MmItYzQwOTFlZDc0NWZmIn0seyJ0eXBlIjoiY2FsbG91dCIsInZhcmlhbnQiOiJpbmZvIiwidGl0bGUiOiJCYW5rdmVyYmluZHVuZyIsImh0bWwiOiI8cD57e2Jhbmt9fTxiciAvPklCQU46IHt7aWJhbn19PGJyIC8+QklDOiB7e2JpY319PC9wPiIsImlkIjoiMDRlNjRlNjgtZjk2Mi00OTBiLThhYzctNTc4MmZkOTNmNjEwIn0seyJ0eXBlIjoidGV4dCIsImh0bWwiOiI8cD5CdWNodW5nc251bW1lcjogPHNwYW4gZGF0YS12YXJpYWJsZT1cImJvb2tpbmdJZFwiIGRhdGEtdHJpcGxlPVwiZmFsc2VcIiBkYXRhLWxhYmVsPVwiQnVjaHVuZ3MtSURcIiBjbGFzcz1cIm1haWwtdmFyaWFibGUtY2hpcFwiIGNvbnRlbnRlZGl0YWJsZT1cImZhbHNlXCI+e3tib29raW5nSWR9fTwvc3Bhbj48YnIgLz5aZWl0cmF1bTogPHNwYW4gZGF0YS12YXJpYWJsZT1cImJvb2tpbmdQZXJpb2RcIiBkYXRhLXRyaXBsZT1cImZhbHNlXCIgZGF0YS1sYWJlbD1cIkJ1Y2h1bmdzemVpdHJhdW1cIiBjbGFzcz1cIm1haWwtdmFyaWFibGUtY2hpcFwiIGNvbnRlbnRlZGl0YWJsZT1cImZhbHNlXCI+e3tib29raW5nUGVyaW9kfX08L3NwYW4+PC9wPiIsImFsaWduIjoibGVmdCIsImlkIjoiNzA4OTU5MjEtYTNkNi00ZTBjLWE2ZTQtMDU5NDhmY2YxMDIwIn0seyJ0eXBlIjoicmF3SHRtbCIsImh0bWwiOiJ7e3ttYWluQ29udGVudH19fSIsImlkIjoiNzE4NWY2NDYtNDEyYy00YTIyLWI2OTAtYzIzZjljOGU0ZGU4In0seyJ0eXBlIjoidGV4dCIsImh0bWwiOiI8cD48c3Ryb25nPkdlc2FtdGJldHJhZzogPHNwYW4gZGF0YS12YXJpYWJsZT1cInRvdGFsQW1vdW50XCIgZGF0YS10cmlwbGU9XCJmYWxzZVwiIGRhdGEtbGFiZWw9XCJHZXNhbXRiZXRyYWdcIiBjbGFzcz1cIm1haWwtdmFyaWFibGUtY2hpcFwiIGNvbnRlbnRlZGl0YWJsZT1cImZhbHNlXCI+e3t0b3RhbEFtb3VudH19PC9zcGFuPiDigqw8L3N0cm9uZz48L3A+IiwiYWxpZ24iOiJyaWdodCIsImlkIjoiM2I2Mjg1ZjgtZGRhMy00ODVkLWFlZTEtNzVjNGY0N2I3MWEwIn0seyJ0eXBlIjoidGV4dCIsImh0bWwiOiI8cCBzdHlsZT1cImNvbG9yOiM4ODg7Zm9udC1zaXplOjEycHg7XCI+RGllc2VzIFNjaHJlaWJlbiB3dXJkZSBtYXNjaGluZWxsIGVyc3RlbGx0IHVuZCBpc3Qgb2huZSBVbnRlcnNjaHJpZnQgZ8O8bHRpZy48L3A+IiwiYWxpZ24iOiJsZWZ0IiwiaWQiOiJlMGYwY2FlMy1hOTkzLTQzNjAtYjA3Yi05ZjMxMmU3NDdjN2YifV19XSwiaWQiOiJmMzNkMGRhMi03MmYzLTQ1YjktYmM4MS03MGE4YWNmZjZlYzUifV0=-->
 <!doctype html>
 <html lang="de">
   <head>
     <meta charset="utf-8" />
-    <title>{{ title }}</title>
+    <title>Rechnung {{invoiceNumber}}</title>
     <style>
-      body {
-        margin: 0;
-      }
-      .invoice-box {
-        font-size: 12px;
-        line-height: 16px;
-        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-        padding-bottom: 20px;
-      }
-      .invoice-box table {
-        width: 100%;
-        line-height: inherit;
-        text-align: left;
-        border-collapse: collapse;
-      }
-      .invoice-box table td,
-      .invoice-box table th {
-        padding: 5px;
-        vertical-align: top;
-      }
-      .invoice-box table tr.heading td {
-        background: #eee;
-        border-bottom: 1px solid #ddd;
-        font-weight: bold;
-      }
-      /* Position tables ({{{mainContent}}}) use table.pdf-items styling from PRINT_CSS */
-      .header {
-        font-weight: bold;
-        font-size: x-large;
-        padding-bottom: 20px;
-      }
-      .header-address {
-        text-align: left;
-        padding-bottom: 20px;
-      }
-      .details {
-        line-height: 14px;
-        font-size: 10px;
-        text-align: right;
-      }
-      .information {
-        padding-top: 10px;
-        padding-bottom: 10px;
-        line-height: 20px;
-        font-size: 12px;
-        text-align: left;
-      }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #222; font-size: 14px; line-height: 1.5; padding: 1cm; }
+      h1, h2, h3 { color: #1976d2; }
+      table { border-collapse: collapse; }
+      .meta { text-align: right; font-size: 12px; color: #666; margin-bottom: 16px; }
+      .info-box { padding: 12px; background: #f9f9f9; border-radius: 4px; margin: 12px 0; }
+      .cancellation-note { margin-top: 10px; padding: 10px; border-left: 4px solid #c0392b; background: #fdecea; font-size: 12px; line-height: 18px; }
+      .refund-note { margin-top: 10px; padding: 10px; border-left: 4px solid #2e7d32; background: #eaf5ea; font-size: 12px; line-height: 18px; }
+      .booking-detail, .booked-items { width: 100%; }
+      .booking-detail td, .booking-detail th,
+      .booked-items td, .booked-items th { padding: 8px; border-bottom: 1px solid #ddd; }
+      
+  table.pdf-items { width: 100%; border-collapse: collapse; }
+  table.pdf-items--summary td {
+    padding: 3px 6px;
+    font-size: 10px;
+    line-height: 1.4;
+    vertical-align: top;
+    border-bottom: 1px solid #ddd;
+  }
+  table.pdf-items--summary td.label { width: 40%; color: #333; }
+  table.pdf-items--summary td.value { text-align: right; }
+  table.pdf-items--summary tr.totals td { font-weight: bold; }
+  table.pdf-items--summary tr.objects td.value { line-height: 1.5; }
+  table.pdf-items--summary tr.booking-sep td {
+    border-top: 2px solid #bbb;
+    padding-top: 6px;
+    border-bottom: none;
+  }
+  table.pdf-items--compact th,
+  table.pdf-items--compact td {
+    padding: 2px 6px;
+    font-size: 9px;
+    line-height: 1.4;
+    vertical-align: top;
+    border: none;
+    text-align: left;
+  }
+  table.pdf-items--compact thead th {
+    background: #eee;
+    border-bottom: 1px solid #bbb;
+    font-weight: bold;
+  }
+  table.pdf-items--compact tbody tr.item:nth-child(even) td { background: #f5f5f5; }
+  table.pdf-items--compact .num { text-align: right; white-space: nowrap; }
+  table.pdf-items--compact td.sub {
+    color: #555;
+    font-size: 8px;
+    padding-top: 0;
+    padding-bottom: 4px;
+  }
+  table.pdf-items--compact tr.coupon td { color: #555; }
+  table.pdf-items--compact tr.totals-sub td {
+    padding-top: 4px;
+    border-top: 2px solid #000;
+    text-align: right;
+    color: #444;
+  }
+  table.pdf-items--compact tr.brutto td {
+    font-weight: bold;
+    font-size: 10px;
+    border-bottom: 2px solid #000;
+    padding-bottom: 4px;
+    background: none;
+    text-align: right;
+  }
+  table.pdf-items--compact tr.brutto td:first-child,
+  table.pdf-items--compact tr.totals-sub td:first-child { text-align: left; }
+  table.pdf-items--compact tr.meta td {
+    font-size: 10px;
+    color: #444;
+    background: none;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 4px;
+  }
+  table.pdf-items--detailed th,
+  table.pdf-items--detailed td {
+    padding: 4px 6px;
+    font-size: 10px;
+    line-height: 1.4;
+    vertical-align: top;
+    border: none;
+    text-align: left;
+  }
+  table.pdf-items--detailed thead th {
+    background: #eee;
+    border-bottom: 1px solid #bbb;
+    font-weight: bold;
+  }
+  table.pdf-items--detailed tbody tr.item:nth-child(even) td { background: #f5f5f5; }
+  table.pdf-items--detailed .num { text-align: right; white-space: nowrap; }
+  .pdf-booking-meta {
+    font-size: 10px;
+    color: #666;
+    line-height: 1.6;
+    margin: 0 0 8px;
+  }
+  table.pdf-items--detailed td.sub {
+    color: #555;
+    font-size: 9px;
+    padding-top: 0;
+    padding-bottom: 6px;
+  }
+  table.pdf-items--detailed ul.item-list {
+    margin: 4px 0 0;
+    padding-left: 18px;
+  }
+  table.pdf-items--detailed tr.coupon td { color: #555; }
+  table.pdf-items--detailed tr.netto td {
+    padding-top: 8px;
+    border-top: 2px solid #000;
+  }
+  table.pdf-items--detailed tr.netto td,
+  table.pdf-items--detailed tr.mwst td,
+  table.pdf-items--detailed tr.brutto td { text-align: right; }
+  table.pdf-items--detailed tr.netto td:first-child,
+  table.pdf-items--detailed tr.mwst td:first-child,
+  table.pdf-items--detailed tr.brutto td:first-child { text-align: left; }
+  table.pdf-items--detailed tr.brutto td {
+    font-weight: bold;
+    border-bottom: 2px solid #000;
+    padding-bottom: 4px;
+  }
+
     </style>
   </head>
   <body>
     <template data-pdf-footer>
-      <div style="display: flex; justify-content: space-between; width: 100%">
-        <span>{{ title }} {{ invoiceNumber }}</span>
-        <span>{{> pdfPageNumbers }}</span>
+      <div data-pdf-wrapper style="width: 100%; font-size: 8px; color: #666; padding: 0 10mm;">
+        <div style="display: flex; justify-content: space-between"><span>Rechnung {{invoiceNumber}}</span><span>Seite <span class="pageNumber"></span> von <span class="totalPages"></span></span></div>
       </div>
     </template>
-
-    <div class="invoice-box">
-      <table>
-        <tr>
-          <td>
-            <div class="header">Smart City Booking</div>
-            <div class="header-address">{{{invoiceAddress}}}</div>
-          </td>
-          <td>
-            <div class="details">
-              Rechnungsnummer: {{invoiceNumber}} <br />
-              <br />
-              {{location}}, {{invoiceDate}}
-            </div>
-          </td>
-        </tr>
-      </table>
-      <div class="information">
-        <span style="font-size: larger; font-weight: bolder">{{ title }}</span>
-        <p>
-          Sehr geehrte Damen und Herren,<br /><br />
-          vielen Dank für Ihre Buchung. Bitte überweisen Sie den genannten
-          Betrag innerhalb von {{ daysUntilPaymentDue }} Tagen mit dem
-          Verwendungszweck {{ purposeOfPayment }} auf folgendes Konto:<br /><br />
-          {{ bank }} <br />
-          IBAN: {{ iban }} <br />
-          BIC: {{ bic }} <br />
-        </p>
-      </div>
-      {{{ mainContent }}}
-      <div class="information">
-        Dieses Schreiben wurde maschinell erstellt und ist ohne Unterschrift
-        gültig.
-      </div>
-    </div>
+<div style="font-family:inherit; color:#222222; line-height:1.5; font-size:16px;">
+<div style=""><table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%; border-collapse:collapse;"><tr><td style="vertical-align:top; width:100%;" width="100%"><div class="meta">Rechnungsnummer: {{invoiceNumber}}<br>{{location}}, {{invoiceDate}}</div>
+<div>{{{invoiceAddress}}}</div>
+<h1 style="margin:0 0 12px; color:#222222; text-align:left; font-size:26px; line-height:1.3;">Ihre Rechnung</h1>
+<div style="text-align:left; color:#222222; font-size:16px; line-height:1.5;"><p>Sehr geehrte Damen und Herren,<br>vielen Dank für Ihre Buchung. Bitte überweisen Sie den Betrag innerhalb von {{daysUntilPaymentDue}} Tagen mit dem Verwendungszweck <strong>{{purposeOfPayment}}</strong> auf folgendes Konto:</p></div>
+<div style="border-left:4px solid #1976d2; background:#e3f2fd; color:#0d3c61; padding:12px 16px; border-radius:2px;"><div style="font-weight:600; margin-bottom:4px;">Bankverbindung</div><p>{{bank}}<br>IBAN: {{iban}}<br>BIC: {{bic}}</p></div>
+<div style="text-align:left; color:#222222; font-size:16px; line-height:1.5;"><p>Buchungsnummer: {{bookingId}}<br>Zeitraum: {{bookingPeriod}}</p></div>
+{{{mainContent}}}
+<div style="text-align:right; color:#222222; font-size:16px; line-height:1.5;"><p><strong>Gesamtbetrag: {{totalAmount}} €</strong></p></div>
+<div style="text-align:left; color:#222222; font-size:16px; line-height:1.5;"><p style="color:#888;font-size:12px;">Dieses Schreiben wurde maschinell erstellt und ist ohne Unterschrift gültig.</p></div></td></tr></table></div>
+</div>
   </body>
 </html>

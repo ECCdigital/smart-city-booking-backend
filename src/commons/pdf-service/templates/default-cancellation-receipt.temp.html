@@ -1,163 +1,152 @@
+<!--MAILBLOCKS:v=1;b64=W3sidHlwZSI6InJvdyIsImNvbHVtbnMiOlt7IndpZHRoIjoxMiwiYmxvY2tzIjpbeyJ0eXBlIjoicmF3SHRtbCIsImh0bWwiOiI8ZGl2IGNsYXNzPVwibWV0YVwiPlN0b3Jub2JlbGVnbnVtbWVyOiB7e2NhbmNlbGxhdGlvbk51bWJlcn19PGJyIC8+VXJzcHLDvG5nbGljaGUgUmVjaG51bmdzbnVtbWVyOiB7e29yaWdpbmFsSW52b2ljZU51bWJlcn19PGJyIC8+e3tsb2NhdGlvbn19LCB7e2NhbmNlbGxhdGlvbkRhdGV9fTwvZGl2PiIsImlkIjoiN2QyY2E3MTUtZThjOS00ZDQ3LWE1MzktYzdiZjlkNDcyYzg1In0seyJ0eXBlIjoicmF3SHRtbCIsImh0bWwiOiI8ZGl2Pnt7e2ludm9pY2VBZGRyZXNzfX19PC9kaXY+IiwiaWQiOiI4Y2VjYmRiZC01OGU0LTQ4Y2EtYThjZC03MmZkMDA2MTEzMWMifSx7InR5cGUiOiJoZWFkaW5nIiwidGV4dCI6IlN0b3Jub3JlY2hudW5nIiwibGV2ZWwiOjEsImFsaWduIjoibGVmdCIsImlkIjoiY2QxNDA0MTYtY2VmNC00N2MxLWFhZjgtODBkZDVlNmNhNDRlIn0seyJ0eXBlIjoidGV4dCIsImh0bWwiOiI8cD5TZWhyIGdlZWhydGUgRGFtZW4gdW5kIEhlcnJlbiw8YnIgLz48YnIgLz5oaWVybWl0IHN0b3JuaWVyZW4gd2lyIGRpZSBSZWNobnVuZyBtaXQgZGVyIE51bW1lciA8c3Ryb25nPjxzcGFuIGRhdGEtdmFyaWFibGU9XCJvcmlnaW5hbEludm9pY2VOdW1iZXJcIiBkYXRhLXRyaXBsZT1cImZhbHNlXCIgZGF0YS1sYWJlbD1cIk9yaWdpbmFsLVJlY2hudW5nc251bW1lclwiIGNsYXNzPVwibWFpbC12YXJpYWJsZS1jaGlwXCIgY29udGVudGVkaXRhYmxlPVwiZmFsc2VcIj57e29yaWdpbmFsSW52b2ljZU51bWJlcn19PC9zcGFuPjwvc3Ryb25nPiB2b20gPHNwYW4gZGF0YS12YXJpYWJsZT1cIm9yaWdpbmFsSW52b2ljZURhdGVcIiBkYXRhLXRyaXBsZT1cImZhbHNlXCIgZGF0YS1sYWJlbD1cIk9yaWdpbmFsLVJlY2hudW5nc2RhdHVtXCIgY2xhc3M9XCJtYWlsLXZhcmlhYmxlLWNoaXBcIiBjb250ZW50ZWRpdGFibGU9XCJmYWxzZVwiPnt7b3JpZ2luYWxJbnZvaWNlRGF0ZX19PC9zcGFuPi4gRGllIG5hY2hmb2xnZW5kIGF1ZmdlZsO8aHJ0ZW4gUG9zaXRpb25lbiB3ZXJkZW4gSWhuZW4ge3sjaWYgaXNGdWxsUmVmdW5kfX1pbiB2b2xsZXIgSMO2aGV7e2Vsc2V9fWFudGVpbGlnIGdlbcOkw58gZGVyIG5hY2hmb2xnZW5kZW4gQmVyZWNobnVuZ3t7L2lmfX0gZ3V0Z2VzY2hyaWViZW4uPC9wPiIsImFsaWduIjoibGVmdCIsImlkIjoiMDcwNzRlMGEtMzFlMi00YmUzLTk4MTEtNjIxMDA3YWY1MWE3In0seyJ0eXBlIjoicmF3SHRtbCIsImh0bWwiOiJ7eyNpZiBjYW5jZWxsYXRpb25SZWFzb259fTxkaXYgY2xhc3M9XCJjYW5jZWxsYXRpb24tbm90ZVwiPjxzdHJvbmc+R3J1bmQgZGVyIFN0b3JuaWVydW5nOjwvc3Ryb25nPiB7e2NhbmNlbGxhdGlvblJlYXNvbn19PC9kaXY+e3svaWZ9fSIsImlkIjoiMzU0OTI5MDMtMTBmNS00MDA5LWE2NDctMGU5N2QxNGZiMTExIn0seyJ0eXBlIjoicmF3SHRtbCIsImh0bWwiOiI8ZGl2IGNsYXNzPVwiY2FuY2VsbGF0aW9uLW5vdGVcIj48c3Ryb25nPkJlcmVjaG51bmcgZGVyIEVyc3RhdHR1bmc6PC9zdHJvbmc+PGJyIC8+U3Rvcm5pZXJ1bmdzemVpdHB1bmt0OiB7e2NhbmNlbGxhdGlvbkRhdGV9fTxiciAvPnt7I2lmIHJlZnVuZENhbGN1bGF0aW9uc319e3sjZWFjaCByZWZ1bmRDYWxjdWxhdGlvbnN9fUJ1Y2h1bmcge3tib29raW5nSWR9fToge3sjaWYgdGltZUJlZm9yZVN0YXJ0VGV4dH19U3Rvcm5pZXJ0IHt7dGltZUJlZm9yZVN0YXJ0VGV4dH19IHZvciBCZWdpbm4gZGVyIEJ1Y2h1bmcuIHt7L2lmfX17eyNpZiBhcHBsaWVkVGllckxhYmVsfX1FcyBnaWx0IGRpZSBFcnN0YXR0dW5nc3N0dWZlOiB7e2FwcGxpZWRUaWVyTGFiZWx9fS4ge3svaWZ9fURpZSBFcnN0YXR0dW5nIGJldHLDpGd0IHt7cmVmdW5kUGVyY2VudGFnZX19ICUgKHt7cmVmdW5kQW1vdW50fX0pLCB7e2NhbGN1bGF0aW9uTW9kZX19Lnt7I3VubGVzcyBAbGFzdH19PGJyIC8+e3svdW5sZXNzfX17ey9lYWNofX17e2Vsc2V9fXt7I2lmIHRpbWVCZWZvcmVTdGFydFRleHR9fVN0b3JuaWVydCB7e3RpbWVCZWZvcmVTdGFydFRleHR9fSB2b3IgQmVnaW5uIGRlciBCdWNodW5nLiB7ey9pZn19e3sjaWYgYXBwbGllZFRpZXJMYWJlbH19RXMgZ2lsdCBkaWUgRXJzdGF0dHVuZ3NzdHVmZToge3thcHBsaWVkVGllckxhYmVsfX0uIHt7L2lmfX1EaWUgRXJzdGF0dHVuZyBiZXRyw6RndCB7e3JlZnVuZFBlcmNlbnRhZ2V9fSAlICh7e3JlZnVuZEFtb3VudH19KSwge3tjYWxjdWxhdGlvbk1vZGV9fS57ey9pZn19PC9kaXY+IiwiaWQiOiI5NmMwNTk3MC1hNWI5LTRjODMtYWRhNC1lNzY4NDIzZGRkNzkifSx7InR5cGUiOiJyYXdIdG1sIiwiaHRtbCI6Int7I2lmIGFscmVhZHlQYWlkfX08ZGl2IGNsYXNzPVwicmVmdW5kLW5vdGVcIj5EZXIgYmVyZWl0cyBnZXphaGx0ZSBCZXRyYWcgaW4gSMO2aGUgdm9uIDxzdHJvbmc+e3tyZWZ1bmRBbW91bnR9fTwvc3Ryb25nPiB3aXJkIElobmVuIGVyc3RhdHRldC57eyNpZiBoYXNDYW5jZWxsYXRpb25GZWV9fSBEZXIgZWluYmVoYWx0ZW5lIEJldHJhZyBiZWzDpHVmdCBzaWNoIGF1ZiA8c3Ryb25nPnt7Y2FuY2VsbGF0aW9uRmVlfX08L3N0cm9uZz4ue3svaWZ9fTwvZGl2Pnt7I2lmIGN1c3RvbWVyQmFua0RldGFpbHN9fXt7e2N1c3RvbWVyQmFua0RldGFpbHN9fX17ey9pZn19e3tlbHNlfX08cD5Tb2Zlcm4gbm9jaCBrZWluZSBaYWhsdW5nIGVyZm9sZ3QgaXN0LCByZWR1emllcnQgc2ljaCBkaWUgWmFobHVuZ3N2ZXJwZmxpY2h0dW5nIHVtIDxzdHJvbmc+e3tyZWZ1bmRBbW91bnR9fTwvc3Ryb25nPi4ge3sjaWYgaXNGdWxsUmVmdW5kfX1EaWUgdXJzcHLDvG5nbGljaGUgUmVjaG51bmcgPHN0cm9uZz57e29yaWdpbmFsSW52b2ljZU51bWJlcn19PC9zdHJvbmc+IHdpcmQgZGFtaXQgdm9sbHN0w6RuZGlnIGF1ZmdlaG9iZW4ue3tlbHNlfX1EZXIgdmVyYmxlaWJlbmRlIEJldHJhZyBpbiBIw7ZoZSB2b24gPHN0cm9uZz57e2NhbmNlbGxhdGlvbkZlZX19PC9zdHJvbmc+IGJsZWlidCBiZXN0ZWhlbi57ey9pZn19PC9wPnt7L2lmfX0iLCJpZCI6ImQ4OGY3NmZhLWVjMTMtNGJmZS1iYTEzLTAzN2I4MjI0YmM2NiJ9LHsidHlwZSI6InJhd0h0bWwiLCJodG1sIjoie3t7bWFpbkNvbnRlbnR9fX0iLCJpZCI6IjQ2NTU2YzIzLWQ4ZGUtNDBjZS1iYTY1LTcxN2Y4MjhkZjY1ZiJ9LHsidHlwZSI6InRleHQiLCJodG1sIjoiPHA+QmVpIFLDvGNrZnJhZ2VuIHp1IGRpZXNlciBTdG9ybm9yZWNobnVuZyB3ZW5kZW4gU2llIHNpY2ggYml0dGUgdW50ZXIgQW5nYWJlIGRlciBTdG9ybm9iZWxlZ251bW1lciA8c3Ryb25nPjxzcGFuIGRhdGEtdmFyaWFibGU9XCJjYW5jZWxsYXRpb25OdW1iZXJcIiBkYXRhLXRyaXBsZT1cImZhbHNlXCIgZGF0YS1sYWJlbD1cIlN0b3Jub2JlbGVnbnVtbWVyXCIgY2xhc3M9XCJtYWlsLXZhcmlhYmxlLWNoaXBcIiBjb250ZW50ZWRpdGFibGU9XCJmYWxzZVwiPnt7Y2FuY2VsbGF0aW9uTnVtYmVyfX08L3NwYW4+PC9zdHJvbmc+IGFuIHVucy48L3A+IiwiYWxpZ24iOiJsZWZ0IiwiaWQiOiIxZjUwOGQ4Zi0zMTExLTQxMjEtOTQzZi1iMjc4Y2ViYzQ2OTcifSx7InR5cGUiOiJ0ZXh0IiwiaHRtbCI6IjxwIHN0eWxlPVwiY29sb3I6Izg4ODtmb250LXNpemU6MTJweDtcIj5EaWVzZXMgU2NocmVpYmVuIHd1cmRlIG1hc2NoaW5lbGwgZXJzdGVsbHQgdW5kIGlzdCBvaG5lIFVudGVyc2NocmlmdCBnw7xsdGlnLjwvcD4iLCJhbGlnbiI6ImxlZnQiLCJpZCI6ImQzYjZjZjg4LWFhZjAtNDIwMi05YTBkLTQ3NmE1YjFiOGIxMCJ9XX1dLCJpZCI6ImQ3NmE5MWU1LTlmZDAtNDE3Ni1hMDJiLTcyZDliOTVhY2Y1OSJ9XQ==-->
 <!doctype html>
 <html lang="de">
   <head>
     <meta charset="utf-8" />
-    <title>{{ title }}</title>
+    <title>Stornorechnung {{cancellationNumber}}</title>
     <style>
-      body {
-        margin: 0;
-      }
-      .invoice-box {
-        font-size: 12px;
-        line-height: 16px;
-        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-        padding-bottom: 20px;
-      }
-      .invoice-box table {
-        width: 100%;
-        line-height: inherit;
-        text-align: left;
-        border-collapse: collapse;
-      }
-      .invoice-box table td,
-      .invoice-box table th {
-        padding: 5px;
-        vertical-align: top;
-      }
-      .invoice-box table tr.heading td {
-        background: #eee;
-        border-bottom: 1px solid #ddd;
-        font-weight: bold;
-      }
-      /* Position tables ({{{mainContent}}}) use table.pdf-items styling from PRINT_CSS */
-      .header {
-        font-weight: bold;
-        font-size: x-large;
-        padding-bottom: 20px;
-      }
-      .header-address {
-        text-align: left;
-        padding-bottom: 20px;
-      }
-      .details {
-        line-height: 14px;
-        font-size: 10px;
-        text-align: right;
-      }
-      .information {
-        padding-top: 10px;
-        padding-bottom: 10px;
-        line-height: 20px;
-        font-size: 12px;
-        text-align: left;
-      }
-      .cancellation-note {
-        margin-top: 10px;
-        padding: 10px;
-        border-left: 4px solid #c0392b;
-        background: #fdecea;
-        font-size: 12px;
-        line-height: 18px;
-      }
-      .refund-note {
-        margin-top: 10px;
-        padding: 10px;
-        border-left: 4px solid #2e7d32;
-        background: #eaf5ea;
-        font-size: 12px;
-        line-height: 18px;
-      }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #222; font-size: 14px; line-height: 1.5; padding: 1cm; }
+      h1, h2, h3 { color: #1976d2; }
+      table { border-collapse: collapse; }
+      .meta { text-align: right; font-size: 12px; color: #666; margin-bottom: 16px; }
+      .info-box { padding: 12px; background: #f9f9f9; border-radius: 4px; margin: 12px 0; }
+      .cancellation-note { margin-top: 10px; padding: 10px; border-left: 4px solid #c0392b; background: #fdecea; font-size: 12px; line-height: 18px; }
+      .refund-note { margin-top: 10px; padding: 10px; border-left: 4px solid #2e7d32; background: #eaf5ea; font-size: 12px; line-height: 18px; }
+      .booking-detail, .booked-items { width: 100%; }
+      .booking-detail td, .booking-detail th,
+      .booked-items td, .booked-items th { padding: 8px; border-bottom: 1px solid #ddd; }
+      
+  table.pdf-items { width: 100%; border-collapse: collapse; }
+  table.pdf-items--summary td {
+    padding: 3px 6px;
+    font-size: 10px;
+    line-height: 1.4;
+    vertical-align: top;
+    border-bottom: 1px solid #ddd;
+  }
+  table.pdf-items--summary td.label { width: 40%; color: #333; }
+  table.pdf-items--summary td.value { text-align: right; }
+  table.pdf-items--summary tr.totals td { font-weight: bold; }
+  table.pdf-items--summary tr.objects td.value { line-height: 1.5; }
+  table.pdf-items--summary tr.booking-sep td {
+    border-top: 2px solid #bbb;
+    padding-top: 6px;
+    border-bottom: none;
+  }
+  table.pdf-items--compact th,
+  table.pdf-items--compact td {
+    padding: 2px 6px;
+    font-size: 9px;
+    line-height: 1.4;
+    vertical-align: top;
+    border: none;
+    text-align: left;
+  }
+  table.pdf-items--compact thead th {
+    background: #eee;
+    border-bottom: 1px solid #bbb;
+    font-weight: bold;
+  }
+  table.pdf-items--compact tbody tr.item:nth-child(even) td { background: #f5f5f5; }
+  table.pdf-items--compact .num { text-align: right; white-space: nowrap; }
+  table.pdf-items--compact td.sub {
+    color: #555;
+    font-size: 8px;
+    padding-top: 0;
+    padding-bottom: 4px;
+  }
+  table.pdf-items--compact tr.coupon td { color: #555; }
+  table.pdf-items--compact tr.totals-sub td {
+    padding-top: 4px;
+    border-top: 2px solid #000;
+    text-align: right;
+    color: #444;
+  }
+  table.pdf-items--compact tr.brutto td {
+    font-weight: bold;
+    font-size: 10px;
+    border-bottom: 2px solid #000;
+    padding-bottom: 4px;
+    background: none;
+    text-align: right;
+  }
+  table.pdf-items--compact tr.brutto td:first-child,
+  table.pdf-items--compact tr.totals-sub td:first-child { text-align: left; }
+  table.pdf-items--compact tr.meta td {
+    font-size: 10px;
+    color: #444;
+    background: none;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 4px;
+  }
+  table.pdf-items--detailed th,
+  table.pdf-items--detailed td {
+    padding: 4px 6px;
+    font-size: 10px;
+    line-height: 1.4;
+    vertical-align: top;
+    border: none;
+    text-align: left;
+  }
+  table.pdf-items--detailed thead th {
+    background: #eee;
+    border-bottom: 1px solid #bbb;
+    font-weight: bold;
+  }
+  table.pdf-items--detailed tbody tr.item:nth-child(even) td { background: #f5f5f5; }
+  table.pdf-items--detailed .num { text-align: right; white-space: nowrap; }
+  .pdf-booking-meta {
+    font-size: 10px;
+    color: #666;
+    line-height: 1.6;
+    margin: 0 0 8px;
+  }
+  table.pdf-items--detailed td.sub {
+    color: #555;
+    font-size: 9px;
+    padding-top: 0;
+    padding-bottom: 6px;
+  }
+  table.pdf-items--detailed ul.item-list {
+    margin: 4px 0 0;
+    padding-left: 18px;
+  }
+  table.pdf-items--detailed tr.coupon td { color: #555; }
+  table.pdf-items--detailed tr.netto td {
+    padding-top: 8px;
+    border-top: 2px solid #000;
+  }
+  table.pdf-items--detailed tr.netto td,
+  table.pdf-items--detailed tr.mwst td,
+  table.pdf-items--detailed tr.brutto td { text-align: right; }
+  table.pdf-items--detailed tr.netto td:first-child,
+  table.pdf-items--detailed tr.mwst td:first-child,
+  table.pdf-items--detailed tr.brutto td:first-child { text-align: left; }
+  table.pdf-items--detailed tr.brutto td {
+    font-weight: bold;
+    border-bottom: 2px solid #000;
+    padding-bottom: 4px;
+  }
+
     </style>
   </head>
   <body>
     <template data-pdf-footer>
-      <div style="display: flex; justify-content: space-between; width: 100%">
-        <span>{{ title }} {{ cancellationNumber }}</span>
-        <span>{{> pdfPageNumbers }}</span>
+      <div data-pdf-wrapper style="width: 100%; font-size: 8px; color: #666; padding: 0 10mm;">
+        <div style="display: flex; justify-content: space-between"><span>{{title}} {{cancellationNumber}}</span><span>Seite <span class="pageNumber"></span> von <span class="totalPages"></span></span></div>
       </div>
     </template>
-
-    <div class="invoice-box">
-      <table>
-        <tr>
-          <td>
-            <div class="header">Smart City Booking</div>
-            <div class="header-address">{{{invoiceAddress}}}</div>
-          </td>
-          <td>
-            <div class="details">
-              Stornobelegnummer: {{cancellationNumber}} <br />
-              Ursprüngliche Rechnungsnummer: {{originalInvoiceNumber}} <br />
-              <br />
-              {{location}}, {{cancellationDate}}
-            </div>
-          </td>
-        </tr>
-      </table>
-      <div class="information">
-        <span style="font-size: larger; font-weight: bolder">{{ title }}</span>
-        <p>
-          Sehr geehrte Damen und Herren,<br /><br />
-          hiermit stornieren wir die Rechnung mit der Nummer
-          <strong>{{originalInvoiceNumber}}</strong> vom
-          {{originalInvoiceDate}}. Die nachfolgend aufgeführten Positionen
-          werden Ihnen {{#if isFullRefund}}in voller Höhe{{else}}anteilig gemäß
-          der nachfolgenden Berechnung{{/if}} gutgeschrieben.
-        </p>
-
-        {{#if cancellationReason}}
-        <div class="cancellation-note">
-          <strong>Grund der Stornierung:</strong>
-          {{cancellationReason}}
-        </div>
-        {{/if}}
-        <div class="cancellation-note">
-          <strong>Berechnung der Erstattung:</strong><br />
-          Stornierungszeitpunkt: {{cancellationDate}}<br />
-          {{#if refundCalculations}} {{#each refundCalculations}} Buchung
-          {{bookingId}}: {{#if timeBeforeStartText}}Storniert
-          {{timeBeforeStartText}} vor Beginn der Buchung. {{/if}}{{#if
-          appliedTierLabel}}Es gilt die Erstattungsstufe:
-          {{appliedTierLabel}}. {{/if}}Die Erstattung beträgt
-          {{refundPercentage}} % ({{refundAmount}}),
-          {{calculationMode}}.{{#unless @last}}<br />{{/unless}} {{/each}}
-          {{else}} {{#if timeBeforeStartText}}Storniert {{timeBeforeStartText}}
-          vor Beginn der Buchung. {{/if}}{{#if appliedTierLabel}}Es gilt die
-          Erstattungsstufe: {{appliedTierLabel}}. {{/if}}
-          Die Erstattung beträgt {{refundPercentage}} % ({{refundAmount}}),
-          {{calculationMode}}.{{/if}}
-        </div>
-        {{#if alreadyPaid}}
-        <div class="refund-note">
-          Der bereits gezahlte Betrag in Höhe von
-          <strong>{{refundAmount}}</strong> wird Ihnen erstattet. {{#if
-          hasCancellationFee}} Der einbehaltene Betrag beläuft sich auf
-          <strong>{{cancellationFee}}</strong>.{{/if}}
-        </div>
-        {{#if customerBankDetails}}{{{ customerBankDetails }}}{{/if}} {{else}}
-        <p>
-          Sofern noch keine Zahlung erfolgt ist, reduziert sich die
-          Zahlungsverpflichtung um <strong>{{refundAmount}}</strong>. {{#if
-          isFullRefund}}Die ursprüngliche Rechnung
-          <strong>{{originalInvoiceNumber}}</strong> wird damit vollständig
-          aufgehoben.{{else}}Der verbleibende Betrag in Höhe von
-          <strong>{{cancellationFee}}</strong> bleibt bestehen.{{/if}}
-        </p>
-        {{/if}}
-      </div>
-
-      {{{ mainContent }}}
-
-      <div class="information">
-        Bei Rückfragen zu dieser Stornorechnung wenden Sie sich bitte unter
-        Angabe der Stornobelegnummer <strong>{{cancellationNumber}}</strong>
-        an uns.
-      </div>
-
-      <div class="information">
-        Dieses Schreiben wurde maschinell erstellt und ist ohne Unterschrift
-        gültig.
-      </div>
-    </div>
+<div style="font-family:inherit; color:#222222; line-height:1.5; font-size:16px;">
+<div style=""><table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%; border-collapse:collapse;"><tr><td style="vertical-align:top; width:100%;" width="100%"><div class="meta">Stornobelegnummer: {{cancellationNumber}}<br>Ursprüngliche Rechnungsnummer: {{originalInvoiceNumber}}<br>{{location}}, {{cancellationDate}}</div>
+<div>{{{invoiceAddress}}}</div>
+<h1 style="margin:0 0 12px; color:#222222; text-align:left; font-size:26px; line-height:1.3;">Stornorechnung</h1>
+<div style="text-align:left; color:#222222; font-size:16px; line-height:1.5;"><p>Sehr geehrte Damen und Herren,<br><br>hiermit stornieren wir die Rechnung mit der Nummer <strong>{{originalInvoiceNumber}}</strong> vom {{originalInvoiceDate}}. Die nachfolgend aufgeführten Positionen werden Ihnen {{#if isFullRefund}}in voller Höhe{{else}}anteilig gemäß der nachfolgenden Berechnung{{/if}} gutgeschrieben.</p></div>
+{{#if cancellationReason}}<div class="cancellation-note"><strong>Grund der Stornierung:</strong> {{cancellationReason}}</div>{{/if}}
+<div class="cancellation-note"><strong>Berechnung der Erstattung:</strong><br>Stornierungszeitpunkt: {{cancellationDate}}<br>{{#if refundCalculations}}{{#each refundCalculations}}Buchung {{bookingId}}: {{#if timeBeforeStartText}}Storniert {{timeBeforeStartText}} vor Beginn der Buchung. {{/if}}{{#if appliedTierLabel}}Es gilt die Erstattungsstufe: {{appliedTierLabel}}. {{/if}}Die Erstattung beträgt {{refundPercentage}} % ({{refundAmount}}), {{calculationMode}}.{{#unless @last}}<br>{{/unless}}{{/each}}{{else}}{{#if timeBeforeStartText}}Storniert {{timeBeforeStartText}} vor Beginn der Buchung. {{/if}}{{#if appliedTierLabel}}Es gilt die Erstattungsstufe: {{appliedTierLabel}}. {{/if}}Die Erstattung beträgt {{refundPercentage}} % ({{refundAmount}}), {{calculationMode}}.{{/if}}</div>
+{{#if alreadyPaid}}<div class="refund-note">Der bereits gezahlte Betrag in Höhe von <strong>{{refundAmount}}</strong> wird Ihnen erstattet.{{#if hasCancellationFee}} Der einbehaltene Betrag beläuft sich auf <strong>{{cancellationFee}}</strong>.{{/if}}</div>{{#if customerBankDetails}}{{{customerBankDetails}}}{{/if}}{{else}}<p>Sofern noch keine Zahlung erfolgt ist, reduziert sich die Zahlungsverpflichtung um <strong>{{refundAmount}}</strong>. {{#if isFullRefund}}Die ursprüngliche Rechnung <strong>{{originalInvoiceNumber}}</strong> wird damit vollständig aufgehoben.{{else}}Der verbleibende Betrag in Höhe von <strong>{{cancellationFee}}</strong> bleibt bestehen.{{/if}}</p>{{/if}}
+{{{mainContent}}}
+<div style="text-align:left; color:#222222; font-size:16px; line-height:1.5;"><p>Bei Rückfragen zu dieser Stornorechnung wenden Sie sich bitte unter Angabe der Stornobelegnummer <strong>{{cancellationNumber}}</strong> an uns.</p></div>
+<div style="text-align:left; color:#222222; font-size:16px; line-height:1.5;"><p style="color:#888;font-size:12px;">Dieses Schreiben wurde maschinell erstellt und ist ohne Unterschrift gültig.</p></div></td></tr></table></div>
+</div>
   </body>
 </html>
