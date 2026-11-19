@@ -180,6 +180,28 @@ class StoredSecretService {
   }
 
   /**
+   * Marks the tenant's or instance's own secrets the body leaves out as kept:
+   * an update only writes the fields the body names, so a secret left out
+   * would stay as stored even next to a new server. Marked, `restore` keeps
+   * it under the rule of the marker.
+   *
+   * @param {Object} next The tenant or instance about to be stored, mutated
+   * @param {Object} body The body of the update
+   * @returns {Object} `next`
+   */
+  static markOmitted(next, body) {
+    for (const field of Object.keys(OWN_SECRETS)) {
+      if (
+        !Object.prototype.hasOwnProperty.call(body || {}, field) &&
+        next[field]
+      ) {
+        next[field] = STORED_SECRET;
+      }
+    }
+    return next;
+  }
+
+  /**
    * The configuration of an access connection test with each marker
    * resolved by the same rule as a save: the stored secret while the fields
    * it is bound to are the stored ones. A secret that cannot be taken is

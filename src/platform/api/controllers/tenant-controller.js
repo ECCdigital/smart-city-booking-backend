@@ -559,7 +559,9 @@ class TenantController {
       // Backend-owned access-app state (e.g. Salto IQ activations) is
       // neither written by a tenant update nor sent back in the answer.
       AccessAppLifecycleService.preserveBackendState(previousTenant, tenant);
-      // A secret the answer masked comes back as the marker: it stays.
+      // A secret the answer masked comes back as the marker, or is left out:
+      // it stays, for its own server and account only.
+      StoredSecretService.markOmitted(tenant, request.body);
       StoredSecretService.restore(previousTenant, tenant);
 
       const updatedTenant = await TenantManager.storeTenant(tenant);

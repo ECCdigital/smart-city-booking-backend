@@ -104,7 +104,8 @@
       an application's secret its server and account (`secrets` of its
       class). Otherwise the save is refused, `400 secret_required`, with
       `params.missing` naming `{ type?, id?, field, reason }` per secret;
-      the secret has to be typed again.
+      the secret has to be typed again. A mail secret the body leaves out
+      counts as the marker.
     security:
       - bearerAuth: []
     requestBody:

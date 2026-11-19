@@ -475,6 +475,46 @@ describe("StoredSecretService", function () {
     });
   });
 
+  describe("a tenant update that leaves a secret out", function () {
+    async function update(body) {
+      sandbox
+        .stub(TenantManager, "getTenant")
+        .callsFake(async () => storedTenant());
+      sandbox.stub(MediaReferenceGuard, "assertTenantStorable").resolves();
+      const storeTenant = sandbox
+        .stub(TenantManager, "storeTenant")
+        .callsFake(async (value) => value);
+      const res = response(sandbox);
+
+      await TenantController.updateTenant(
+        { user: { id: "admin-1" }, body: { id: "tenant-1", ...body } },
+        res,
+      );
+      return { storeTenant, res };
+    }
+
+    it("refuses another mail server for the stored password", async function () {
+      const { storeTenant, res } = await update({
+        noreplyHost: "smtp.evil.example",
+      });
+
+      assert.ok(storeTenant.notCalled);
+      assert.strictEqual(res.status.firstCall.args[0], 400);
+      assert.deepStrictEqual(res.send.firstCall.args[0].params.missing, [
+        { field: "noreplyPassword", reason: "noreply_host_changed" },
+      ]);
+    });
+
+    it("keeps the stored password while the mail server stays", async function () {
+      const { storeTenant } = await update({ name: "Verein e. V." });
+
+      assert.strictEqual(
+        storeTenant.firstCall.args[0].noreplyPassword,
+        "smtp-pass",
+      );
+    });
+  });
+
   describe("the instance routes", function () {
     function storedInstance() {
       return {
