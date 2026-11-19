@@ -69,6 +69,11 @@ module.exports = {
  * A tier of hours that are no whole days falls to the day below. Where two
  * tiers fall to the same day, the one with the most hours stays, so the days
  * stay unique and the percentages keep falling.
+ *
+ * @param {Array<{ hoursBeforeStart?: number, daysBeforeStart?: number, refundPercentage: number }>} tiers
+ *   The stored tiers, in hours or, not yet migrated, in days
+ * @returns {Array<{ daysBeforeStart: number, refundPercentage: number }>}
+ *   One tier per day, by descending days
  */
 function tiersInDays(tiers) {
   const hoursOf = (tier) => tier.hoursBeforeStart ?? tier.daysBeforeStart * 24;

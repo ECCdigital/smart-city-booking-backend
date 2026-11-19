@@ -279,7 +279,7 @@ class CancellationRefundService {
     let tier = { appliedTierHours: null, appliedTierDays: null, label: null };
     let deadline = null;
     let atStart = false;
-    let fallback = false;
+    let belowLowestDeadline = false;
 
     if (Number.isFinite(tierHours)) {
       tier = {
@@ -292,12 +292,12 @@ class CancellationRefundService {
           ? formatDays(tierHours / HOURS_PER_DAY)
           : formatHours(tierHours);
       atStart = tierHours === 0;
-      fallback = calculation.hoursBeforeStart < tierHours;
+      belowLowestDeadline = calculation.hoursBeforeStart < tierHours;
     } else if (Number.isFinite(tierDays)) {
       tier = { appliedTierHours: null, appliedTierDays: tierDays, label: null };
       deadline = formatDays(tierDays);
       atStart = tierDays === 0;
-      fallback = calculation.daysBeforeStart < tierDays;
+      belowLowestDeadline = calculation.daysBeforeStart < tierDays;
     } else {
       return tier;
     }
@@ -309,7 +309,7 @@ class CancellationRefundService {
       return tier;
     }
 
-    if (fallback) {
+    if (belowLowestDeadline) {
       tier.label = atStart ? "nach Beginn" : `unter ${deadline} vor Beginn`;
     } else {
       tier.label = atStart ? "bis zum Beginn" : `bis ${deadline} vor Beginn`;

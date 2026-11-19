@@ -345,18 +345,18 @@ describe("CancellationRefundService", function () {
   });
 
   it("describes no time before the start once the booking has begun", function () {
-    const describe = (calculation) =>
+    const timeBefore = (calculation) =>
       CancellationRefundService.describeTimeBeforeStart(calculation);
 
     for (const hoursBeforeStart of [-1, -3, -30]) {
-      assert.deepStrictEqual(describe({ hoursBeforeStart }), {
+      assert.deepStrictEqual(timeBefore({ hoursBeforeStart }), {
         hoursBeforeStart: 0,
         daysBeforeStart: 0,
         label: null,
         detailedLabel: null,
       });
     }
-    assert.deepStrictEqual(describe({ daysBeforeStart: -2 }), {
+    assert.deepStrictEqual(timeBefore({ daysBeforeStart: -2 }), {
       hoursBeforeStart: null,
       daysBeforeStart: 0,
       label: null,

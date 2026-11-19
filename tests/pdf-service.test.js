@@ -389,6 +389,7 @@ describe("PdfService document generation (rendering only)", () => {
     assert.ok(!html.includes("-119,00"));
   });
 
+  /** Renders the default single cancellation receipt; without a calculation the fallback one. */
   function renderSingleCancellation(refundCalculation) {
     sinon.stub(TenantManager, "getTenant").resolves({
       id: "tenant-1",
@@ -403,7 +404,9 @@ describe("PdfService document generation (rendering only)", () => {
       "booking-1",
       "ST-1-1",
       "RE-1-1",
-      { alreadyPaid: true, refundCalculation },
+      refundCalculation
+        ? { alreadyPaid: true, refundCalculation }
+        : { alreadyPaid: true },
     ).then((result) => result.buffer.toString());
   }
 
@@ -459,23 +462,7 @@ describe("PdfService document generation (rendering only)", () => {
   });
 
   it("leaves no empty line in the calculation without a time span", async () => {
-    sinon.stub(TenantManager, "getTenant").resolves({
-      id: "tenant-1",
-      cancellationTemplate: "",
-      location: "Musterstadt",
-    });
-    sinon.stub(BookingManager, "getBooking").resolves(makeBooking());
-    sinon.stub(BookableManager, "getBookables").resolves(BOOKABLES);
-
-    const result = await PdfService.generateSingleCancellationReceipt(
-      "tenant-1",
-      "booking-1",
-      "ST-1-1",
-      "RE-1-1",
-      { alreadyPaid: true },
-    );
-
-    const html = result.buffer.toString();
+    const html = await renderSingleCancellation(null);
     assert.doesNotMatch(html, /<br \/>\s*<br \/>\s*Die Erstattung/);
     assert.match(html, /Die Erstattung beträgt\s+100 %/);
   });
