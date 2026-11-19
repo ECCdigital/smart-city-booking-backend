@@ -30,13 +30,13 @@ For API-only setup, see the [README Quick Start](../README.md#quick-start). For 
 
 ## Version alignment
 
-| Component  | Branch / line                     | Notes                                      |
-| ---------- | --------------------------------- | ------------------------------------------ |
-| Backend    | `develop` or a release tag `v4.…` | v4 API                                     |
-| Admin UI   | `develop` or a release tag `v4.…` | Same release as the backend, e.g. `v4.3.3` |
-| Storefront | `develop` or a release tag `v1.…` | Storefront v1.x ↔ backend v4.x only       |
+| Component  | Branch / line                     | Notes                                         |
+| ---------- | --------------------------------- | --------------------------------------------- |
+| Backend    | `develop` or a release tag `v4.…` | v4 API                                        |
+| Admin UI   | `develop` or a release tag `v4.…` | Same minor line as the backend, e.g. `v4.3.…` |
+| Storefront | `develop` or a release tag `v1.…` | Storefront v1.x ↔ backend v4.x only          |
 
-Releases that fit together: backend and Admin UI `v4.3.3` with Storefront `v1.2.1`. The Compose example pins them in `.env.full-stack.example`.
+Releases that fit together: backend `v4.3.4`, Admin UI `v4.3.3` and Storefront `v1.2.1`. The Compose example pins them in `.env.full-stack.example`.
 
 `develop` carries the newest state of each repo. To **contribute**, work on the newest `version/<major>.<minor>.x` of the repo instead, and put fixes on the oldest maintained one; they are merged forward from there. `develop` gets nothing directly: GitHub proposes it as a pull request's base, so switch the base by hand to the `version/…` branch. The rule in full: [Versions & Branches](../README.md#versions--branches).
 

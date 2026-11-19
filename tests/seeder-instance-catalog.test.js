@@ -65,6 +65,7 @@ describe("seeder: instance catalog", function () {
 
   it("leaves an existing instance catalog alone", async function () {
     const existing = { type: "instance", name: "Raumbuchung Musterstadt" };
+    const before = { ...existing };
     const mongoose = fakeMongoose({
       instances: [{ isInitialized: true, ownerUserIds: ["admin"] }],
       catalogs: [existing],
@@ -72,7 +73,7 @@ describe("seeder: instance catalog", function () {
 
     await seed(mongoose);
 
-    expect(instanceCatalogs(mongoose)).to.deep.equal([existing]);
+    expect(instanceCatalogs(mongoose)).to.deep.equal([before]);
   });
 
   it("does not take a tenant's catalog for the instance's", async function () {
