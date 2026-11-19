@@ -258,7 +258,7 @@ Removes a booking for good: its access is taken back, its documents removed, the
 
 ## Cancellation refunds
 
-Tenant owners configure `cancellationRefundTiers` through the existing tenant create/update API. An empty array means a full refund.
+Tenant owners configure `cancellationRefundTiers` through the existing tenant create/update API: a list of `{ hoursBeforeStart, refundPercentage }`, the threshold in whole hours before the start, unique. An empty array means a full refund.
 
 Public JSON bookable responses under `/json/:tenant/bookables` and `/json/:tenant/bookables/:id` (including nested `relatedBookables` and event tickets) include the tenant’s `cancellationRefundTiers` so storefronts can show the refund policy without an extra tenant request.
 

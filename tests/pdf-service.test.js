@@ -360,13 +360,13 @@ describe("PdfService document generation (rendering only)", () => {
         alreadyPaid: true,
         refundCalculation: {
           cancelledAt: Date.parse("2026-07-20T12:00:00+02:00"),
-          daysBeforeStart: 12,
+          hoursBeforeStart: 290,
           originalAmountEur: 119,
           suggestedRefundPercentage: 50,
           appliedRefundPercentage: 50,
           refundAmountEur: 59.5,
           cancellationFeeEur: 59.5,
-          appliedTierDays: 0,
+          appliedTierHours: 0,
           origin: "user",
           adminOverride: false,
         },
@@ -374,12 +374,97 @@ describe("PdfService document generation (rendering only)", () => {
     );
 
     const html = result.buffer.toString();
-    assert.ok(html.includes("50 % Erstattung"));
-    assert.ok(html.includes("12 Kalendertage"));
+    assert.match(
+      html,
+      /Storniert\s+12 Tage\s+vor Beginn der Buchung\.\s+Es gilt die\s+Erstattungsstufe:\s+bis zum Beginn\./,
+    );
+    assert.match(
+      html,
+      /Die Erstattung beträgt\s+50 %\s+\(59,50\s?€\),\s+Automatisch nach Mandantenregel\./,
+    );
+    assert.ok(!html.includes("Kalendertage"));
     assert.ok(html.includes("Automatisch nach Mandantenregel"));
     assert.ok(html.includes("-59,50"));
     assert.ok(html.includes("59,50"));
     assert.ok(!html.includes("-119,00"));
+  });
+
+  /** Renders the default single cancellation receipt; without a calculation the fallback one. */
+  function renderSingleCancellation(refundCalculation) {
+    sinon.stub(TenantManager, "getTenant").resolves({
+      id: "tenant-1",
+      cancellationTemplate: "",
+      location: "Musterstadt",
+    });
+    sinon.stub(BookingManager, "getBooking").resolves(makeBooking());
+    sinon.stub(BookableManager, "getBookables").resolves(BOOKABLES);
+
+    return PdfService.generateSingleCancellationReceipt(
+      "tenant-1",
+      "booking-1",
+      "ST-1-1",
+      "RE-1-1",
+      refundCalculation
+        ? { alreadyPaid: true, refundCalculation }
+        : { alreadyPaid: true },
+    ).then((result) => result.buffer.toString());
+  }
+
+  it("names no tier on a cancellation by the system or an override", async () => {
+    const system = {
+      cancelledAt: Date.parse("2026-07-20T12:00:00+02:00"),
+      hoursBeforeStart: 5,
+      originalAmountEur: 119,
+      suggestedRefundPercentage: 0,
+      appliedRefundPercentage: 100,
+      refundAmountEur: 119,
+      cancellationFeeEur: 0,
+      appliedTierHours: 0,
+      origin: "system",
+      adminOverride: false,
+    };
+
+    const html = await renderSingleCancellation(system);
+
+    assert.ok(!html.includes("Erstattungsstufe"));
+    assert.match(html, /Die Erstattung beträgt\s+100 %/);
+
+    const data = PdfService._buildCancellationCalculationData({
+      ...system,
+      hoursBeforeStart: 50,
+      appliedTierHours: 48,
+      suggestedRefundPercentage: 50,
+      origin: "admin",
+      adminOverride: true,
+    });
+    assert.strictEqual(data.appliedTierLabel, null);
+    assert.strictEqual(data.appliedTierHours, 48);
+    assert.strictEqual(data.appliedTierDays, 2);
+  });
+
+  it("prints no time before the start once the booking has begun", async () => {
+    const html = await renderSingleCancellation({
+      cancelledAt: Date.parse("2026-07-20T12:00:00+02:00"),
+      hoursBeforeStart: -3,
+      originalAmountEur: 119,
+      suggestedRefundPercentage: 0,
+      appliedRefundPercentage: 0,
+      refundAmountEur: 0,
+      cancellationFeeEur: 119,
+      appliedTierHours: 0,
+      origin: "admin",
+      adminOverride: false,
+    });
+
+    assert.ok(!html.includes("-3"));
+    assert.ok(!html.includes("vor Beginn der Buchung"));
+    assert.match(html, /Es gilt die\s+Erstattungsstufe:\s+nach Beginn\./);
+  });
+
+  it("leaves no empty line in the calculation without a time span", async () => {
+    const html = await renderSingleCancellation(null);
+    assert.doesNotMatch(html, /<br \/>\s*<br \/>\s*Die Erstattung/);
+    assert.match(html, /Die Erstattung beträgt\s+100 %/);
   });
 
   it("renders aggregated cancellations using each booking refund", async () => {
@@ -412,26 +497,26 @@ describe("PdfService document generation (rendering only)", () => {
           {
             bookingId: "booking-1",
             cancelledAt,
-            daysBeforeStart: 12,
+            hoursBeforeStart: 290,
             originalAmountEur: 119,
             suggestedRefundPercentage: 100,
             appliedRefundPercentage: 100,
             refundAmountEur: 119,
             cancellationFeeEur: 0,
-            appliedTierDays: 20,
+            appliedTierHours: 240,
             origin: "admin",
             adminOverride: false,
           },
           {
             bookingId: "booking-2",
             cancelledAt,
-            daysBeforeStart: 5,
+            hoursBeforeStart: 13,
             originalAmountEur: 119,
             suggestedRefundPercentage: 50,
             appliedRefundPercentage: 50,
             refundAmountEur: 59.5,
             cancellationFeeEur: 59.5,
-            appliedTierDays: 0,
+            appliedTierHours: 12,
             origin: "admin",
             adminOverride: false,
           },
@@ -450,6 +535,14 @@ describe("PdfService document generation (rendering only)", () => {
     assert.ok(html.includes("IBAN: DE89370400440532013000"));
     assert.match(html, /Buchung\s+booking-1/);
     assert.match(html, /Buchung\s+booking-2/);
+    assert.match(
+      html,
+      /Storniert\s+12 Tage\s+vor Beginn der Buchung\.\s+Es gilt die\s+Erstattungsstufe:\s+bis 10 Tage vor Beginn\.\s+Die Erstattung beträgt\s+100 %\s+\(119,00\s?€\),\s+Automatisch nach Mandantenregel\./,
+    );
+    assert.match(
+      html,
+      /Storniert\s+13 Stunden\s+vor Beginn der Buchung\.\s+Es gilt die\s+Erstattungsstufe:\s+bis 12 Stunden vor Beginn\./,
+    );
     assert.ok(html.includes("-178,50"));
     assert.ok(html.includes("59,50"));
   });
@@ -1066,6 +1159,23 @@ describe("pdf sample data", () => {
     assert.ok(!data.bookingEntries.includes("Buchungsnummer:"));
     assert.strictEqual(data.booking.id, "BK-2026-0042");
     assert.ok(data.booking.paymentDate);
+  });
+
+  it("cancellation sample data carries every refund field of a receipt", () => {
+    const sample = buildSampleData("cancellation");
+    const fields = PdfService._buildCancellationCalculationData({
+      hoursBeforeStart: 480,
+      appliedTierHours: 336,
+      suggestedRefundPercentage: 100,
+      appliedRefundPercentage: 100,
+      cancellationFeeEur: 0,
+      origin: "user",
+      adminOverride: false,
+    });
+
+    for (const [field, value] of Object.entries(fields)) {
+      assert.deepStrictEqual(sample[field], value, field);
+    }
   });
 
   it("default templates render with sample data without errors", () => {

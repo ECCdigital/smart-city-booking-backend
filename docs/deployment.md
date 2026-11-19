@@ -102,9 +102,14 @@ Database migration scripts live in `migrations/scripts/`. Run them according to 
 
 Pending migrations run at start-up under a MongoDB lock, so parallel processes run them once, and `GET /healthz/ready` answers `503` until they have succeeded in that process — route traffic by that probe. The cutover to the tenant supervision is described in [tenant-supervision-cutover.md](tenant-supervision-cutover.md).
 
+## Scheduled rules
+
+`RULE_ENGINE_ENABLED=true` starts the rule engine in every process that has it set. Unlike the migrations, the scheduled runs take no lock: with two processes, every rule runs twice. Set it on exactly one process, for example a dedicated worker, and leave it `false` on the others. On those, `POST /api/rules/:id/run` answers `409`, a dry run still works, so route manual runs to the process with the engine.
+
 ## Operations checklist
 
 - Keep MongoDB data on persistent storage
 - Rotate secrets regularly
 - Change default admin credentials after first login (`INIT_ADMIN`, `INIT_ADMIN_SECRET`)
 - Back up the database before major version upgrades
+- Enable the rule engine (`RULE_ENGINE_ENABLED`) on exactly one process

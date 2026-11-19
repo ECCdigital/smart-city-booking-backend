@@ -110,7 +110,7 @@ describe("BookingService cancellation refunds", function () {
       .resolves(new Booking(booking({ attachments: [INVOICE] })));
     sinon.stub(TenantManager, "getTenant").resolves({
       id: "tenant-1",
-      cancellationRefundTiers: [{ daysBeforeStart: 0, refundPercentage: 50 }],
+      cancellationRefundTiers: [{ hoursBeforeStart: 0, refundPercentage: 50 }],
     });
     const pdf = stubIssuance().single;
     const saved = stubCancellationSideEffects();
@@ -150,7 +150,7 @@ describe("BookingService cancellation refunds", function () {
     sinon.stub(BookingManager, "getBooking").resolves(new Booking(booking()));
     sinon.stub(TenantManager, "getTenant").resolves({
       id: "tenant-1",
-      cancellationRefundTiers: [{ daysBeforeStart: 0, refundPercentage: 50 }],
+      cancellationRefundTiers: [{ hoursBeforeStart: 0, refundPercentage: 50 }],
     });
     const pdf = stubIssuance().single;
     const saved = stubCancellationSideEffects();
@@ -187,8 +187,8 @@ describe("BookingService cancellation refunds", function () {
     sinon.stub(TenantManager, "getTenant").resolves({
       id: "tenant-1",
       cancellationRefundTiers: [
-        { daysBeforeStart: 20, refundPercentage: 100 },
-        { daysBeforeStart: 0, refundPercentage: 50 },
+        { hoursBeforeStart: 480, refundPercentage: 100 },
+        { hoursBeforeStart: 0, refundPercentage: 50 },
       ],
     });
     sinon.stub(GroupBookingManager, "getGroupBooking").resolves({
@@ -215,8 +215,8 @@ describe("BookingService cancellation refunds", function () {
       [50, 100],
     );
     assert.deepStrictEqual(
-      preview.bookings.map((entry) => entry.daysBeforeStart),
-      [5, 30],
+      preview.bookings.map((entry) => entry.hoursBeforeStart),
+      [5 * 24, 30 * 24],
     );
     assert.strictEqual(preview.originalAmountEur, 30);
     assert.strictEqual(preview.refundAmountEur, 20);
@@ -243,8 +243,8 @@ describe("BookingService cancellation refunds", function () {
     sinon.stub(TenantManager, "getTenant").resolves({
       id: "tenant-1",
       cancellationRefundTiers: [
-        { daysBeforeStart: 20, refundPercentage: 100 },
-        { daysBeforeStart: 0, refundPercentage: 50 },
+        { hoursBeforeStart: 480, refundPercentage: 100 },
+        { hoursBeforeStart: 0, refundPercentage: 50 },
       ],
     });
     sinon.stub(GroupBookingManager, "getGroupBooking").resolves({
@@ -324,7 +324,7 @@ describe("BookingService cancellation refunds", function () {
     ];
     sinon.stub(TenantManager, "getTenant").resolves({
       id: "tenant-1",
-      cancellationRefundTiers: [{ daysBeforeStart: 0, refundPercentage: 100 }],
+      cancellationRefundTiers: [{ hoursBeforeStart: 0, refundPercentage: 100 }],
     });
     sinon.stub(GroupBookingManager, "getGroupBooking").resolves({
       id: "group-1",
@@ -364,13 +364,13 @@ describe("BookingService cancellation refunds", function () {
       rejectionReason: "Changed plans",
       cancellationRefund: {
         cancelledAt: Date.UTC(2026, 6, 1, 8),
-        daysBeforeStart: 10,
+        hoursBeforeStart: 240,
         originalAmountEur: 97.5,
         suggestedRefundPercentage: 50,
         appliedRefundPercentage: 25,
         refundAmountEur: 24.38,
         cancellationFeeEur: 73.12,
-        appliedTierDays: 0,
+        appliedTierHours: 0,
         origin: "admin",
         adminOverride: true,
         cancelledByUserId: "admin-1",

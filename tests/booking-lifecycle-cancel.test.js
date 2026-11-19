@@ -63,13 +63,13 @@ function cancelled(overrides = {}) {
     rejectionReason: "Irrtum",
     cancellationRefund: {
       cancelledAt: NOW,
-      daysBeforeStart: 10,
+      hoursBeforeStart: 240,
       originalAmountEur: 40,
       suggestedRefundPercentage: 100,
       appliedRefundPercentage: 50,
       refundAmountEur: 20,
       cancellationFeeEur: 20,
-      appliedTierDays: null,
+      appliedTierHours: null,
       origin: "admin",
       adminOverride: true,
       cancelledByUserId: "admin-1",
@@ -402,7 +402,9 @@ describe("booking lifecycle: cancel", function () {
       ],
       tenant: {
         id: TENANT,
-        cancellationRefundTiers: [{ daysBeforeStart: 0, refundPercentage: 50 }],
+        cancellationRefundTiers: [
+          { hoursBeforeStart: 0, refundPercentage: 50 },
+        ],
       },
     });
 
@@ -459,7 +461,7 @@ describe("booking lifecycle: cancel", function () {
   it("an admin refund percentage overrides the tiers; a system trigger refunds in full", async function () {
     const tenant = {
       id: TENANT,
-      cancellationRefundTiers: [{ daysBeforeStart: 0, refundPercentage: 50 }],
+      cancellationRefundTiers: [{ hoursBeforeStart: 0, refundPercentage: 50 }],
     };
     const admin = lifecycleOver({ bookings: [booking()], tenant });
     await admin.lifecycle.cancel(TENANT, "B-1", {
@@ -483,7 +485,7 @@ describe("booking lifecycle: cancel", function () {
   it("rejects a request free of charge, whatever the tiers or an admin override say; a customer withdrawing it pays the tiers", async function () {
     const tenant = {
       id: TENANT,
-      cancellationRefundTiers: [{ daysBeforeStart: 0, refundPercentage: 50 }],
+      cancellationRefundTiers: [{ hoursBeforeStart: 0, refundPercentage: 50 }],
     };
     for (const trigger of [TRIGGER.ADMIN, TRIGGER.SYSTEM]) {
       const { adapters, lifecycle } = lifecycleOver({
@@ -724,7 +726,9 @@ describe("booking lifecycle: requestCancel", function () {
       bookings: [booking()],
       tenant: {
         id: TENANT,
-        cancellationRefundTiers: [{ daysBeforeStart: 0, refundPercentage: 50 }],
+        cancellationRefundTiers: [
+          { hoursBeforeStart: 0, refundPercentage: 50 },
+        ],
       },
     });
 
@@ -773,8 +777,8 @@ describe("booking lifecycle: requestCancel", function () {
       cancellationFeeEur: 20,
       suggestedRefundPercentage: 50,
       appliedRefundPercentage: 50,
-      daysBeforeStart: 10,
-      appliedTierDays: 0,
+      hoursBeforeStart: 240,
+      appliedTierHours: 0,
     });
     expect(adapters.access.calls).to.deep.equal([]);
     expect(adapters.documents.calls).to.deep.equal([]);
