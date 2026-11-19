@@ -3,7 +3,7 @@ const PmPaymentApplication = require("./payment/pmPaymentApplication");
 const GiroCockpitApplication = require("./payment/giroCockpitApplication");
 const InvoiceApplication = require("./payment/invoiceApplication");
 const AuthApplication = require("./authApplication");
-const { createAccessApplication } = require("./accessApplication");
+const { AccessApplication, accessAppTypes } = require("./accessApplication");
 const CardAuthApplication = require("./cardAuthApplication");
 
 const PAYMENT_CLASS_MAP = {
@@ -19,22 +19,30 @@ const TYPE_CLASS_MAP = {
 };
 
 class ApplicationFactory {
+  /**
+   * The class of an application, `null` for a type or payment id it does
+   * not know. An access provider without a class of its own is an
+   * `AccessApplication`, as `create` makes it.
+   *
+   * @param {{type: string, id: string}} data
+   * @returns {Function|null}
+   */
+  static classOf(data) {
+    if (data?.type === "payment") return PAYMENT_CLASS_MAP[data.id] || null;
+    if (data?.type === "access") {
+      return accessAppTypes[data.id] || AccessApplication;
+    }
+    return TYPE_CLASS_MAP[data?.type] || null;
+  }
+
   static create(data) {
-    if (data.type === "payment") {
-      const PaymentClass = PAYMENT_CLASS_MAP[data.id];
-      if (!PaymentClass) {
-        throw new Error(`Unknown payment application id: ${data.id}`);
-      }
-      return new PaymentClass(data);
-    }
-
-    if (data.type === "access") {
-      return createAccessApplication(data);
-    }
-
-    const ApplicationClass = TYPE_CLASS_MAP[data.type];
+    const ApplicationClass = ApplicationFactory.classOf(data);
     if (!ApplicationClass) {
-      throw new Error(`Unknown application type: ${data.type}`);
+      throw new Error(
+        data.type === "payment"
+          ? `Unknown payment application id: ${data.id}`
+          : `Unknown application type: ${data.type}`,
+      );
     }
     return new ApplicationClass(data);
   }
@@ -45,3 +53,5 @@ class ApplicationFactory {
 }
 
 module.exports = ApplicationFactory;
+module.exports.PAYMENT_CLASS_MAP = PAYMENT_CLASS_MAP;
+module.exports.TYPE_CLASS_MAP = TYPE_CLASS_MAP;

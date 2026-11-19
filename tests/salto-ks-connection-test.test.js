@@ -6,16 +6,16 @@ process.env.CRYPTO_SECRET =
   process.env.CRYPTO_SECRET || "0123456789abcdef0123456789abcdef";
 
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
+const AccessInfoService = require("../src/commons/services/access/access-info-service");
 const {
-  testProvider,
-} = require("../src/commons/services/access/clients/access-test-registry");
+  STORED_SECRET,
+} = require("../src/commons/services/stored-secret-service");
 const {
   installFakeSaltoKsConnectApi,
   saltoHttpError,
   identityError,
   FAKE_SITE_ID,
 } = require("./helpers/fake-salto-ks-api-client");
-require("../src/commons/services/access/clients");
 
 const IQ_ID = "5dfdc54e-8335-11f0-a2ed-6045bd92d38f";
 const OTHER_SYSTEM_USER = "other-system-user@example.test";
@@ -98,7 +98,9 @@ describe("Salto KS connection test", () => {
   });
 
   async function test(config = CONFIG) {
-    return testProvider("salto-ks", config, { tenantId: "tenant-1" });
+    return AccessInfoService.testConnection("salto-ks", config, {
+      tenantId: "tenant-1",
+    });
   }
 
   it("reports remote_access and the activation state per IQ", async () => {
@@ -123,7 +125,7 @@ describe("Salto KS connection test", () => {
   });
 
   it("reports the activation state of the identity under test", async () => {
-    const result = await testProvider(
+    const result = await AccessInfoService.testConnection(
       "salto-ks",
       { ...CONFIG, username: OTHER_SYSTEM_USER },
       { tenantId: "tenant-1" },
@@ -357,15 +359,18 @@ describe("Salto KS connection test with the stored secrets", () => {
     password: "stored-password",
   };
 
-  /** The form as the admin UI sends it: the identity, the secrets left empty. */
+  /**
+   * The form as the admin UI sends it: the identity, the secrets as the
+   * answer hands them out.
+   */
   function form(overrides = {}) {
     return {
       clientId: STORED.clientId,
-      clientSecret: "",
+      clientSecret: STORED_SECRET,
       siteId: STORED.siteId,
       environment: STORED.environment,
       username: STORED.username,
-      password: "",
+      password: STORED_SECRET,
       ...overrides,
     };
   }
@@ -393,10 +398,12 @@ describe("Salto KS connection test with the stored secrets", () => {
   });
 
   async function test(config) {
-    return testProvider("salto-ks", config, { tenantId: "tenant-1" });
+    return AccessInfoService.testConnection("salto-ks", config, {
+      tenantId: "tenant-1",
+    });
   }
 
-  it("tests with the stored secrets when the form leaves them empty", async () => {
+  it("tests with the stored secrets where the form sends the marker", async () => {
     const result = await test(form());
 
     expect(result.success).to.be.true;
@@ -415,14 +422,17 @@ describe("Salto KS connection test with the stored secrets", () => {
     });
   });
 
-  it("tests with the stored secrets when the form leaves them out", async () => {
-    const config = form();
-    delete config.clientSecret;
-    delete config.password;
+  // As on a save, an empty secret is none: only the marker stands for the
+  // stored one.
+  it("takes no stored secret where the form leaves it empty", async () => {
+    const result = await test(form({ clientSecret: "", password: "" }));
 
-    const result = await test(config);
-
-    expect(result.success).to.be.true;
+    expect(result).to.deep.include({
+      success: false,
+      code: "missing_fields",
+      missing: [{ field: "clientSecret" }, { field: "password" }],
+    });
+    expect(salto.logins).to.be.empty;
   });
 
   it("tests a stored application that is not switched on yet", async () => {
@@ -544,11 +554,16 @@ describe("Salto KS connection test with the stored secrets", () => {
     });
   });
 
-  // A secret neither sent nor stored is `missing_secret`'s, with its reason.
-  it("names every missing required field but the secrets, as the request names it", async () => {
+  // A marker without a stored secret is `missing_secret`'s, with its reason.
+  it("names every missing required field but the markers, as the request names it", async () => {
     storeTenant(null);
 
-    const result = await test({ siteId: "Labor", environment: "accept" });
+    const result = await test({
+      siteId: "Labor",
+      environment: "accept",
+      clientSecret: STORED_SECRET,
+      password: STORED_SECRET,
+    });
 
     expect(result).to.deep.include({
       success: false,
@@ -574,7 +589,7 @@ describe("Salto KS connection test over the real transport", () => {
   }
 
   async function test(config = {}) {
-    return testProvider(
+    return AccessInfoService.testConnection(
       "salto-ks",
       { ...CONFIG, siteId: "", ...config },
       { tenantId: "tenant-1" },

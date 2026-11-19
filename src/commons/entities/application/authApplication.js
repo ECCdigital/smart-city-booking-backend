@@ -15,6 +15,10 @@ class AuthApplication extends TenantApplication {
     this.roleMapping = params.roleMapping || {};
   }
 
+  static get secrets() {
+    return { privateClientSecret: ["serverUrl", "realm", "privateClient"] };
+  }
+
   /**
    * Decrypts the private client secret if it exists.
    */

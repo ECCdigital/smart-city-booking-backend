@@ -15,6 +15,15 @@ class EPayBLApplication extends PaymentApplication {
     this.notificationSecret = params.notificationSecret || "";
   }
 
+  static get secrets() {
+    const boundTo = ["baseUrl", "merchantId"];
+    return {
+      certPassphrase: boundTo,
+      notificationSecret: boundTo,
+      clientP12: boundTo,
+    };
+  }
+
   decrypt() {
     if (this.certPassphrase) {
       this.certPassphrase = SecurityUtils.decrypt(this.certPassphrase);

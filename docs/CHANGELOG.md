@@ -9,6 +9,7 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ### Security
 
+- Stored secrets are write only ([ECCdigital/tickets#569](https://github.com/ECCdigital/tickets/issues/569)): tenant and instance answers carry `__stored_secret__` instead of a stored mail password, Graph or Keycloak client secret, card auth token and the secrets of GiroCockpit, pmPayment, ePayBL, Nuki, Salto KS, iFBS and Pareva. A save that hands the marker back keeps the secret, an empty value removes it. The marker keeps a secret only while the server and account it is bound to stay the same (`secrets` of each application class): otherwise a save answers `400 secret_required` (a tenant's mail secret left out of the body counts as the marker) and an access connection test `missing_secret`. Salto KS no longer takes a stored secret for an empty field. Needs the Admin UI with ECCdigital/tickets#569. OpenAPI updated
 - Booking references are drawn from a cryptographically secure source: the characters of a booking reference (`XXXX-XXXX`) and of a group booking reference (`G-XXXX-XXXX`) come from `crypto.randomInt` instead of `Math.random`, so they are harder to predict. Format, alphabet, length and the retry on a taken reference are unchanged
 
 ### Changed
