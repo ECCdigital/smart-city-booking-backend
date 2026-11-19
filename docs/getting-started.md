@@ -30,11 +30,13 @@ For API-only setup, see the [README Quick Start](../README.md#quick-start). For 
 
 ## Version alignment
 
-| Component  | Branch / line                     | Notes                                |
-| ---------- | --------------------------------- | ------------------------------------ |
-| Backend    | `develop` or a release tag `v4.…` | v4 API                               |
-| Admin UI   | `develop` or a release tag `v4.…` | Must match backend major line        |
-| Storefront | `develop` or a release tag `v1.…` | Storefront v1.x ↔ backend v4.x only |
+| Component  | Branch / line                     | Notes                                      |
+| ---------- | --------------------------------- | ------------------------------------------ |
+| Backend    | `develop` or a release tag `v4.…` | v4 API                                     |
+| Admin UI   | `develop` or a release tag `v4.…` | Same release as the backend, e.g. `v4.3.3` |
+| Storefront | `develop` or a release tag `v1.…` | Storefront v1.x ↔ backend v4.x only       |
+
+Releases that fit together: backend and Admin UI `v4.3.3` with Storefront `v1.2.1`. The Compose example pins them in `.env.full-stack.example`.
 
 `develop` carries the newest state of each repo. To **contribute**, work on the newest `version/<major>.<minor>.x` of the repo instead, and put fixes on the oldest maintained one; they are merged forward from there. `develop` gets nothing directly: GitHub proposes it as a pull request's base, so switch the base by hand to the `version/…` branch. The rule in full: [Versions & Branches](../README.md#versions--branches).
 
@@ -180,7 +182,7 @@ From the backend repo root:
 ```bash
 cp docker-compose.full-stack.example.yml docker-compose.yml
 cp .env.full-stack.example .env
-# Edit secrets in .env (CRYPTO_SECRET, JWT_*, INIT_ADMIN_SECRET, optional Nextcloud)
+# Edit secrets in .env (MONGO_ROOT_PASSWORD, CRYPTO_SECRET, JWT_*, INIT_ADMIN_SECRET, optional Nextcloud)
 docker compose up -d --build
 ```
 
@@ -199,7 +201,11 @@ docker compose up -d --build
 - Storefront `NUXT_API_BASE_URL=http://backend:8081` — **container → container** (BFF), not `localhost:8080`
 - Storefront public URLs remain `http://localhost:3000`
 
-The example builds the backend from the current directory (`.`) and the frontends from their public GitHub `develop` branches. For a more stable deploy, pin a release tag in `docker-compose.yml` (`#v<major>.<minor>.<patch>` instead of `#develop`) or switch `build:` to published GHCR images.
+The example builds all three services from release tags of their public GitHub repositories: `BACKEND_VERSION`, `ADMIN_UI_VERSION` and `STOREFRONT_VERSION` in `.env`. To update, change them there and run `docker compose up -d --build`; the pairs that fit are in [Version alignment](#version-alignment). To run a change of your own backend checkout, switch the backend's `context:` to `.`.
+
+MongoDB requires a login: the example creates the root account from `MONGO_ROOT_USERNAME` and `MONGO_ROOT_PASSWORD` on the first start, and the backend signs in with it. The account is created with an empty data volume only; an installation from an older example without a login is moved over as in [deployment.md](deployment.md#moving-an-existing-installation-to-a-mongodb-login).
+
+The example publishes every port on all interfaces of the host, MongoDB's too, and Docker opens them past host firewalls such as ufw. That is fine on a workstation; before a server is reachable from the internet, read [Full stack with Docker Compose](deployment.md#full-stack-with-docker-compose).
 
 Nextcloud is **not** included in the Compose file. Set `NEXTCLOUD_*` in `.env` if you need uploads/PDFs — see [nextcloud.md](nextcloud.md).
 
@@ -208,6 +214,8 @@ Stop the stack:
 ```bash
 docker compose down
 ```
+
+The data stays in the volume `mongodb_data`. `docker compose down -v` deletes it, with every tenant and setting.
 
 ---
 
@@ -241,16 +249,17 @@ Without a tenant and public bookables, the Storefront will look empty even if al
 
 ## Troubleshooting
 
-| Symptom                                                                  | Likely cause                                                                                                          |
-| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| Storefront cannot load catalog / auth fails                              | `NUXT_API_BASE_URL` points at `8080` (Admin) instead of the API (`8081` locally, or `http://backend:8081` in Compose) |
-| Email / redirect links open Admin instead of Storefront (or the reverse) | Confusing `FRONTEND_URL` with Storefront URLs — `FRONTEND_URL` must be Admin; Storefront uses `NUXT_USER_*`           |
-| Storefront empty                                                         | No tenant, no public bookables, or portal/catalog not enabled                                                         |
-| Uploads / PDF receipts fail                                              | Nextcloud not configured — see [nextcloud.md](nextcloud.md)                                                           |
-| Admin cannot reach API                                                   | Wrong `VUE_APP_SERVER_BASE_URL`; CORS reflects the request origin (Admin talks to the API from the browser)           |
-| Compose: Storefront cannot reach API                                     | BFF still using `localhost` inside the container — use the Docker service name (`backend`)                            |
-| Compose / Docker: `npm ci` fails with `sizeCalculation` / `maxSize`      | Backend Dockerfile must use Node 22 LTS (not Node 25); pull latest Dockerfile and rebuild                             |
-| Auth cookies in production Storefront                                    | In `NODE_ENV=production`, cookies require HTTPS behind a reverse proxy                                                |
+| Symptom                                                                     | Likely cause                                                                                                                       |
+| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Storefront cannot load catalog / auth fails                                 | `NUXT_API_BASE_URL` points at `8080` (Admin) instead of the API (`8081` locally, or `http://backend:8081` in Compose)              |
+| Email / redirect links open Admin instead of Storefront (or the reverse)    | Confusing `FRONTEND_URL` with Storefront URLs — `FRONTEND_URL` must be Admin; Storefront uses `NUXT_USER_*`                        |
+| Storefront empty                                                            | No tenant, no public bookables, or portal/catalog not enabled                                                                      |
+| Compose: sign-in fails, tenants and settings gone, only the init admin left | MongoDB reachable from the internet without a login and emptied: see [deployment.md](deployment.md#full-stack-with-docker-compose) |
+| Uploads / PDF receipts fail                                                 | Nextcloud not configured — see [nextcloud.md](nextcloud.md)                                                                        |
+| Admin cannot reach API                                                      | Wrong `VUE_APP_SERVER_BASE_URL`; CORS reflects the request origin (Admin talks to the API from the browser)                        |
+| Compose: Storefront cannot reach API                                        | BFF still using `localhost` inside the container — use the Docker service name (`backend`)                                         |
+| Compose / Docker: `npm ci` fails with `sizeCalculation` / `maxSize`         | Backend Dockerfile must use Node 22 LTS (not Node 25); pull latest Dockerfile and rebuild                                          |
+| Auth cookies in production Storefront                                       | In `NODE_ENV=production`, cookies require HTTPS behind a reverse proxy                                                             |
 
 ---
 
