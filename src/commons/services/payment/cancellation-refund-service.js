@@ -202,8 +202,10 @@ class CancellationRefundService {
 
   /**
    * The time from the cancellation to the start of a calculation as it is
-   * read: whole days of 24 hours from one day on, hours below. An audit of
-   * before 4.4 counted calendar days (`daysBeforeStart`) and keeps them.
+   * read: whole days of 24 hours from one day on, hours below. An audit
+   * stored before 4.5 counted calendar days (`daysBeforeStart`) and keeps
+   * them. Once the booking has begun there is no time before the start: the
+   * numbers are 0 and the labels `null`.
    *
    * @param {Object} calculation A calculation, preview or stored audit
    * @returns {{ hoursBeforeStart: number|null, daysBeforeStart: number|null, label: string|null, detailedLabel: string|null }}
@@ -215,6 +217,14 @@ class CancellationRefundService {
   static describeTimeBeforeStart(calculation) {
     const hours = calculation?.hoursBeforeStart;
     if (Number.isFinite(hours)) {
+      if (hours < 0) {
+        return {
+          hoursBeforeStart: 0,
+          daysBeforeStart: 0,
+          label: null,
+          detailedLabel: null,
+        };
+      }
       const days = Math.floor(hours / HOURS_PER_DAY);
       const rest = hours % HOURS_PER_DAY;
       const label =
@@ -232,10 +242,10 @@ class CancellationRefundService {
 
     const legacyDays = calculation?.daysBeforeStart;
     if (Number.isFinite(legacyDays)) {
-      const label = formatDays(legacyDays);
+      const label = legacyDays < 0 ? null : formatDays(legacyDays);
       return {
         hoursBeforeStart: null,
-        daysBeforeStart: legacyDays,
+        daysBeforeStart: Math.max(legacyDays, 0),
         label,
         detailedLabel: label,
       };
@@ -250,26 +260,61 @@ class CancellationRefundService {
   }
 
   /**
-   * The tier a calculation applied as the booker reads it: "bis 36 Stunden
-   * vor Beginn", in days where its deadline divides by 24, "bis zum Beginn"
-   * at 0 hours. An audit of before 4.4 named it in days
-   * (`appliedTierDays`). `null` where no tier applied.
+   * The tier a calculation applied: its deadline in hours and in whole days
+   * of 24 hours, and as the booker reads it. The label reads "bis 36 Stunden
+   * vor Beginn", in days where the deadline divides by 24, "bis zum Beginn"
+   * at 0 hours. Below the lowest deadline that tier still applies: "unter
+   * 12 Stunden vor Beginn", or "nach Beginn" for a tier of 0 hours. An audit
+   * stored before 4.5 named the tier in calendar days (`appliedTierDays`).
+   * The label is `null` where no tier applied or the tier did not set the
+   * refund: a cancellation by the system or an override by the
+   * administration.
    *
    * @param {Object} calculation A calculation, preview or stored audit
-   * @returns {string|null}
+   * @returns {{ appliedTierHours: number|null, appliedTierDays: number|null, label: string|null }}
    */
   static describeAppliedTier(calculation) {
-    const hours = calculation?.appliedTierHours;
-    if (Number.isFinite(hours)) {
-      if (hours === 0) return "bis zum Beginn";
-      const deadline =
-        hours % HOURS_PER_DAY === 0
-          ? formatDays(hours / HOURS_PER_DAY)
-          : formatHours(hours);
-      return `bis ${deadline} vor Beginn`;
+    const tierHours = calculation?.appliedTierHours;
+    const tierDays = calculation?.appliedTierDays;
+    let tier = { appliedTierHours: null, appliedTierDays: null, label: null };
+    let deadline = null;
+    let atStart = false;
+    let fallback = false;
+
+    if (Number.isFinite(tierHours)) {
+      tier = {
+        appliedTierHours: tierHours,
+        appliedTierDays: Math.floor(tierHours / HOURS_PER_DAY),
+        label: null,
+      };
+      deadline =
+        tierHours % HOURS_PER_DAY === 0
+          ? formatDays(tierHours / HOURS_PER_DAY)
+          : formatHours(tierHours);
+      atStart = tierHours === 0;
+      fallback = calculation.hoursBeforeStart < tierHours;
+    } else if (Number.isFinite(tierDays)) {
+      tier = { appliedTierHours: null, appliedTierDays: tierDays, label: null };
+      deadline = formatDays(tierDays);
+      atStart = tierDays === 0;
+      fallback = calculation.daysBeforeStart < tierDays;
+    } else {
+      return tier;
     }
-    const days = calculation?.appliedTierDays;
-    return Number.isFinite(days) ? `bis ${formatDays(days)} vor Beginn` : null;
+
+    if (
+      calculation.origin === CANCELLATION_ORIGINS.SYSTEM ||
+      calculation.adminOverride
+    ) {
+      return tier;
+    }
+
+    if (fallback) {
+      tier.label = atStart ? "nach Beginn" : `unter ${deadline} vor Beginn`;
+    } else {
+      tier.label = atStart ? "bis zum Beginn" : `bis ${deadline} vor Beginn`;
+    }
+    return tier;
   }
 
   static validateRefundPercentage(refundPercentage) {

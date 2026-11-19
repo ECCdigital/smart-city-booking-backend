@@ -266,16 +266,102 @@ describe("CancellationRefundService", function () {
 
   it("describes the applied tier as the booker reads it", function () {
     const tier = (calculation) =>
-      CancellationRefundService.describeAppliedTier(calculation);
+      CancellationRefundService.describeAppliedTier({
+        origin: CANCELLATION_ORIGINS.USER,
+        adminOverride: false,
+        ...calculation,
+      });
 
-    assert.strictEqual(
-      tier({ appliedTierHours: 36 }),
-      "bis 36 Stunden vor Beginn",
+    assert.deepStrictEqual(
+      tier({ hoursBeforeStart: 40, appliedTierHours: 36 }),
+      {
+        appliedTierHours: 36,
+        appliedTierDays: 1,
+        label: "bis 36 Stunden vor Beginn",
+      },
     );
-    assert.strictEqual(tier({ appliedTierHours: 48 }), "bis 2 Tage vor Beginn");
-    assert.strictEqual(tier({ appliedTierHours: 0 }), "bis zum Beginn");
-    assert.strictEqual(tier({ appliedTierDays: 3 }), "bis 3 Tage vor Beginn");
-    assert.strictEqual(tier({ appliedTierHours: null }), null);
+    assert.strictEqual(
+      tier({ hoursBeforeStart: 50, appliedTierHours: 48 }).label,
+      "bis 2 Tage vor Beginn",
+    );
+    assert.strictEqual(
+      tier({ hoursBeforeStart: 5, appliedTierHours: 0 }).label,
+      "bis zum Beginn",
+    );
+    assert.deepStrictEqual(tier({ daysBeforeStart: 4, appliedTierDays: 3 }), {
+      appliedTierHours: null,
+      appliedTierDays: 3,
+      label: "bis 3 Tage vor Beginn",
+    });
+    assert.deepStrictEqual(tier({ appliedTierHours: null }), {
+      appliedTierHours: null,
+      appliedTierDays: null,
+      label: null,
+    });
+  });
+
+  it("names the lowest tier that applies below its deadline as such", function () {
+    const tier = (calculation) =>
+      CancellationRefundService.describeAppliedTier({
+        origin: CANCELLATION_ORIGINS.USER,
+        adminOverride: false,
+        ...calculation,
+      }).label;
+
+    // Tiers 48 h and 12 h without a tier of 0 h, cancelled 3 h before.
+    assert.strictEqual(
+      tier({ hoursBeforeStart: 3, appliedTierHours: 12 }),
+      "unter 12 Stunden vor Beginn",
+    );
+    assert.strictEqual(
+      tier({ daysBeforeStart: 1, appliedTierDays: 2 }),
+      "unter 2 Tage vor Beginn",
+    );
+    // A tier of 0 h applies after the start, too.
+    assert.strictEqual(
+      tier({ hoursBeforeStart: -3, appliedTierHours: 0 }),
+      "nach Beginn",
+    );
+  });
+
+  it("names no tier where the tier did not set the refund", function () {
+    const system = CancellationRefundService.describeAppliedTier({
+      hoursBeforeStart: 5,
+      appliedTierHours: 0,
+      origin: CANCELLATION_ORIGINS.SYSTEM,
+      adminOverride: false,
+    });
+    const override = CancellationRefundService.describeAppliedTier({
+      hoursBeforeStart: 50,
+      appliedTierHours: 48,
+      origin: CANCELLATION_ORIGINS.ADMIN,
+      adminOverride: true,
+    });
+
+    assert.strictEqual(system.label, null);
+    assert.strictEqual(system.appliedTierHours, 0);
+    assert.strictEqual(override.label, null);
+    assert.strictEqual(override.appliedTierDays, 2);
+  });
+
+  it("describes no time before the start once the booking has begun", function () {
+    const describe = (calculation) =>
+      CancellationRefundService.describeTimeBeforeStart(calculation);
+
+    for (const hoursBeforeStart of [-1, -3, -30]) {
+      assert.deepStrictEqual(describe({ hoursBeforeStart }), {
+        hoursBeforeStart: 0,
+        daysBeforeStart: 0,
+        label: null,
+        detailedLabel: null,
+      });
+    }
+    assert.deepStrictEqual(describe({ daysBeforeStart: -2 }), {
+      hoursBeforeStart: null,
+      daysBeforeStart: 0,
+      label: null,
+      detailedLabel: null,
+    });
   });
 
   it("coerces MongoDB Double timestamps before calculating hours", function () {
