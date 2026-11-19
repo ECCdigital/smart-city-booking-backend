@@ -315,7 +315,15 @@ describe("CancellationRefundService", function () {
     );
     assert.strictEqual(
       tier({ daysBeforeStart: 1, appliedTierDays: 2 }),
-      "unter 2 Tage vor Beginn",
+      "unter 2 Tagen vor Beginn",
+    );
+    assert.strictEqual(
+      tier({ hoursBeforeStart: 10, appliedTierHours: 48 }),
+      "unter 2 Tagen vor Beginn",
+    );
+    assert.strictEqual(
+      tier({ hoursBeforeStart: 10, appliedTierHours: 24 }),
+      "unter 1 Tag vor Beginn",
     );
     // A tier of 0 h applies after the start, too.
     assert.strictEqual(

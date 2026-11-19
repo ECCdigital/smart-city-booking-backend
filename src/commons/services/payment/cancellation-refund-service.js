@@ -277,6 +277,8 @@ class CancellationRefundService {
     const tierHours = calculation?.appliedTierHours;
     const tierDays = calculation?.appliedTierDays;
     let tier = { appliedTierHours: null, appliedTierDays: null, label: null };
+    // "bis" takes the accusative ("bis 2 Tage"), "unter" the dative
+    // ("unter 2 Tagen"); hours read alike in both.
     let deadline = null;
     let atStart = false;
     let belowLowestDeadline = false;
@@ -287,15 +289,15 @@ class CancellationRefundService {
         appliedTierDays: Math.floor(tierHours / HOURS_PER_DAY),
         label: null,
       };
-      deadline =
+      deadline = (dative) =>
         tierHours % HOURS_PER_DAY === 0
-          ? formatDays(tierHours / HOURS_PER_DAY)
+          ? formatDays(tierHours / HOURS_PER_DAY, dative)
           : formatHours(tierHours);
       atStart = tierHours === 0;
       belowLowestDeadline = calculation.hoursBeforeStart < tierHours;
     } else if (Number.isFinite(tierDays)) {
       tier = { appliedTierHours: null, appliedTierDays: tierDays, label: null };
-      deadline = formatDays(tierDays);
+      deadline = (dative) => formatDays(tierDays, dative);
       atStart = tierDays === 0;
       belowLowestDeadline = calculation.daysBeforeStart < tierDays;
     } else {
@@ -310,9 +312,13 @@ class CancellationRefundService {
     }
 
     if (belowLowestDeadline) {
-      tier.label = atStart ? "nach Beginn" : `unter ${deadline} vor Beginn`;
+      tier.label = atStart
+        ? "nach Beginn"
+        : `unter ${deadline(true)} vor Beginn`;
     } else {
-      tier.label = atStart ? "bis zum Beginn" : `bis ${deadline} vor Beginn`;
+      tier.label = atStart
+        ? "bis zum Beginn"
+        : `bis ${deadline(false)} vor Beginn`;
     }
     return tier;
   }
@@ -394,8 +400,9 @@ class CancellationRefundService {
   }
 }
 
-function formatDays(days) {
-  return `${days} ${days === 1 ? "Tag" : "Tage"}`;
+function formatDays(days, dative = false) {
+  if (days === 1) return "1 Tag";
+  return `${days} ${dative ? "Tagen" : "Tage"}`;
 }
 
 function formatHours(hours) {
