@@ -7,9 +7,19 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ## [Unreleased]
 
+### Security
+
+- Booking references are drawn from a cryptographically secure source: the characters of a booking reference (`XXXX-XXXX`) and of a group booking reference (`G-XXXX-XXXX`) come from `crypto.randomInt` instead of `Math.random`, so they are harder to predict. Format, alphabet, length and the retry on a taken reference are unchanged
+
 ### Changed
 
 - CI gate „protected files“ ([ECCdigital/tickets#425](https://github.com/ECCdigital/tickets/issues/425)): the new job `protected-files`, required by `ci-ok`, blocks a pull request that deletes or changes an existing test, adds `.skip`, `.only` or `.todo`, or changes an accepted ADR or the CI configuration, unless the ticket it references (`Refs ECCdigital/tickets#<n>`) names the file; new tests are free. It runs the rule from ECCdigital/portolan with the read-only GitHub App „Portolan Gate“ (org secrets `GATE_APP_ID`, `GATE_PRIVATE_KEY`); pull requests from forks get no secrets and stay blocked until an admin bypasses the gate. No code change
+- Agent docs refreshed to stand `ecc-12` of the ECC skills setup: `docs/agents/issue-tracker.md` follows the template „GitHub Portolan, Produkt-Repo“ and reads the Ablauf (`v1`/`v2`) of `ECCdigital/tickets`, with sub-tickets, the extended Definition of Ready and `Refs` instead of `Closes` under `v2`; the `## Agent skills` block in `CLAUDE.md` names it. No code change
+
+### Fixed
+
+- The attendee list CSV of an event (`GET /csv/:tenant/events/:id/bookings`) keeps its columns and rows: a value with `;` or `"` is quoted, with inner quotes doubled, and a line break becomes a space. Before, a semicolon in a name or address moved the following columns of that row, and a line break split the row.
+- The booking and invoice dates of PDF documents read in Europe/Berlin, whatever the server's time zone: `formatDate` of the PDF service followed the server, unlike `formatDateTime` beside it, so on a server in UTC, as in the Docker image, a receipt or invoice from shortly after midnight carried the previous day.
 
 ### Fixed
 
