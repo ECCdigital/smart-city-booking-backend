@@ -23,7 +23,7 @@ const {
   checkPayedStatus,
   validatePaymentProviderRequirement,
 } = require("../booking-consitency-service");
-const { TRANSITION } = require("../booking-lifecycle/booking-state");
+const { STATUS, TRANSITION } = require("../booking-lifecycle/booking-state");
 const {
   CancellationRefundService,
   CANCELLATION_ORIGINS,
@@ -89,6 +89,7 @@ class BookingService {
         tenant,
         booking,
         origin: CANCELLATION_ORIGINS.ADMIN,
+        rejection: booking.status === STATUS.REQUESTED,
       }),
     };
   }
@@ -200,6 +201,7 @@ class BookingService {
         booking,
         cancelledAt,
         origin: CANCELLATION_ORIGINS.ADMIN,
+        rejection: booking.status === STATUS.REQUESTED,
       }),
     }));
 

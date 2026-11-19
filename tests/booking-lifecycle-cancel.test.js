@@ -268,7 +268,7 @@ describe("booking lifecycle: cancel", function () {
     );
   });
 
-  it("rejects a priced request: rejected, the document and the rejection mail", async function () {
+  it("rejects a priced request: rejected, no document, the rejection mail without attachment", async function () {
     const { adapters, lifecycle } = lifecycleOver({
       bookings: [booking({ status: "requested" })],
     });
@@ -281,7 +281,7 @@ describe("booking lifecycle: cancel", function () {
     expect(effectTable(outcome)).to.deep.equal([
       "persist store.save ok",
       "provision access.revoke ok",
-      "document documents.issue ok",
+      "document documents.issue skipped",
       "notify workflow.emit ok",
       "notify mail.BOOKING_REJECTION ok",
       "notify mail.BOOKING_CANCEL skipped",
@@ -295,9 +295,7 @@ describe("booking lifecycle: cancel", function () {
     expect(stored.cancellationRefund).to.not.have.property("cancelledFrom");
     const [mail] = adapters.mail.calls;
     expect(mail.args[0]).to.equal("BOOKING_REJECTION");
-    expect(mail.args[1].attachments.map((f) => f.name)).to.deep.equal([
-      "cancellation-1.pdf",
-    ]);
+    expect(mail.args[1].attachments).to.deep.equal([]);
   });
 
   it("a request the customer withdraws without a hook reads as a cancellation: the cancel mail, not the rejection", async function () {
@@ -482,6 +480,49 @@ describe("booking lifecycle: cancel", function () {
     expect(system.adapters.store.rows.get("B-1").cancellationRefund).to.include(
       { origin: "system", appliedRefundPercentage: 100 },
     );
+  });
+
+  it("rejects a request free of charge, whatever the tiers or an admin override say; a customer withdrawing it pays the tiers", async function () {
+    const tenant = {
+      id: TENANT,
+      cancellationRefundTiers: [{ hoursBeforeStart: 0, refundPercentage: 50 }],
+    };
+    for (const trigger of [TRIGGER.ADMIN, TRIGGER.SYSTEM]) {
+      const { adapters, lifecycle } = lifecycleOver({
+        bookings: [booking({ status: "requested" })],
+        tenant,
+      });
+      await lifecycle.cancel(TENANT, "B-1", {
+        trigger,
+        reason: "Kein Platz",
+        refundPercentage: 25,
+      });
+      const { cancellationRefund } = adapters.store.rows.get("B-1");
+      expect(cancellationRefund, trigger).to.include({
+        rejection: true,
+        suggestedRefundPercentage: 100,
+        appliedRefundPercentage: 100,
+        refundAmountEur: 40,
+        cancellationFeeEur: 0,
+        adminOverride: false,
+      });
+      expect(adapters.documents.calls, trigger).to.deep.equal([]);
+    }
+
+    const customer = lifecycleOver({
+      bookings: [booking({ status: "requested" })],
+      tenant,
+    });
+    await customer.lifecycle.cancel(TENANT, "B-1", {
+      trigger: TRIGGER.CUSTOMER,
+    });
+    expect(
+      customer.adapters.store.rows.get("B-1").cancellationRefund,
+    ).to.include({
+      rejection: false,
+      appliedRefundPercentage: 50,
+      cancellationFeeEur: 20,
+    });
   });
 
   it("leaves the workflow event out when a workflow action triggered the cancellation, and refunds in full", async function () {

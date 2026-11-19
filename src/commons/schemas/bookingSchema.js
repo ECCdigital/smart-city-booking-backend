@@ -63,6 +63,9 @@ const cancellationAuditSchema = new Schema(
       enum: ["user", "admin", "system"],
     },
     adminOverride: { type: Boolean, required: true },
+    // A request the administration or the system turned down: refunded in
+    // full, outside the tiers. Absent on audits written before.
+    rejection: { type: Boolean, default: undefined },
     cancelledByUserId: { type: String, default: null },
     // The state the booking was cancelled or withdrawn from; `reinstate`
     // returns a cancelled one to it and the entity derives `isPayed` of
