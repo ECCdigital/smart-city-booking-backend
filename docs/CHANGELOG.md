@@ -7,6 +7,14 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ## [Unreleased]
 
+### Security
+
+- The full-stack Compose example requires a MongoDB login (ECCdigital/tickets#981): `mongodb` creates its root account from `MONGO_ROOT_USERNAME` and `MONGO_ROOT_PASSWORD` in `.env`, and the backend's `DB_URL` signs in with it. Before, MongoDB ran without a login on a published port; on a server reachable from the internet it was emptied, sign-in failed until a restart, and only the init admin came back. The example now also builds all three services from release tags (`BACKEND_VERSION`, `ADMIN_UI_VERSION`, `STOREFRONT_VERSION` in `.env`) instead of `develop`, and no longer points to the GHCR images, which are not public. An existing installation creates the account once, see [docs/deployment.md](deployment.md#moving-an-existing-installation-to-a-mongodb-login); the same page now names the firewall and reverse proxy a public server needs, backups with `mongodump`, and that `docker compose down -v` deletes the data
+
+### Fixed
+
+- The backend creates the instance catalog at start when there is none, with the Portal Name „Buchungsportal“ (ECCdigital/tickets#981). Nothing created it before: on a fresh database `GET /api/catalog` and `/api/catalog/public` answered `404 instance_catalog_not_found`, the Admin UI's tenant list said the catalog could not be loaded, and saving the instance settings ended in „Fehler beim Aktualisieren der Instanz“ although the instance was saved. An existing instance catalog is left alone. No migration: the next start creates it
+
 ### Added
 
 - `docker-publish.yml` refuses to build a tag that is not `v` plus the `version` of `package.json` (ECCdigital/tickets#1018). A release candidate tagged without `npm version` built an image whose app still reported the previous version
