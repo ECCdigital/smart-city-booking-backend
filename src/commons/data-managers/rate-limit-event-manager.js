@@ -17,6 +17,21 @@ class RateLimitEventManager {
   }
 
   /**
+   * Several attempts of one key at once, in one round trip.
+   *
+   * @param {string} key The limited subject
+   * @param {Date} at When the attempts happened
+   * @param {number} count How many rows
+   * @returns {Promise<string[]>} The ids of the rows, for `removeMany`
+   */
+  static async recordMany(key, at, count) {
+    const rows = await RateLimitEventModel.insertMany(
+      Array.from({ length: count }, () => ({ key, at })),
+    );
+    return rows.map((row) => String(row._id));
+  }
+
+  /**
    * @param {string} key The limited subject
    * @param {Date} since Start of the window (exclusive)
    * @returns {Promise<number>} Attempts of the key in the window
@@ -47,6 +62,13 @@ class RateLimitEventManager {
    */
   static async remove(id) {
     await RateLimitEventModel.deleteOne({ _id: id });
+  }
+
+  /**
+   * @param {string[]} ids The row ids from `recordMany`
+   */
+  static async removeMany(ids) {
+    await RateLimitEventModel.deleteMany({ _id: { $in: ids } });
   }
 }
 

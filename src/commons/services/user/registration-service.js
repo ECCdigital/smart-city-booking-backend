@@ -4,7 +4,6 @@ const { User, USER_HOOK_TYPES } = require("../../entities/user/user");
 const { notify } = require("../../mail-service");
 const RateLimiter = require("../rate-limit/rate-limiter");
 const limits = require("../rate-limit/limits");
-const { TooManyRequestsError } = require("../../../errors/BaseError");
 const { afterAnswer } = require("./after-answer");
 const { normalizeClientPage } = require("./client-page");
 const BlacklistService = require("../blacklist/blacklist-service");
@@ -46,7 +45,7 @@ class RegistrationService {
     invitation = null,
     ip,
   }) {
-    await RegistrationService._gate(limits.signupPerIp(ip));
+    await RateLimiter.enforce(limits.signupPerIp(ip));
     // Validated before the lookup, so a malformed body fails the same way
     // whether or not the address has an account.
     user.validate();
@@ -115,7 +114,7 @@ class RegistrationService {
    * @throws {TooManyRequestsError} Past the per-IP verification mail limit
    */
   static async requestVerificationMail({ id, verifyUrl, nextUrl, ip }) {
-    await RegistrationService._gate(limits.verificationMailPerIp(ip));
+    await RateLimiter.enforce(limits.verificationMailPerIp(ip));
 
     afterAnswer(async () => {
       const user = await UserManager.getUser(id, true);
@@ -140,21 +139,12 @@ class RegistrationService {
    * @throws {TooManyRequestsError} Past the per-IP forgot-password limit
    */
   static async requestForgotPassword({ id, resetUrl, ip }) {
-    await RegistrationService._gate(limits.forgotPasswordPerIp(ip));
+    await RateLimiter.enforce(limits.forgotPasswordPerIp(ip));
 
     afterAnswer(async () => {
       const user = await UserManager.getUser(id, true);
       await RegistrationService._sendResetMail(user, resetUrl);
     }, `forgot password request for ${id}`);
-  }
-
-  static async _gate(limit) {
-    const gate = await RateLimiter.consume(limit);
-    if (!gate.allowed) {
-      throw new TooManyRequestsError("too_many_requests", {
-        retryAfterSeconds: gate.retryAfterSeconds,
-      });
-    }
   }
 
   static _verificationLimits(id, ip) {

@@ -97,12 +97,30 @@ class BookableManager {
     return find(ownCondition("bookable", scope));
   }
 
-  /** As `_within`, for a method that names ids: the direct-link rule. */
-  static async _reachedWithin(tenantId, scope, find) {
-    if (scope?.reach === REACH.PUBLIC) {
-      return projection.reached(tenantId, await find({}));
+  /**
+   * As `_within`, for a method that names ids: the direct-link rule.
+   *
+   * @param {string} tenantId
+   * @param {{reach: string, userId?: string|null}} scope
+   * @param {(condition: Object) => Promise<Object[]>} find As of `_within`
+   * @param {Object} [options]
+   * @param {boolean} [options.whole=false] Answer the bookables as `find`
+   *   read them: under `public` the projection then decides which
+   *   bookables, not their fields
+   * @returns {Promise<Bookable[]>} Entities, projected under `public`
+   *   unless `whole`
+   */
+  static async _reachedWithin(tenantId, scope, find, { whole = false } = {}) {
+    if (scope?.reach !== REACH.PUBLIC) {
+      return find(ownCondition("bookable", scope));
     }
-    return find(ownCondition("bookable", scope));
+    const found = await find({});
+    const reached = await projection.reached(tenantId, found);
+    if (!whole) {
+      return reached;
+    }
+    const reachedIds = new Set(reached.map(({ id }) => id));
+    return found.filter(({ id }) => reachedIds.has(id));
   }
 
   /**
@@ -196,16 +214,36 @@ class BookableManager {
    * @returns {Promise<Bookable[]>} - A promise that resolves to a list of bookables.
    */
   static async getBookablesByIds(tenantId, ids, scope) {
+    return BookableManager._byIds(tenantId, ids, scope);
+  }
+
+  /**
+   * The bookables of `getBookablesByIds` - the same ids within the same
+   * reach, in one query - each whole, as the domain reads it: under
+   * `public` the projection decides which bookables, not their fields. For
+   * a service that checks what its route reaches (the checkout of the
+   * batch occupancy); what it answers never carries the bookable itself.
+   * @param {string} tenantId
+   * @param {string[]} ids
+   * @param {{reach: string, userId?: string|null}} scope As of `getBookable`
+   * @returns {Promise<Bookable[]>}
+   */
+  static async getWholeBookablesByIds(tenantId, ids, scope) {
+    return BookableManager._byIds(tenantId, ids, scope, { whole: true });
+  }
+
+  /** The read of `getBookablesByIds` and `getWholeBookablesByIds`. */
+  static async _byIds(tenantId, ids, scope, options) {
     if (!ids?.length) return [];
 
-    return BookableManager._reachedWithin(tenantId, scope, async (condition) =>
-      (
-        await BookableModel.find({
-          tenantId: tenantId,
-          id: { $in: ids },
-          ...condition,
-        })
-      ).map((doc) => doc.toEntity()),
+    return BookableManager._reachedWithin(
+      tenantId,
+      scope,
+      async (condition) =>
+        (
+          await BookableModel.find({ tenantId, id: { $in: ids }, ...condition })
+        ).map((doc) => doc.toEntity()),
+      options,
     );
   }
 

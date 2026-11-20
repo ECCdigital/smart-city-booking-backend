@@ -6,6 +6,8 @@ const {
 const bunyan = require("bunyan");
 const ExternalPriceService = require("./external-price-service");
 const { DOMAIN } = require("./authorization/reach");
+const RateLimiter = require("./rate-limit/rate-limiter");
+const { periodOccupancyPerIp } = require("./rate-limit/limits");
 
 const logger = bunyan.createLogger({
   name: "bookable-service.js",
@@ -27,7 +29,8 @@ class BookableService {
    * Retrieves the occupancy information for a given bookable item within a specified time range.
    *
    * @param {Object} params - The parameters for retrieving occupancy information.
-   * @param {string} params.bookableId - The unique identifier of the bookable item.
+   * @param {Bookable} params.bookable - The bookable, read whole, within the
+   *   reach of the request: the caller decides the reach.
    * @param {string} params.tenantId - The identifier of the tenant requesting the occupancy.
    * @param {number} params.timeBegin - The start time of the occupancy check period.
    * @param {number} params.timeEnd - The end time of the occupancy check period.
@@ -36,45 +39,75 @@ class BookableService {
    * @return {Promise<Object>} A promise that resolves to an object containing occupancy details, including the bookable ID, title, and availability data. In case of an error, it returns an error response object.
    */
   static async getOccupancy({
-    bookableId,
+    bookable,
     tenantId,
     timeBegin,
     timeEnd,
     userId = null,
     ignoreRelatedEntities = false,
   }) {
+    const bookableId = bookable.id;
+    try {
+      return await this._withCheckout(
+        { bookable, tenantId, timeBegin, timeEnd, userId },
+        async (checkoutService) => ({
+          bookableId,
+          title: bookable.title,
+          ...(await this._performAvailabilityCheck(
+            checkoutService,
+            ignoreRelatedEntities,
+          )),
+        }),
+      );
+    } catch (error) {
+      logger.error(error);
+      return this._createErrorResponse(bookableId);
+    }
+  }
+
+  /**
+   * Runs `use` with the checkout of one unit of a loaded bookable in a
+   * period, as the single and the batch occupancy check it, and cleans the
+   * checkout up afterwards.
+   *
+   * @param {Object} params
+   * @param {Bookable} params.bookable - The bookable, read whole.
+   * @param {string} params.tenantId
+   * @param {number} params.timeBegin
+   * @param {number} params.timeEnd
+   * @param {string|null} params.userId
+   * @param {Map} [params.externalCache]
+   * @param {Map} [params.requestCache]
+   * @param {function(ItemCheckoutService): Promise<*>} use
+   * @return {Promise<*>} What `use` answers.
+   */
+  static async _withCheckout(
+    {
+      bookable,
+      tenantId,
+      timeBegin,
+      timeEnd,
+      userId,
+      externalCache,
+      requestCache,
+    },
+    use,
+  ) {
     let checkoutService = null;
     try {
-      const bookable = await BookableManager.getBookable(
-        bookableId,
-        tenantId,
-        DOMAIN,
-      );
       checkoutService = new ItemCheckoutService({
         user: userId,
         tenantId,
         timeBegin,
         timeEnd,
-        bookableId,
+        bookableId: bookable.id,
         amount: 1,
         bookWithoutDiscount: false,
+        externalCache,
+        requestCache,
       });
-
       await checkoutService.init(bookable);
-
-      const occupancyData = await this._performAvailabilityCheck(
-        checkoutService,
-        ignoreRelatedEntities,
-      );
-
-      return {
-        bookableId,
-        title: bookable.title,
-        ...occupancyData,
-      };
-    } catch (error) {
-      logger.error(error);
-      return this._createErrorResponse(bookableId);
+      return await use(checkoutService);
     } finally {
       if (checkoutService) {
         checkoutService.cleanup();
@@ -91,9 +124,17 @@ class BookableService {
    * `validateItem` answers for one unit. A refusal names its check in
    * `reason`, a bookable whose checks could not run answers `reason: "error"`.
    *
+   * Each distinct id counts at the limit per IP first, as it runs one
+   * checkout (ECCdigital/tickets#1254): past it nothing is looked up and
+   * the request spends nothing.
+   *
    * @param {Object} params
-   * @param {string[]} params.bookableIds - Ids the route already found within the reach of the request.
+   * @param {string[]} params.bookableIds - The ids the request asks for.
+   * @param {string} params.ip - The client IP the limit counts against.
    * @param {string} params.tenantId
+   * @param {{reach: string, userId?: string|null}} params.scope - The reach
+   *   of the request: ids outside it are left out, as the single occupancy
+   *   answers them 404.
    * @param {number} params.timeBegin
    * @param {number} params.timeEnd
    * @param {string|null} [params.userId=null]
@@ -101,16 +142,25 @@ class BookableService {
    */
   static async getPeriodOccupancies({
     bookableIds,
+    ip,
     tenantId,
+    scope,
     timeBegin,
     timeEnd,
     userId = null,
   }) {
-    // As `getOccupancy`: the checkout reads the whole bookable.
-    const bookables = await BookableManager.getBookablesByIds(
+    const ids = [...new Set(bookableIds)];
+    await RateLimiter.enforce({
+      ...periodOccupancyPerIp(ip),
+      cost: ids.length,
+    });
+
+    // One read: the bookables within the reach of the request, each whole,
+    // as the checkout of `getOccupancy` reads it.
+    const bookables = await BookableManager.getWholeBookablesByIds(
       tenantId,
-      bookableIds,
-      DOMAIN,
+      ids,
+      scope,
     );
     // A pool, not rounds: each worker takes the next bookable as soon as
     // its own is done, so one slow external provider holds one slot and
@@ -120,6 +170,9 @@ class BookableService {
     // `CalendarService.checkAvailability` keeps one: bookables on the same
     // IFBS location or Pareva unit ask the provider once.
     const externalCache = new Map();
+    // And one of the membership, the tenant and its apps, which every
+    // checkout of the request reads alike.
+    const requestCache = new Map();
     let next = 0;
     const worker = async () => {
       while (next < bookables.length) {
@@ -131,6 +184,7 @@ class BookableService {
           timeEnd,
           userId,
           externalCache,
+          requestCache,
         });
       }
     };
@@ -150,58 +204,56 @@ class BookableService {
     timeEnd,
     userId,
     externalCache,
+    requestCache,
   }) {
-    let checkoutService = null;
     try {
-      checkoutService = new ItemCheckoutService({
-        user: userId,
-        tenantId,
-        timeBegin,
-        timeEnd,
-        bookableId: bookable.id,
-        amount: 1,
-        bookWithoutDiscount: false,
-        externalCache,
-      });
-      await checkoutService.init(bookable);
+      return await this._withCheckout(
+        {
+          bookable,
+          tenantId,
+          timeBegin,
+          timeEnd,
+          userId,
+          externalCache,
+          requestCache,
+        },
+        async (checkoutService) => {
+          const checkResults = await checkoutService.checkAll(false);
 
-      const checkResults = await checkoutService.checkAll(false);
+          // A check that refuses names its type. One that throws (a
+          // provider down, a tenant without its app) names none and says
+          // nothing about the period: unless another check refuses, that
+          // is an error, not a booked-out bookable.
+          const rejected = checkResults.filter((r) => r.status === "rejected");
+          const refusal = rejected.find((r) => r.reason?.checkType);
+          if (rejected.length > 0 && !refusal) {
+            rejected.forEach((r) => logger.error(r.reason));
+            return this._periodError(bookable);
+          }
 
-      // A check that refuses names its type. One that throws (a provider
-      // down, a tenant without its app) names none and says nothing about
-      // the period: unless another check refuses, that is an error, not a
-      // booked-out bookable.
-      const rejected = checkResults.filter((r) => r.status === "rejected");
-      const refusal = rejected.find((r) => r.reason?.checkType);
-      if (rejected.length > 0 && !refusal) {
-        rejected.forEach((r) => logger.error(r.reason));
-        return this._periodError(bookable);
-      }
+          const { isAvailable, totalCapacity, booked, remaining } =
+            this._occupancyOfCheckResults(checkResults);
 
-      const { isAvailable, totalCapacity, booked, remaining } =
-        this._occupancyOfCheckResults(checkResults);
-
-      // Only the documented fields: a failed check names the parent or
-      // child that failed (`failedCheck`, `bookableId`, `title`), which may
-      // be one the request cannot reach.
-      return {
-        bookableId: bookable.id,
-        title: bookable.title,
-        isAvailable,
-        totalCapacity,
-        booked,
-        remaining,
-        ...(refusal ? { reason: refusal.reason.checkType } : {}),
-        price: isAvailable ? await this._periodPrice(checkoutService) : null,
-      };
+          // Only the documented fields: a failed check names the parent or
+          // child that failed (`failedCheck`, `bookableId`, `title`), which
+          // may be one the request cannot reach.
+          return {
+            bookableId: bookable.id,
+            title: bookable.title,
+            isAvailable,
+            totalCapacity,
+            booked,
+            remaining,
+            ...(refusal ? { reason: refusal.reason.checkType } : {}),
+            price: isAvailable
+              ? await this._periodPrice(checkoutService)
+              : null,
+          };
+        },
+      );
     } catch (error) {
       logger.error(error);
       return this._periodError(bookable);
-    } finally {
-      if (checkoutService) {
-        checkoutService.cleanup();
-        checkoutService = null;
-      }
     }
   }
 
@@ -222,14 +274,7 @@ class BookableService {
   /** The price of one unit in the period, as `validateItem` answers it; null where none can be found. */
   static async _periodPrice(checkoutService) {
     try {
-      return {
-        regularPriceEur: await checkoutService.regularPriceEur(),
-        userPriceEur: await checkoutService.userPriceEur(),
-        regularGrossPriceEur: await checkoutService.regularGrossPriceEur(),
-        userGrossPriceEur: await checkoutService.userGrossPriceEur(),
-        freeBookingAllowed: await checkoutService.freeBookingAllowed(),
-        bookingDiscountPercent: await checkoutService.bookingDiscountPercent(),
-      };
+      return await checkoutService.priceFields();
     } catch (error) {
       logger.warn(error);
       return null;

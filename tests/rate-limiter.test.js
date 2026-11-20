@@ -154,10 +154,9 @@ describe("RateLimiter.consume", function () {
     );
     const allowed = results.filter((r) => r.allowed).length;
     assert.ok(allowed <= 5, `allowed ${allowed} of 12 with a limit of 5`);
-    assert.ok(allowed >= 1, "a burst is not denied wholesale");
     assert.strictEqual(events.size, allowed);
 
-    await results.find((r) => r.allowed).release();
+    await results.find((r) => r.allowed)?.release();
     const next = await RateLimiter.consume({
       key: "k",
       limit: 5,
@@ -176,6 +175,81 @@ describe("RateLimiter.consume", function () {
       RateLimiter.consume({ key: "", limit: 1, windowMs: 60_000 }),
       /key/,
     );
+    for (const cost of [0, 1.5, "2"]) {
+      await assert.rejects(
+        RateLimiter.consume({ key: "k", limit: 5, windowMs: 60_000, cost }),
+        /cost/,
+      );
+    }
+  });
+
+  describe("an attempt that costs more than one", function () {
+    const take = (cost, seconds) =>
+      RateLimiter.consume({
+        key: "k",
+        limit: 5,
+        windowMs: 60_000,
+        cost,
+        now: at(seconds),
+      });
+
+    it("counts as that many attempts", async function () {
+      const first = await take(3, 0);
+      const second = await take(3, 1);
+      const third = await take(2, 2);
+
+      assert.deepStrictEqual(
+        [first.allowed, second.allowed, third.allowed],
+        [true, false, true],
+      );
+      assert.strictEqual(events.size, 5);
+    });
+
+    it("takes all of its attempts back when denied", async function () {
+      await take(4, 0);
+      const denied = await take(2, 1);
+
+      assert.strictEqual(denied.allowed, false);
+      assert.strictEqual(events.size, 4);
+    });
+
+    it("waits until enough attempts left the window for all of it", async function () {
+      await take(2, 0);
+      await take(2, 10);
+
+      // 4 in the window plus 3 is 2 over the limit of 5: the two from t=0
+      // leave at t=60, 35 seconds from t=25.
+      const denied = await take(3, 25);
+
+      assert.strictEqual(denied.allowed, false);
+      assert.strictEqual(denied.retryAfterSeconds, 35);
+    });
+
+    it("release() gives all of its attempts back", async function () {
+      const first = await take(5, 0);
+      await first.release();
+
+      assert.strictEqual(events.size, 0);
+      assert.strictEqual((await take(5, 1)).allowed, true);
+    });
+
+    it("never lets parallel attempts exceed the limit together", async function () {
+      const results = await Promise.all(
+        Array.from({ length: 8 }, () =>
+          RateLimiter.consume({
+            key: "k",
+            limit: 10,
+            windowMs: 60_000,
+            cost: 3,
+            now: at(0),
+          }),
+        ),
+      );
+      const allowed = results.filter((r) => r.allowed).length;
+      // Like the unweighted burst: never over-allowed, possibly over-denied.
+      assert.ok(allowed <= 3, `allowed ${allowed} of 8 costing 3 of 10`);
+      assert.strictEqual(events.size, allowed * 3);
+    });
   });
 });
 

@@ -394,6 +394,24 @@ function installRouteWorld({
   restub(BookableManager, "getBookable", (id, tenantId, scope) =>
     oneOffer(Object.values(bookables), "bookable")(id, tenantId, scope),
   );
+  // The same reach, the bookables whole: the projection decides which.
+  restub(
+    BookableManager,
+    "getWholeBookablesByIds",
+    async (tenantId, ids, scope) => {
+      const records = Object.values(bookables).filter(
+        (record) =>
+          ids.includes(record.id) &&
+          reaches(record, "bookable", tenantId, scope),
+      );
+      const reachedIds = new Set(
+        (await projected(records, tenantId, scope, reached)).map(
+          ({ id }) => id,
+        ),
+      );
+      return records.filter(({ id }) => reachedIds.has(id));
+    },
+  );
   restub(UserManager, "getRawUser", async () => ({
     _id: "64f1",
     toEntity: () => user(),
@@ -738,9 +756,11 @@ function installRouteWorld({
   stubManager(RateLimitEventManager, {
     only: {
       record: async () => FIXTURE_ID,
+      recordMany: async (key, at, count) => Array(count).fill(FIXTURE_ID),
       countSince: async () => 1,
       oldestAtWithin: async () => null,
       remove: async () => {},
+      removeMany: async () => {},
     },
   });
   stubManager(WorkflowManager, {

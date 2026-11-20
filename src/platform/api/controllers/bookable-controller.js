@@ -655,10 +655,12 @@ class BookableController {
         return response.status(400).send(`${tenantId} -- No id provided`);
       }
 
-      // The bookable within the reach of the request; none there is a 404.
-      const bookable = await BookableManager.getBookable(
-        bookableId,
+      // The bookable within the reach of the request, read once and whole
+      // for the checkout, as the batch occupancy reads its own; none there
+      // is a 404.
+      const [bookable] = await BookableManager.getWholeBookablesByIds(
         tenantId,
+        [bookableId],
         scopeOf(request),
       );
       if (!bookable) {
@@ -669,7 +671,7 @@ class BookableController {
       }
 
       const occupancy = await BookableService.getOccupancy({
-        bookableId,
+        bookable,
         tenantId,
         timeBegin,
         timeEnd,
@@ -697,6 +699,9 @@ class BookableController {
    * `/calendar/occupancy` answer theirs (`ApiResponse.ok` would spread the
    * array into an object). Every error goes to the central error handler,
    * so a client sees one error shape.
+   *
+   * Past the limit per IP, counted in bookables (ECCdigital/tickets#1254),
+   * it answers 429 with `Retry-After`.
    */
   static async getPeriodOccupancies(request, response, next) {
     try {
@@ -721,15 +726,12 @@ class BookableController {
         });
       }
 
-      const reached = await BookableManager.getBookablesByIds(
-        tenantId,
-        [...new Set(bookableIds)],
-        scopeOf(request),
-      );
-
+      // Ids outside the reach of the request are left out (`scope`).
       const occupancies = await BookableService.getPeriodOccupancies({
-        bookableIds: reached.map((bookable) => bookable.id),
+        bookableIds,
+        ip: request.ip,
         tenantId,
+        scope: scopeOf(request),
         timeBegin,
         timeEnd,
         userId: request.user?.id,

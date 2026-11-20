@@ -13,10 +13,13 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ### Changed
 
+- `POST /api/:tenant/bookables/occupancy` reads its bookables with one query instead of two and takes its checkout and price fields from the same code as `GET /api/:tenant/bookables/:id/occupancy` and `validateItem` (v1, v2) ([ECCdigital/tickets#1252](https://github.com/ECCdigital/tickets/issues/1252)). No change at the API
+- `POST /api/:tenant/bookables/occupancy` reads the caller's membership, the tenant and each tenant app once per request instead of once or more per bookable ([ECCdigital/tickets#1253](https://github.com/ECCdigital/tickets/issues/1253)). No change at the API
 - Agent docs refreshed to stand `ecc-12` of the ECC skills setup: `docs/agents/issue-tracker.md` follows the template „GitHub Portolan, Produkt-Repo“ and reads the Ablauf (`v1`/`v2`) of `ECCdigital/tickets`, with sub-tickets, the extended Definition of Ready and `Refs` instead of `Closes` under `v2`; the `## Agent skills` block in `CLAUDE.md` names it. No code change
 
 ### Fixed
 
+- `POST /api/:tenant/bookables/occupancy` is limited per client IP in bookables ([ECCdigital/tickets#1254](https://github.com/ECCdigital/tickets/issues/1254)): 2000 per 5 minutes (`RATE_LIMIT_PERIOD_OCCUPANCY_PER_IP`), past it `429` with `Retry-After`.
 - The occupancy of a bookable whose parent or child refuses the period names that check in `reason` (`parent-availability`, `child-bookings`) instead of failing ([ECCdigital/tickets#850](https://github.com/ECCdigital/tickets/issues/850)); `failedCheck` of `GET /api/:tenant/bookables/:id/occupancy` no longer names the refusing bookable.
 - The attendee list CSV of an event (`GET /csv/:tenant/events/:id/bookings`) keeps its columns and rows: a value with `;` or `"` is quoted, with inner quotes doubled, and a line break becomes a space. Before, a semicolon in a name or address moved the following columns of that row, and a line break split the row.
 - The booking and invoice dates of PDF documents read in Europe/Berlin, whatever the server's time zone: `formatDate` of the PDF service followed the server, unlike `formatDateTime` beside it, so on a server in UTC, as in the Docker image, a receipt or invoice from shortly after midnight carried the previous day.
