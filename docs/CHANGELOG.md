@@ -7,12 +7,17 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ## [Unreleased]
 
+### Added
+
+- Occupancy and price of many bookables in one period ([ECCdigital/tickets#850](https://github.com/ECCdigital/tickets/issues/850)): `POST /api/:tenant/bookables/occupancy` with up to 100 `bookableIds` answers each with its availability, the period's price and, where refused, the `reason` (`error` where the checks could not run). The storefront's search asks it once per tenant instead of twice per bookable.
+
 ### Changed
 
 - Agent docs refreshed to stand `ecc-12` of the ECC skills setup: `docs/agents/issue-tracker.md` follows the template „GitHub Portolan, Produkt-Repo“ and reads the Ablauf (`v1`/`v2`) of `ECCdigital/tickets`, with sub-tickets, the extended Definition of Ready and `Refs` instead of `Closes` under `v2`; the `## Agent skills` block in `CLAUDE.md` names it. No code change
 
 ### Fixed
 
+- The occupancy of a bookable whose parent or child refuses the period names that check in `reason` (`parent-availability`, `child-bookings`) instead of failing ([ECCdigital/tickets#850](https://github.com/ECCdigital/tickets/issues/850)); `failedCheck` of `GET /api/:tenant/bookables/:id/occupancy` no longer names the refusing bookable.
 - The attendee list CSV of an event (`GET /csv/:tenant/events/:id/bookings`) keeps its columns and rows: a value with `;` or `"` is quoted, with inner quotes doubled, and a line break becomes a space. Before, a semicolon in a name or address moved the following columns of that row, and a line break split the row.
 - The booking and invoice dates of PDF documents read in Europe/Berlin, whatever the server's time zone: `formatDate` of the PDF service followed the server, unlike `formatDateTime` beside it, so on a server in UTC, as in the Docker image, a receipt or invoice from shortly after midnight carried the previous day.
 
