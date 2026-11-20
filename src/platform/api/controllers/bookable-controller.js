@@ -655,10 +655,12 @@ class BookableController {
         return response.status(400).send(`${tenantId} -- No id provided`);
       }
 
-      // The bookable within the reach of the request; none there is a 404.
-      const bookable = await BookableManager.getBookable(
-        bookableId,
+      // The bookable within the reach of the request, read once and whole
+      // for the checkout, as the batch occupancy reads its own; none there
+      // is a 404.
+      const [bookable] = await BookableManager.getWholeBookablesByIds(
         tenantId,
+        [bookableId],
         scopeOf(request),
       );
       if (!bookable) {
@@ -669,7 +671,7 @@ class BookableController {
       }
 
       const occupancy = await BookableService.getOccupancy({
-        bookableId,
+        bookable,
         tenantId,
         timeBegin,
         timeEnd,

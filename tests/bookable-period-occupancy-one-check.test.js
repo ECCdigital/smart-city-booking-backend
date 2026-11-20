@@ -17,6 +17,9 @@ const {
 } = require("./helpers/booking-lifecycle-harness");
 const BookableModel = require("../src/commons/data-managers/models/bookableModel");
 const {
+  BookableManager,
+} = require("../src/commons/data-managers/bookable-manager");
+const {
   ItemCheckoutService,
 } = require("../src/commons/services/checkout/item-checkout-service");
 const {
@@ -114,6 +117,27 @@ describe("occupancy of many bookables: one check, one read", function () {
     expect(BookableModel.find.callCount).to.equal(1);
   });
 
+  it("reads the bookable of the single occupancy with one query", async function () {
+    h = await installHarness({ bookablesFromModel: true });
+
+    const res = await h
+      .api()
+      .get(`/api/${TENANT}/bookables/room/occupancy`)
+      .query({ timeBegin: TIME_BEGIN, timeEnd: TIME_END });
+
+    expect(res.status).to.equal(200);
+    expect(res.body).to.include({
+      bookableId: "room",
+      title: "Raum",
+      isAvailable: true,
+    });
+    // Every read of a bookable: the harness answers `getBookable` from its
+    // catalogue, the reads by ids go to the model.
+    const reads =
+      BookableModel.find.callCount + BookableManager.getBookable.callCount;
+    expect(reads).to.equal(1);
+  });
+
   it("answers a bookable whose checkout throws as an error and the others as usual", async function () {
     h = await installHarness();
     const init = ItemCheckoutService.prototype.init;
@@ -186,6 +210,18 @@ describe("occupancy of many bookables: one check, one read", function () {
       expect(res.status).to.equal(200);
       expect(res.body.map((o) => o.bookableId)).to.deep.equal(["room"]);
       expect(JSON.stringify(res.body)).to.not.include("auto-room");
+    });
+
+    it("is a 404 of the single occupancy for an anonymous caller, as before", async function () {
+      h = await install();
+      const single = (id) =>
+        h
+          .api()
+          .get(`/api/${TENANT}/bookables/${id}/occupancy`)
+          .query({ timeBegin: TIME_BEGIN, timeEnd: TIME_END });
+
+      expect((await single("auto-room")).status).to.equal(404);
+      expect((await single("room")).status).to.equal(200);
     });
 
     it("is answered for the staff, who reach every bookable", async function () {

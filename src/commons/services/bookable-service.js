@@ -29,7 +29,8 @@ class BookableService {
    * Retrieves the occupancy information for a given bookable item within a specified time range.
    *
    * @param {Object} params - The parameters for retrieving occupancy information.
-   * @param {string} params.bookableId - The unique identifier of the bookable item.
+   * @param {Bookable} params.bookable - The bookable, read whole, within the
+   *   reach of the request: the caller decides the reach.
    * @param {string} params.tenantId - The identifier of the tenant requesting the occupancy.
    * @param {number} params.timeBegin - The start time of the occupancy check period.
    * @param {number} params.timeEnd - The end time of the occupancy check period.
@@ -38,21 +39,17 @@ class BookableService {
    * @return {Promise<Object>} A promise that resolves to an object containing occupancy details, including the bookable ID, title, and availability data. In case of an error, it returns an error response object.
    */
   static async getOccupancy({
-    bookableId,
+    bookable,
     tenantId,
     timeBegin,
     timeEnd,
     userId = null,
     ignoreRelatedEntities = false,
   }) {
+    const bookableId = bookable.id;
     try {
-      const bookable = await BookableManager.getBookable(
-        bookableId,
-        tenantId,
-        DOMAIN,
-      );
       return await this._withCheckout(
-        { bookable, bookableId, tenantId, timeBegin, timeEnd, userId },
+        { bookable, tenantId, timeBegin, timeEnd, userId },
         async (checkoutService) => ({
           bookableId,
           title: bookable.title,
@@ -74,8 +71,7 @@ class BookableService {
    * checkout up afterwards.
    *
    * @param {Object} params
-   * @param {Bookable|null} params.bookable - The bookable, read whole.
-   * @param {string} [params.bookableId=params.bookable.id]
+   * @param {Bookable} params.bookable - The bookable, read whole.
    * @param {string} params.tenantId
    * @param {number} params.timeBegin
    * @param {number} params.timeEnd
@@ -88,7 +84,6 @@ class BookableService {
   static async _withCheckout(
     {
       bookable,
-      bookableId = bookable?.id,
       tenantId,
       timeBegin,
       timeEnd,
@@ -105,7 +100,7 @@ class BookableService {
         tenantId,
         timeBegin,
         timeEnd,
-        bookableId,
+        bookableId: bookable.id,
         amount: 1,
         bookWithoutDiscount: false,
         externalCache,
