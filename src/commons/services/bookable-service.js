@@ -79,6 +79,7 @@ class BookableService {
    * @param {number} params.timeEnd
    * @param {string|null} params.userId
    * @param {Map} [params.externalCache]
+   * @param {Map} [params.requestCache]
    * @param {function(ItemCheckoutService): Promise<*>} use
    * @return {Promise<*>} What `use` answers.
    */
@@ -91,6 +92,7 @@ class BookableService {
       timeEnd,
       userId,
       externalCache,
+      requestCache,
     },
     use,
   ) {
@@ -105,6 +107,7 @@ class BookableService {
         amount: 1,
         bookWithoutDiscount: false,
         externalCache,
+        requestCache,
       });
       await checkoutService.init(bookable);
       return await use(checkoutService);
@@ -158,6 +161,9 @@ class BookableService {
     // `CalendarService.checkAvailability` keeps one: bookables on the same
     // IFBS location or Pareva unit ask the provider once.
     const externalCache = new Map();
+    // And one of the membership, the tenant and its apps, which every
+    // checkout of the request reads alike.
+    const requestCache = new Map();
     let next = 0;
     const worker = async () => {
       while (next < bookables.length) {
@@ -169,6 +175,7 @@ class BookableService {
           timeEnd,
           userId,
           externalCache,
+          requestCache,
         });
       }
     };
@@ -188,10 +195,19 @@ class BookableService {
     timeEnd,
     userId,
     externalCache,
+    requestCache,
   }) {
     try {
       return await this._withCheckout(
-        { bookable, tenantId, timeBegin, timeEnd, userId, externalCache },
+        {
+          bookable,
+          tenantId,
+          timeBegin,
+          timeEnd,
+          userId,
+          externalCache,
+          requestCache,
+        },
         async (checkoutService) => {
           const checkResults = await checkoutService.checkAll(false);
 
