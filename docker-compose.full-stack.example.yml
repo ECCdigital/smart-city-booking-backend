@@ -6,17 +6,29 @@
 #   # edit secrets in .env
 #   docker compose up -d --build
 #
-# Docs: docs/getting-started.md
+# Docs: docs/getting-started.md, for public operation docs/deployment.md
 #
-# Pins: for a more stable deploy, change #develop to a release tag
-# (#v<major>.<minor>.<patch>) or use the published GHCR images.
+# Versions: all three services build from the release tags in .env
+# (BACKEND_VERSION, ADMIN_UI_VERSION, STOREFRONT_VERSION). To update, change
+# them there and run `docker compose up -d --build`.
+#
+# Data: MongoDB keeps its data in the volume mongodb_data. `docker compose
+# down -v` deletes it.
 
 services:
   mongodb:
     image: mongo:7
     restart: unless-stopped
+    environment:
+      # Creates the root account on the first start, with an empty volume
+      # only. For an existing volume see docs/deployment.md
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:?set MONGO_ROOT_USERNAME in .env}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?set MONGO_ROOT_PASSWORD in .env}
     volumes:
       - mongodb_data:/data/db
+    # Docker publishes ports past host firewalls such as ufw: keep 27017 closed
+    # to the outside in the firewall in front of the server, see
+    # docs/deployment.md
     ports:
       - "27017:27017"
     networks:
@@ -24,15 +36,15 @@ services:
 
   backend:
     build:
-      context: .
-      # Or build from GitHub:
-      # context: https://github.com/ECCdigital/smart-city-booking-backend.git#develop
+      context: https://github.com/ECCdigital/smart-city-booking-backend.git#${BACKEND_VERSION:?set BACKEND_VERSION in .env}
+      # Or build the local checkout:
+      # context: .
     restart: unless-stopped
     env_file:
       - .env
     environment:
       PORT: "8081"
-      DB_URL: mongodb://mongodb:27017/booking-manager
+      DB_URL: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongodb:27017/booking-manager?authSource=admin
       DB_NAME: booking-manager
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
       BACKEND_URL: ${BACKEND_URL:-http://localhost:8081}
@@ -50,7 +62,7 @@ services:
 
   admin:
     build:
-      context: https://github.com/ECCdigital/smart-city-booking-vue-app.git#develop
+      context: https://github.com/ECCdigital/smart-city-booking-vue-app.git#${ADMIN_UI_VERSION:?set ADMIN_UI_VERSION in .env}
     restart: unless-stopped
     environment:
       VUE_APP_SERVER_BASE_URL: ${BACKEND_URL:-http://localhost:8081}
@@ -65,7 +77,7 @@ services:
 
   storefront:
     build:
-      context: https://github.com/ECCdigital/smart-city-booking-store-front.git#develop
+      context: https://github.com/ECCdigital/smart-city-booking-store-front.git#${STOREFRONT_VERSION:?set STOREFRONT_VERSION in .env}
     restart: unless-stopped
     environment:
       # Server-side BFF → backend on the Docker network (not localhost:8080)
