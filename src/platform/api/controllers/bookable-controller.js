@@ -721,15 +721,11 @@ class BookableController {
         });
       }
 
-      const reached = await BookableManager.getBookablesByIds(
-        tenantId,
-        [...new Set(bookableIds)],
-        scopeOf(request),
-      );
-
+      // Ids outside the reach of the request are left out (`scope`).
       const occupancies = await BookableService.getPeriodOccupancies({
-        bookableIds: reached.map((bookable) => bookable.id),
+        bookableIds: [...new Set(bookableIds)],
         tenantId,
+        scope: scopeOf(request),
         timeBegin,
         timeEnd,
         userId: request.user?.id,

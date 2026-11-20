@@ -741,6 +741,25 @@ class ItemCheckoutService {
     return grossPrice;
   }
 
+  /**
+   * The price fields of the checkout as `validateItem` (v1 and v2) and the
+   * batch occupancy answer them, the prices times `multiplier`.
+   *
+   * @param {number} [multiplier=1] The units the price is for: the amount,
+   *   or 1 where the price category ignores it (`ignoreAmount`).
+   * @returns {Promise<Object>}
+   */
+  async priceFields(multiplier = 1) {
+    return {
+      regularPriceEur: (await this.regularPriceEur()) * multiplier,
+      userPriceEur: (await this.userPriceEur()) * multiplier,
+      regularGrossPriceEur: (await this.regularGrossPriceEur()) * multiplier,
+      userGrossPriceEur: (await this.userGrossPriceEur()) * multiplier,
+      freeBookingAllowed: await this.freeBookingAllowed(),
+      bookingDiscountPercent: await this.bookingDiscountPercent(),
+    };
+  }
+
   async checkPermissions() {
     const provider = await this._getAvailabilityProvider();
     return runPermissionCheck({
