@@ -23,6 +23,9 @@ const providerRegistry = require("../src/commons/services/checkout/providers/reg
 const BaseCheckoutProvider = require("../src/commons/services/checkout/providers/base-checkout-provider");
 const IfbsCheckoutProvider = require("../src/commons/services/checkout/providers/ifbs-checkout-provider");
 const ParevaCheckoutProvider = require("../src/commons/services/checkout/providers/pareva-checkout-provider");
+const {
+  installInMemoryRateLimitEvents,
+} = require("./helpers/in-memory-rate-limit-events");
 
 const OCCUPANCY = `/api/${TENANT}/bookables/occupancy`;
 
@@ -38,6 +41,11 @@ function tenBookables(overrides = {}) {
 
 describe("occupancy of many bookables: one read per request", function () {
   let h;
+
+  // The route counts its ids at the limit per IP (ECCdigital/tickets#1254).
+  beforeEach(function () {
+    installInMemoryRateLimitEvents();
+  });
 
   afterEach(async function () {
     sinon.restore();
