@@ -6,7 +6,15 @@ const { Bookable } = require("../../../commons/entities/bookable/bookable");
 const { v4: uuidv4 } = require("uuid");
 const AccessPointManager = require("../../../commons/data-managers/access-point-manager");
 const { ValidationError } = require("../../../errors/ValidationError");
-const { BaseError, BadRequestError } = require("../../../errors/BaseError");
+const {
+  BaseError,
+  BadRequestError,
+  TooManyRequestsError,
+} = require("../../../errors/BaseError");
+const RateLimiter = require("../../../commons/services/rate-limit/rate-limiter");
+const {
+  periodOccupancyPerIp,
+} = require("../../../commons/services/rate-limit/limits");
 const { answerMetaValues } = require("./meta-values-answer");
 const {
   scopeOf,
@@ -697,6 +705,11 @@ class BookableController {
    * `/calendar/occupancy` answer theirs (`ApiResponse.ok` would spread the
    * array into an object). Every error goes to the central error handler,
    * so a client sees one error shape.
+   *
+   * Each distinct id counts at the limit per IP, as it runs one checkout
+   * (ECCdigital/tickets#1254): past it the route answers 429 with
+   * `Retry-After` before it looks up a bookable. A refused request spends
+   * nothing.
    */
   static async getPeriodOccupancies(request, response, next) {
     try {
@@ -721,9 +734,20 @@ class BookableController {
         });
       }
 
+      const ids = [...new Set(bookableIds)];
+      const gate = await RateLimiter.consume({
+        ...periodOccupancyPerIp(request.ip),
+        cost: ids.length,
+      });
+      if (!gate.allowed) {
+        throw new TooManyRequestsError("too_many_requests", {
+          retryAfterSeconds: gate.retryAfterSeconds,
+        });
+      }
+
       // Ids outside the reach of the request are left out (`scope`).
       const occupancies = await BookableService.getPeriodOccupancies({
-        bookableIds: [...new Set(bookableIds)],
+        bookableIds: ids,
         tenantId,
         scope: scopeOf(request),
         timeBegin,

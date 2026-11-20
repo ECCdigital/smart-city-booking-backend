@@ -16,6 +16,11 @@
       Public (`bookable.readPublic`): bookables outside the reach of the
       request, such as ones the public cannot see, are left out of the
       answer. At most 100 ids per request.
+
+      Limited per client IP in bookables, not requests: each distinct id
+      counts once, 2000 per 5 minutes
+      (`RATE_LIMIT_PERIOD_OCCUPANCY_PER_IP`). A request refused with `400`
+      or `429` counts nothing.
     parameters:
       - $ref: "#/components/parameters/TenantParam"
     requestBody:
@@ -133,6 +138,38 @@
                 params:
                   type: object
                   additionalProperties: true
+      "429":
+        description: |
+          `too_many_requests`: the ids of this request do not fit into what
+          is left of the client IP's 2000 bookables per 5 minutes
+          (`RATE_LIMIT_PERIOD_OCCUPANCY_PER_IP`); no bookable is checked.
+          `Retry-After` (seconds) and `params.retryAfterSeconds` say when
+          they fit.
+        headers:
+          Retry-After:
+            description: Seconds until the ids of the request fit
+            schema:
+              type: integer
+        content:
+          application/json:
+            schema:
+              type: object
+              description: The body of the central error handler.
+              properties:
+                error:
+                  type: string
+                  example: TooManyRequestsError
+                code:
+                  type: string
+                  example: too_many_requests
+                statusCode:
+                  type: integer
+                  example: 429
+                params:
+                  type: object
+                  properties:
+                    retryAfterSeconds:
+                      type: integer
       "500":
         description: "`internal_error`: the bookables could not be read"
         content:

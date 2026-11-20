@@ -1,6 +1,7 @@
 /**
- * The rate limits of the public entry points (spec §6.3) and of the geo
- * services (map ECCdigital/tickets#372), with their
+ * The rate limits of the public entry points (spec §6.3), of the geo
+ * services (map ECCdigital/tickets#372) and of the storefront's search
+ * (ECCdigital/tickets#1254), with their
  * defaults and the environment variables that override them. Each limit is
  * read at call time, so a changed environment counts at once. Every limit
  * has its own key even when two of them guard the same subject: the limiter
@@ -131,6 +132,18 @@ function geoTilesOutbound() {
   };
 }
 
+/**
+ * Bookables per IP asked by `POST /bookables/occupancy`: 2000 in 5 minutes.
+ * Each bookable of a request is one attempt, as it runs one checkout
+ * (ECCdigital/tickets#1254).
+ */
+function periodOccupancyPerIp(ip) {
+  return {
+    key: `period-occupancy:ip:${ip}`,
+    ...limitFrom("RATE_LIMIT_PERIOD_OCCUPANCY_PER_IP", 2000, 300),
+  };
+}
+
 module.exports = {
   signupPerIp,
   verificationMailPerAccount,
@@ -141,5 +154,6 @@ module.exports = {
   geoPerUser,
   geoOutbound,
   geoTilesOutbound,
+  periodOccupancyPerIp,
   positiveInt,
 };
