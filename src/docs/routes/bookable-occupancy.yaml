@@ -115,3 +115,41 @@
         description: |
           `invalid_period_occupancy_request`: no ids, more than 100, or no
           valid period
+        content:
+          application/json:
+            schema:
+              type: object
+              description: The body of the central error handler.
+              properties:
+                error:
+                  type: string
+                  example: BadRequestError
+                code:
+                  type: string
+                  example: invalid_period_occupancy_request
+                statusCode:
+                  type: integer
+                  example: 400
+                params:
+                  type: object
+                  additionalProperties: true
+      "500":
+        description: "`internal_error`: the bookables could not be read"
+        content:
+          application/json:
+            schema:
+              type: object
+              description: The body of the central error handler.
+              properties:
+                error:
+                  type: string
+                  example: InternalError
+                code:
+                  type: string
+                  example: internal_error
+                statusCode:
+                  type: integer
+                  example: 500
+                params:
+                  type: object
+                  additionalProperties: true

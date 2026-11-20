@@ -20,6 +20,7 @@ const {
 const {
   CHECK_TYPES,
 } = require("../src/commons/availability/checkout-check-types");
+const BookableService = require("../src/commons/services/bookable-service");
 
 const OCCUPANCY = `/api/${TENANT}/bookables/occupancy`;
 
@@ -234,4 +235,35 @@ describe("occupancy of many bookables in one period", function () {
       expect(res.body.code).to.equal("invalid_period_occupancy_request");
     });
   }
+
+  it("answers a failure in the error handler's JSON, as it answers the 400", async function () {
+    sinon
+      .stub(BookableService, "getPeriodOccupancies")
+      .rejects(new Error("database down"));
+
+    const res = await post({
+      bookableIds: ["room"],
+      timeBegin: TIME_BEGIN,
+      timeEnd: TIME_END,
+    });
+
+    expect(res.status).to.equal(500);
+    expect(res.type).to.equal("application/json");
+    expect(res.body).to.deep.equal({
+      error: "InternalError",
+      code: "internal_error",
+      statusCode: 500,
+    });
+  });
+
+  it("answers the occupancies as a bare array", async function () {
+    const res = await post({
+      bookableIds: ["room"],
+      timeBegin: TIME_BEGIN,
+      timeEnd: TIME_END,
+    });
+
+    expect(res.type).to.equal("application/json");
+    expect(res.body).to.be.an("array");
+  });
 });

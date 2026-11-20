@@ -695,7 +695,13 @@ class BookableController {
   /**
    * `POST /bookables/occupancy`: the occupancy of many bookables in one
    * period, each with the price of that period where it is available.
-   * Ids outside the reach of the request are left out of the answer, as `GET /bookables/:id/occupancy` answers them 404.
+   * Ids outside the reach of the request are left out of the answer, as
+   * `GET /bookables/:id/occupancy` answers them 404.
+   *
+   * The answer is the bare array, as the single occupancy and
+   * `/calendar/occupancy` answer theirs (`ApiResponse.ok` would spread the
+   * array into an object). Every error goes to the central error handler,
+   * so a client sees one error shape.
    */
   static async getPeriodOccupancies(request, response, next) {
     try {
@@ -734,13 +740,9 @@ class BookableController {
         userId: request.user?.id,
       });
 
-      response.status(200).send(occupancies);
+      response.status(200).json(occupancies);
     } catch (err) {
-      if (err instanceof BaseError) {
-        return next(err);
-      }
-      logger.error(err);
-      response.status(500).send("Could not get bookable occupancies");
+      next(err);
     }
   }
 
