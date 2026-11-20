@@ -701,17 +701,19 @@ class BookableController {
     try {
       const tenantId = request.params.tenant;
       const { bookableIds, timeBegin, timeEnd } = request.body ?? {};
-      const begin = Number(timeBegin);
-      const end = Number(timeEnd);
 
+      // Numbers only, as the OpenAPI says: `Number()` would read `null`,
+      // `""`, `false` and `[]` as 0 and check from 1970 on.
       if (
         !Array.isArray(bookableIds) ||
         bookableIds.length === 0 ||
         bookableIds.length > MAX_PERIOD_OCCUPANCY_IDS ||
         !bookableIds.every((id) => typeof id === "string" && id) ||
-        !Number.isFinite(begin) ||
-        !Number.isFinite(end) ||
-        end <= begin
+        typeof timeBegin !== "number" ||
+        typeof timeEnd !== "number" ||
+        !Number.isFinite(timeBegin) ||
+        !Number.isFinite(timeEnd) ||
+        timeEnd <= timeBegin
       ) {
         throw new BadRequestError("invalid_period_occupancy_request", {
           maxBookableIds: MAX_PERIOD_OCCUPANCY_IDS,
@@ -727,8 +729,8 @@ class BookableController {
       const occupancies = await BookableService.getPeriodOccupancies({
         bookableIds: reached.map((bookable) => bookable.id),
         tenantId,
-        timeBegin: begin,
-        timeEnd: end,
+        timeBegin,
+        timeEnd,
         userId: request.user?.id,
       });
 

@@ -14,6 +14,12 @@ const {
   TIME_BEGIN,
   TIME_END,
 } = require("./helpers/booking-lifecycle-harness");
+const {
+  ItemCheckoutService,
+} = require("../src/commons/services/checkout/item-checkout-service");
+const {
+  CHECK_TYPES,
+} = require("../src/commons/availability/checkout-check-types");
 
 const OCCUPANCY = `/api/${TENANT}/bookables/occupancy`;
 
@@ -75,9 +81,69 @@ describe("occupancy of many bookables in one period", function () {
     expect(res.body[0].price).to.equal(null);
   });
 
+  for (const [name, refusal] of [
+    [
+      "parent",
+      {
+        checkType: CHECK_TYPES.PARENT_AVAILABILITY,
+        available: false,
+        parentAvailability: [
+          { bookableId: "hidden-parent", title: "Verborgen", available: false },
+        ],
+      },
+    ],
+    [
+      "child",
+      {
+        checkType: CHECK_TYPES.CHILD_BOOKINGS,
+        available: false,
+        childAvailabilities: [
+          { bookableId: "hidden-child", title: "Verborgen", available: false },
+        ],
+      },
+    ],
+  ]) {
+    it(`names neither id nor title of a ${name} that refuses the period`, async function () {
+      sinon
+        .stub(
+          ItemCheckoutService.prototype,
+          name === "parent" ? "checkParentAvailability" : "checkChildBookings",
+        )
+        .rejects(refusal);
+
+      const res = await post({
+        bookableIds: ["room"],
+        timeBegin: TIME_BEGIN,
+        timeEnd: TIME_END,
+      });
+
+      expect(res.status).to.equal(200);
+      expect(res.body[0]).to.include({
+        bookableId: "room",
+        title: "Raum",
+        isAvailable: false,
+        reason: refusal.checkType,
+        price: null,
+      });
+      expect(res.body[0]).to.not.have.property("failedCheck");
+      expect(JSON.stringify(res.body)).to.not.match(/hidden-|Verborgen/);
+    });
+  }
+
   for (const [name, body] of [
     ["no ids", { bookableIds: [], timeBegin: TIME_BEGIN, timeEnd: TIME_END }],
     ["no period", { bookableIds: ["room"] }],
+    // `Number()` would read these as 0, a period from 1970 on.
+    ...[null, "", false, [], [TIME_BEGIN], String(TIME_BEGIN)].map(
+      (timeBegin) => [
+        `a begin of ${JSON.stringify(timeBegin)}`,
+        { bookableIds: ["room"], timeBegin, timeEnd: TIME_END },
+      ],
+    ),
+    [
+      "an end of null",
+      { bookableIds: ["room"], timeBegin: TIME_BEGIN, timeEnd: null },
+    ],
     [
       "an end before the begin",
       { bookableIds: ["room"], timeBegin: TIME_END, timeEnd: TIME_BEGIN },

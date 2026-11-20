@@ -69,7 +69,12 @@
                     nullable: true
                   reason:
                     type: string
-                    description: The check that failed, where one did
+                    description: |
+                      The type of the check that failed, where the check
+                      names one, such as `availability`,
+                      `parent-availability` or `child-bookings`. The parent
+                      or child that failed is not named: it may be one the
+                      request cannot reach.
                   price:
                     type: object
                     nullable: true

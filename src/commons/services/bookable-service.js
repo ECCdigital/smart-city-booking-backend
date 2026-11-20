@@ -147,15 +147,21 @@ class BookableService {
       });
       await checkoutService.init(bookable);
 
-      const occupancy = await this._performAvailabilityCheck(checkoutService);
+      const { isAvailable, totalCapacity, booked, remaining, reason } =
+        await this._performAvailabilityCheck(checkoutService);
 
+      // Only the documented fields: a failed check names the parent or
+      // child that failed (`failedCheck`, `bookableId`, `title`), which may
+      // be one the request cannot reach.
       return {
         bookableId: bookable.id,
         title: bookable.title,
-        ...occupancy,
-        price: occupancy.isAvailable
-          ? await this._periodPrice(checkoutService)
-          : null,
+        isAvailable,
+        totalCapacity,
+        booked,
+        remaining,
+        ...(reason ? { reason } : {}),
+        price: isAvailable ? await this._periodPrice(checkoutService) : null,
       };
     } catch (error) {
       logger.error(error);
