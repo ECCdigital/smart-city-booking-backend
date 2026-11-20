@@ -69,6 +69,10 @@ class ItemCheckoutService {
    * @param {string|string[]|null} [excludeBookingIds] Booking IDs to ignore in capacity checks (e.g. the booking being edited).
    * @param {Map} externalCache An optional Map instance for caching data across multiple service instances, particularly useful for external provider data. If not provided, a new Map will be created for each instance.
    *                                Defaults to `false` (discounts are applied when configured).
+   * @param {Map} [requestCache] An optional Map shared by the checkouts of
+   *   one request: the membership, the tenant and the tenant apps they read
+   *   are read once for all of them. If not provided, a new Map is created
+   *   for each instance.
    * @param {number} [amountInBooking] Units of this bookable the whole booking
    *   counts against the bookable's maximum per booking: the sum over the
    *   booking's chosen positions of it, 0 for a mandatory addon. Defaults to
@@ -92,6 +96,7 @@ class ItemCheckoutService {
       checkoutId,
       excludeBookingIds,
       externalCache,
+      requestCache,
       amountInBooking,
       manualPriceEur,
     },
@@ -128,6 +133,7 @@ class ItemCheckoutService {
         ? [excludeBookingIds]
         : [];
     this.externalCache = externalCache || new Map();
+    this.requestCache = requestCache || new Map();
     this._cache = new Map();
     this._availabilityProvider = null;
   }
@@ -159,6 +165,38 @@ class ItemCheckoutService {
       this._cache.set(key, fn());
     }
     return this._cache.get(key);
+  }
+
+  /**
+   * What `load` answers, read once per `requestCache` under `key`: the
+   * checkouts of one request that ask the same share one read. A failed
+   * read is not kept - whoever shared it reads again on their own, as
+   * they would without the cache, and later ones start a new read - so
+   * the cache never changes an answer, it only saves reads.
+   *
+   * @param {string} key Names everything the answer depends on.
+   * @param {function(): Promise<*>} load
+   * @returns {Promise<*>}
+   */
+  async _readOncePerRequest(key, load) {
+    const shared = this.requestCache.get(key);
+    if (shared) {
+      try {
+        return await shared;
+      } catch {
+        return load();
+      }
+    }
+    const read = load();
+    this.requestCache.set(key, read);
+    try {
+      return await read;
+    } catch (error) {
+      if (this.requestCache.get(key) === read) {
+        this.requestCache.delete(key);
+      }
+      throw error;
+    }
   }
 
   /**
@@ -231,9 +269,9 @@ class ItemCheckoutService {
         continue;
       }
 
-      const app = await TenantManager.getTenantAppById(
-        this.tenantId,
-        decl.provider,
+      const app = await this._readOncePerRequest(
+        `tenantApp:${this.tenantId}:${decl.provider}`,
+        () => TenantManager.getTenantAppById(this.tenantId, decl.provider),
       );
 
       if (!app || !app.active) {
@@ -285,7 +323,7 @@ class ItemCheckoutService {
     if (!parevaRows.length) return null;
 
     const app = AccessProvider.findActiveApplication(
-      await TenantManager.getTenant(this.tenantId, DOMAIN),
+      await this.domainTenant(),
       PAREVA,
       [ACCESS_APP_TYPE],
     );
@@ -302,6 +340,16 @@ class ItemCheckoutService {
       tenantId: this.tenantId,
       externalCache: this.externalCache,
     });
+  }
+
+  /**
+   * The tenant as the domain reads it, once per request.
+   * @returns {Promise<Tenant|null>}
+   */
+  domainTenant() {
+    return this._readOncePerRequest(`tenant:${this.tenantId}:domain`, () =>
+      TenantManager.getTenant(this.tenantId, DOMAIN),
+    );
   }
 
   cleanup() {
@@ -408,9 +456,13 @@ class ItemCheckoutService {
         return 0;
       }
 
-      const membership = await MembershipManager.getMembershipByTenantAndUserID(
-        this.tenantId,
-        this.user,
+      const membership = await this._readOncePerRequest(
+        `membership:${this.tenantId}:${this.user}`,
+        () =>
+          MembershipManager.getMembershipByTenantAndUserID(
+            this.tenantId,
+            this.user,
+          ),
       );
       const userRoles = membership?.roles || [];
 
@@ -750,6 +802,25 @@ class ItemCheckoutService {
   async userGrossPriceEur() {
     const { grossPrice } = await this._userPricesAfterCoupons();
     return grossPrice;
+  }
+
+  /**
+   * The price fields of the checkout as `validateItem` (v1 and v2) and the
+   * batch occupancy answer them, the prices times `multiplier`.
+   *
+   * @param {number} [multiplier=1] The units the price is for: the amount,
+   *   or 1 where the price category ignores it (`ignoreAmount`).
+   * @returns {Promise<Object>}
+   */
+  async priceFields(multiplier = 1) {
+    return {
+      regularPriceEur: (await this.regularPriceEur()) * multiplier,
+      userPriceEur: (await this.userPriceEur()) * multiplier,
+      regularGrossPriceEur: (await this.regularGrossPriceEur()) * multiplier,
+      userGrossPriceEur: (await this.userGrossPriceEur()) * multiplier,
+      freeBookingAllowed: await this.freeBookingAllowed(),
+      bookingDiscountPercent: await this.bookingDiscountPercent(),
+    };
   }
 
   async checkPermissions() {

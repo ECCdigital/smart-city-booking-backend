@@ -25,6 +25,8 @@ const ENV_KEYS = [
   "RATE_LIMIT_GEO_OUTBOUND_WINDOW_SECONDS",
   "RATE_LIMIT_GEO_TILES_OUTBOUND",
   "RATE_LIMIT_GEO_TILES_OUTBOUND_WINDOW_SECONDS",
+  "RATE_LIMIT_PERIOD_OCCUPANCY_PER_IP",
+  "RATE_LIMIT_PERIOD_OCCUPANCY_PER_IP_WINDOW_SECONDS",
 ];
 
 describe("rate-limit limits", function () {
@@ -144,6 +146,23 @@ describe("rate-limit limits", function () {
       key: "geo:tiles:outbound",
       limit: 20,
       windowMs: 10_000,
+    });
+  });
+
+  it("carries the occupancy default, 2000 bookables per IP in 5 minutes, and reads the environment", function () {
+    assert.deepStrictEqual(limits.periodOccupancyPerIp("203.0.113.7"), {
+      key: "period-occupancy:ip:203.0.113.7",
+      limit: 2000,
+      windowMs: 300_000,
+    });
+
+    process.env.RATE_LIMIT_PERIOD_OCCUPANCY_PER_IP = "150";
+    process.env.RATE_LIMIT_PERIOD_OCCUPANCY_PER_IP_WINDOW_SECONDS = "60";
+
+    assert.deepStrictEqual(limits.periodOccupancyPerIp("203.0.113.7"), {
+      key: "period-occupancy:ip:203.0.113.7",
+      limit: 150,
+      windowMs: 60_000,
     });
   });
 

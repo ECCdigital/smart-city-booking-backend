@@ -66,6 +66,7 @@ class CheckoutDataProvider extends AvailabilityDataProvider {
 
     await provider.load({
       bookableOverride: checkoutService.originBookable,
+      readTenant: () => checkoutService.domainTenant(),
     });
 
     return provider;
@@ -74,8 +75,13 @@ class CheckoutDataProvider extends AvailabilityDataProvider {
   /**
    * @param {Object} [options]
    * @param {import("../../entities/bookable/bookable").Bookable|null} [options.bookableOverride]
+   * @param {function(): Promise<Object|null>} [options.readTenant] Reads the
+   *   tenant in place of `TenantManager.getTenant` under the domain reach.
    */
-  async load({ bookableOverride = null } = {}) {
+  async load({
+    bookableOverride = null,
+    readTenant = () => TenantManager.getTenant(this.tenantId, DOMAIN),
+  } = {}) {
     const [bookable, parentBookables, relatedBookables, tenant] =
       await Promise.all([
         bookableOverride ??
@@ -94,7 +100,7 @@ class CheckoutDataProvider extends AvailabilityDataProvider {
           this.tenantId,
           DOMAIN,
         ),
-        TenantManager.getTenant(this.tenantId, DOMAIN),
+        readTenant(),
       ]);
 
     this.bookable = bookable;

@@ -9,6 +9,12 @@ const INVALID_TYPE_OBJECT = "invalid_type_object";
 /** The sources of a point the input writes: search, by hand, NUKI. */
 const POINT_SOURCES = Object.freeze(["photon", "manual", "nuki"]);
 
+/**
+ * Old sources of stored locations. They pass on a new location too: a copy
+ * of a stored offer (duplicating in the Admin UI) carries its location.
+ */
+const OLD_POINT_SOURCES = Object.freeze(["nominatim", "legacy"]);
+
 /** The fields of an address; each one filled is content of the location. */
 const ADDRESS_FIELDS = Object.freeze([
   "street",
@@ -88,12 +94,10 @@ function checkShape(location, storedLocation) {
   if (expectObject(".meta", meta) && meta) {
     expectString(".meta.additional", meta.additional);
     const source = meta.source;
-    // An old source (`nominatim`, `legacy`) stays as long as it is the
-    // stored one: stored locations are never rewritten.
     if (
       !isAbsent(source) &&
       !POINT_SOURCES.includes(source) &&
-      !(isPlainObject(storedLocation) && storedLocation.meta?.source === source)
+      !OLD_POINT_SOURCES.includes(source)
     ) {
       refuse(".meta.source", ERROR_CODES.enum, { allowed: POINT_SOURCES });
     }

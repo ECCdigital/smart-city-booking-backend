@@ -90,6 +90,13 @@ router.get(
   publicRoute("bookable", "readPublic"),
   BookableController.getBookableOccupancy,
 );
+// Many bookables in one period, with the price of the period: the
+// storefront's search.
+router.post(
+  "/bookables/occupancy",
+  publicRoute("bookable", "readPublic"),
+  BookableController.getPeriodOccupancies,
+);
 router.get(
   "/bookables/:id/prices",
   publicRoute("bookable", "prices"),

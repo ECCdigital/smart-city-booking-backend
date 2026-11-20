@@ -1,4 +1,5 @@
 const RateLimitEventManager = require("../../data-managers/rate-limit-event-manager");
+const { TooManyRequestsError } = require("../../../errors/BaseError");
 
 /**
  * A sliding-window rate limiter over the `RateLimitEvent` collection, safe
@@ -10,18 +11,20 @@ const RateLimitEventManager = require("../../data-managers/rate-limit-event-mana
  */
 class RateLimiter {
   /**
-   * Counts one attempt of `key` against `limit` per `windowMs`.
+   * Counts one attempt of `key` against `limit` per `windowMs`, or `cost`
+   * attempts at once: allowed only when all of them fit, denied as a whole.
    *
    * @param {Object} params
    * @param {string} params.key The limited subject, e.g. `signup:ip:203.0.113.7`
    * @param {number} params.limit Attempts allowed per window (≥ 1)
    * @param {number} params.windowMs Length of the sliding window (> 0)
+   * @param {number} [params.cost=1] How many attempts this one counts as (≥ 1)
    * @param {Date} [params.now] The clock, for tests
    * @returns {Promise<{ allowed: boolean, retryAfterSeconds: number, release: () => Promise<void> }>}
    *   `retryAfterSeconds` is 0 when allowed, otherwise the seconds until a
    *   slot frees (at least 1).
    */
-  static async consume({ key, limit, windowMs, now = new Date() }) {
+  static async consume({ key, limit, windowMs, cost = 1, now = new Date() }) {
     if (typeof key !== "string" || key.length === 0) {
       throw new Error("RateLimiter.consume: key must be a non-empty string");
     }
@@ -31,23 +34,23 @@ class RateLimiter {
     if (!(windowMs > 0)) {
       throw new Error("RateLimiter.consume: windowMs must be > 0");
     }
+    if (!Number.isInteger(cost) || cost < 1) {
+      throw new Error("RateLimiter.consume: cost must be an integer >= 1");
+    }
 
     const since = new Date(now.getTime() - windowMs);
-    const id = await RateLimitEventManager.record(key, now);
+    // All rows of the attempt go in before the count, in one round trip.
+    const takeBack = await RateLimiter._record(key, now, cost);
     const count = await RateLimitEventManager.countSince(key, since);
 
     if (count <= limit) {
-      return {
-        allowed: true,
-        retryAfterSeconds: 0,
-        release: () => RateLimitEventManager.remove(id),
-      };
+      return { allowed: true, retryAfterSeconds: 0, release: takeBack };
     }
 
-    await RateLimitEventManager.remove(id);
+    await takeBack();
 
-    // Without our row there are `count - 1` attempts in the window; a slot
-    // frees once `count - limit` of the oldest have left it.
+    // Without our rows there are `count - cost` attempts in the window; all
+    // of ours fit once `count - limit` of the oldest have left it.
     const freesAt = await RateLimitEventManager.oldestAtWithin(
       key,
       since,
@@ -62,6 +65,38 @@ class RateLimiter {
       retryAfterSeconds: Math.max(1, Math.ceil(waitMs / 1000)),
       release: async () => {},
     };
+  }
+
+  /**
+   * `consume`, refusing a denied attempt instead of answering it.
+   *
+   * @param {Object} params As of `consume`
+   * @returns {Promise<{ allowed: true, retryAfterSeconds: 0, release: () => Promise<void> }>}
+   * @throws {TooManyRequestsError} Past the limit, with `retryAfterSeconds`
+   *   for the `Retry-After` header
+   */
+  static async enforce(params) {
+    const result = await RateLimiter.consume(params);
+    if (!result.allowed) {
+      throw new TooManyRequestsError("too_many_requests", {
+        retryAfterSeconds: result.retryAfterSeconds,
+      });
+    }
+    return result;
+  }
+
+  /**
+   * Inserts the `cost` rows of one attempt.
+   *
+   * @returns {Promise<() => Promise<void>>} Removes them again
+   */
+  static async _record(key, now, cost) {
+    if (cost === 1) {
+      const id = await RateLimitEventManager.record(key, now);
+      return () => RateLimitEventManager.remove(id);
+    }
+    const ids = await RateLimitEventManager.recordMany(key, now, cost);
+    return () => RateLimitEventManager.removeMany(ids);
   }
 
   /**
