@@ -17,15 +17,32 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 - Refund tiers count in hours ([ECCdigital/tickets#637](https://github.com/ECCdigital/tickets/issues/637)): a tier of `cancellationRefundTiers` names its threshold in whole hours (`hoursBeforeStart`) instead of calendar days, and a cancellation counts the hours that actually pass until the start. The migration `02-11-2026-cancellation-refund-tiers-in-hours` turns d days into d × 24 hours; breaking, roll out together with the matching Admin UI and Storefront, see the [upgrade notes](migrations/v4.5-upgrade.md#refund-tiers-count-in-hours)
 - Index for the tickets of an event ([ECCdigital/tickets#740](https://github.com/ECCdigital/tickets/issues/740)): `bookables` gets the index `tenantId_1_eventId_1_type_1`, so the query for the tickets of an event (`{tenantId, eventId, type: "ticket"}`, e.g. in the checkout of a ticket) reads only that event's bookables instead of every bookable of the tenant. The migration `18-11-2026-add-bookable-event-index` builds it on existing instances and skips an index with the same keys. No API change
 - CI gate „protected files“ ([ECCdigital/tickets#425](https://github.com/ECCdigital/tickets/issues/425)): the new job `protected-files`, required by `ci-ok`, blocks a pull request that deletes or changes an existing test, adds `.skip`, `.only` or `.todo`, or changes an accepted ADR or the CI configuration, unless the ticket it references (`Refs ECCdigital/tickets#<n>`) names the file; new tests are free. It runs the rule from ECCdigital/portolan with the read-only GitHub App „Portolan Gate“ (org secrets `GATE_APP_ID`, `GATE_PRIVATE_KEY`); pull requests from forks get no secrets and stay blocked until an admin bypasses the gate. No code change
+
+### Fixed
+
+- A flat-rate price is charged once per booking ([ECCdigital/smart-city-booking-issues#37](https://github.com/ECCdigital/smart-city-booking-issues/issues/37)): the checkout prices a booking per calendar day to pick each day's category and charged a flat-rate category for every day the booking touches, so a booking over midnight paid it twice. A flat-rate category now counts once per booking; time-based categories stay priced per day
+- The web integration marks a flat-rate price ([ECCdigital/smart-city-booking-issues#39](https://github.com/ECCdigital/smart-city-booking-issues/issues/39)): the HTML of `/html/:tenant/bookables` and `/html/:tenant/bookables/:id`, which booking-manager.js embeds, shows a price category with `fixedPrice` as „Pauschalpreis“ (`<span class="price-category-flat-rate">`) and without the unit, as the storefront does. Before, it read as a price per hour or day
+- Rejecting a request is free of charge ([ECCdigital/tickets#753](https://github.com/ECCdigital/tickets/issues/753)): a request the administration or the system rejects, single or series, refunds in full - no cancellation fee on the cancellation document, outside the tiers, a `refundPercentage` is ignored. The admin previews of a request answer the same; calculation and refund audit carry `rejection: true`. Such a rejection issues no cancellation document, whatever `skipCancellation` says; the rejection mail goes out without attachment. A customer withdrawing a request still pays the tiers and gets the document. OpenAPI updated
+
+## [4.4.2] — 2026-11-20
+
+### Added
+
+- Occupancy and price of many bookables in one period ([ECCdigital/tickets#850](https://github.com/ECCdigital/tickets/issues/850)): `POST /api/:tenant/bookables/occupancy` with up to 100 `bookableIds` answers each with its availability, the period's price and, where refused, the `reason` (`error` where the checks could not run). The storefront's search asks it once per tenant instead of twice per bookable.
+
+### Changed
+
+- `POST /api/:tenant/bookables/occupancy` reads its bookables with one query instead of two and takes its checkout and price fields from the same code as `GET /api/:tenant/bookables/:id/occupancy` and `validateItem` (v1, v2) ([ECCdigital/tickets#1252](https://github.com/ECCdigital/tickets/issues/1252)). No change at the API
+- `POST /api/:tenant/bookables/occupancy` reads the caller's membership, the tenant and each tenant app once per request instead of once or more per bookable ([ECCdigital/tickets#1253](https://github.com/ECCdigital/tickets/issues/1253)). No change at the API
 - Agent docs refreshed to stand `ecc-12` of the ECC skills setup: `docs/agents/issue-tracker.md` follows the template „GitHub Portolan, Produkt-Repo“ and reads the Ablauf (`v1`/`v2`) of `ECCdigital/tickets`, with sub-tickets, the extended Definition of Ready and `Refs` instead of `Closes` under `v2`; the `## Agent skills` block in `CLAUDE.md` names it. No code change
 
 ### Fixed
 
+- Duplicating an offer with an old location works again ([ECCdigital/tickets#750](https://github.com/ECCdigital/tickets/issues/750)): creating a bookable, event or access point accepts the old `location.meta.source` values `nominatim` and `legacy`, not only an unchanged stored location; before, the copy the Admin UI posts was refused with `400`
+- `POST /api/:tenant/bookables/occupancy` is limited per client IP in bookables ([ECCdigital/tickets#1254](https://github.com/ECCdigital/tickets/issues/1254)): 2000 per 5 minutes (`RATE_LIMIT_PERIOD_OCCUPANCY_PER_IP`), past it `429` with `Retry-After`.
+- The occupancy of a bookable whose parent or child refuses the period names that check in `reason` (`parent-availability`, `child-bookings`) instead of failing ([ECCdigital/tickets#850](https://github.com/ECCdigital/tickets/issues/850)); `failedCheck` of `GET /api/:tenant/bookables/:id/occupancy` no longer names the refusing bookable.
 - The attendee list CSV of an event (`GET /csv/:tenant/events/:id/bookings`) keeps its columns and rows: a value with `;` or `"` is quoted, with inner quotes doubled, and a line break becomes a space. Before, a semicolon in a name or address moved the following columns of that row, and a line break split the row.
 - The booking and invoice dates of PDF documents read in Europe/Berlin, whatever the server's time zone: `formatDate` of the PDF service followed the server, unlike `formatDateTime` beside it, so on a server in UTC, as in the Docker image, a receipt or invoice from shortly after midnight carried the previous day.
-- A flat-rate price is charged once per booking ([ECCdigital/smart-city-booking-issues#37](https://github.com/ECCdigital/smart-city-booking-issues/issues/37)): the checkout prices a booking per calendar day to pick each day's category and charged a flat-rate category for every day the booking touches, so a booking over midnight paid it twice. A flat-rate category now counts once per booking; time-based categories stay priced per day
-- The web integration marks a flat-rate price ([ECCdigital/smart-city-booking-issues#39](https://github.com/ECCdigital/smart-city-booking-issues/issues/39)): the HTML of `/html/:tenant/bookables` and `/html/:tenant/bookables/:id`, which booking-manager.js embeds, shows a price category with `fixedPrice` as „Pauschalpreis“ (`<span class="price-category-flat-rate">`) and without the unit, as the storefront does. Before, it read as a price per hour or day
-- Rejecting a request is free of charge ([ECCdigital/tickets#753](https://github.com/ECCdigital/tickets/issues/753)): a request the administration or the system rejects, single or series, refunds in full - no cancellation fee on the cancellation document, outside the tiers, a `refundPercentage` is ignored. The admin previews of a request answer the same; calculation and refund audit carry `rejection: true`. Such a rejection issues no cancellation document, whatever `skipCancellation` says; the rejection mail goes out without attachment. A customer withdrawing a request still pays the tiers and gets the document. OpenAPI updated
 
 ## [4.4.1] — 2026-11-16
 
@@ -109,6 +126,21 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 - A simulated group checkout (`?simulate=true`, the price preview of a group or series) no longer stores a group booking ([ECCdigital/tickets#488](https://github.com/ECCdigital/tickets/issues/488)): before, it left a group in the database whose members were never stored. It now answers the group it would book with the computed members in `bookings`, which were empty before
 - An admin edit of a booking (`PUT /api/:tenant/bookings`) keeps the owner `assignedUserId` the booking was created with ([ECCdigital/tickets#484](https://github.com/ECCdigital/tickets/issues/484)): before, the first mail of the form became the owner, so a guest booking fell silently to the account of that mail and a booking of an account left the customer's list when the mail changed. The first mail as owner applies only when a manual booking is created
 - A manual booking follows its corrected mail ([ECCdigital/tickets#563](https://github.com/ECCdigital/tickets/issues/563)): when an admin edit changes the first address of a manual booking's mail (`bookedVia: admin`), the owner `assignedUserId` moves to the new address, so the account of a mistyped address no longer sees the booking. Bookings of an account, guest bookings and bookings without a Buchungsweg keep their owner. See the [upgrade notes](migrations/v4.4-upgrade.md#owner-of-a-booking-after-an-admin-edit)
+
+## [4.3.4] — 2026-11-20
+
+### Security
+
+- The full-stack Compose example requires a MongoDB login (ECCdigital/tickets#981): `mongodb` creates its root account from `MONGO_ROOT_USERNAME` and `MONGO_ROOT_PASSWORD` in `.env`, and the backend's `DB_URL` signs in with it. Before, MongoDB ran without a login on a published port; on a server reachable from the internet it was emptied, sign-in failed until a restart, and only the init admin came back. The example now also builds all three services from release tags (`BACKEND_VERSION`, `ADMIN_UI_VERSION`, `STOREFRONT_VERSION` in `.env`) instead of `develop`, and no longer points to the GHCR images, which are not public. An existing installation creates the account once, see [docs/deployment.md](deployment.md#moving-an-existing-installation-to-a-mongodb-login); the same page now names the firewall and reverse proxy a public server needs, backups with `mongodump`, and that `docker compose down -v` deletes the data
+
+### Added
+
+- `docker-publish.yml` refuses to build a tag that is not `v` plus the `version` of `package.json` (ECCdigital/tickets#1018). A release candidate tagged without `npm version` built an image whose app still reported the previous version
+
+### Fixed
+
+- The backend creates the instance catalog at start when there is none, with the Portal Name „Buchungsportal“ (ECCdigital/tickets#981). Nothing created it before: on a fresh database `GET /api/catalog` and `/api/catalog/public` answered `404 instance_catalog_not_found`, the Admin UI's tenant list said the catalog could not be loaded, and saving the instance settings ended in „Fehler beim Aktualisieren der Instanz“ although the instance was saved. An existing instance catalog is left alone. No migration: the next start creates it
+- Deleting a bookable removes the references to it from `checkoutBookableIds` of the tenant's other bookables, optional and mandatory alike (ECCdigital/tickets#781). Before, the reference stayed, and the Storefront showed the bookable carrying it as not available. Existing orphaned references are not cleaned up
 
 ## [4.3.3] — 2026-11-09
 

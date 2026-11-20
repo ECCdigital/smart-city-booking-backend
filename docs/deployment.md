@@ -92,9 +92,57 @@ cp .env.full-stack.example .env
 docker compose up -d --build
 ```
 
-Details (ports, BFF networking, branch pins): [getting-started.md](getting-started.md#path-b--docker-compose).
+Details (ports, BFF networking, version pins): [getting-started.md](getting-started.md#path-b--docker-compose). Nextcloud is not part of the example Compose stack — configure it separately when needed.
 
-For production, prefer pinned release tags or GHCR images behind a TLS reverse proxy. Nextcloud is not part of the example Compose stack — configure it separately when needed.
+### Before the server is reachable from the internet
+
+The example is built for a workstation. It does not set up the server around it; that is assumed knowledge, and these are the prerequisites:
+
+- **A firewall in front of the server**, at the hoster or in the network, that lets in only the reverse proxy's ports (usually 443) and SSH. The example publishes MongoDB (`27017`), the API (`8081`), the Admin UI (`8080`) and the Storefront (`3000`) on all interfaces, and Docker opens published ports past host firewalls such as ufw. A MongoDB reachable from the internet is found and emptied by automated attacks within days, login or not.
+- **A reverse proxy with TLS** in front of the Admin UI, the API and the Storefront. Set `FRONTEND_URL`, `BACKEND_URL` and `NUXT_*_BASE_URL` to its HTTPS addresses.
+- **Secrets of your own** in `.env`: `MONGO_ROOT_PASSWORD`, `CRYPTO_SECRET`, `JWT_SECRET`, `JWT_REFRESH_SECRET` and `INIT_ADMIN_SECRET`.
+
+### Data and backups
+
+MongoDB keeps its data in the Docker volume `mongodb_data`. `docker compose down` and `docker compose up -d` keep it; **`docker compose down -v` deletes it**, with every tenant and setting. The backend then starts on an empty database and only creates the init admin from `INIT_ADMIN` again.
+
+Back up with `mongodump`, for example daily and before every update. The archive holds the bookings and the accounts: it is written readable for its owner only, and under a temporary name first, so a failed run leaves the last archive as it was:
+
+```bash
+f=booking-manager-$(date +%F).archive.gz
+(umask 077; docker compose exec -T mongodb sh -c 'mongodump --quiet --archive --gzip -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --db booking-manager' > "$f.tmp") && mv "$f.tmp" "$f" || rm -f "$f.tmp"
+```
+
+The dump reads one collection after the other while the backend keeps writing, so it is not a snapshot of a single moment. For the backup before an update, or whenever it has to be consistent, stop the backend first (`docker compose stop backend`) and start it again afterwards (`docker compose start backend`).
+
+Restore with the backend stopped, so it writes nothing while the collections are replaced:
+
+```bash
+docker compose stop backend
+docker compose exec -T mongodb sh -c 'mongorestore --quiet --archive --gzip --drop -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin' < booking-manager-2026-11-19.archive.gz
+docker compose start backend
+```
+
+Keep the archives off the server, where only you can read them as well.
+
+### Moving an existing installation to a MongoDB login
+
+Earlier versions of the example ran MongoDB without a login. The `MONGO_INITDB_ROOT_*` variables only create the root account on an empty volume. On an existing one, MongoDB starts with the login switched on but without the account, and the account has to be created once:
+
+1. Back up without the login options, the backend stopped: `docker compose stop backend`, then `(umask 077; docker compose exec -T mongodb mongodump --quiet --archive --gzip --db booking-manager > before-login.archive.gz)`.
+2. Take over from the new example: in `docker-compose.yml` the `environment:` of `mongodb` and the `DB_URL` of `backend`; in `.env` `MONGO_ROOT_USERNAME` and `MONGO_ROOT_PASSWORD`.
+3. `docker compose up -d`. MongoDB now requires a login, so the backend fails to connect until step 4.
+4. Create the root account. Without an account MongoDB accepts this one command from inside the container:
+
+   ```bash
+   docker compose exec mongodb sh -c 'mongosh --quiet --eval "db.getSiblingDB(\"admin\").createUser({ user: process.env.MONGO_INITDB_ROOT_USERNAME, pwd: process.env.MONGO_INITDB_ROOT_PASSWORD, roles: [\"root\"] })"'
+   ```
+
+   MongoDB accepts it only while it has no account at all. If it answers `requires authentication`, the volume holds an account already, perhaps an attacker's: start on a fresh volume with `docker compose down -v` and `docker compose up -d mongodb`, then restore `before-login.archive.gz` as above, with the login options.
+
+5. `docker compose up -d` (or `docker compose restart backend`), then check that the Admin UI shows your tenants.
+
+A database that was emptied already is better started fresh: `docker compose down -v`, then `docker compose up -d`.
 
 ## Database migrations
 
@@ -108,7 +156,9 @@ Pending migrations run at start-up under a MongoDB lock, so parallel processes r
 
 ## Operations checklist
 
-- Keep MongoDB data on persistent storage
+- Keep MongoDB data on persistent storage, and never run `docker compose down -v` on a stack whose data you need
+- Keep MongoDB closed to the internet and require a login
+- Back up the database regularly (`mongodump`) and keep the backups off the server
 - Rotate secrets regularly
 - Change default admin credentials after first login (`INIT_ADMIN`, `INIT_ADMIN_SECRET`)
 - Back up the database before major version upgrades

@@ -6,7 +6,7 @@ const { Bookable } = require("../../../commons/entities/bookable/bookable");
 const { v4: uuidv4 } = require("uuid");
 const AccessPointManager = require("../../../commons/data-managers/access-point-manager");
 const { ValidationError } = require("../../../errors/ValidationError");
-const { BaseError } = require("../../../errors/BaseError");
+const { BaseError, BadRequestError } = require("../../../errors/BaseError");
 const { answerMetaValues } = require("./meta-values-answer");
 const {
   scopeOf,
@@ -34,6 +34,9 @@ const logger = bunyan.createLogger({
   name: "bookable-controller.js",
   level: process.env.LOG_LEVEL,
 });
+
+/** How many bookables `POST /bookables/occupancy` takes in one request. */
+const MAX_PERIOD_OCCUPANCY_IDS = 100;
 
 /**
  * Web Controller for Bookables.
@@ -652,10 +655,12 @@ class BookableController {
         return response.status(400).send(`${tenantId} -- No id provided`);
       }
 
-      // The bookable within the reach of the request; none there is a 404.
-      const bookable = await BookableManager.getBookable(
-        bookableId,
+      // The bookable within the reach of the request, read once and whole
+      // for the checkout, as the batch occupancy reads its own; none there
+      // is a 404.
+      const [bookable] = await BookableManager.getWholeBookablesByIds(
         tenantId,
+        [bookableId],
         scopeOf(request),
       );
       if (!bookable) {
@@ -666,7 +671,7 @@ class BookableController {
       }
 
       const occupancy = await BookableService.getOccupancy({
-        bookableId,
+        bookable,
         tenantId,
         timeBegin,
         timeEnd,
@@ -681,6 +686,60 @@ class BookableController {
       }
       logger.error(err);
       response.status(500).send("Could not get bookable occupancy");
+    }
+  }
+
+  /**
+   * `POST /bookables/occupancy`: the occupancy of many bookables in one
+   * period, each with the price of that period where it is available.
+   * Ids outside the reach of the request are left out of the answer, as
+   * `GET /bookables/:id/occupancy` answers them 404.
+   *
+   * The answer is the bare array, as the single occupancy and
+   * `/calendar/occupancy` answer theirs (`ApiResponse.ok` would spread the
+   * array into an object). Every error goes to the central error handler,
+   * so a client sees one error shape.
+   *
+   * Past the limit per IP, counted in bookables (ECCdigital/tickets#1254),
+   * it answers 429 with `Retry-After`.
+   */
+  static async getPeriodOccupancies(request, response, next) {
+    try {
+      const tenantId = request.params.tenant;
+      const { bookableIds, timeBegin, timeEnd } = request.body ?? {};
+
+      // Numbers only, as the OpenAPI says: `Number()` would read `null`,
+      // `""`, `false` and `[]` as 0 and check from 1970 on.
+      if (
+        !Array.isArray(bookableIds) ||
+        bookableIds.length === 0 ||
+        bookableIds.length > MAX_PERIOD_OCCUPANCY_IDS ||
+        !bookableIds.every((id) => typeof id === "string" && id) ||
+        typeof timeBegin !== "number" ||
+        typeof timeEnd !== "number" ||
+        !Number.isFinite(timeBegin) ||
+        !Number.isFinite(timeEnd) ||
+        timeEnd <= timeBegin
+      ) {
+        throw new BadRequestError("invalid_period_occupancy_request", {
+          maxBookableIds: MAX_PERIOD_OCCUPANCY_IDS,
+        });
+      }
+
+      // Ids outside the reach of the request are left out (`scope`).
+      const occupancies = await BookableService.getPeriodOccupancies({
+        bookableIds,
+        ip: request.ip,
+        tenantId,
+        scope: scopeOf(request),
+        timeBegin,
+        timeEnd,
+        userId: request.user?.id,
+      });
+
+      response.status(200).json(occupancies);
+    } catch (err) {
+      next(err);
     }
   }
 

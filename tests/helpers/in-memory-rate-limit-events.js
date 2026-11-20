@@ -27,6 +27,16 @@ function installInMemoryRateLimitEvents() {
     return id;
   });
   sinon
+    .stub(RateLimitEventManager, "recordMany")
+    .callsFake(async (key, at, count) => {
+      await new Promise((resolve) => setImmediate(resolve));
+      return Array.from({ length: count }, () => {
+        const id = `evt-${nextId++}`;
+        events.set(id, { key, at: new Date(at) });
+        return id;
+      });
+    });
+  sinon
     .stub(RateLimitEventManager, "countSince")
     .callsFake(async (key, since) => inWindow(key, since).length);
   sinon
@@ -39,6 +49,9 @@ function installInMemoryRateLimitEvents() {
     });
   sinon.stub(RateLimitEventManager, "remove").callsFake(async (id) => {
     events.delete(id);
+  });
+  sinon.stub(RateLimitEventManager, "removeMany").callsFake(async (ids) => {
+    ids.forEach((id) => events.delete(id));
   });
 
   return events;

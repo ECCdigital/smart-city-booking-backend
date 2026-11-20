@@ -6,11 +6,19 @@ const {
 const bunyan = require("bunyan");
 const ExternalPriceService = require("./external-price-service");
 const { DOMAIN } = require("./authorization/reach");
+const RateLimiter = require("./rate-limit/rate-limiter");
+const { periodOccupancyPerIp } = require("./rate-limit/limits");
 
 const logger = bunyan.createLogger({
   name: "bookable-service.js",
   level: process.env.LOG_LEVEL,
 });
+
+/** How many bookables `getPeriodOccupancies` checks at once. */
+const PERIOD_CHECK_CONCURRENCY = 5;
+
+/** The `reason` of a bookable whose checks could not run. */
+const PERIOD_ERROR_REASON = "error";
 
 /**
  * The BookableService class provides methods for determining the availability
@@ -21,7 +29,8 @@ class BookableService {
    * Retrieves the occupancy information for a given bookable item within a specified time range.
    *
    * @param {Object} params - The parameters for retrieving occupancy information.
-   * @param {string} params.bookableId - The unique identifier of the bookable item.
+   * @param {Bookable} params.bookable - The bookable, read whole, within the
+   *   reach of the request: the caller decides the reach.
    * @param {string} params.tenantId - The identifier of the tenant requesting the occupancy.
    * @param {number} params.timeBegin - The start time of the occupancy check period.
    * @param {number} params.timeEnd - The end time of the occupancy check period.
@@ -30,50 +39,245 @@ class BookableService {
    * @return {Promise<Object>} A promise that resolves to an object containing occupancy details, including the bookable ID, title, and availability data. In case of an error, it returns an error response object.
    */
   static async getOccupancy({
-    bookableId,
+    bookable,
     tenantId,
     timeBegin,
     timeEnd,
     userId = null,
     ignoreRelatedEntities = false,
   }) {
+    const bookableId = bookable.id;
+    try {
+      return await this._withCheckout(
+        { bookable, tenantId, timeBegin, timeEnd, userId },
+        async (checkoutService) => ({
+          bookableId,
+          title: bookable.title,
+          ...(await this._performAvailabilityCheck(
+            checkoutService,
+            ignoreRelatedEntities,
+          )),
+        }),
+      );
+    } catch (error) {
+      logger.error(error);
+      return this._createErrorResponse(bookableId);
+    }
+  }
+
+  /**
+   * Runs `use` with the checkout of one unit of a loaded bookable in a
+   * period, as the single and the batch occupancy check it, and cleans the
+   * checkout up afterwards.
+   *
+   * @param {Object} params
+   * @param {Bookable} params.bookable - The bookable, read whole.
+   * @param {string} params.tenantId
+   * @param {number} params.timeBegin
+   * @param {number} params.timeEnd
+   * @param {string|null} params.userId
+   * @param {Map} [params.externalCache]
+   * @param {Map} [params.requestCache]
+   * @param {function(ItemCheckoutService): Promise<*>} use
+   * @return {Promise<*>} What `use` answers.
+   */
+  static async _withCheckout(
+    {
+      bookable,
+      tenantId,
+      timeBegin,
+      timeEnd,
+      userId,
+      externalCache,
+      requestCache,
+    },
+    use,
+  ) {
     let checkoutService = null;
     try {
-      const bookable = await BookableManager.getBookable(
-        bookableId,
-        tenantId,
-        DOMAIN,
-      );
       checkoutService = new ItemCheckoutService({
         user: userId,
         tenantId,
         timeBegin,
         timeEnd,
-        bookableId,
+        bookableId: bookable.id,
         amount: 1,
         bookWithoutDiscount: false,
+        externalCache,
+        requestCache,
       });
-
       await checkoutService.init(bookable);
-
-      const occupancyData = await this._performAvailabilityCheck(
-        checkoutService,
-        ignoreRelatedEntities,
-      );
-
-      return {
-        bookableId,
-        title: bookable.title,
-        ...occupancyData,
-      };
-    } catch (error) {
-      logger.error(error);
-      return this._createErrorResponse(bookableId);
+      return await use(checkoutService);
     } finally {
       if (checkoutService) {
         checkoutService.cleanup();
         checkoutService = null;
       }
+    }
+  }
+
+  /**
+   * The occupancy of many bookables in one period, each with the price of
+   * that period where it is available - what the storefront's search with a
+   * period asks, in one request instead of two per bookable. Each bookable
+   * is checked as `getOccupancy` checks it; the price is the one
+   * `validateItem` answers for one unit. A refusal names its check in
+   * `reason`, a bookable whose checks could not run answers `reason: "error"`.
+   *
+   * Each distinct id counts at the limit per IP first, as it runs one
+   * checkout (ECCdigital/tickets#1254): past it nothing is looked up and
+   * the request spends nothing.
+   *
+   * @param {Object} params
+   * @param {string[]} params.bookableIds - The ids the request asks for.
+   * @param {string} params.ip - The client IP the limit counts against.
+   * @param {string} params.tenantId
+   * @param {{reach: string, userId?: string|null}} params.scope - The reach
+   *   of the request: ids outside it are left out, as the single occupancy
+   *   answers them 404.
+   * @param {number} params.timeBegin
+   * @param {number} params.timeEnd
+   * @param {string|null} [params.userId=null]
+   * @return {Promise<Object[]>} One entry per bookable found.
+   */
+  static async getPeriodOccupancies({
+    bookableIds,
+    ip,
+    tenantId,
+    scope,
+    timeBegin,
+    timeEnd,
+    userId = null,
+  }) {
+    const ids = [...new Set(bookableIds)];
+    await RateLimiter.enforce({
+      ...periodOccupancyPerIp(ip),
+      cost: ids.length,
+    });
+
+    // One read: the bookables within the reach of the request, each whole,
+    // as the checkout of `getOccupancy` reads it.
+    const bookables = await BookableManager.getWholeBookablesByIds(
+      tenantId,
+      ids,
+      scope,
+    );
+    // A pool, not rounds: each worker takes the next bookable as soon as
+    // its own is done, so one slow external provider holds one slot and
+    // not the four beside it. `_getPeriodOccupancy` never throws.
+    const results = new Array(bookables.length);
+    // One cache of the external providers for the whole request, as
+    // `CalendarService.checkAvailability` keeps one: bookables on the same
+    // IFBS location or Pareva unit ask the provider once.
+    const externalCache = new Map();
+    // And one of the membership, the tenant and its apps, which every
+    // checkout of the request reads alike.
+    const requestCache = new Map();
+    let next = 0;
+    const worker = async () => {
+      while (next < bookables.length) {
+        const index = next++;
+        results[index] = await this._getPeriodOccupancy({
+          bookable: bookables[index],
+          tenantId,
+          timeBegin,
+          timeEnd,
+          userId,
+          externalCache,
+          requestCache,
+        });
+      }
+    };
+    await Promise.all(
+      Array.from(
+        { length: Math.min(PERIOD_CHECK_CONCURRENCY, bookables.length) },
+        worker,
+      ),
+    );
+    return results;
+  }
+
+  static async _getPeriodOccupancy({
+    bookable,
+    tenantId,
+    timeBegin,
+    timeEnd,
+    userId,
+    externalCache,
+    requestCache,
+  }) {
+    try {
+      return await this._withCheckout(
+        {
+          bookable,
+          tenantId,
+          timeBegin,
+          timeEnd,
+          userId,
+          externalCache,
+          requestCache,
+        },
+        async (checkoutService) => {
+          const checkResults = await checkoutService.checkAll(false);
+
+          // A check that refuses names its type. One that throws (a
+          // provider down, a tenant without its app) names none and says
+          // nothing about the period: unless another check refuses, that
+          // is an error, not a booked-out bookable.
+          const rejected = checkResults.filter((r) => r.status === "rejected");
+          const refusal = rejected.find((r) => r.reason?.checkType);
+          if (rejected.length > 0 && !refusal) {
+            rejected.forEach((r) => logger.error(r.reason));
+            return this._periodError(bookable);
+          }
+
+          const { isAvailable, totalCapacity, booked, remaining } =
+            this._occupancyOfCheckResults(checkResults);
+
+          // Only the documented fields: a failed check names the parent or
+          // child that failed (`failedCheck`, `bookableId`, `title`), which
+          // may be one the request cannot reach.
+          return {
+            bookableId: bookable.id,
+            title: bookable.title,
+            isAvailable,
+            totalCapacity,
+            booked,
+            remaining,
+            ...(refusal ? { reason: refusal.reason.checkType } : {}),
+            price: isAvailable
+              ? await this._periodPrice(checkoutService)
+              : null,
+          };
+        },
+      );
+    } catch (error) {
+      logger.error(error);
+      return this._periodError(bookable);
+    }
+  }
+
+  /** A bookable whose checks could not run: no answer about the period. */
+  static _periodError(bookable) {
+    return {
+      bookableId: bookable.id,
+      title: bookable.title,
+      isAvailable: false,
+      totalCapacity: null,
+      booked: null,
+      remaining: null,
+      reason: PERIOD_ERROR_REASON,
+      price: null,
+    };
+  }
+
+  /** The price of one unit in the period, as `validateItem` answers it; null where none can be found. */
+  static async _periodPrice(checkoutService) {
+    try {
+      return await checkoutService.priceFields();
+    } catch (error) {
+      logger.warn(error);
+      return null;
     }
   }
 
@@ -113,48 +317,7 @@ class BookableService {
         checkResults = await checkoutService.checkAll(false);
       }
 
-      const availabilityCheck =
-        checkResults.find(
-          (result) =>
-            result.status === "fulfilled" &&
-            result.value &&
-            result.value.checkType === CHECK_TYPES.AVAILABILITY,
-        )?.value ||
-        checkResults.find(
-          (result) =>
-            result.status === "rejected" &&
-            result.reason &&
-            result.reason.checkType === CHECK_TYPES.AVAILABILITY,
-        )?.reason;
-      if (!checkResults || !Array.isArray(checkResults)) {
-        return this._createUnavailableResponse();
-      }
-
-      const failedCheck = checkResults.find(
-        (result) => result.status === "rejected",
-      );
-
-      if (failedCheck) {
-        const occupancyData = this._extractOccupancyFromFailedCheck(
-          failedCheck.reason,
-        );
-
-        return {
-          isAvailable: false,
-          totalCapacity: availabilityCheck?.totalCapacity ?? null,
-          booked: availabilityCheck?.booked ?? null,
-          remaining: availabilityCheck?.remaining ?? null,
-          reason: occupancyData.reason,
-          failedCheck: occupancyData,
-        };
-      }
-
-      return {
-        isAvailable: availabilityCheck?.available ?? false,
-        totalCapacity: availabilityCheck?.totalCapacity ?? null,
-        booked: availabilityCheck?.booked ?? null,
-        remaining: availabilityCheck?.remaining ?? null,
-      };
+      return this._occupancyOfCheckResults(checkResults);
     } catch (error) {
       const occupancyData = this._extractOccupancyFromFailedCheck(error);
 
@@ -163,6 +326,63 @@ class BookableService {
         ...occupancyData,
       };
     }
+  }
+
+  /**
+   * The occupancy a list of settled checks (`checkAll(false)`) amounts to.
+   * Throws where the list is not one, as `_performAvailabilityCheck` expects.
+   *
+   * @param {PromiseSettledResult[]} checkResults
+   * @return {Object} As `_performAvailabilityCheck`.
+   */
+  static _occupancyOfCheckResults(checkResults) {
+    const availabilityCheck =
+      checkResults.find(
+        (result) =>
+          result.status === "fulfilled" &&
+          result.value &&
+          result.value.checkType === CHECK_TYPES.AVAILABILITY,
+      )?.value ||
+      checkResults.find(
+        (result) =>
+          result.status === "rejected" &&
+          result.reason &&
+          result.reason.checkType === CHECK_TYPES.AVAILABILITY,
+      )?.reason;
+    if (!checkResults || !Array.isArray(checkResults)) {
+      return this._createUnavailableResponse();
+    }
+
+    const failedCheck = checkResults.find(
+      (result) => result.status === "rejected",
+    );
+
+    if (failedCheck) {
+      // A refusing parent or child may be one the request cannot reach:
+      // the single occupancy is public, so `failedCheck` leaves out which
+      // bookable refused and keeps only its numbers.
+      const occupancyData = this._extractOccupancyFromFailedCheck(
+        failedCheck.reason,
+      );
+      delete occupancyData.bookableId;
+      delete occupancyData.title;
+
+      return {
+        isAvailable: false,
+        totalCapacity: availabilityCheck?.totalCapacity ?? null,
+        booked: availabilityCheck?.booked ?? null,
+        remaining: availabilityCheck?.remaining ?? null,
+        reason: occupancyData.reason,
+        failedCheck: occupancyData,
+      };
+    }
+
+    return {
+      isAvailable: availabilityCheck?.available ?? false,
+      totalCapacity: availabilityCheck?.totalCapacity ?? null,
+      booked: availabilityCheck?.booked ?? null,
+      remaining: availabilityCheck?.remaining ?? null,
+    };
   }
 
   /**
@@ -195,43 +415,33 @@ class BookableService {
           reason: reasonObj.checkType ?? null,
         };
 
-      case CHECK_TYPES.PARENT_AVAILABILITY:
-        if (
-          reasonObj.parentAvailability &&
-          reasonObj.parentAvailability.length > 0
-        ) {
-          const parentData = reasonObj.parentAvailability.find(
-            (avail) => avail.available === false,
-          );
-          return {
-            bookableId: parentData.bookableId ?? null,
-            title: parentData.title ?? null,
-            totalCapacity: parentData.totalCapacity ?? null,
-            booked: parentData.booked ?? null,
-            remaining: parentData.remaining ?? null,
-            reason: reasonObj.checkType ?? null,
-          };
-        }
-        break;
+      case CHECK_TYPES.PARENT_AVAILABILITY: {
+        // `runParentAvailabilityCheck` marks the refusing parent with
+        // `isAvailable: false` in `parentAvailability`.
+        const parentData =
+          (reasonObj.parentAvailability ?? []).find(
+            (avail) => avail.isAvailable === false,
+          ) ?? {};
+        return {
+          bookableId: parentData.bookableId ?? null,
+          title: parentData.title ?? null,
+          totalCapacity: parentData.totalCapacity ?? null,
+          booked: parentData.booked ?? null,
+          remaining: parentData.remaining ?? null,
+          reason: reasonObj.checkType ?? null,
+        };
+      }
 
       case CHECK_TYPES.CHILD_BOOKINGS:
-        if (
-          reasonObj.childAvailabilities &&
-          reasonObj.childAvailabilities.length > 0
-        ) {
-          const childData = reasonObj.childAvailabilities.find(
-            (avail) => avail.available === false,
-          );
-          return {
-            bookableId: childData.bookableId ?? null,
-            title: childData.title ?? null,
-            totalCapacity: childData.totalCapacity ?? null,
-            booked: childData.booked ?? null,
-            remaining: childData.remaining ?? null,
-            reason: reasonObj.checkType ?? null,
-          };
-        }
-        break;
+        // `runChildBookingsCheck` names the refusing child on the refusal itself.
+        return {
+          bookableId: reasonObj.bookableId ?? null,
+          title: reasonObj.title ?? null,
+          totalCapacity: reasonObj.totalCapacity ?? null,
+          booked: reasonObj.booked ?? null,
+          remaining: reasonObj.remaining ?? null,
+          reason: reasonObj.checkType ?? null,
+        };
       case CHECK_TYPES.EVENT_DATE:
         return {
           eventId: reasonObj.eventId ?? null,
