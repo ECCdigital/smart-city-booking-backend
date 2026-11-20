@@ -631,7 +631,7 @@ components:
         only when unchanged from the stored location. `points` is
         `[longitude, latitude]` as numbers within ±180 and ±90, or
         `[null, null]` for no point; `meta.source` is `photon`, `manual` or
-        `nuki` (an old stored value such as `nominatim` or `legacy` may stay);
+        `nuki`, or the old `nominatim` or `legacy`;
         `address.country_code` has two letters, empty only in an empty
         location or as stored. Unknown fields are kept unchecked.
       properties:

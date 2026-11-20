@@ -394,7 +394,7 @@ describe("location check on the create and update routes", function () {
         });
       }
 
-      for (const source of ["google", "nominatim", "legacy", 7]) {
+      for (const source of ["google", 7]) {
         it(`refuses the source ${source} on a new location`, async function () {
           const fields = await refusedFields((location) => ({
             ...location,
@@ -411,6 +411,12 @@ describe("location check on the create and update routes", function () {
           location.meta = { source };
           return location;
         };
+
+        it(`stores the old source ${source} on a new location, as a copy carries it`, async function () {
+          const res = await create(old());
+
+          expect(res.status).to.equal(201);
+        });
 
         it(`keeps an unchanged old location with the source ${source}`, async function () {
           const res = await update(old(), old());
@@ -430,7 +436,7 @@ describe("location check on the create and update routes", function () {
         });
       }
 
-      it("refuses an old source the stored location did not have", async function () {
+      it("stores an old source the stored location did not have", async function () {
         const changed = withPoint();
         changed.meta.source = "legacy";
         const stored = withPoint();
@@ -438,10 +444,8 @@ describe("location check on the create and update routes", function () {
 
         const res = await update(stored, changed);
 
-        expect(res.status).to.equal(400);
-        expect(res.body.details.map((d) => d.field)).to.deep.equal([
-          "location.meta.source",
-        ]);
+        expect(res.status).to.be.oneOf([200, 201]);
+        expect(written).to.deep.equal([changed]);
       });
 
       for (const code of ["PL", "pl", "De"]) {

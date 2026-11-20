@@ -7,6 +7,27 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ## [Unreleased]
 
+### Added
+
+- Occupancy and price of many bookables in one period ([ECCdigital/tickets#850](https://github.com/ECCdigital/tickets/issues/850)): `POST /api/:tenant/bookables/occupancy` with up to 100 `bookableIds` answers each with its availability, the period's price and, where refused, the `reason` (`error` where the checks could not run). The storefront's search asks it once per tenant instead of twice per bookable.
+
+### Changed
+
+- Agent docs refreshed to stand `ecc-12` of the ECC skills setup: `docs/agents/issue-tracker.md` follows the template „GitHub Portolan, Produkt-Repo“ and reads the Ablauf (`v1`/`v2`) of `ECCdigital/tickets`, with sub-tickets, the extended Definition of Ready and `Refs` instead of `Closes` under `v2`; the `## Agent skills` block in `CLAUDE.md` names it. No code change
+
+### Fixed
+
+- The attendee list CSV of an event (`GET /csv/:tenant/events/:id/bookings`) keeps its columns and rows: a value with `;` or `"` is quoted, with inner quotes doubled, and a line break becomes a space. Before, a semicolon in a name or address moved the following columns of that row, and a line break split the row.
+- The booking and invoice dates of PDF documents read in Europe/Berlin, whatever the server's time zone: `formatDate` of the PDF service followed the server, unlike `formatDateTime` beside it, so on a server in UTC, as in the Docker image, a receipt or invoice from shortly after midnight carried the previous day.
+
+## [4.4.1] — 2026-11-16
+
+### Changed
+
+- The default PDF templates for receipts, invoices, cancellation and withdrawal receipts are the Admin UI's visual defaults, built from its default blocks and carrying them, so a new tenant's templates open in the visual editor instead of the expert mode. A tenant without a stored template gets this layout as well. Templates already stored stay as they are
+
+## [4.4.0] — 2026-11-16
+
 ### Security
 
 - Forgot password is rate-limited ([ECCdigital/tickets#302](https://github.com/ECCdigital/tickets/issues/302)): `POST /auth/forgot-password` answers `429 too_many_requests` with `Retry-After` past 30 requests per client IP and hour (`RATE_LIMIT_FORGOT_PASSWORD_PER_IP`); an account gets at most 1 reset mail per minute and 5 per hour (`RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_SHORT`, `_LONG`), silently, so the answer still does not tell whether the address has an account. Defaults in `.env-example`
@@ -16,7 +37,7 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ### Added
 
-- Occupancy and price of many bookables in one period ([ECCdigital/tickets#850](https://github.com/ECCdigital/tickets/issues/850)): `POST /api/:tenant/bookables/occupancy` with up to 100 `bookableIds` answers each with its availability, the period's price and, where refused, the `reason` (`error` where the checks could not run). The storefront's search asks it once per tenant instead of twice per bookable.
+- The flags of a tenant's offers as suggestions, like the tags ([ECCdigital/tickets#1114](https://github.com/ECCdigital/tickets/issues/1114)): `GET /api/:tenant/events/_meta/flags` and `GET /api/:tenant/bookables/_meta/flags` answer each flag once, with the rights of `…/_meta/tags`: the public gets the flags of the offers it sees in a list, the staff those of all the tenant's offers. Route snapshot updated
 - Private or business booking ([ECCdigital/tickets#621](https://github.com/ECCdigital/tickets/issues/621), glossary „Geschäftliche Buchung“): a booking stores `isBusiness`, the booker's answer from the checkout (v1, v2 and group checkout); a body without it is read off `company`. An admin edit keeps it unless the form names one; bookings from before have none and read off `company`. The withdrawal is offered for a private booking by this answer, and `POST /api/:tenant/bookings/:id/accept-withdrawal` refuses a business booking with `403 booking_withdrawal_not_private`
 - The tenant's withdrawal receipt ([ECCdigital/tickets#611](https://github.com/ECCdigital/tickets/issues/611)): `withdrawalTemplate` (validated like the other PDF templates, preview with `templateType: "withdrawal"`) replaces the default template, `withdrawalNumberPrefix` the prefix `WB`; both writable on the tenant. Variables in `docs/pdf-templates.md`
 - Withdrawal receipt „Widerrufbeleg“ ([ECCdigital/tickets#611](https://github.com/ECCdigital/tickets/issues/611)): accepting a withdrawal issues the new booking document type `withdrawal` instead of the cancellation document - its own counter (`withdrawalCount`), number `WB-<year>-<counter>-<revision>`, attachment field `withdrawalId`, its own default template (no fee, no tier calculation; a tenant's cancellation template does not apply). `POST /bookings/:id/cancellation-receipt` reissues it for a withdrawn booking; `GET /api/:tenant/bookings/:id/withdrawal-receipt/:withdrawalReceiptId` (`booking.document`) downloads it, route snapshot updated on purpose
@@ -48,6 +69,7 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ### Changed
 
+- A new tenant starts with the payment option „Rechnung“ active and with the default templates for invoices, cancellation and withdrawal receipts stored; an invoice app sent with the creation is kept as sent
 - The CSV of an event's attendee list (`GET /csv/:tenant/events/:id/bookings`) heads the column of `assignedUserId` „Zugewiesener Benutzer“ instead of „Angemeldeter Benutzer“ ([ECCdigital/tickets#562](https://github.com/ECCdigital/tickets/issues/562))
 - Bank details of a cancellation follow one rule ([ECCdigital/tickets#565](https://github.com/ECCdigital/tickets/issues/565)): they are kept only for a paid booking (cancelled from `confirmed`), for the direct cancellation, the cancellation request and the rejection by the administration alike, single and group. A cancellation request of an unpaid booking no longer stores them in its hook, and a rejection of an unpaid booking no longer prints them on the cancellation document
 - The connection test of Salto KS answers per check ([ECCdigital/tickets#576](https://github.com/ECCdigital/tickets/issues/576)): `POST /api/:tenant/access-apps/salto-ks/test` adds `checks` (`credentials`, `login`, `site`, `remoteAccess`, `remoteLockingRight`, `iqs`, each with a `status` and, for a failure Salto explains, a `code` such as `invalid_client` or `site_forbidden`), `testedWith`, `testedAt` and `environment`. A failure in credentials, login or site fails the test and skips the rest; OpenAPI documents the answer
@@ -72,6 +94,7 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ### Fixed
 
+- Duplicating an offer with an old location works again ([ECCdigital/tickets#750](https://github.com/ECCdigital/tickets/issues/750)): creating a bookable, event or access point accepts the old `location.meta.source` values `nominatim` and `legacy`, not only an unchanged stored location; before, the copy the Admin UI posts was refused with `400`
 - A parent can no longer be booked while a dependent is partly taken ([ECCdigital/tickets#673](https://github.com/ECCdigital/tickets/issues/673)): any booking of a dependent in the period refuses the parent with `child-bookings`, whatever the dependent's amount, also when it has none; the calendars show the parent as taken for that time. Ticket dependents keep counting against their amount. Reinstating a cancelled booking only warns, as of ECCdigital/tickets#643.
 - An old confirmation link no longer cancels a reinstated booking ([ECCdigital/tickets#561](https://github.com/ECCdigital/tickets/issues/561)): reinstating a booking drops its open cancellation request, whose release then answers `404`.
 - Saving an access point whose provider the tenant has not switched on ([ECCdigital/tickets#311](https://github.com/ECCdigital/tickets/issues/311)): `PUT /api/:tenant/access-points` stores it instead of answering `404 <provider>_application_not_found` and checks mode and lock on the first save once the provider is active; at a Salto door `authorization` and `both` are refused as `400 unsupported_mode` without asking Salto, also while Salto cannot be reached. The lock listing `GET /api/:tenant/access-apps/:provider/access-points` answers such a provider with `404 <provider>_application_not_found` instead of `500` (route snapshot updated on purpose)
@@ -80,6 +103,12 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 - A simulated group checkout (`?simulate=true`, the price preview of a group or series) no longer stores a group booking ([ECCdigital/tickets#488](https://github.com/ECCdigital/tickets/issues/488)): before, it left a group in the database whose members were never stored. It now answers the group it would book with the computed members in `bookings`, which were empty before
 - An admin edit of a booking (`PUT /api/:tenant/bookings`) keeps the owner `assignedUserId` the booking was created with ([ECCdigital/tickets#484](https://github.com/ECCdigital/tickets/issues/484)): before, the first mail of the form became the owner, so a guest booking fell silently to the account of that mail and a booking of an account left the customer's list when the mail changed. The first mail as owner applies only when a manual booking is created
 - A manual booking follows its corrected mail ([ECCdigital/tickets#563](https://github.com/ECCdigital/tickets/issues/563)): when an admin edit changes the first address of a manual booking's mail (`bookedVia: admin`), the owner `assignedUserId` moves to the new address, so the account of a mistyped address no longer sees the booking. Bookings of an account, guest bookings and bookings without a Buchungsweg keep their owner. See the [upgrade notes](migrations/v4.4-upgrade.md#owner-of-a-booking-after-an-admin-edit)
+
+## [4.3.3] — 2026-11-09
+
+### Security
+
+- `GET /api/:tenant/bookings/:id/status/public` answers its refusals instead of ending the server process (ECCdigital/tickets#927): a tenant without the public status view is `405 public_status_view_disabled`, a name that does not match is `401 booking_name_mismatch`, an unknown booking `404`. Before, the refusal of a tenant in the default configuration carried no HTTP status, and setting it on the answer threw outside the handler's `try`, so one unauthenticated request stopped the backend. The handler takes the status from `statusCode`, no longer from the error code
 
 ## [4.3.2] — 2026-11-03
 
