@@ -7,6 +7,10 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ## [Unreleased]
 
+### Fixed
+
+- A release builds its Docker image again ([ECCdigital/tickets#1319](https://github.com/ECCdigital/tickets/issues/1319)): `docker-publish.yml` runs on GitHub's `ubuntu-latest` unless the self-hosted runner is chosen on a manual start. Before, a release left the runner empty and the workflow failed before it started, and a manual start preset the self-hosted runner, which is offline
+
 ## [4.4.2] — 2026-11-20
 
 ### Added
