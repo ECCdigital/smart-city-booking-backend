@@ -108,6 +108,21 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 - An admin edit of a booking (`PUT /api/:tenant/bookings`) keeps the owner `assignedUserId` the booking was created with ([ECCdigital/tickets#484](https://github.com/ECCdigital/tickets/issues/484)): before, the first mail of the form became the owner, so a guest booking fell silently to the account of that mail and a booking of an account left the customer's list when the mail changed. The first mail as owner applies only when a manual booking is created
 - A manual booking follows its corrected mail ([ECCdigital/tickets#563](https://github.com/ECCdigital/tickets/issues/563)): when an admin edit changes the first address of a manual booking's mail (`bookedVia: admin`), the owner `assignedUserId` moves to the new address, so the account of a mistyped address no longer sees the booking. Bookings of an account, guest bookings and bookings without a Buchungsweg keep their owner. See the [upgrade notes](migrations/v4.4-upgrade.md#owner-of-a-booking-after-an-admin-edit)
 
+## [4.3.4] — 2026-11-20
+
+### Security
+
+- The full-stack Compose example requires a MongoDB login (ECCdigital/tickets#981): `mongodb` creates its root account from `MONGO_ROOT_USERNAME` and `MONGO_ROOT_PASSWORD` in `.env`, and the backend's `DB_URL` signs in with it. Before, MongoDB ran without a login on a published port; on a server reachable from the internet it was emptied, sign-in failed until a restart, and only the init admin came back. The example now also builds all three services from release tags (`BACKEND_VERSION`, `ADMIN_UI_VERSION`, `STOREFRONT_VERSION` in `.env`) instead of `develop`, and no longer points to the GHCR images, which are not public. An existing installation creates the account once, see [docs/deployment.md](deployment.md#moving-an-existing-installation-to-a-mongodb-login); the same page now names the firewall and reverse proxy a public server needs, backups with `mongodump`, and that `docker compose down -v` deletes the data
+
+### Added
+
+- `docker-publish.yml` refuses to build a tag that is not `v` plus the `version` of `package.json` (ECCdigital/tickets#1018). A release candidate tagged without `npm version` built an image whose app still reported the previous version
+
+### Fixed
+
+- The backend creates the instance catalog at start when there is none, with the Portal Name „Buchungsportal“ (ECCdigital/tickets#981). Nothing created it before: on a fresh database `GET /api/catalog` and `/api/catalog/public` answered `404 instance_catalog_not_found`, the Admin UI's tenant list said the catalog could not be loaded, and saving the instance settings ended in „Fehler beim Aktualisieren der Instanz“ although the instance was saved. An existing instance catalog is left alone. No migration: the next start creates it
+- Deleting a bookable removes the references to it from `checkoutBookableIds` of the tenant's other bookables, optional and mandatory alike (ECCdigital/tickets#781). Before, the reference stayed, and the Storefront showed the bookable carrying it as not available. Existing orphaned references are not cleaned up
+
 ## [4.3.3] — 2026-11-09
 
 ### Security
