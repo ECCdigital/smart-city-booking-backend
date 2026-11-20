@@ -6,6 +6,8 @@ const {
 const bunyan = require("bunyan");
 const ExternalPriceService = require("./external-price-service");
 const { DOMAIN } = require("./authorization/reach");
+const RateLimiter = require("./rate-limit/rate-limiter");
+const { periodOccupancyPerIp } = require("./rate-limit/limits");
 
 const logger = bunyan.createLogger({
   name: "bookable-service.js",
@@ -127,8 +129,13 @@ class BookableService {
    * `validateItem` answers for one unit. A refusal names its check in
    * `reason`, a bookable whose checks could not run answers `reason: "error"`.
    *
+   * Each distinct id counts at the limit per IP first, as it runs one
+   * checkout (ECCdigital/tickets#1254): past it nothing is looked up and
+   * the request spends nothing.
+   *
    * @param {Object} params
    * @param {string[]} params.bookableIds - The ids the request asks for.
+   * @param {string} params.ip - The client IP the limit counts against.
    * @param {string} params.tenantId
    * @param {{reach: string, userId?: string|null}} params.scope - The reach
    *   of the request: ids outside it are left out, as the single occupancy
@@ -140,17 +147,24 @@ class BookableService {
    */
   static async getPeriodOccupancies({
     bookableIds,
+    ip,
     tenantId,
     scope,
     timeBegin,
     timeEnd,
     userId = null,
   }) {
+    const ids = [...new Set(bookableIds)];
+    await RateLimiter.enforce({
+      ...periodOccupancyPerIp(ip),
+      cost: ids.length,
+    });
+
     // One read: the bookables within the reach of the request, each whole,
     // as the checkout of `getOccupancy` reads it.
     const bookables = await BookableManager.getWholeBookablesByIds(
       tenantId,
-      bookableIds,
+      ids,
       scope,
     );
     // A pool, not rounds: each worker takes the next bookable as soon as

@@ -1,4 +1,5 @@
 const RateLimitEventManager = require("../../data-managers/rate-limit-event-manager");
+const { TooManyRequestsError } = require("../../../errors/BaseError");
 
 /**
  * A sliding-window rate limiter over the `RateLimitEvent` collection, safe
@@ -64,6 +65,24 @@ class RateLimiter {
       retryAfterSeconds: Math.max(1, Math.ceil(waitMs / 1000)),
       release: async () => {},
     };
+  }
+
+  /**
+   * `consume`, refusing a denied attempt instead of answering it.
+   *
+   * @param {Object} params As of `consume`
+   * @returns {Promise<{ allowed: true, retryAfterSeconds: 0, release: () => Promise<void> }>}
+   * @throws {TooManyRequestsError} Past the limit, with `retryAfterSeconds`
+   *   for the `Retry-After` header
+   */
+  static async enforce(params) {
+    const result = await RateLimiter.consume(params);
+    if (!result.allowed) {
+      throw new TooManyRequestsError("too_many_requests", {
+        retryAfterSeconds: result.retryAfterSeconds,
+      });
+    }
+    return result;
   }
 
   /**

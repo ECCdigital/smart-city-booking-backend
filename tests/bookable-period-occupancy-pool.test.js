@@ -16,10 +16,18 @@ const {
   ItemCheckoutService,
 } = require("../src/commons/services/checkout/item-checkout-service");
 const { DOMAIN } = require("../src/commons/services/authorization/reach");
+const {
+  installInMemoryRateLimitEvents,
+} = require("./helpers/in-memory-rate-limit-events");
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe("period occupancies in a pool", function () {
+  // The service counts the ids at the limit per IP (ECCdigital/tickets#1254).
+  beforeEach(function () {
+    installInMemoryRateLimitEvents();
+  });
+
   afterEach(function () {
     sinon.restore();
   });
