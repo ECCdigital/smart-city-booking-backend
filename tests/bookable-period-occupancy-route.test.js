@@ -130,6 +130,76 @@ describe("occupancy of many bookables in one period", function () {
     });
   }
 
+  describe("reason", function () {
+    const ask = () =>
+      post({ bookableIds: ["room"], timeBegin: TIME_BEGIN, timeEnd: TIME_END });
+
+    it("names the check that refuses, also one without occupancy data", async function () {
+      sinon.stub(ItemCheckoutService.prototype, "checkOpeningHours").rejects({
+        checkType: CHECK_TYPES.OPENING_HOURS,
+        available: false,
+      });
+
+      const res = await ask();
+
+      expect(res.body[0]).to.include({
+        isAvailable: false,
+        reason: CHECK_TYPES.OPENING_HOURS,
+      });
+    });
+
+    it("is error where the checkout cannot start", async function () {
+      sinon
+        .stub(ItemCheckoutService.prototype, "init")
+        .rejects(new Error("Tenant tenant-1 has no active app"));
+
+      const res = await ask();
+
+      expect(res.status).to.equal(200);
+      expect(res.body[0]).to.include({
+        bookableId: "room",
+        title: "Raum",
+        isAvailable: false,
+        reason: "error",
+        price: null,
+      });
+    });
+
+    it("is error where a check throws instead of refusing", async function () {
+      sinon
+        .stub(ItemCheckoutService.prototype, "checkAvailability")
+        .rejects(new Error("provider timeout"));
+
+      const res = await ask();
+
+      expect(res.body[0]).to.include({ isAvailable: false, reason: "error" });
+    });
+
+    it("keeps the refusal where one check refuses and another throws", async function () {
+      sinon
+        .stub(ItemCheckoutService.prototype, "checkAvailability")
+        .rejects(new Error("provider timeout"));
+      sinon.stub(ItemCheckoutService.prototype, "checkOpeningHours").rejects({
+        checkType: CHECK_TYPES.OPENING_HOURS,
+        available: false,
+      });
+
+      const res = await ask();
+
+      expect(res.body[0]).to.include({
+        isAvailable: false,
+        reason: CHECK_TYPES.OPENING_HOURS,
+      });
+    });
+
+    it("is absent where the bookable is available", async function () {
+      const res = await ask();
+
+      expect(res.body[0].isAvailable).to.equal(true);
+      expect(res.body[0]).to.not.have.property("reason");
+    });
+  });
+
   for (const [name, body] of [
     ["no ids", { bookableIds: [], timeBegin: TIME_BEGIN, timeEnd: TIME_END }],
     ["no period", { bookableIds: ["room"] }],

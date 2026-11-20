@@ -15,6 +15,9 @@ const logger = bunyan.createLogger({
 /** How many bookables `getPeriodOccupancies` checks at once. */
 const PERIOD_CHECK_CONCURRENCY = 5;
 
+/** The `reason` of a bookable whose checks could not run. */
+const PERIOD_ERROR_REASON = "error";
+
 /**
  * The BookableService class provides methods for determining the availability
  * and occupancy of bookable items within a specific time range.
@@ -83,8 +86,10 @@ class BookableService {
   /**
    * The occupancy of many bookables in one period, each with the price of
    * that period where it is available - what the storefront's search with a
-   * period asks, in one request instead of two per bookable. Each
-   * bookable is checked as `getOccupancy` checks it; the price is the one `validateItem` answers for one unit.
+   * period asks, in one request instead of two per bookable. Each bookable
+   * is checked as `getOccupancy` checks it; the price is the one
+   * `validateItem` answers for one unit. A refusal names its check in
+   * `reason`, a bookable whose checks could not run answers `reason: "error"`.
    *
    * @param {Object} params
    * @param {string[]} params.bookableIds - Ids the route already found within the reach of the request.
@@ -147,8 +152,21 @@ class BookableService {
       });
       await checkoutService.init(bookable);
 
-      const { isAvailable, totalCapacity, booked, remaining, reason } =
-        await this._performAvailabilityCheck(checkoutService);
+      const checkResults = await checkoutService.checkAll(false);
+
+      // A check that refuses names its type. One that throws (a provider
+      // down, a tenant without its app) names none and says nothing about
+      // the period: unless another check refuses, that is an error, not a
+      // booked-out bookable.
+      const rejected = checkResults.filter((r) => r.status === "rejected");
+      const refusal = rejected.find((r) => r.reason?.checkType);
+      if (rejected.length > 0 && !refusal) {
+        rejected.forEach((r) => logger.error(r.reason));
+        return this._periodError(bookable);
+      }
+
+      const { isAvailable, totalCapacity, booked, remaining } =
+        this._occupancyOfCheckResults(checkResults);
 
       // Only the documented fields: a failed check names the parent or
       // child that failed (`failedCheck`, `bookableId`, `title`), which may
@@ -160,18 +178,32 @@ class BookableService {
         totalCapacity,
         booked,
         remaining,
-        ...(reason ? { reason } : {}),
+        ...(refusal ? { reason: refusal.reason.checkType } : {}),
         price: isAvailable ? await this._periodPrice(checkoutService) : null,
       };
     } catch (error) {
       logger.error(error);
-      return { ...this._createErrorResponse(bookable.id), price: null };
+      return this._periodError(bookable);
     } finally {
       if (checkoutService) {
         checkoutService.cleanup();
         checkoutService = null;
       }
     }
+  }
+
+  /** A bookable whose checks could not run: no answer about the period. */
+  static _periodError(bookable) {
+    return {
+      bookableId: bookable.id,
+      title: bookable.title,
+      isAvailable: false,
+      totalCapacity: null,
+      booked: null,
+      remaining: null,
+      reason: PERIOD_ERROR_REASON,
+      price: null,
+    };
   }
 
   /** The price of one unit in the period, as `validateItem` answers it; null where none can be found. */
@@ -227,48 +259,7 @@ class BookableService {
         checkResults = await checkoutService.checkAll(false);
       }
 
-      const availabilityCheck =
-        checkResults.find(
-          (result) =>
-            result.status === "fulfilled" &&
-            result.value &&
-            result.value.checkType === CHECK_TYPES.AVAILABILITY,
-        )?.value ||
-        checkResults.find(
-          (result) =>
-            result.status === "rejected" &&
-            result.reason &&
-            result.reason.checkType === CHECK_TYPES.AVAILABILITY,
-        )?.reason;
-      if (!checkResults || !Array.isArray(checkResults)) {
-        return this._createUnavailableResponse();
-      }
-
-      const failedCheck = checkResults.find(
-        (result) => result.status === "rejected",
-      );
-
-      if (failedCheck) {
-        const occupancyData = this._extractOccupancyFromFailedCheck(
-          failedCheck.reason,
-        );
-
-        return {
-          isAvailable: false,
-          totalCapacity: availabilityCheck?.totalCapacity ?? null,
-          booked: availabilityCheck?.booked ?? null,
-          remaining: availabilityCheck?.remaining ?? null,
-          reason: occupancyData.reason,
-          failedCheck: occupancyData,
-        };
-      }
-
-      return {
-        isAvailable: availabilityCheck?.available ?? false,
-        totalCapacity: availabilityCheck?.totalCapacity ?? null,
-        booked: availabilityCheck?.booked ?? null,
-        remaining: availabilityCheck?.remaining ?? null,
-      };
+      return this._occupancyOfCheckResults(checkResults);
     } catch (error) {
       const occupancyData = this._extractOccupancyFromFailedCheck(error);
 
@@ -277,6 +268,58 @@ class BookableService {
         ...occupancyData,
       };
     }
+  }
+
+  /**
+   * The occupancy a list of settled checks (`checkAll(false)`) amounts to.
+   * Throws where the list is not one, as `_performAvailabilityCheck` expects.
+   *
+   * @param {PromiseSettledResult[]} checkResults
+   * @return {Object} As `_performAvailabilityCheck`.
+   */
+  static _occupancyOfCheckResults(checkResults) {
+    const availabilityCheck =
+      checkResults.find(
+        (result) =>
+          result.status === "fulfilled" &&
+          result.value &&
+          result.value.checkType === CHECK_TYPES.AVAILABILITY,
+      )?.value ||
+      checkResults.find(
+        (result) =>
+          result.status === "rejected" &&
+          result.reason &&
+          result.reason.checkType === CHECK_TYPES.AVAILABILITY,
+      )?.reason;
+    if (!checkResults || !Array.isArray(checkResults)) {
+      return this._createUnavailableResponse();
+    }
+
+    const failedCheck = checkResults.find(
+      (result) => result.status === "rejected",
+    );
+
+    if (failedCheck) {
+      const occupancyData = this._extractOccupancyFromFailedCheck(
+        failedCheck.reason,
+      );
+
+      return {
+        isAvailable: false,
+        totalCapacity: availabilityCheck?.totalCapacity ?? null,
+        booked: availabilityCheck?.booked ?? null,
+        remaining: availabilityCheck?.remaining ?? null,
+        reason: occupancyData.reason,
+        failedCheck: occupancyData,
+      };
+    }
+
+    return {
+      isAvailable: availabilityCheck?.available ?? false,
+      totalCapacity: availabilityCheck?.totalCapacity ?? null,
+      booked: availabilityCheck?.booked ?? null,
+      remaining: availabilityCheck?.remaining ?? null,
+    };
   }
 
   /**

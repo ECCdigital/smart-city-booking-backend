@@ -70,11 +70,30 @@
                   reason:
                     type: string
                     description: |
-                      The type of the check that failed, where the check
-                      names one, such as `availability`,
-                      `parent-availability` or `child-bookings`. The parent
-                      or child that failed is not named: it may be one the
-                      request cannot reach.
+                      Present where a check refused the period: the type of
+                      that check. The parent or child
+                      that refused is not named, it may be one the request
+                      cannot reach. `error`: the checks could not run (an
+                      external provider failed, the tenant lacks the app a
+                      provider needs), so nothing is known about the period.
+                    enum:
+                      - permission
+                      - availability
+                      - parent-availability
+                      - opening-hours
+                      - booking-duration
+                      - event-date
+                      - event-seats
+                      - child-bookings
+                      - max-booking-date
+                      - insufficient-lead-time
+                      - time-in-past
+                      - time-relation
+                      - price-category
+                      - max-amount
+                      - block-period
+                      - time-period
+                      - error
                   price:
                     type: object
                     nullable: true
