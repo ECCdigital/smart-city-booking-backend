@@ -21,6 +21,12 @@ const {
   CHECK_TYPES,
 } = require("../src/commons/availability/checkout-check-types");
 const BookableService = require("../src/commons/services/bookable-service");
+const {
+  BookableManager,
+} = require("../src/commons/data-managers/bookable-manager");
+const {
+  installInMemoryRateLimitEvents,
+} = require("./helpers/in-memory-rate-limit-events");
 
 const OCCUPANCY = `/api/${TENANT}/bookables/occupancy`;
 
@@ -29,11 +35,13 @@ describe("occupancy of many bookables in one period", function () {
 
   beforeEach(async function () {
     h = await installHarness();
+    installInMemoryRateLimitEvents();
   });
 
   afterEach(async function () {
     sinon.restore();
     await h.close();
+    delete process.env.RATE_LIMIT_PERIOD_OCCUPANCY_PER_IP;
   });
 
   const post = (body) => h.api().post(OCCUPANCY).send(body);
@@ -291,6 +299,75 @@ describe("occupancy of many bookables in one period", function () {
       error: "InternalError",
       code: "internal_error",
       statusCode: 500,
+    });
+  });
+
+  describe("limit per IP, counted in bookables", function () {
+    // 100 ids, as the storefront asks at most; one of them is found.
+    const hundredIds = [
+      "room",
+      ...Array.from({ length: 99 }, (_, i) => `b${i}`),
+    ];
+    const askHundred = () =>
+      post({
+        bookableIds: hundredIds,
+        timeBegin: TIME_BEGIN,
+        timeEnd: TIME_END,
+      });
+
+    it("answers 429 with Retry-After past the limit and starts no checkout", async function () {
+      process.env.RATE_LIMIT_PERIOD_OCCUPANCY_PER_IP = "150";
+
+      const first = await askHundred();
+      expect(first.status).to.equal(200);
+
+      // The harness stubs the lookup already.
+      const lookup = BookableManager.getBookablesByIds;
+      lookup.resetHistory();
+      const checkout = sinon.spy(ItemCheckoutService.prototype, "init");
+      const second = await askHundred();
+
+      expect(second.status).to.equal(429);
+      expect(second.body.code).to.equal("too_many_requests");
+      expect(Number(second.headers["retry-after"])).to.be.within(1, 300);
+      expect(lookup.called).to.equal(false);
+      expect(checkout.called).to.equal(false);
+    });
+
+    it("answers a request with few ids under the limit as before", async function () {
+      process.env.RATE_LIMIT_PERIOD_OCCUPANCY_PER_IP = "150";
+      await askHundred();
+
+      const res = await post({
+        bookableIds: ["room", "auto-room"],
+        timeBegin: TIME_BEGIN,
+        timeEnd: TIME_END,
+      });
+
+      expect(res.status).to.equal(200);
+      expect(res.body).to.have.length(2);
+    });
+
+    it("counts an id the request names twice once", async function () {
+      process.env.RATE_LIMIT_PERIOD_OCCUPANCY_PER_IP = "2";
+
+      const res = await post({
+        bookableIds: ["room", "auto-room", "room"],
+        timeBegin: TIME_BEGIN,
+        timeEnd: TIME_END,
+      });
+
+      expect(res.status).to.equal(200);
+    });
+
+    it("spends nothing on a request it refuses with 400", async function () {
+      process.env.RATE_LIMIT_PERIOD_OCCUPANCY_PER_IP = "100";
+
+      const invalid = await post({ bookableIds: hundredIds });
+      const valid = await askHundred();
+
+      expect(invalid.status).to.equal(400);
+      expect(valid.status).to.equal(200);
     });
   });
 
