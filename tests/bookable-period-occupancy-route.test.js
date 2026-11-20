@@ -82,6 +82,7 @@ describe("occupancy of many bookables in one period", function () {
     expect(res.body[0].price).to.equal(null);
   });
 
+  // The shapes `runParentAvailabilityCheck` and `runChildBookingsCheck` throw.
   for (const [name, refusal] of [
     [
       "parent",
@@ -89,7 +90,14 @@ describe("occupancy of many bookables in one period", function () {
         checkType: CHECK_TYPES.PARENT_AVAILABILITY,
         available: false,
         parentAvailability: [
-          { bookableId: "hidden-parent", title: "Verborgen", available: false },
+          {
+            bookableId: "hidden-parent",
+            title: "Verborgen",
+            totalCapacity: 1,
+            booked: 1,
+            remaining: 0,
+            isAvailable: false,
+          },
         ],
       },
     ],
@@ -98,9 +106,11 @@ describe("occupancy of many bookables in one period", function () {
       {
         checkType: CHECK_TYPES.CHILD_BOOKINGS,
         available: false,
-        childAvailabilities: [
-          { bookableId: "hidden-child", title: "Verborgen", available: false },
-        ],
+        bookableId: "hidden-child",
+        title: "Verborgen",
+        totalCapacity: 1,
+        booked: 1,
+        remaining: 0,
       },
     ],
   ]) {
@@ -127,6 +137,34 @@ describe("occupancy of many bookables in one period", function () {
         price: null,
       });
       expect(res.body[0]).to.not.have.property("failedCheck");
+      expect(JSON.stringify(res.body)).to.not.match(/hidden-|Verborgen/);
+    });
+
+    it(`names the refusal of a ${name} on the single occupancy, without its id or title`, async function () {
+      sinon
+        .stub(
+          ItemCheckoutService.prototype,
+          name === "parent" ? "checkParentAvailability" : "checkChildBookings",
+        )
+        .rejects(refusal);
+
+      const res = await h
+        .api()
+        .get(`/api/${TENANT}/bookables/room/occupancy`)
+        .query({ timeBegin: TIME_BEGIN, timeEnd: TIME_END });
+
+      expect(res.status).to.equal(200);
+      expect(res.body).to.include({
+        bookableId: "room",
+        title: "Raum",
+        isAvailable: false,
+        reason: refusal.checkType,
+      });
+      expect(res.body.failedCheck).to.include({
+        totalCapacity: 1,
+        booked: 1,
+        remaining: 0,
+      });
       expect(JSON.stringify(res.body)).to.not.match(/hidden-|Verborgen/);
     });
   }

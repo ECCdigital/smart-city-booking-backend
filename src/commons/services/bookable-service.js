@@ -313,9 +313,14 @@ class BookableService {
     );
 
     if (failedCheck) {
+      // A refusing parent or child may be one the request cannot reach:
+      // the single occupancy is public, so `failedCheck` leaves out which
+      // bookable refused and keeps only its numbers.
       const occupancyData = this._extractOccupancyFromFailedCheck(
         failedCheck.reason,
       );
+      delete occupancyData.bookableId;
+      delete occupancyData.title;
 
       return {
         isAvailable: false,
@@ -365,43 +370,33 @@ class BookableService {
           reason: reasonObj.checkType ?? null,
         };
 
-      case CHECK_TYPES.PARENT_AVAILABILITY:
-        if (
-          reasonObj.parentAvailability &&
-          reasonObj.parentAvailability.length > 0
-        ) {
-          const parentData = reasonObj.parentAvailability.find(
-            (avail) => avail.available === false,
-          );
-          return {
-            bookableId: parentData.bookableId ?? null,
-            title: parentData.title ?? null,
-            totalCapacity: parentData.totalCapacity ?? null,
-            booked: parentData.booked ?? null,
-            remaining: parentData.remaining ?? null,
-            reason: reasonObj.checkType ?? null,
-          };
-        }
-        break;
+      case CHECK_TYPES.PARENT_AVAILABILITY: {
+        // `runParentAvailabilityCheck` marks the refusing parent with
+        // `isAvailable: false` in `parentAvailability`.
+        const parentData =
+          (reasonObj.parentAvailability ?? []).find(
+            (avail) => avail.isAvailable === false,
+          ) ?? {};
+        return {
+          bookableId: parentData.bookableId ?? null,
+          title: parentData.title ?? null,
+          totalCapacity: parentData.totalCapacity ?? null,
+          booked: parentData.booked ?? null,
+          remaining: parentData.remaining ?? null,
+          reason: reasonObj.checkType ?? null,
+        };
+      }
 
       case CHECK_TYPES.CHILD_BOOKINGS:
-        if (
-          reasonObj.childAvailabilities &&
-          reasonObj.childAvailabilities.length > 0
-        ) {
-          const childData = reasonObj.childAvailabilities.find(
-            (avail) => avail.available === false,
-          );
-          return {
-            bookableId: childData.bookableId ?? null,
-            title: childData.title ?? null,
-            totalCapacity: childData.totalCapacity ?? null,
-            booked: childData.booked ?? null,
-            remaining: childData.remaining ?? null,
-            reason: reasonObj.checkType ?? null,
-          };
-        }
-        break;
+        // `runChildBookingsCheck` names the refusing child on the refusal itself.
+        return {
+          bookableId: reasonObj.bookableId ?? null,
+          title: reasonObj.title ?? null,
+          totalCapacity: reasonObj.totalCapacity ?? null,
+          booked: reasonObj.booked ?? null,
+          remaining: reasonObj.remaining ?? null,
+          reason: reasonObj.checkType ?? null,
+        };
       case CHECK_TYPES.EVENT_DATE:
         return {
           eventId: reasonObj.eventId ?? null,
