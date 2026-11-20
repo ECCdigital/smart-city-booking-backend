@@ -86,6 +86,7 @@ const MediaService = require("../../src/commons/services/media/media-service");
 const IdGenerator = require("../../src/commons/utilities/id-generator");
 const PaymentService = require("../../src/commons/services/payment/providers/payment-service");
 const { Bookable } = require("../../src/commons/entities/bookable/bookable");
+const BookableModel = require("../../src/commons/data-managers/models/bookableModel");
 const { Role } = require("../../src/commons/entities/role/role");
 const Instance = require("../../src/commons/entities/instance/instance");
 const ApplicationFactory = require("../../src/commons/entities/application/applicationFactory");
@@ -475,11 +476,15 @@ function instanceOf(record) {
  * @param {Object} [options.bookables] - Additional or replaced bookables.
  * @param {Object} [options.instance] - Overrides of the stored instance,
  *   e.g. `{ applications: [keycloakApp] }`.
+ * @param {boolean} [options.bookablesFromModel] - Reads the bookables by
+ *   their ids through the real manager, from the catalogue behind
+ *   `BookableModel.find`, so a test counts what the database is asked.
  */
 async function installHarness({
   tenant: tenantOverrides,
   bookables,
   instance: instanceOverrides,
+  bookablesFromModel = false,
 } = {}) {
   const store = new Map();
   const groups = new Map();
@@ -764,16 +769,41 @@ async function installHarness({
       );
       return bookable;
     });
-  sinon
-    .stub(BookableManager, "getBookablesByIds")
-    .callsFake(async (tenantId, ids, scope) =>
-      projected(
-        ids.map((id) => catalogue[id]).filter(Boolean),
-        tenantId,
-        scope,
-        reached,
-      ),
+  if (bookablesFromModel) {
+    // Every field of the filter has to match, `id` by `$in`.
+    sinon.stub(BookableModel, "find").callsFake(async (filter) =>
+      Object.values(catalogue)
+        .filter((doc) =>
+          Object.entries(filter).every(([field, value]) =>
+            field === "id" ? value.$in.includes(doc.id) : doc[field] === value,
+          ),
+        )
+        .map((doc) => ({ toEntity: () => doc })),
     );
+  } else {
+    // The whole bookables within the reach: the projection decides which.
+    sinon
+      .stub(BookableManager, "getWholeBookablesByIds")
+      .callsFake(async (tenantId, ids, scope) => {
+        const whole = ids.map((id) => catalogue[id]).filter(Boolean);
+        const reachedIds = new Set(
+          (await projected(whole, tenantId, scope, reached)).map(
+            ({ id }) => id,
+          ),
+        );
+        return whole.filter(({ id }) => reachedIds.has(id));
+      });
+    sinon
+      .stub(BookableManager, "getBookablesByIds")
+      .callsFake(async (tenantId, ids, scope) =>
+        projected(
+          ids.map((id) => catalogue[id]).filter(Boolean),
+          tenantId,
+          scope,
+          reached,
+        ),
+      );
+  }
   sinon.stub(BookableManager, "getAncestorBookables").resolves([]);
   sinon.stub(BookableManager, "getAllParentBookables").resolves([]);
   sinon.stub(BookableManager, "getRelatedBookables").resolves([]);

@@ -114,16 +114,7 @@ class CheckoutController {
       const payload = {
         checkoutId,
         checkoutIdGenerated: generated,
-        regularPriceEur:
-          (await itemCheckoutService.regularPriceEur()) * multiplier,
-        userPriceEur: (await itemCheckoutService.userPriceEur()) * multiplier,
-        regularGrossPriceEur:
-          (await itemCheckoutService.regularGrossPriceEur()) * multiplier,
-        userGrossPriceEur:
-          (await itemCheckoutService.userGrossPriceEur()) * multiplier,
-        freeBookingAllowed: await itemCheckoutService.freeBookingAllowed(),
-        bookingDiscountPercent:
-          await itemCheckoutService.bookingDiscountPercent(),
+        ...(await itemCheckoutService.priceFields(multiplier)),
       };
 
       return response.status(200).json(payload);

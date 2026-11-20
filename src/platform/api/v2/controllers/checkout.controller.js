@@ -135,15 +135,7 @@ class CheckoutControllerV2 {
       let multiplier = parseInt(amount);
       if (service.ignoreAmount) multiplier = 1;
 
-      const data = {
-        regularPriceEur: (await service.regularPriceEur()) * multiplier,
-        userPriceEur: (await service.userPriceEur()) * multiplier,
-        regularGrossPriceEur:
-          (await service.regularGrossPriceEur()) * multiplier,
-        userGrossPriceEur: (await service.userGrossPriceEur()) * multiplier,
-        freeBookingAllowed: await service.freeBookingAllowed(),
-        bookingDiscountPercent: await service.bookingDiscountPercent(),
-      };
+      const data = await service.priceFields(multiplier);
 
       logger.info(
         { tenantId, bookableId, userId: user?.id, amount },

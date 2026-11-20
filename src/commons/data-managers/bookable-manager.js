@@ -210,6 +210,34 @@ class BookableManager {
   }
 
   /**
+   * The bookables of `getBookablesByIds` - the same ids within the same
+   * reach, in one query - each whole, as the domain reads it: under
+   * `public` the projection decides which bookables, not their fields. For
+   * a service that checks what its route reaches (the checkout of the
+   * batch occupancy); what it answers never carries the bookable itself.
+   * @param {string} tenantId
+   * @param {string[]} ids
+   * @param {{reach: string, userId?: string|null}} scope As of `getBookable`
+   * @returns {Promise<Bookable[]>}
+   */
+  static async getWholeBookablesByIds(tenantId, ids, scope) {
+    if (!ids?.length) return [];
+
+    const condition =
+      scope?.reach === REACH.PUBLIC ? {} : ownCondition("bookable", scope);
+    const bookables = (
+      await BookableModel.find({ tenantId, id: { $in: ids }, ...condition })
+    ).map((doc) => doc.toEntity());
+    if (scope?.reach !== REACH.PUBLIC) {
+      return bookables;
+    }
+    const reachedIds = new Set(
+      (await projection.reached(tenantId, bookables)).map(({ id }) => id),
+    );
+    return bookables.filter(({ id }) => reachedIds.has(id));
+  }
+
+  /**
    * Batch-load bookables with merged custom field definitions - a direct
    * link each, as `getBookablesByIds`.
    * @param {string} tenantId

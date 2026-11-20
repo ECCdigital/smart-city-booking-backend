@@ -15,6 +15,7 @@ const {
 const {
   ItemCheckoutService,
 } = require("../src/commons/services/checkout/item-checkout-service");
+const { DOMAIN } = require("../src/commons/services/authorization/reach");
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -26,7 +27,7 @@ describe("period occupancies in a pool", function () {
   it("keeps five in flight past a slow bookable and the order of the bookables", async function () {
     const ids = ["slow", "b", "c", "d", "e", "f", "g", "h"];
     sinon
-      .stub(BookableManager, "getBookablesByIds")
+      .stub(BookableManager, "getWholeBookablesByIds")
       .resolves(ids.map((id) => ({ id, title: id })));
 
     // "slow" finishes only once the others are done, or after a second -
@@ -62,6 +63,7 @@ describe("period occupancies in a pool", function () {
     const results = await BookableService.getPeriodOccupancies({
       bookableIds: ids,
       tenantId: "t",
+      scope: DOMAIN,
       timeBegin: 1,
       timeEnd: 2,
     });
@@ -75,7 +77,7 @@ describe("period occupancies in a pool", function () {
 
   it("shares one cache of the external providers within a request, not across requests", async function () {
     sinon
-      .stub(BookableManager, "getBookablesByIds")
+      .stub(BookableManager, "getWholeBookablesByIds")
       .resolves(["a", "b", "c"].map((id) => ({ id, title: id })));
     sinon.stub(ItemCheckoutService.prototype, "init").resolves();
     const caches = [];
@@ -90,6 +92,7 @@ describe("period occupancies in a pool", function () {
       BookableService.getPeriodOccupancies({
         bookableIds: ["a", "b", "c"],
         tenantId: "t",
+        scope: DOMAIN,
         timeBegin: 1,
         timeEnd: 2,
       });
@@ -104,12 +107,13 @@ describe("period occupancies in a pool", function () {
   });
 
   it("answers an empty list for no bookables", async function () {
-    sinon.stub(BookableManager, "getBookablesByIds").resolves([]);
+    sinon.stub(BookableManager, "getWholeBookablesByIds").resolves([]);
 
     expect(
       await BookableService.getPeriodOccupancies({
         bookableIds: ["x"],
         tenantId: "t",
+        scope: DOMAIN,
         timeBegin: 1,
         timeEnd: 2,
       }),
