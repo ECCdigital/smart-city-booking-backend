@@ -7,6 +7,8 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ## [Unreleased]
 
+## [4.4.2] — 2026-11-20
+
 ### Added
 
 - Occupancy and price of many bookables in one period ([ECCdigital/tickets#850](https://github.com/ECCdigital/tickets/issues/850)): `POST /api/:tenant/bookables/occupancy` with up to 100 `bookableIds` answers each with its availability, the period's price and, where refused, the `reason` (`error` where the checks could not run). The storefront's search asks it once per tenant instead of twice per bookable.
@@ -19,6 +21,7 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ### Fixed
 
+- Duplicating an offer with an old location works again ([ECCdigital/tickets#750](https://github.com/ECCdigital/tickets/issues/750)): creating a bookable, event or access point accepts the old `location.meta.source` values `nominatim` and `legacy`, not only an unchanged stored location; before, the copy the Admin UI posts was refused with `400`
 - `POST /api/:tenant/bookables/occupancy` is limited per client IP in bookables ([ECCdigital/tickets#1254](https://github.com/ECCdigital/tickets/issues/1254)): 2000 per 5 minutes (`RATE_LIMIT_PERIOD_OCCUPANCY_PER_IP`), past it `429` with `Retry-After`.
 - The occupancy of a bookable whose parent or child refuses the period names that check in `reason` (`parent-availability`, `child-bookings`) instead of failing ([ECCdigital/tickets#850](https://github.com/ECCdigital/tickets/issues/850)); `failedCheck` of `GET /api/:tenant/bookables/:id/occupancy` no longer names the refusing bookable.
 - The attendee list CSV of an event (`GET /csv/:tenant/events/:id/bookings`) keeps its columns and rows: a value with `;` or `"` is quoted, with inner quotes doubled, and a line break becomes a space. Before, a semicolon in a name or address moved the following columns of that row, and a line break split the row.
@@ -98,7 +101,6 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ### Fixed
 
-- Duplicating an offer with an old location works again ([ECCdigital/tickets#750](https://github.com/ECCdigital/tickets/issues/750)): creating a bookable, event or access point accepts the old `location.meta.source` values `nominatim` and `legacy`, not only an unchanged stored location; before, the copy the Admin UI posts was refused with `400`
 - A parent can no longer be booked while a dependent is partly taken ([ECCdigital/tickets#673](https://github.com/ECCdigital/tickets/issues/673)): any booking of a dependent in the period refuses the parent with `child-bookings`, whatever the dependent's amount, also when it has none; the calendars show the parent as taken for that time. Ticket dependents keep counting against their amount. Reinstating a cancelled booking only warns, as of ECCdigital/tickets#643.
 - An old confirmation link no longer cancels a reinstated booking ([ECCdigital/tickets#561](https://github.com/ECCdigital/tickets/issues/561)): reinstating a booking drops its open cancellation request, whose release then answers `404`.
 - Saving an access point whose provider the tenant has not switched on ([ECCdigital/tickets#311](https://github.com/ECCdigital/tickets/issues/311)): `PUT /api/:tenant/access-points` stores it instead of answering `404 <provider>_application_not_found` and checks mode and lock on the first save once the provider is active; at a Salto door `authorization` and `both` are refused as `400 unsupported_mode` without asking Salto, also while Salto cannot be reached. The lock listing `GET /api/:tenant/access-apps/:provider/access-points` answers such a provider with `404 <provider>_application_not_found` instead of `500` (route snapshot updated on purpose)
