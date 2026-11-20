@@ -610,13 +610,18 @@ class BookableManager {
   }
 
   /**
-   * Remove a bookable
+   * Remove a bookable and the references to it in `checkoutBookableIds` of
+   * the tenant's other bookables, optional and mandatory alike.
    * @param {string} id Bookable ID
    * @param {string} tenantId Tenant ID
    * @returns {Promise<void>}
    */
   static async removeBookable(id, tenantId) {
     await BookableModel.deleteOne({ id: id, tenantId: tenantId });
+    await BookableModel.updateMany(
+      { tenantId: tenantId, "checkoutBookableIds.bookableId": id },
+      { $pull: { checkoutBookableIds: { bookableId: id } } },
+    );
   }
 
   /**
