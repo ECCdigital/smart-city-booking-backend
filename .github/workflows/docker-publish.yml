@@ -11,13 +11,13 @@ on:
   workflow_dispatch:
     inputs:
       runner_type:
-        description: "Runner-Typ"
+        description: "Runner: GitHub's ubuntu-latest, or the self-hosted runner only when chosen"
         required: true
         type: choice
         options:
-          - self-hosted
           - ubuntu-latest
-        default: self-hosted
+          - self-hosted
+        default: ubuntu-latest
 
 env:
   # Use docker.io for Docker Hub if empty
@@ -27,8 +27,9 @@ env:
 
 jobs:
   build:
-    runs-on:
-      - ${{ github.event.inputs.runner_type }}
+    # A release has no inputs: it runs on GitHub's runner. The self-hosted runner
+    # only when chosen on a manual start (ECCdigital/tickets#1319).
+    runs-on: ${{ inputs.runner_type || 'ubuntu-latest' }}
     permissions:
       contents: read
       packages: write
