@@ -122,7 +122,10 @@ const TABLE = {
     pay: { any: "manageBookings.updateAny" },
     reject: { any: "manageBookings.updateAny" },
     acceptWithdrawal: { any: "manageBookings.updateAny" },
-    delete: { any: "manageBookings.deleteAny" },
+    delete: {
+      own: "manageBookings.deleteOwn",
+      any: "manageBookings.deleteAny",
+    },
     cancel: { own: "signedIn", any: "manageBookings.updateAny" },
     operate: { own: "signedIn", any: "manageBookings.updateAny" },
   },
