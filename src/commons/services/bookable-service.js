@@ -112,23 +112,29 @@ class BookableService {
       bookableIds,
       DOMAIN,
     );
-    const results = [];
-    for (let i = 0; i < bookables.length; i += PERIOD_CHECK_CONCURRENCY) {
-      const chunk = bookables.slice(i, i + PERIOD_CHECK_CONCURRENCY);
-      results.push(
-        ...(await Promise.all(
-          chunk.map((bookable) =>
-            this._getPeriodOccupancy({
-              bookable,
-              tenantId,
-              timeBegin,
-              timeEnd,
-              userId,
-            }),
-          ),
-        )),
-      );
-    }
+    // A pool, not rounds: each worker takes the next bookable as soon as
+    // its own is done, so one slow external provider holds one slot and
+    // not the four beside it. `_getPeriodOccupancy` never throws.
+    const results = new Array(bookables.length);
+    let next = 0;
+    const worker = async () => {
+      while (next < bookables.length) {
+        const index = next++;
+        results[index] = await this._getPeriodOccupancy({
+          bookable: bookables[index],
+          tenantId,
+          timeBegin,
+          timeEnd,
+          userId,
+        });
+      }
+    };
+    await Promise.all(
+      Array.from(
+        { length: Math.min(PERIOD_CHECK_CONCURRENCY, bookables.length) },
+        worker,
+      ),
+    );
     return results;
   }
 
