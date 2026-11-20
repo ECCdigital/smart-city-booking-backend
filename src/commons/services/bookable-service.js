@@ -116,6 +116,10 @@ class BookableService {
     // its own is done, so one slow external provider holds one slot and
     // not the four beside it. `_getPeriodOccupancy` never throws.
     const results = new Array(bookables.length);
+    // One cache of the external providers for the whole request, as
+    // `CalendarService.checkAvailability` keeps one: bookables on the same
+    // IFBS location or Pareva unit ask the provider once.
+    const externalCache = new Map();
     let next = 0;
     const worker = async () => {
       while (next < bookables.length) {
@@ -126,6 +130,7 @@ class BookableService {
           timeBegin,
           timeEnd,
           userId,
+          externalCache,
         });
       }
     };
@@ -144,6 +149,7 @@ class BookableService {
     timeBegin,
     timeEnd,
     userId,
+    externalCache,
   }) {
     let checkoutService = null;
     try {
@@ -155,6 +161,7 @@ class BookableService {
         bookableId: bookable.id,
         amount: 1,
         bookWithoutDiscount: false,
+        externalCache,
       });
       await checkoutService.init(bookable);
 

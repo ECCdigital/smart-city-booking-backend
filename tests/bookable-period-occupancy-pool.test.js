@@ -2,6 +2,7 @@
  * `BookableService.getPeriodOccupancies` checks the bookables of one request
  * five at a time in a pool: a slow bookable (an external provider) holds one
  * slot, the others go on, and the answer keeps the order of the bookables.
+ * The checks of one request share one cache of the external providers.
  */
 
 const { expect } = require("chai");
@@ -11,6 +12,9 @@ const BookableService = require("../src/commons/services/bookable-service");
 const {
   BookableManager,
 } = require("../src/commons/data-managers/bookable-manager");
+const {
+  ItemCheckoutService,
+} = require("../src/commons/services/checkout/item-checkout-service");
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -67,6 +71,36 @@ describe("period occupancies in a pool", function () {
     expect(peak).to.equal(5);
     // In fixed rounds of five, "f" to "h" would wait for "slow".
     expect(startedWhileSlow).to.deep.equal(ids);
+  });
+
+  it("shares one cache of the external providers within a request, not across requests", async function () {
+    sinon
+      .stub(BookableManager, "getBookablesByIds")
+      .resolves(["a", "b", "c"].map((id) => ({ id, title: id })));
+    sinon.stub(ItemCheckoutService.prototype, "init").resolves();
+    const caches = [];
+    sinon
+      .stub(ItemCheckoutService.prototype, "checkAll")
+      .callsFake(async function () {
+        caches.push(this.externalCache);
+        return [];
+      });
+
+    const ask = () =>
+      BookableService.getPeriodOccupancies({
+        bookableIds: ["a", "b", "c"],
+        tenantId: "t",
+        timeBegin: 1,
+        timeEnd: 2,
+      });
+    await ask();
+    await ask();
+
+    expect(caches).to.have.length(6);
+    expect(caches[0]).to.be.instanceOf(Map);
+    expect(new Set(caches.slice(0, 3)).size).to.equal(1);
+    expect(new Set(caches.slice(3)).size).to.equal(1);
+    expect(caches[3]).to.not.equal(caches[0]);
   });
 
   it("answers an empty list for no bookables", async function () {
