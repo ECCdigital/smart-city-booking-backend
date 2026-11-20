@@ -18,6 +18,7 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ### Fixed
 
+- `POST /api/:tenant/bookables/occupancy` is limited per client IP in bookables, not requests ([ECCdigital/tickets#1254](https://github.com/ECCdigital/tickets/issues/1254)): each distinct id counts once, 2000 per 5 minutes (`RATE_LIMIT_PERIOD_OCCUPANCY_PER_IP`). Past it the route answers `429` with `Retry-After` and checks no bookable, so one request with 100 ids no longer slips past a per-request limit.
 - The occupancy of a bookable whose parent or child refuses the period names that check in `reason` (`parent-availability`, `child-bookings`) instead of failing ([ECCdigital/tickets#850](https://github.com/ECCdigital/tickets/issues/850)); `failedCheck` of `GET /api/:tenant/bookables/:id/occupancy` no longer names the refusing bookable.
 - The attendee list CSV of an event (`GET /csv/:tenant/events/:id/bookings`) keeps its columns and rows: a value with `;` or `"` is quoted, with inner quotes doubled, and a line break becomes a space. Before, a semicolon in a name or address moved the following columns of that row, and a line break split the row.
 - The booking and invoice dates of PDF documents read in Europe/Berlin, whatever the server's time zone: `formatDate` of the PDF service followed the server, unlike `formatDateTime` beside it, so on a server in UTC, as in the Docker image, a receipt or invoice from shortly after midnight carried the previous day.

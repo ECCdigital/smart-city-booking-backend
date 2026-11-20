@@ -738,9 +738,11 @@ function installRouteWorld({
   stubManager(RateLimitEventManager, {
     only: {
       record: async () => FIXTURE_ID,
+      recordMany: async (key, at, count) => Array(count).fill(FIXTURE_ID),
       countSince: async () => 1,
       oldestAtWithin: async () => null,
       remove: async () => {},
+      removeMany: async () => {},
     },
   });
   stubManager(WorkflowManager, {

@@ -19,11 +19,19 @@ const BookableModel = require("../src/commons/data-managers/models/bookableModel
 const {
   ItemCheckoutService,
 } = require("../src/commons/services/checkout/item-checkout-service");
+const {
+  installInMemoryRateLimitEvents,
+} = require("./helpers/in-memory-rate-limit-events");
 
 const OCCUPANCY = `/api/${TENANT}/bookables/occupancy`;
 
 describe("occupancy of many bookables: one check, one read", function () {
   let h;
+
+  // The route counts its ids at the limit per IP (ECCdigital/tickets#1254).
+  beforeEach(function () {
+    installInMemoryRateLimitEvents();
+  });
 
   afterEach(async function () {
     sinon.restore();

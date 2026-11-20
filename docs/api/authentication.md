@@ -246,17 +246,18 @@ See `.env-example` for reference values.
 
 Sliding windows counted in MongoDB (`rateLimitEvents`, rows expire after 7 days), so they hold across parallel requests and several server processes. Each limit has a count and a `_WINDOW_SECONDS` companion; a value that is not a positive integer falls back to the default. A limit hit answers `429 { code: "too_many_requests", params: { retryAfterSeconds } }` with a `Retry-After` header.
 
-| Variable                                         | Default | Applies to                               |
-| ------------------------------------------------ | ------- | ---------------------------------------- |
-| `RATE_LIMIT_SIGNUP_PER_IP`                       | 10/h    | `POST /auth/signup`, per client IP       |
-| `RATE_LIMIT_VERIFICATION_MAIL_PER_ACCOUNT_SHORT` | 1/min   | verification mails per account           |
-| `RATE_LIMIT_VERIFICATION_MAIL_PER_ACCOUNT_LONG`  | 5/h     | verification mails per account           |
-| `RATE_LIMIT_VERIFICATION_MAIL_PER_IP`            | 30/h    | `POST /auth/resend-verification`, per IP |
-| `RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_SHORT`   | 1/min   | reset mails per account                  |
-| `RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_LONG`    | 5/h     | reset mails per account                  |
-| `RATE_LIMIT_FORGOT_PASSWORD_PER_IP`              | 30/h    | `POST /auth/forgot-password`, per IP     |
-| `RATE_LIMIT_TENANT_SELF_CREATION_PER_USER`       | 3/24h   | tenant self-creation per user            |
+| Variable                                         | Default   | Applies to                                                   |
+| ------------------------------------------------ | --------- | ------------------------------------------------------------ |
+| `RATE_LIMIT_SIGNUP_PER_IP`                       | 10/h      | `POST /auth/signup`, per client IP                           |
+| `RATE_LIMIT_VERIFICATION_MAIL_PER_ACCOUNT_SHORT` | 1/min     | verification mails per account                               |
+| `RATE_LIMIT_VERIFICATION_MAIL_PER_ACCOUNT_LONG`  | 5/h       | verification mails per account                               |
+| `RATE_LIMIT_VERIFICATION_MAIL_PER_IP`            | 30/h      | `POST /auth/resend-verification`, per IP                     |
+| `RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_SHORT`   | 1/min     | reset mails per account                                      |
+| `RATE_LIMIT_FORGOT_PASSWORD_PER_ACCOUNT_LONG`    | 5/h       | reset mails per account                                      |
+| `RATE_LIMIT_FORGOT_PASSWORD_PER_IP`              | 30/h      | `POST /auth/forgot-password`, per IP                         |
+| `RATE_LIMIT_TENANT_SELF_CREATION_PER_USER`       | 3/24h     | tenant self-creation per user                                |
+| `RATE_LIMIT_PERIOD_OCCUPANCY_PER_IP`             | 2000/5min | bookables of `POST /api/:tenant/bookables/occupancy`, per IP |
 
-The per-IP limits and `RATE_LIMIT_TENANT_SELF_CREATION_PER_USER` answer `429`; the per-account limits of the verification and reset mails end silently with the usual answer, so they do not tell whether the address has an account.
+The per-IP limits and `RATE_LIMIT_TENANT_SELF_CREATION_PER_USER` answer `429`; `RATE_LIMIT_PERIOD_OCCUPANCY_PER_IP` counts each distinct bookable id of a request, not the request; the per-account limits of the verification and reset mails end silently with the usual answer, so they do not tell whether the address has an account.
 
 The client IP is `req.ip`. The server takes `X-Forwarded-For` only from the proxies `TRUSTED_PROXIES` names (addresses or CIDR networks); without the variable it counts the direct address of the connection. See [docs/migrations/v4.3.1-upgrade.md](../migrations/v4.3.1-upgrade.md).
