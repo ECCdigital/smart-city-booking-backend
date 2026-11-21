@@ -138,7 +138,7 @@ _Required permission:_ `manageRoles.updateAny`
 
 ### DELETE /api/:tenant/roles/:id
 
-Deletes a role. **Requires JWT.**
+Deletes a role. **Requires JWT.** `409 role_in_use` while members hold the role or usable invitations offer it; `params.memberships` and `params.invitations` name the counts, and nothing is deleted.
 
 ## Bookables
 

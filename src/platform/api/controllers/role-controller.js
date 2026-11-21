@@ -1,8 +1,10 @@
 const { RoleManager } = require("../../../commons/data-managers/role-manager");
 const MembershipManager = require("../../../commons/data-managers/membership-manager");
+const InvitationManager = require("../../../commons/data-managers/invitation-manager");
+const Invitation = require("../../../commons/entities/tenant/invitation");
 const { Role } = require("../../../commons/entities/role/role");
 const { v4: uuidv4 } = require("uuid");
-const { NotFoundError } = require("../../../errors/BaseError");
+const { NotFoundError, ConflictError } = require("../../../errors/BaseError");
 const createComponentLogger = require("../../../middleware/logger");
 
 const logger = createComponentLogger("role-controller.js");
@@ -148,7 +150,13 @@ class RoleController {
     }
   }
 
-  static async removeRole(request, response) {
+  /**
+   * A role still held by a member or offered by a usable invitation is not
+   * removed: both keep role ids as plain strings, so a removed role would leave
+   * dangling references behind. Challenges and bookables also name roles and
+   * are deliberately not checked here.
+   */
+  static async removeRole(request, response, next) {
     try {
       const user = request.user;
       const tenantId = request.params.tenant;
@@ -158,6 +166,26 @@ class RoleController {
         const role = await RoleManager.getRole(roleId, tenantId);
         if (!role) {
           return response.sendStatus(404);
+        }
+        const memberships =
+          await MembershipManager.getMembershipsByTenantAndRoles(tenantId, [
+            roleId,
+          ]);
+        const invitations = (
+          await InvitationManager.getInvitationsByTenantID(tenantId)
+        ).filter(
+          (invitation) =>
+            Invitation.isUsable(invitation) &&
+            (invitation.roles || []).includes(roleId),
+        );
+        if (memberships.length > 0 || invitations.length > 0) {
+          return next(
+            new ConflictError("role_in_use", {
+              roleId,
+              memberships: memberships.length,
+              invitations: invitations.length,
+            }),
+          );
         }
         await RoleManager.removeRole(roleId, tenantId);
         logger.info(`Removed role ${role.id} by user ${user?.id}`);
