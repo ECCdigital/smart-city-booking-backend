@@ -1,0 +1,1114 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PROTOTYP · Prüfliste der Release-Prüfung 4.5.0 (#1328)</title>
+<!--
+  PROTOTYPE, throwaway. Answers ECCdigital/tickets#1328: which flows does the
+  release check of Biletado 4.5.0 cover, how deep, who checks them (agent in the
+  browser on ibus or locally at dumps, or a human), and in which stage: the
+  pre-check (Vorprüfung) in KW 48 on the head of version/4.5.x and version/1.4.x
+  of 24.11., or the re-check (Nachprüfung) at rc.0 on 04.12./07.12.
+  Built from the prototype of 4.4 (branch prototype/760-release-check-4.4):
+  same model plus the stage, new checklist. One file, no build, state lives in
+  the URL hash.
+-->
+<style>
+<style>
+  :root {
+    --accent: #3b5bdb; --accent-soft: #edf2ff; --ink: #1f2328; --muted: #656d76;
+    --line: #e3e5e8; --bg: #f7f7f8; --card: #fff;
+    --red: #c92a2a; --red-soft: #fff5f5; --amber: #b35c00; --amber-soft: #fff8e1; --grey: #adb5bd;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--ink); background: var(--bg); }
+  code { font: 12.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; background: #f1f3f5; padding: 0 3px; border-radius: 3px; }
+  button { font: inherit; cursor: pointer; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+  .proto { background: #212529; color: #f8f9fa; font-size: 12px; padding: 6px 0; }
+  .proto b { color: #ffd43b; }
+  header h1 { font-size: 24px; margin: 28px 0 6px; letter-spacing: -0.01em; }
+  .lead { font-size: 15px; color: #343a40; max-width: 860px; margin: 0 0 10px; }
+  details.frame { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 16px; margin: 12px 0 20px; }
+  details.frame summary { cursor: pointer; font-weight: 600; }
+  details.frame ul { margin: 8px 0; padding-left: 20px; }
+  details.frame li { margin: 3px 0; }
+
+  /* State panel */
+  .summary { position: sticky; top: 0; z-index: 5; background: #f7f7f8; border-bottom: 1px solid var(--line); }
+  .summary .wrap { padding-top: 10px; padding-bottom: 10px; }
+  .stats { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; min-width: 112px; }
+  .stat .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .stat .v { font-size: 17px; font-weight: 600; }
+  .stat .d { font-size: 12px; font-weight: 600; margin-left: 4px; }
+  .stat .d.up { color: var(--red); } .stat .d.down { color: #2b8a3e; }
+  .stat.bad { border-color: var(--red); background: var(--red-soft); }
+  .stat.warn { border-color: #f0b46a; background: var(--amber-soft); }
+  .stat.flash { box-shadow: 0 0 0 2px var(--accent); }
+  .stat-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .last { font-size: 13px; color: var(--muted); margin-top: 6px; min-height: 24px; display: flex; gap: 12px; align-items: center; }
+  .last b { color: var(--ink); }
+
+  .btn { border: 1px solid var(--line); background: var(--card); border-radius: 6px; padding: 5px 10px; color: var(--ink); }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.small { padding: 2px 8px; font-size: 12px; }
+  .btn[disabled] { opacity: 0.45; cursor: default; }
+
+  /* Walkthroughs */
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 10px; margin: 20px 0; }
+  .panel > h2 { font-size: 15px; margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .wt-tabs { display: flex; gap: 4px; padding: 10px 16px 0; flex-wrap: wrap; }
+  .wt-tab { border: 1px solid var(--line); border-bottom: none; background: #f8f9fa; border-radius: 6px 6px 0 0; padding: 6px 12px; }
+  .wt-tab[aria-selected="true"] { background: var(--card); color: var(--accent); font-weight: 600; box-shadow: inset 0 2px 0 var(--accent); }
+  .wt-body { border-top: 1px solid var(--line); padding: 14px 16px 16px; }
+  .wt-body p { margin: 0 0 8px; max-width: 860px; }
+  .wt-watch { color: var(--muted); }
+  .steps { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; max-width: 640px; }
+  .step { text-align: left; border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 7px 12px; }
+  .step .n { display: inline-block; width: 20px; color: var(--muted); }
+  .step.next { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+  .step.done { color: var(--muted); }
+  .step.done .n::before { content: "✓"; color: #2b8a3e; }
+  .step.done .n span { display: none; }
+
+  /* Main tabs */
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-top: 8px; flex-wrap: wrap; }
+  .tab { border: none; background: none; padding: 9px 14px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab .cnt { font-size: 11px; background: #e9ecef; border-radius: 10px; padding: 0 6px; margin-left: 4px; }
+  .tab .cnt.bad { background: var(--red); color: #fff; }
+  #view { padding: 16px 0 80px; }
+
+  .filters { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; font-size: 13px; }
+  .filters label { display: inline-flex; gap: 5px; align-items: center; }
+  .filters input[type=search] { border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; min-width: 200px; }
+  .legend { font-size: 12.5px; color: var(--muted); margin: 0 0 14px; }
+
+  .area { margin-bottom: 22px; }
+  .area-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 0 2px 6px; }
+  .area-head h3 { margin: 0; font-size: 16px; }
+  .area-head .meta { color: var(--muted); font-size: 12.5px; }
+  .area-head .added { font-size: 11.5px; color: var(--amber); background: var(--amber-soft); border-radius: 4px; padding: 0 6px; }
+  .area-head .acts { margin-left: auto; display: flex; gap: 4px; }
+
+  .row { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin-bottom: 6px; }
+  .row.out .title { color: var(--muted); }
+  .row.conflict { border-color: var(--red); }
+  .row.just { box-shadow: 0 0 0 2px var(--accent); }
+  .row-top { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .row-name { flex: 1 1 340px; min-width: 260px; display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+  .risk { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; transform: translateY(-1px); }
+  .risk.hoch { background: var(--red); } .risk.mittel { background: #f59f00; } .risk.niedrig { background: var(--grey); }
+  .title { border: none; background: none; padding: 0; font-weight: 600; text-align: left; color: var(--ink); }
+  .title:hover { color: var(--accent); }
+  .tag { font-size: 11px; border-radius: 4px; padding: 0 6px; background: #f1f3f5; color: #495057; white-space: nowrap; }
+  .tag.w1 { background: #e7f5ff; color: #1864ab; }
+  .tag.w2 { background: #f3f0ff; color: #5f3dc4; }
+  .tag.smoke { background: #ebfbee; color: #2b8a3e; }
+  .tag.need { background: #fff; border: 1px solid var(--line); }
+  .tag.changed { background: var(--accent-soft); color: var(--accent); }
+  .tag.q { background: var(--amber-soft); color: var(--amber); }
+  .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .seg button { border: none; background: #fff; padding: 3px 8px; font-size: 12.5px; color: #495057; border-right: 1px solid var(--line); }
+  .seg button:last-child { border-right: none; }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+  .seg button.prop:not([aria-pressed="true"]) { box-shadow: inset 0 -2px 0 #bac8ff; }
+  select { font: inherit; font-size: 12.5px; border: 1px solid var(--line); border-radius: 6px; padding: 3px 4px; background: #fff; }
+  .chk { font-size: 12.5px; display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
+  .alerts { margin-top: 6px; display: flex; flex-direction: column; gap: 3px; }
+  .alert { font-size: 12.5px; border-radius: 5px; padding: 3px 8px; }
+  .alert.c { background: var(--red-soft); color: var(--red); }
+  .alert.w { background: var(--amber-soft); color: var(--amber); }
+  .details { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); display: grid; grid-template-columns: 130px 1fr; gap: 4px 12px; font-size: 13px; }
+  .details .k { color: var(--muted); }
+  .details input[type=text] { width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font: inherit; }
+
+  .groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+  .group { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
+  .group h4 { margin: 0 0 2px; font-size: 14.5px; }
+  .group .meta { color: var(--muted); font-size: 12.5px; margin-bottom: 6px; }
+  .group ul { margin: 0; padding-left: 18px; font-size: 13px; }
+  .group li { margin: 2px 0; }
+  .group li .m { color: var(--muted); }
+  .note { color: var(--muted); max-width: 860px; margin: 0 0 14px; }
+  .area-picks { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 14px; font-size: 13px; }
+  .issue-list { list-style: none; padding: 0; margin: 0 0 20px; }
+  .issue-list li { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; margin-bottom: 5px; font-size: 13px; }
+  .issue-list li.c { border-left: 3px solid var(--red); }
+  .issue-list li.w { border-left: 3px solid #f59f00; }
+  .issue-list li.q { border-left: 3px solid var(--accent); }
+  .link { display: inline; border: none; background: none; padding: 0; color: var(--accent); font-weight: 600; text-align: left; }
+  textarea.md { width: 100%; min-height: 460px; font: 12.5px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+  .tag.w3 { background: #fff4e6; color: #d9480f; }
+  .tag.pend { background: #fff5f5; color: #c92a2a; border: 1px dashed #ffa8a8; }
+  .tag.st-vor { background: #e6fcf5; color: #087f5b; }
+  .tag.st-nach { background: #f8f0fc; color: #862e9c; }
+  .tl { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 0; font-size: 12.5px; }
+  .tl span { border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; background: #fff; }
+  .tl span.now { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="proto"><div class="wrap"><b>PROTOTYP zum Wegwerfen</b> · Klärung <a style="color:#a5d8ff" href="https://github.com/ECCdigital/tickets/issues/1328">ECCdigital/tickets#1328</a> zur Karte <a style="color:#a5d8ff" href="https://github.com/ECCdigital/tickets/issues/1324">Release-Prüfung Biletado 4.5.0</a> · Jede Änderung steht in der Adresse dieser Seite: Link kopieren reicht zum Teilen.</div></div>
+
+<header class="wrap">
+  <h1>Prüfliste der Release-Prüfung 4.5.0 – erster Entwurf</h1>
+  <p class="lead"><b>Frage aus #1328:</b> Welche Abläufe prüft die Release-Prüfung von Biletado 4.5.0, wie tief, wer prüft sie (der Agent im Browser auf ibus oder lokal an Dumps, oder ein Mensch), und in welcher Stufe: in der <b>Vorprüfung</b> in KW 48 am Stand vom 24.11. oder erst in der <b>Nachprüfung</b> an rc.0? Unten steht ein Vorschlag für jeden Ablauf, Basis ist die Prüfliste von 4.4. Stell um, was nicht passt. Die Leiste oben zeigt nach jedem Klick Aufwand je Stufe, Konflikte und offene Fragen.</p>
+  <div class="tl"><span class="now">Mo 23.11. Prüfliste</span><span>Di 24.11. SHA festhalten, ibus</span><span>Di–Fr KW 48 Vorprüfung</span><span>Do 03.12. Stichtag</span><span>Fr 04.12. rc.0, Nachprüfung</span><span>Mo 07.12. Nachprüfung, Go/No-Go</span><span>ab Di 08.12. Deploy-Abende</span></div>
+  <details class="frame">
+    <summary>Rahmen aus der Karte #1324 (aufklappen)</summary>
+    <ul>
+      <li><b>Zwei Stufen.</b> <b>Vorprüfung</b> auf dem Kopf von <code>version/4.5.x</code> (Backend, Admin UI) und <code>version/1.4.x</code> (Storefront) am Di 24.11. morgens, per SHA festgehalten. <b>Nachprüfung</b> an <code>v4.5.0-rc.0</code> / <code>v1.4.0-rc.0</code> am Fr 04.12. und Mo 07.12.: was nach dem 24.11. bis zum Stichtag gemergt wurde, Fixe aus der Vorprüfung, der Smoke-Test, Changelog und Upgrade-Hinweise. Go/No-Go je Welle erst danach.</li>
+      <li><b>Ausgangsstand</b> an den Instanzen: Backend <code>v4.4.0-rc.4</code>, Admin UI <code>v4.4.0-rc.3</code>, Storefront <code>v1.3.0-rc.2</code>. Was 4.4.0 final, 4.4.1 und 4.4.2 bzw. 1.3.1 brachten, ist für die Instanzen neu und kam ohne Smoke-Test. Es gehört hier mit hinein („neu an den Instanzen“).</li>
+      <li><b>Stand am 23.11.</b>: Gemergt sind Stornierungsregeln stundengenau samt „bis … vor Beginn“, Secrets write-only, Gebühren beim Ablehnen, Übergänge nur mit <code>updateAny</code>, „Verbindlich buchen“ bei 0 €, Anrede mit „Sie“, Account-Seiten, Karte auf schmalen Screens, Startseite, Serienbuchungen, die PRs von außen und der Index der Tickets. <b>Offen</b> sind „Stornogebühr“ (#809), Preis pro angefangene Stunde (#811), Rolle löschen, die noch vergeben ist, dazu Buchungen löschen mit <code>deleteOwn</code> (#635) und das Veranstaltungsmanagement, die der Spec nicht nennt. Ein offener PR kommt nur, wenn er bis zum Stichtag gemergt ist.</li>
+      <li><b>ibus</b>: frei schreiben. <b>Verboten</b>: Zahlungen im Live-Modus, echte Schlösser außer den Testschlössern, direktes <code>PUT /api/instances</code>. Vor der ersten Änderung die Instanz per <code>GET /api/instances</code> sichern.</li>
+      <li><b>Wer prüft:</b> Der Agent prüft API und Abläufe in Storefront und Admin UI im Browser auf ibus, die Migrationen an Dumps. Menschen prüfen, was Wissen über die Kunden oder echte Hardware braucht. Kunden prüfen nicht mit.</li>
+      <li><b>Funde</b>: Ein möglicher Release-Blocker wird ein Fehler-Ticket mit Fix auf <code>version/4.5.x</code> bzw. <code>version/1.4.x</code>, in der Vorprüfung bis zum Stichtag. Nach rc.0 ergibt jeder Fix einen neuen Release-Kandidaten. Alles andere geht in 4.5.1 bzw. 1.4.1.</li>
+      <li><b>Tiefe</b>: <b>Smoke</b> = geht es überhaupt, ein Durchlauf (≈ 10 min). <b>Ablauf</b> = der Hauptweg samt Varianten (≈ 30 min). <b>Gründlich</b> = dazu Randfälle, Fehlerwege, Rechte (≈ 90 min). <b>Anderswo</b> = nicht am Release-Kandidaten, etwa Deploy-Bereitschaft. Die Minuten sind grob und nur zum Vergleichen.</li>
+      <li><b>Schon eigene Klärungen</b> auf der Karte, hier nur der Vollständigkeit halber: ibus (#1326), Testsuiten (#1327), Upgrade an den Dumps (#1330), Release-Blocker (#1329), Instanzen (#1325). Ihre Zeit zählt mit.</li>
+    </ul>
+  </details>
+</header>
+
+<div class="summary" id="summary"></div>
+
+<main class="wrap">
+  <section class="panel" id="walkthroughs"></section>
+  <nav class="tabs" id="tabs"></nav>
+  <section id="view"></section>
+</main>
+
+<!-- ===================== Checklist data (the draft itself) ===================== -->
+<script>
+const AREAS = [
+  { key: 'upgrade', title: 'Upgrade, Migrationen und Stand' },
+  { key: 'refund', title: 'Stornierungsregeln stundengenau und Ablehnen' },
+  { key: 'secrets', title: 'Secrets write-only' },
+  { key: 'price', title: 'Preise und Checkout' },
+  { key: 'search', title: 'Zeitsuche und Patches 4.4.x (an den Instanzen neu)' },
+  { key: 'admin', title: 'Admin UI 4.5 (Rechte, Rollen, Anrede)' },
+  { key: 'storefront', title: 'Storefront 1.4 (Startseite, Konto, Karte, Anrede)' },
+  { key: 'core', title: 'Bestand aus 4.4 (Regression)' },
+  { key: 'access', title: 'Schlösser und Zugang' },
+];
+
+// p: "<depth> <who> <where> <stage> [+smoke]"
+function P(spec) {
+  const [depth, who, where, stage, smoke] = spec.split(' ');
+  return { depth, who, where, stage, smoke: smoke === '+smoke' };
+}
+// kind: 'new' = neu in 4.5.0 / 1.4.0, 'patch' = neu an den Instanzen (4.4.0 final, 4.4.1, 4.4.2, 1.3.1), 'core' = Bestand aus 4.4.
+// pending: PRs noch offen am 23.11., kommt nur, wenn bis zum Stichtag gemergt. rcOnly: gibt es erst mit rc.0.
+// inst: betrifft nur diese Instanzen (Daten nur im Dump).
+function I(id, area, title, risk, p, how, why, extra) {
+  return Object.assign({ id, area, title, risk, p: P(p), how, why, needs: [], kind: 'new', inst: null, ticket: null, question: null, riskWhy: null, pending: null, rcOnly: false }, extra || {});
+}
+
+const ITEMS = [
+  // --- Upgrade, Migrationen und Stand
+  I('up-ibus', 'upgrade', 'ibus fährt den festgehaltenen Stand', 'mittel', 'smoke agent ibus vor +smoke',
+    'Mit `/coolify-image` die drei Images vom SHA des 24.11. (in der Nachprüfung die von rc.0) zusammen auf ibus setzen, vorher Backup und `GET /api/instances`. Tags im Coolify-MCP gegenlesen, `/healthz/ready` gibt 200, beide Migrationen stehen im Log.',
+    'Voraussetzung für alles auf ibus. Die erste Runde ist die Klärung „Läuft der Stand vom 24.11. von Biletado 4.5 auf ibus?“, an rc.0 gehört sie in den Smoke-Test.',
+    { kind: 'core', ticket: 1326, riskWhy: 'Sonst prüfen wir den falschen Stand.' }),
+  I('up-tests', 'upgrade', 'Testsuiten auf dem festgehaltenen Stand', 'hoch', 'smoke agent local vor +smoke',
+    'Tests, Lint, Format und Build in Backend, Admin UI und Storefront auf den SHAs, an rc.0 noch einmal. Der `typecheck` der Storefront gatet nicht, nur die Zahl der Fehler gegen 1.3.',
+    '`ci-ok` lief je PR, aber nie auf dem Kopf nach allen Merges. Das ist die Klärung „Sind die Testsuiten am Stand vom 24.11. von Biletado 4.5 grün?“.',
+    { kind: 'core', ticket: 1327, riskWhy: 'Ein roter Test nach den Merges zeigt auf einen Release-Blocker.' }),
+  I('up-dumps', 'upgrade', 'Upgrade von den 4.4.0-RCs an den Dumps jeder Instanz, samt Rückweg', 'hoch', 'deep agent local vor',
+    'Dump je Instanz wiederherstellen, Backend vom Stand der Vorprüfung starten: `02-11-2026-cancellation-refund-tiers-in-hours` und `18-11-2026-add-bookable-event-index` laufen, ein zweiter Lauf ändert nichts, Staffeln vorher und nachher vergleichen. Rückweg: `down` der Staffeln, dann das Backend `v4.4.0-rc.4` auf dem Ergebnis.',
+    'Die Staffel-Migration ist breaking und der Rückweg rundet ab. Das ist die Klärung „Übersteht der Bestand jeder Instanz das Upgrade …?“.',
+    { kind: 'new', ticket: 1330, needs: ['customerData'], riskWhy: 'Jede fehlgeschlagene Migration und ein kaputter Rückweg sind Release-Blocker.' }),
+  I('up-template', 'upgrade', 'Gespeichertes Standard-`cancellationTemplate`: Stornobeleg sagt „0 Kalendertage“', 'hoch', 'flow agent local vor',
+    'An der migrierten Kopie eines Dumps einen Mandanten mit gespeichertem Standard-Template finden, 13 h vor Beginn stornieren: Der Beleg zeigt ohne Abhilfe „0 Kalendertage“. Dann die Abhilfe aus `docs/migrations/v4.5-upgrade.md` anwenden (Template ersetzen oder leeren) und erneut stornieren.',
+    'Jeder seit 4.4.0 final angelegte Mandant speichert das Template, an den Instanzen also wenige, aber genau die neuen Kunden. Welche es sind, zählt die Klärung zu den Instanzen (#1325).',
+    { kind: 'new', needs: ['customerData'], riskWhy: 'Ein falscher Stornobeleg geht an Kund:innen und lässt sich nicht zurückholen.',
+      question: 'Wendet der Deploy-Abend die Abhilfe per Skript an, oder ändert ein Fix die Migration, sodass sie das Standard-Template selbst ersetzt? Gehört zur Deploy-Bereitschaft, die Prüfung zeigt nur, ob die Abhilfe reicht.' }),
+  I('up-mixed', 'upgrade', 'Gemischte Versionen am Deploy-Abend', 'mittel', 'smoke agent local vor',
+    'Lokal Backend 4.5 neben Admin UI `v4.4.0-rc.3` und Storefront `v1.3.0-rc.2`, und umgekehrt: Was sieht ein Kunde in den Minuten bis alle drei laufen? Erwartet laut Upgrade-Hinweis `500` bei Storno bis zur Migration und `400` beim Speichern des Mandanten aus einer alten Admin UI. Dazu: Zeigt eine alte Admin UI den Marker `__stored_secret__` als Klartext?',
+    'Laut Upgrade-Hinweis rollen die drei zusammen aus. Wie lange das Fenster wirklich ist und ob der Abend eine Wartungsseite braucht, zeigt nur der Versuch.',
+    { kind: 'new', riskWhy: 'Eine Störung während des Deploys, die ein Kunde sieht.' }),
+  I('up-docs', 'upgrade', 'Changelogs und Upgrade-Hinweise vollständig', 'mittel', 'smoke agent local nach',
+    '`[4.5.0]` bzw. `[1.4.0]` der drei Changelogs gegen die gemergten PRs, `docs/migrations/v4.5-upgrade.md` gegen beide Migrationen, `RULE_ENGINE_ENABLED` auf genau einem Prozess, die Abhilfe zum `cancellationTemplate`, Secrets write-only (Admin UI vor oder mit dem Backend). Im Changelog von 1.4.0 der Hinweis zu Open Locker.',
+    'Go heißt laut Ziel der Karte: Upgrade-Hinweise und Changelog sind vollständig. Sie entstehen erst mit rc.0 (#1218), die Release-Prüfung prüft sie nur.',
+    { kind: 'core', rcOnly: true }),
+  I('up-release', 'upgrade', 'GitHub-Release baut die Images von rc.0', 'niedrig', 'smoke agent local nach',
+    'Nach dem Tag: `docker-publish.yml` lief für alle drei Repos auf `ubuntu-latest`, die Images `v4.5.0-rc.0` bzw. `v1.4.0-rc.0` liegen in der Registry und tragen den SHA des Tags.',
+    'rc.0 ist der erste Tag, der den Bau aus dem Release auf den neuen Linien zeigt (#1319). Ohne Image kein ibus und kein Deploy.',
+    { kind: 'patch', rcOnly: true }),
+  I('up-ops', 'upgrade', 'Betrieb je Instanz: Template, `RULE_ENGINE_ENABLED`, Healthcheck, Backup', 'hoch', 'elsewhere human customer vor',
+    'Welche Instanz die Abhilfe zum `cancellationTemplate` braucht, an welcher die Rule Engine auf mehreren Prozessen läuft, ob Coolify und mStudio auf `/healthz/ready` warten, Backup vor dem Upgrade, Kusel in mStudio.',
+    'Das ist Deploy-Bereitschaft je Welle, steht im Nebel der Karte, nicht am Release-Kandidaten.',
+    { kind: 'core', needs: ['customerKnowledge'] }),
+
+  // --- Stornierungsregeln stundengenau und Ablehnen
+  I('r-tiers', 'refund', 'Staffel in Tagen oder Stunden pflegen', 'hoch', 'deep agent ibus vor',
+    'In der Admin UI unter „Erstattungsstaffel“: Stufen in Tagen und Stunden anlegen, „1 Tag“ neben „24 Stunden“ wird abgewiesen, ab 48 Stunden der Vorschlag ganzer Tage, „Möglich: 50 bis 100 %“ mit den begrenzenden Stufen, Titel „Bis 2 Tage vor Beginn“, 0 Stunden „Bis zum Beginn“. API: `hoursBeforeStart` statt `daysBeforeStart`, ein Body mit `daysBeforeStart` gibt `400`.',
+    'Kern von 4.5 (#637, #808), breaking über alle drei Repos.',
+    { riskWhy: 'Eine falsch gespeicherte Staffel erstattet falsch, bei jeder Storno.' }),
+  I('r-cancel', 'refund', 'Storno zählt die Stunden bis zum Beginn', 'hoch', 'deep agent ibus vor +smoke',
+    'Mit Staffel 48 h / 24 h / 0 h: Storno durch den Kunden in der Storefront 50 h, 30 h, 13 h und 1 h vor Beginn, jeweils Stufe, Betrag, „Sie stornieren 1 Tag und 6 Stunden vor Beginn“. Storno durch die Verwaltung mit Vorschau „Die Buchung beginnt in …“, Serie, Buchung ohne Zeitraum (`cancellationRefundPercentageWithoutTimeSpan`), Sommerzeit egal, weil Stunden.',
+    'Was vorher „1 Tag vorher“ war, ist jetzt 13 Stunden. Genau hier merken Kund:innen eine Änderung am Geld.',
+    { riskWhy: 'Falsche Erstattung.' }),
+  I('r-sf', 'refund', 'Stornobedingungen am Angebot und Storno-Dialog in der Storefront', 'mittel', 'flow agent ibus vor',
+    'Stornobedingungen eines Angebots lesen `hoursBeforeStart` („Bis 2 Tage vor Beginn“, „Bis 13 Stunden vor Beginn“), der Storno-Dialog nennt „Es gilt die Erstattungsstufe „bis 2 Tage vor Beginn““. Ohne Staffel die Zeit bis zum Beginn.',
+    'Storefront 1.4 liest nur das neue Feld. Eine 1.3 an einem 4.5-Backend zeigt keine Staffel, daher der gemeinsame Rollout.',
+    {}),
+  I('r-docs', 'refund', 'Stornobeleg, Mails und eigene Vorlagen', 'mittel', 'flow agent ibus vor',
+    'Standard-Stornobeleg ohne „Kalendertage“, Variablen `timeBeforeStartLabel`, `timeBeforeStartText`, `appliedTierLabel`, `appliedTierHours` in Mail und PDF, eine eigene Vorlage mit `daysBeforeStart` rendert weiter (jetzt Spannen von 24 h). Storno-Mails mit Mailfänger lesen.',
+    'Kunden mit eigenen Vorlagen dürfen beim Upgrade nichts verlieren.',
+    { needs: ['mailbox'] }),
+  I('r-reject', 'refund', 'Ablehnen einer Anfrage ist kostenlos', 'hoch', 'flow agent ibus vor',
+    'Bezahlte Anfrage ablehnen, einzeln und als Serie: volle Erstattung, kein Stornobeleg, auch wenn „Kein Stornobeleg erstellen“ nicht gesetzt ist, Mail ohne Anhang, Hinweis im Dialog „Buchungsanfrage ablehnen“. Gegenprobe: Kunde zieht seine Anfrage selbst zurück, dann gilt die Staffel samt Beleg. Audit trägt `rejection: true`.',
+    'Neu (#753), ändert Geld und Belege, und berührt dieselbe Rechnung wie die Staffel.',
+    { riskWhy: 'Falsche Erstattung oder fehlender Beleg.' }),
+  I('r-fee', 'refund', '„Einbehaltener Betrag“ statt „Stornogebühr“ in Mails und Dialog', 'niedrig', 'smoke agent ibus nach',
+    'Storno-Mail, Mail-Editor der Admin UI und Storno-Dialog der Storefront sagen „Einbehaltener Betrag“ bzw. formulieren nach Zahlung, ohne „Stornogebühr“.',
+    'Gestapelt auf #637 (#809), am 23.11. in allen drei Repos noch offen.',
+    { pending: 'BE#391, AU#334, SF#182' }),
+
+  // --- Secrets write-only
+  I('s-api', 'secrets', 'Keine Antwort liefert ein gespeichertes Secret', 'hoch', 'deep agent ibus vor',
+    'Alle Antworten zu Mandant und Instanz (auch Apps, öffentliche Mandanten, Katalog) mit Owner, Admin und Mitglied abfragen: Mail-Passwort, Graph- und Keycloak-Secret, Karten-Token, GiroCockpit, pmPayment, ePayBL, Nuki, Salto KS, iFBS, Pareva tragen nur `__stored_secret__` oder fehlen.',
+    'Sicherheitsfeature (#569). Ein einziges vergessenes Feld macht es wertlos. Im Review gab es zwei Funde „Major“ zur Sicherheit.',
+    { riskWhy: 'Sicherheitslücke.' }),
+  I('s-form', 'secrets', 'Formulare: Secret bleibt, ersetzen, entfernen', 'hoch', 'flow agent ibus vor +smoke',
+    'In der Admin UI: gespeichertes Secret als acht Punkte, Mandant speichern ohne Änderung, danach geht die Mail noch raus und GiroCockpit im Testmodus zahlt noch. Secret ersetzen, mit dem Kreuz entfernen, Auge nur beim Tippen.',
+    'Ein Speichern, das das Secret löscht, legt beim Kunden Mail, Zahlung oder Schloss lahm.',
+    { needs: ['mailbox'], riskWhy: 'Mail, Zahlung oder Schloss fallen nach einem harmlosen Speichern aus.' }),
+  I('s-bound', 'secrets', 'Marker hält nur bei gleichem Server und Konto', 'mittel', 'flow agent ibus vor',
+    'Server oder Konto einer App ändern, ohne das Secret neu einzugeben: `400 secret_required`. „Verbindung testen“ ohne Secret: `missing_secret`. Salto KS nimmt für ein leeres Feld kein gespeichertes Secret mehr.',
+    'Schützt davor, ein Secret an einen fremden Server zu schicken. Die Regel ist neu und streng, Admins werden auf sie stoßen.',
+    {}),
+  I('s-dump', 'secrets', 'Speichern nach dem Upgrade lässt jedes Secret der Instanz stehen', 'hoch', 'flow agent local vor',
+    'An der migrierten Kopie von zwei Dumps mit vielen Apps (etwa Guben mit iFBS, eine Instanz mit Pareva oder Salto KS) jeden Mandanten über die Admin UI 4.5 speichern, ohne ein Secret anzufassen: In der Datenbank bleibt jedes Secret gleich, kein Speichern gibt `400`.',
+    'Auf ibus gibt es nicht jede App und nicht jede Kombination von Server und Konto. Die echten Konfigurationen liegen nur in den Dumps.',
+    { needs: ['customerData'], riskWhy: 'Ein verlorenes Secret fällt erst beim Kunden auf.' }),
+
+  // --- Preise und Checkout
+  I('p-zero', 'price', '„Verbindlich buchen“ nur bei 0 €', 'hoch', 'flow agent ibus vor +smoke',
+    'Storefront und Admin UI (Checkout, Schnellübersicht, Gruppenbuchung): 0 € auch nach Rabatt zeigt „Verbindlich buchen“. Fehlender Preis, ungültige Position, laufende Preisprüfung (nach „Zum vollen Preis buchen“ oder Gutschein entfernen) zeigen „Zahlungspflichtig buchen“. Eine späte alte Antwort überschreibt nicht.',
+    'Neu (#937, #1303). „Zahlungspflichtig buchen“ ist Pflicht, sobald etwas kostet.',
+    { riskWhy: 'Ein kostenpflichtiger Checkout ohne „Zahlungspflichtig buchen“ ist ein Rechtsproblem.' }),
+  I('p-flat', 'price', 'Pauschale einmal je Buchung, „Pauschalpreis“ in der Web-Integration', 'mittel', 'flow agent ibus vor',
+    'Buchung über Mitternacht mit Pauschal-Kategorie: einmal berechnet, Kategorien nach Zeit weiter je Tag. HTML von `/html/:tenant/bookables` zeigt „Pauschalpreis“ ohne Einheit. Storefront: „Pauschalpreis“ mit lesbarem Kontrast.',
+    'PRs von außen (#37, #39), ändern Preise.',
+    { riskWhy: 'Falscher Preis.' }),
+  I('p-hour', 'price', 'Preis pro angefangene Stunde', 'mittel', 'flow agent ibus nach',
+    'Angebot mit Stundenpreis und „angefangene Stunden voll zählen“: 1:10 h kostet 2 Stunden, Hinweis in der Storefront, ohne Schalter unverändert.',
+    'Neu (#811), am 23.11. in allen drei Repos offen.',
+    { pending: 'BE#392, AU#335, SF#209', riskWhy: 'Falscher Preis.' }),
+  I('p-refs', 'price', 'Buchungsnummern aus `crypto.randomInt`', 'niedrig', 'smoke agent ibus vor',
+    'Ein paar Buchungen und eine Gruppenbuchung: Format `XXXX-XXXX` bzw. `G-XXXX-XXXX` wie vorher.',
+    'PR von außen, nur die Quelle des Zufalls. Die Tests decken den Rest.',
+    {}),
+
+  // --- Zeitsuche und Patches 4.4.x
+  I('z-search', 'search', 'Zeitsuche: keine 429, Preise und Treffer des Zeitraums', 'hoch', 'flow agent ibus vor +smoke',
+    'Suche mit Zeitraum über mehrere Mandanten und viele Angebote: eine Anfrage je Mandant an `POST …/bookables/occupancy`, kein `429`, Preise des Zeitraums, belegte und durch Eltern/Kind gesperrte Angebote fehlen mit Grund.',
+    'Der Fehler hat Kund:innen getroffen (#850). Die Instanzen haben den Fix noch nicht, er kam als Patch ohne Smoke-Test.',
+    { kind: 'patch', riskWhy: 'Suche ist der Einstieg jeder Buchung.' }),
+  I('z-limit', 'search', 'Limit der Zeitsuche je Besucher, nicht je Storefront', 'mittel', 'flow agent ibus vor',
+    'Hinter dem zentralen Proxy: Zählt `RATE_LIMIT_PERIOD_OCCUPANCY_PER_IP` die IP der Besucher:in (über die BFF der Storefront weitergereicht) und nicht die der Storefront? Zwei Besucher:innen parallel, eine über die Grenze.',
+    'Bei 4.3 und 4.4 zählten Limits hinter dem Proxy je Instanz. Hier würde dann die ganze Storefront gesperrt.',
+    { kind: 'patch', riskWhy: 'Eine gesperrte Storefront.' }),
+  I('z-dup', 'search', 'Duplizieren eines Angebots mit altem Ort', 'mittel', 'smoke agent local vor',
+    'Angebot, Veranstaltung und Zugangspunkt mit `location.meta.source` `nominatim` oder `legacy` duplizieren: Kopie entsteht, nur eine Meldung.',
+    'Fix (#750) für einen Fehler, den Admins heute haben. Alte Orte gibt es vor allem an den Instanzen, daher an einem Dump.',
+    { kind: 'patch', needs: ['customerData'] }),
+  I('z-docs', 'search', 'CSV der Teilnehmer und Datum auf PDF-Belegen', 'niedrig', 'smoke agent ibus vor',
+    'Teilnehmerliste mit `;`, `"` und Zeilenumbruch im Namen: Spalten bleiben. Beleg einer Buchung kurz nach Mitternacht: Datum in Europe/Berlin.',
+    'PRs von außen als Patch 4.4.2.',
+    { kind: 'patch' }),
+  I('z-new44', 'search', 'Was 4.4.0 final und 4.4.1 nachlegten: Flags, Standardvorlagen neuer Mandanten', 'niedrig', 'smoke agent ibus vor',
+    'Flags werden in Veranstaltung und Angebot vorgeschlagen wie Tags. Ein neuer Mandant hat Rechnung und Standardbelege aktiv, die PDF-Vorlagen öffnen im visuellen Editor, die Vorschau rendert die Seitenzahl.',
+    'Zwischen `v4.4.0-rc.4` an den Instanzen und 4.4.1 dazugekommen, nie an einer Instanz gelaufen.',
+    { kind: 'patch' }),
+
+  // --- Admin UI 4.5
+  I('a-trans', 'admin', 'Übergänge einer Buchung nur mit „Alle bearbeiten“', 'mittel', 'flow agent ibus vor',
+    'Rolle mit nur „Eigene bearbeiten“: Liste, Kalender, Kanban, Buchungs- und Serienseite bieten Freigeben, Als bezahlt markieren, Ablehnen/Stornieren, Widerruf akzeptieren, Wiederherstellen nicht mehr an, „Bearbeiten“ bleibt. Mit `updateAny` alles wie vorher.',
+    'Rechte (#836, #837). Vorher bot die UI an, was das Backend mit 403 abwies.',
+    {}),
+  I('a-role', 'admin', 'Rolle löschen, die noch vergeben ist', 'mittel', 'flow agent ibus nach',
+    'Rolle mit Mitgliedern oder offenen Einladungen löschen: abgelehnt mit Grund, kein stilles Schließen. Ohne Bezug wie vorher.',
+    'PR von außen, am 23.11. offen. Ob ablehnen oder aufräumen, entscheidet das Review.',
+    { pending: 'BE#396, AU#336' }),
+  I('a-delown', 'admin', 'Buchungen löschen mit `deleteOwn`', 'mittel', 'flow agent ibus nach',
+    'Eigene Buchung in jedem Status löschen mit dem Recht zum Löschen, Warnung im Dialog, fremde nicht.',
+    'Offen (#635), steht nicht im Spec von #1200.',
+    { pending: 'BE#425, AU#361', question: 'Kommt Buchungen löschen mit `deleteOwn` in 4.5.0? Entscheidet #1200, sonst entfällt der Ablauf.' }),
+  I('a-events', 'admin', 'Veranstaltungsmanagement: Buchungen einer Veranstaltung', 'mittel', 'flow agent ibus nach',
+    'Wer eine Veranstaltung ändern darf, sieht ihre Buchungen, auch ohne Recht auf die Buchungsliste. Editor der Veranstaltung wie bei Angeboten.',
+    'Offen (BE#418 zu #1308, AU#356), steht nicht im Spec von #1200.',
+    { pending: 'BE#418, AU#356', question: 'Kommt das Veranstaltungsmanagement in 4.5.0? Entscheidet #1200, sonst entfällt der Ablauf.' }),
+  I('a-sie', 'admin', 'Anrede mit „Sie“ in der Admin UI', 'niedrig', 'smoke agent ibus vor',
+    'Stichprobe: Hinweise zur Blacklist, Einladungsdialog, Vorlagen-Editoren, leere Listen.',
+    'Nur Texte (#1183).',
+    {}),
+
+  // --- Storefront 1.4
+  I('f-start', 'storefront', 'Startseite überarbeitet', 'mittel', 'flow agent ibus vor +smoke',
+    'Abgemeldet und angemeldet: Begrüßung mit nächster Buchung und nächstem Schlüssel, Reihenfolge nach der Suche, „Angebot nach Anbietern“, Karte in der Nähe, kommende Veranstaltungen ohne Hydration-Fehler unter 1024 px.',
+    'Die Startseite sieht jede:r zuerst. Review gegen den Entwurf lief im PR.',
+    {}),
+  I('f-map', 'storefront', 'Karte der Ergebnisse auf schmalen Screens', 'mittel', 'flow agent ibus vor',
+    'Unter `md`: kein weißer Punkt am Pin, Karte bleibt verschiebbar, während ein Angebot unten steht, Tipp auf die Karte schließt es, Pin mit mehreren Angeboten mit „1 / 2“.',
+    'Die meisten Besucher:innen kommen mit dem Handy (#1073).',
+    {}),
+  I('f-account', 'storefront', 'Konto: Rechnungen, leere Listen, Serienbuchungen', 'niedrig', 'smoke agent ibus vor',
+    'Icon „Rechnungen“, gemeinsamer leerer Zustand in Buchungen, Schlüssel, Favoriten und Belegen, Buttons in der Primärfarbe, Serienbuchung mit Symbol und Tooltip.',
+    'Kleine UI-Änderungen (#798, #799, #999).',
+    {}),
+  I('f-small', 'storefront', 'Schmale Screens, Anrede mit „Sie“, Barrierefreiheit', 'niedrig', 'smoke agent ibus vor',
+    'Detailseite: eine Zeile für Zurück, Herz, Jetzt buchen. Anrede „Sie“ in Stichproben. Icon-Buttons haben Namen, Karten der Startseite per Tastatur erreichbar.',
+    'Kleine Fixes, zwei davon von außen.',
+    {}),
+  I('f-events', 'storefront', 'Veranstaltungsdetails: Ansprechperson, Referierende, Programm', 'niedrig', 'smoke agent ibus vor',
+    'Veranstaltung mit Ansprechperson, Referierenden und Programm: alles steht unter „Veranstalter“ bzw. darunter, ohne Angaben keine leeren Blöcke.',
+    'Neu in 1.4 (#1176), die Felder liefert das Backend schon.',
+    {}),
+  I('f-locker', 'storefront', '„Zeitraum gerade ausgebucht“ für alle, Fach nur mit Open Locker', 'niedrig', 'smoke agent ibus vor',
+    'Checkout, den das Backend mit `checkout.compartments_unavailable` abweist, zeigt „Zeitraum gerade ausgebucht“. Ohne Open Locker im Backend keine Fach-Namen.',
+    'SF#185 bleibt als Einzelfall in 1.4.0, betrifft auch Pareva.',
+    {}),
+
+  // --- Bestand aus 4.4
+  I('c-tenants', 'core', 'Mandantengrenzen halten, auch an den neuen Routen', 'hoch', 'deep agent ibus vor',
+    'Als Mitglied von Mandant A über die API Daten von B anfragen: `POST …/bookables/occupancy` mit fremden IDs, Vorschau der Storno, Mandant und Apps mit Secrets, Buchungen einer Veranstaltung. Erwartet 403 oder 404, nie Daten.',
+    'Bei 4.3 war das der eine echte Release-Blocker. 4.4.2 bringt eine Route über viele Angebote.',
+    { kind: 'core', riskWhy: 'Sicherheitslücke.' }),
+  I('c-free', 'core', 'Kostenlose Selbstbuchung', 'mittel', 'flow agent ibus vor +smoke',
+    'Angebot suchen, buchen als Gast und angemeldet, Bestätigung kommt, Buchung im Konto.',
+    'Hauptweg, berührt Zeitsuche, „Verbindlich buchen“ und Buchungsnummern.',
+    { kind: 'core', needs: ['mailbox'] }),
+  I('c-paid', 'core', 'Kostenpflichtige Selbstbuchung mit GiroCockpit im Testmodus', 'hoch', 'flow agent ibus vor +smoke',
+    'Bezahlt buchen, zahlen, Rechnung und Zahlungsbeleg kommen, Storno mit Erstattung nach Staffel.',
+    'Hauptweg mit Geld, berührt Secrets write-only und die Staffel.',
+    { kind: 'core', riskWhy: 'Keine Zahlung, kein Umsatz.' }),
+  I('c-request', 'core', 'Anfrage mit Bestätigung, manuelle Buchung, Gruppenbuchung', 'mittel', 'smoke agent ibus vor',
+    'Je ein Durchlauf in Storefront und Admin UI.',
+    'Bestand, berührt Ablehnen und Übergänge.',
+    { kind: 'core' }),
+  I('c-sso', 'core', 'SSO-Anmeldung auf ibus', 'mittel', 'smoke agent ibus vor +smoke',
+    'Anmeldung per SSO in Storefront und Admin UI, nachdem der Mandant gespeichert wurde.',
+    'Das Keycloak-Secret ist jetzt write-only.',
+    { kind: 'core' }),
+  I('c-pages', 'core', 'Rundgang durch alle Seiten von Admin UI und Storefront', 'mittel', 'smoke agent ibus vor +smoke',
+    'Jede Seite einmal öffnen, Konsole ohne Fehler, keine i18n-Schlüssel sichtbar.',
+    'Findet Brüche, die keine Prüfung gezielt sucht.',
+    { kind: 'core' }),
+  I('c-44', 'core', 'Sperre, Blacklist, Meldungen, Widerruf, Favoriten', 'mittel', 'smoke agent ibus vor',
+    'Je ein Durchlauf der Neuerungen aus 4.4: Konto sperren, Blacklist im Checkout, Meldung, Widerruf mit Widerrufbeleg, Favorit setzen.',
+    'An den Instanzen seit 4.4.0-RC, 4.5 ändert dort nichts direkt.',
+    { kind: 'core' }),
+  I('c-providers', 'core', 'Zahlungsanbieter der Kunden', 'mittel', 'smoke human customer vor',
+    'Welche Instanz pmPayment, ePayBL oder GiroCockpit live nutzt und ob deren Konfiguration nach dem Upgrade ohne Secret-Eingabe weiterläuft.',
+    'Live-Zahlungen sind auf ibus verboten. Mit Secrets write-only reicht hier ein Blick nach dem Deploy der ersten Welle, die Datenbank prüft „Speichern nach dem Upgrade …“ an den Dumps.',
+    { kind: 'core', needs: ['customerKnowledge'] }),
+  I('c-skip', 'core', 'Dashboards, Süderbraruper Regeln, Keycloak der Kunden', 'niedrig', 'skip human customer vor',
+    '–',
+    '4.5 ändert dort nichts. Die Rule Engine bekommt nur Doku (`RULE_ENGINE_ENABLED`, siehe Betrieb).',
+    { kind: 'core' }),
+
+  // --- Schlösser und Zugang
+  I('x-salto', 'access', 'Salto KS: „Verbindung testen“ mit gespeichertem Secret', 'mittel', 'smoke agent ibus vor',
+    'Auf ibus mit dem Zugang zu Salto KS Accept: Verbindung testen, ohne das Secret neu einzugeben, dann Mandant speichern und noch einmal testen.',
+    'Secrets write-only ändert, woher das Secret beim Test kommt.',
+    { kind: 'core', needs: ['saltoAccount'] }),
+  I('x-locks', 'access', 'Nuki und Salto am Testschloss', 'mittel', 'smoke human device vor',
+    'Nach dem Speichern des Mandanten: Nuki „ECC Digital LAB“ und Salto am Testschloss öffnen per Buchung.',
+    'Echte Schlösser bedient nur ein Mensch. Prüft, dass Secrets write-only kein Schloss abhängt.',
+    { kind: 'core', needs: ['realLock'] }),
+  I('x-ifbs', 'access', 'Schließfächer iFBS (Guben) und Pareva', 'niedrig', 'skip human customer vor',
+    'Fach buchen und öffnen.',
+    '4.5 ändert dort nur, dass die Secrets write-only sind. Dass sie beim Speichern bleiben, prüft „Speichern nach dem Upgrade …“ am Dump von Guben.',
+    { kind: 'core', inst: 'Guben', needs: ['customerKnowledge'] }),
+];
+</script>
+<!-- ===================== ReleaseCheck: the pure model (no DOM) ===================== -->
+<script>
+const ReleaseCheck = (() => {
+  const DEPTHS = [
+    { key: 'skip', label: 'Nicht prüfen', short: 'nein', minutes: 0 },
+    { key: 'elsewhere', label: 'Anderswo', short: 'anderswo', minutes: 0 },
+    { key: 'smoke', label: 'Smoke', short: 'Smoke', minutes: 10 },
+    { key: 'flow', label: 'Ablauf', short: 'Ablauf', minutes: 30 },
+    { key: 'deep', label: 'Gründlich', short: 'Gründlich', minutes: 90 },
+  ];
+  const DEPTH = Object.fromEntries(DEPTHS.map((d) => [d.key, d]));
+  const WHO = { agent: 'Agent', human: 'Mensch' };
+  const WHERE = { ibus: 'ibus', local: 'lokal', customer: 'bei Kunden', device: 'Testgerät' };
+  const RISK_ORDER = { hoch: 0, mittel: 1, niedrig: 2 };
+  const SMOKE_MINUTES = DEPTH.smoke.minutes;
+  const FIELDS = ['depth', 'who', 'where', 'stage', 'smoke', 'note'];
+  const STAGE = { vor: 'Vorprüfung', nach: 'Nachprüfung' };
+  const NACH_BUDGET_MINUTES = 12 * 60; // Fr 04.12. + Mo 07.12., grob
+  const VOR_BUDGET_MINUTES = 26 * 60;  // Di 24.11. bis Fr 27.11., Agent-Zeit samt Aufsicht, grob
+
+  // What an item needs, and when a decision breaks the rules of the map #1324.
+  const NEEDS = {
+    realLock: { label: 'echtes Schloss',
+      conflict: (d) => (d.where === 'ibus' ? 'Auf ibus gibt es außer dem Testschloss keine echten Schlösser.' : d.who === 'agent' ? 'Ein echtes Schloss bedient nur ein Mensch.' : null) },
+    saltoAccount: { label: 'Zugang Salto KS', conflict: () => null },
+    customerKnowledge: { label: 'Wissen über Kunden',
+      conflict: (d) => (d.who === 'agent' ? 'Braucht Wissen über die Kunden, das prüft ein Mensch.' : null) },
+    customerData: { label: 'Kundendaten (Dump)',
+      conflict: (d) => (d.where === 'ibus' ? 'Kundendaten gehören nicht auf ibus.' : null) },
+    mailbox: { label: 'Postfach', conflict: () => null },
+  };
+  const GENERAL_RULES = [
+    (it, d) => (d.who === 'agent' && d.where === 'customer' ? 'Der Agent hat keinen Zugang zu Kundeninstanzen.' : null),
+    (it, d) => (d.who === 'agent' && d.where === 'device' && !it.needs.includes('realLock') ? 'Ein Testgerät bedient nur ein Mensch.' : null),
+    (it, d) => (it.pending && d.stage === 'vor' ? 'Die PRs (' + it.pending + ') sind am 23.11. noch offen, am Stand vom 24.11. gibt es den Ablauf nicht. Er geht nur in die Nachprüfung.' : null),
+    (it, d) => (it.rcOnly && d.stage === 'vor' ? 'Gibt es erst mit rc.0 am 04.12., also nur in der Nachprüfung.' : null),
+  ];
+
+  function create(items, areas) {
+    const byId = Object.fromEntries(items.map((it) => [it.id, it]));
+    const proposalOf = (it) => ({ depth: it.p.depth, who: it.p.who, where: it.p.where, stage: it.p.stage, smoke: it.p.smoke, note: '' });
+    const inScope = (d) => d.depth === 'smoke' || d.depth === 'flow' || d.depth === 'deep';
+
+    function initialState(overrides) {
+      const decisions = {};
+      for (const it of items) decisions[it.id] = Object.assign(proposalOf(it), (overrides && overrides[it.id]) || {});
+      return { decisions, recheckAreas: [], last: null };
+    }
+
+    function applyChanges(state, changes, label) {
+      const decisions = Object.assign({}, state.decisions);
+      const ids = [];
+      for (const c of changes) {
+        if (!decisions[c.id] || decisions[c.id][c.field] === c.value) continue;
+        decisions[c.id] = Object.assign({}, decisions[c.id], { [c.field]: c.value });
+        if (!ids.includes(c.id)) ids.push(c.id);
+      }
+      return Object.assign({}, state, { decisions, last: { label, ids } });
+    }
+
+    function reduce(state, action) {
+      switch (action.type) {
+        case 'set':
+          return applyChanges(state, [{ id: action.id, field: action.field, value: action.value }], action.label);
+        case 'bulk':
+          return applyChanges(state, action.changes, action.label);
+        case 'resetItem': {
+          const p = proposalOf(byId[action.id]);
+          return applyChanges(state, FIELDS.map((f) => ({ id: action.id, field: f, value: p[f] })), action.label);
+        }
+        case 'resetAll':
+          return Object.assign(initialState(), { last: { label: action.label, ids: [] } });
+        case 'setRecheckAreas':
+          return Object.assign({}, state, { recheckAreas: action.areas.slice(), last: { label: action.label, ids: [] } });
+        default:
+          return state;
+      }
+    }
+
+    // Bulk helpers: build change lists for many items at once.
+    function changesWhere(state, predicate, field, value) {
+      return items.filter((it) => predicate(it, state.decisions[it.id])).map((it) => ({ id: it.id, field, value }));
+    }
+
+    function conflictsOf(it, d) {
+      if (!inScope(d)) return [];
+      const out = it.needs.map((n) => NEEDS[n].conflict(d)).concat(GENERAL_RULES.map((r) => r(it, d)));
+      return out.filter(Boolean);
+    }
+
+    function warningsOf(it, d) {
+      const out = [];
+      if (it.risk === 'hoch' && d.depth === 'skip') out.push('Hohes Blocker-Risiko, aber nicht geprüft.');
+      if (d.smoke && !inScope(d)) out.push('Steht im Smoke-Test, ist selbst aber nicht im Umfang.');
+      if (it.inst && d.where === 'ibus' && inScope(d)) out.push('Betrifft nur ' + it.inst + ', diese Daten gibt es auf ibus nicht.');
+      if (it.risk === 'hoch' && it.kind !== 'core' && d.stage === 'nach' && !it.pending && !it.rcOnly && inScope(d)) out.push('Hohes Blocker-Risiko erst in der Nachprüfung: Ein Fund kommt dann nach dem Stichtag und kostet einen neuen Release-Kandidaten.');
+      return out;
+    }
+
+    function isChanged(it, d) {
+      const p = proposalOf(it);
+      return FIELDS.some((f) => p[f] !== d[f]);
+    }
+
+    function minutesOf(d) { return DEPTH[d.depth].minutes; }
+
+    function summarize(state) {
+      const s = {
+        total: items.length, inScope: 0,
+        agent: { count: 0, minutes: 0 }, human: { count: 0, minutes: 0 },
+        smoke: { count: 0, minutes: 0 },
+        vor: { count: 0, minutes: 0 }, nach: { count: 0, minutes: 0 },
+        conflicts: [], warnings: [], questions: [], timeWarnings: [], changed: 0, skipped: 0, elsewhere: 0,
+      };
+      for (const it of items) {
+        const d = state.decisions[it.id];
+        if (isChanged(it, d)) s.changed++;
+        if (d.depth === 'skip') s.skipped++;
+        if (d.depth === 'elsewhere') s.elsewhere++;
+        if (inScope(d)) {
+          s.inScope++;
+          s[d.who].count++;
+          s[d.who].minutes += minutesOf(d);
+          s[d.stage].count++;
+          s[d.stage].minutes += minutesOf(d);
+          if (it.question) s.questions.push({ item: it, text: it.question });
+        }
+        if (d.smoke && inScope(d)) { s.smoke.count++; s.smoke.minutes += SMOKE_MINUTES; }
+        for (const text of conflictsOf(it, d)) s.conflicts.push({ item: it, text });
+        for (const text of warningsOf(it, d)) s.warnings.push({ item: it, text });
+      }
+      const r = recheck(state);
+      s.nachTotal = { count: r.later.length + r.affected.length + r.smoke.length, minutes: r.minutes };
+      if (s.vor.minutes > VOR_BUDGET_MINUTES) s.timeWarnings.push('Vorprüfung ≈ ' + hours(s.vor.minutes) + ': mehr als die rund ' + hours(VOR_BUDGET_MINUTES) + ' von Di 24.11. bis Fr 27.11.');
+      if (r.minutes > NACH_BUDGET_MINUTES) s.timeWarnings.push('Nachprüfung ≈ ' + hours(r.minutes) + ': mehr als die rund ' + hours(NACH_BUDGET_MINUTES) + ' an Fr 04.12. und Mo 07.12. Das Go/No-Go am Mo 07.12. wackelt.');
+      return s;
+    }
+
+    // The checklist cut into prework (Vorarbeiten): one group per area, or per person and place.
+    function prework(state, groupBy) {
+      const groups = new Map();
+      for (const it of items) {
+        const d = state.decisions[it.id];
+        if (!inScope(d)) continue;
+        let key, title;
+        if (groupBy === 'person') {
+          key = d.who + '·' + d.where;
+          title = WHO[d.who] + ' · ' + WHERE[d.where];
+        } else {
+          key = it.area;
+          title = areas.find((a) => a.key === it.area).title;
+        }
+        const sub = key;
+        key = d.stage + '|' + key;
+        title = STAGE[d.stage] + ' · ' + title;
+        if (!groups.has(key)) groups.set(key, { key, sub, stage: d.stage, title, entries: [], minutes: 0, who: new Set() });
+        const g = groups.get(key);
+        g.entries.push({ item: it, d });
+        g.minutes += minutesOf(d);
+        g.who.add(d.who);
+      }
+      const order = groupBy === 'person' ? ['agent·ibus', 'agent·local', 'human·ibus', 'human·local', 'human·customer', 'human·device'] : areas.map((a) => a.key);
+      return [...groups.values()].sort((a, b) => {
+        if (a.stage !== b.stage) return a.stage === 'vor' ? -1 : 1;
+        const ia = order.indexOf(a.sub), ib = order.indexOf(b.sub);
+        return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+      });
+    }
+
+    // Nachprüfung at rc.0: everything only checkable then (stage 'nach') in its depth,
+    // areas touched by fixes since the Vorprüfung in their depth, plus the smoke test.
+    function recheck(state) {
+      const later = [], affected = [], smoke = [];
+      for (const it of items) {
+        const d = state.decisions[it.id];
+        if (!inScope(d)) continue;
+        if (d.stage === 'nach') later.push({ item: it, d, minutes: minutesOf(d) });
+        else if (state.recheckAreas.includes(it.area)) affected.push({ item: it, d, minutes: minutesOf(d) });
+        else if (d.smoke) smoke.push({ item: it, d, minutes: SMOKE_MINUTES });
+      }
+      const minutes = later.concat(affected, smoke).reduce((m, e) => m + e.minutes, 0);
+      return { later, affected, smoke, minutes };
+    }
+
+    function diffFromProposal(state) {
+      const diff = {};
+      for (const it of items) {
+        const p = proposalOf(it), d = state.decisions[it.id];
+        for (const f of FIELDS) if (p[f] !== d[f]) (diff[it.id] = diff[it.id] || {})[f] = d[f];
+      }
+      return diff;
+    }
+
+    function hours(min) { return (min / 60).toLocaleString('de-DE', { maximumFractionDigits: 1 }) + ' h'; }
+
+    function toMarkdown(state, today) {
+      const s = summarize(state);
+      const cell = (t) => String(t || '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+      const L = [];
+      L.push('## Prüfliste der Release-Prüfung 4.5.0');
+      L.push('');
+      L.push('Stand ' + today + ', aus dem Prototyp zu #1328. Vorprüfung in KW 48 auf dem Kopf von `version/4.5.x` und `version/1.4.x` vom 24.11., Nachprüfung an `v4.5.0-rc.0` bzw. `v1.4.0-rc.0` am 04.12. und 07.12.');
+      L.push('');
+      L.push('Tiefe: **Smoke** = geht es überhaupt, ein Durchlauf (≈ 10 min). **Ablauf** = Hauptweg samt Varianten (≈ 30 min). **Gründlich** = dazu Randfälle, Fehlerwege, Rechte (≈ 90 min). **Anderswo** = nicht am Release-Kandidaten, etwa Deploy-Bereitschaft.');
+      L.push('');
+      L.push('**Umfang:** ' + s.inScope + ' von ' + s.total + ' Abläufen · Agent ' + s.agent.count + ' (≈ ' + hours(s.agent.minutes) + ') · Mensch ' + s.human.count + ' (≈ ' + hours(s.human.minutes) + ') · Vorprüfung ' + s.vor.count + ' (≈ ' + hours(s.vor.minutes) + ') · Nachprüfung ' + s.nachTotal.count + ' samt Smoke-Test (≈ ' + hours(s.nachTotal.minutes) + ') · Smoke-Test ' + s.smoke.count + ' · anderswo ' + s.elsewhere + ' · nicht geprüft ' + s.skipped);
+      for (const a of areas) {
+        L.push('');
+        L.push('### ' + a.title);
+        L.push('');
+        L.push('| Ablauf | Stufe | Tiefe | Wer | Wo | Smoke-Test | Klärung | Notiz |');
+        L.push('| --- | --- | --- | --- | --- | --- | --- | --- |');
+        for (const it of items.filter((x) => x.area === a.key)) {
+          const d = state.decisions[it.id];
+          const out = !inScope(d);
+          const title = cell(it.title) + (it.pending ? ' (offen: ' + it.pending + ')' : '');
+          L.push('| ' + [title, out ? '' : STAGE[d.stage], DEPTH[d.depth].label, out ? '' : WHO[d.who], out ? '' : WHERE[d.where], d.smoke && !out ? 'ja' : '', it.ticket ? '#' + it.ticket : '', cell(d.note)].join(' | ') + ' |');
+        }
+      }
+      const r = recheck(state);
+      L.push('');
+      L.push('### Nachprüfung an rc.0');
+      L.push('');
+      L.push('- Erst dann prüfbar: ' + (r.later.map((e) => e.item.title).join(', ') || 'nichts'));
+      if (r.affected.length) L.push('- Von Fixen betroffen: ' + r.affected.map((e) => e.item.title).join(', '));
+      L.push('- Smoke-Test: ' + (r.smoke.map((e) => e.item.title).join(', ') || 'nichts'));
+      L.push('- Zusammen ≈ ' + hours(r.minutes));
+      if (s.timeWarnings.length) {
+        L.push('');
+        L.push('### Zeit');
+        L.push('');
+        for (const t of s.timeWarnings) L.push('- ' + t);
+      }
+      if (s.conflicts.length || s.warnings.length) {
+        L.push('');
+        L.push('### Konflikte und Warnungen');
+        L.push('');
+        for (const c of s.conflicts) L.push('- Konflikt, ' + c.item.title + ': ' + c.text);
+        for (const w of s.warnings) L.push('- Warnung, ' + w.item.title + ': ' + w.text);
+      }
+      if (s.questions.length) {
+        L.push('');
+        L.push('### Offene Fragen');
+        L.push('');
+        for (const q of s.questions) L.push('- ' + q.item.title + ': ' + q.text);
+      }
+      return L.join('\n');
+    }
+
+    return {
+      DEPTHS, DEPTH, WHO, WHERE, STAGE, NEEDS, RISK_ORDER, SMOKE_MINUTES,
+      byId, proposalOf, inScope, initialState, reduce, changesWhere,
+      conflictsOf, warningsOf, isChanged, summarize, prework, recheck, diffFromProposal, toMarkdown, hours,
+    };
+  }
+
+  return { create };
+})();
+</script>
+
+<!-- ===================== Page shell (throwaway) ===================== -->
+<script>
+const M = ReleaseCheck.create(ITEMS, AREAS);
+const areaTitle = (key) => AREAS.find((a) => a.key === key).title;
+
+function readHash() {
+  const m = location.hash.match(/^#s=(.*)$/);
+  if (!m) return {};
+  try { return JSON.parse(decodeURIComponent(m[1])); } catch (e) { return {}; }
+}
+function writeHash() {
+  const diff = M.diffFromProposal(state);
+  const url = location.pathname + location.search + (Object.keys(diff).length ? '#s=' + encodeURIComponent(JSON.stringify(diff)) : '');
+  history.replaceState(null, '', url);
+}
+
+let state = M.initialState(readHash());
+let prevSummary = null;
+const view = {
+  tab: 'list', who: 'all', stage: 'all', risk: 'all', onlyFlagged: false, onlyChanged: false, onlyNew: false, q: '',
+  groupBy: 'area', open: new Set(), wt: { scenario: 0, step: -1 },
+};
+
+function dispatch(action) {
+  const before = M.summarize(state);
+  state = M.reduce(state, action);
+  prevSummary = before;
+  writeHash();
+  render();
+}
+
+// ---------- helpers ----------
+const esc = (t) => String(t == null ? '' : t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmt = (t) => esc(t).replace(/`([^`]+)`/g, '<code>$1</code>');
+const h = M.hours;
+
+// ---------- walkthroughs ----------
+const ALL = () => true;
+const SCENARIOS = [
+  {
+    title: 'Die Regeln von ibus greifen',
+    text: 'Der Agent prüft auf ibus. Dort sind echte Schlösser außer den Testschlössern, Zahlungen im Live-Modus und Kundendaten tabu, und Wissen über die Kunden hat er nicht. Was passiert, wenn wir ihm zu viel geben?',
+    watch: 'Achte auf „Konflikte“ in der Leiste oben und auf rot umrandete Zeilen. Der letzte Schritt räumt auf.',
+    steps: [
+      { label: '„0 Kalendertage“ auf ibus statt am Dump prüfen', run: () => ({ type: 'set', id: 'up-template', field: 'where', value: 'ibus', label: 'Standard-cancellationTemplate: Wo → ibus' }) },
+      { label: 'Secrets nach dem Upgrade auf ibus statt an den Dumps', run: () => ({ type: 'set', id: 's-dump', field: 'where', value: 'ibus', label: 'Speichern nach dem Upgrade: Wo → ibus' }) },
+      { label: 'Zahlungsanbieter der Kunden dem Agenten geben', run: () => ({ type: 'bulk', label: 'Zahlungsanbieter der Kunden: Wer → Agent, Wo → ibus', changes: [{ id: 'c-providers', field: 'who', value: 'agent' }, { id: 'c-providers', field: 'where', value: 'ibus' }] }) },
+      { label: 'Nuki und Salto am Testschloss dem Agenten geben', run: () => ({ type: 'set', id: 'x-locks', field: 'who', value: 'agent', label: 'Testschlösser: Wer → Agent' }) },
+      { label: 'Alles zurück auf den Entwurf', run: () => ({ type: 'resetAll', label: 'Zurück auf den Entwurf: keine Konflikte mehr' }) },
+    ],
+  },
+  {
+    title: 'Zu viel für die Nachprüfung',
+    text: 'Die Nachprüfung hat nur Fr 04.12. und Mo 07.12., danach fällt das Go/No-Go. Was nach dem 24.11. gemergt wird, kann erst dort geprüft werden. Was, wenn viel spät kommt oder wir aus Bequemlichkeit verschieben?',
+    watch: 'Achte auf „Nachprüfung“ in der Leiste, auf „Warnungen“ und auf den Reiter „Nachprüfung an rc.0“.',
+    steps: [
+      { label: 'Zwei offene Features kommen doch nicht', tab: 'recheck', run: () => ({ type: 'bulk', label: 'deleteOwn und Veranstaltungsmanagement verpassen 4.5.0: nicht prüfen', changes: [{ id: 'a-delown', field: 'depth', value: 'skip' }, { id: 'a-events', field: 'depth', value: 'skip' }] }) },
+      { label: 'Ein Fund an der Staffel, Fix vor dem Stichtag', tab: 'recheck', run: () => ({ type: 'setRecheckAreas', areas: ['refund'], label: 'Nachprüfung: Stornierungsregeln von einem Fix betroffen' }) },
+      { label: 'Dazu ein Fix an Secrets write-only', tab: 'recheck', run: () => ({ type: 'setRecheckAreas', areas: ['refund', 'secrets'], label: 'Nachprüfung: dazu Secrets write-only' }) },
+      { label: 'Die ganze Admin UI erst an rc.0 prüfen', tab: 'recheck', run: () => ({ type: 'bulk', label: 'Admin UI 4.5: Stufe → Nachprüfung', changes: M.changesWhere(state, (it, d) => it.area === 'admin' && M.inScope(d), 'stage', 'nach') }) },
+      { label: 'Zurück auf den Entwurf', run: () => ({ type: 'resetAll', label: 'Zurück auf den Entwurf' }) },
+    ],
+  },
+  {
+    title: 'ibus läuft erst Mittwoch',
+    text: 'Hakt der Bau der Images am 24.11., bleiben für die Vorprüfung nur Mittwoch bis Freitag. Wo lässt sich kürzen, ohne ein hohes Risiko ungeprüft zu lassen oder es in die Nachprüfung zu schieben?',
+    watch: 'Achte auf „Vorprüfung“ (Stunden) und auf „Warnungen“.',
+    steps: [
+      { label: 'Bestand aus 4.4 nur noch als Smoke', run: () => ({ type: 'bulk', label: 'Bestand aus 4.4: Tiefe → Smoke', changes: M.changesWhere(state, (it, d) => it.kind === 'core' && M.inScope(d) && it.area !== 'upgrade', 'depth', 'smoke') }) },
+      { label: 'Alles mit niedrigem Risiko streichen', run: () => ({ type: 'bulk', label: 'Niedriges Risiko: Tiefe → nicht prüfen', changes: M.changesWhere(state, (it, d) => it.risk === 'niedrig' && M.inScope(d), 'depth', 'skip') }) },
+      { label: 'Falscher Ausweg: Hohes in die Nachprüfung', run: () => ({ type: 'bulk', label: 'Hohes Risiko, neu: Stufe → Nachprüfung', changes: M.changesWhere(state, (it, d) => it.risk === 'hoch' && it.kind !== 'core' && it.area !== 'upgrade' && M.inScope(d), 'stage', 'nach') }) },
+      { label: 'Zurück auf den Entwurf', run: () => ({ type: 'resetAll', label: 'Zurück auf den Entwurf' }) },
+    ],
+  },
+];
+
+function renderWalkthroughs() {
+  const sc = SCENARIOS[view.wt.scenario];
+  const running = view.wt.step >= 0;
+  const done = running && view.wt.step >= sc.steps.length;
+  let html = '<h2>Geführte Durchgänge</h2><div class="wt-tabs" role="tablist">';
+  SCENARIOS.forEach((s, i) => {
+    html += '<button class="wt-tab" role="tab" aria-selected="' + (i === view.wt.scenario) + '" data-act="wtPick" data-i="' + i + '">' + esc(s.title) + '</button>';
+  });
+  html += '</div><div class="wt-body"><p>' + esc(sc.text) + '</p><p class="wt-watch">' + esc(sc.watch) + '</p>';
+  html += '<button class="btn primary" data-act="wtStart">' + (running ? 'Neu starten' : 'Durchgang starten') + '</button> <span class="wt-watch" style="font-size:12.5px">Setzt die Prüfliste auf den Entwurf zurück.</span>';
+  html += '<div class="steps">';
+  sc.steps.forEach((st, i) => {
+    const cls = !running ? '' : i < view.wt.step ? 'done' : i === view.wt.step ? 'next' : '';
+    const disabled = !running || i !== view.wt.step;
+    html += '<button class="step ' + cls + '" data-act="wtStep" data-i="' + i + '"' + (disabled ? ' disabled' : '') + '><span class="n"><span>' + (i + 1) + '.</span></span> ' + esc(st.label) + '</button>';
+  });
+  html += '</div>';
+  if (done) html += '<p style="margin-top:10px"><b>Fertig.</b> Spiel frei weiter, oder starte einen anderen Durchgang.</p>';
+  html += '</div>';
+  document.getElementById('walkthroughs').innerHTML = html;
+}
+
+// ---------- summary (the state panel) ----------
+function stat(key, label, value, opts) {
+  opts = opts || {};
+  let delta = '';
+  if (prevSummary && opts.num !== undefined && opts.prev !== undefined && opts.num !== opts.prev) {
+    const diff = opts.num - opts.prev;
+    const text = opts.isMinutes ? (diff > 0 ? '+' : '−') + h(Math.abs(diff)) : (diff > 0 ? '+' : '−') + Math.abs(diff);
+    delta = '<span class="d ' + (diff > 0 ? 'up' : 'down') + '">' + text + '</span>';
+  }
+  const changed = delta ? ' flash' : '';
+  return '<div class="stat ' + (opts.cls || '') + changed + '" title="' + esc(opts.title || '') + '"><div class="k">' + label + '</div><div class="v">' + value + delta + '</div></div>';
+}
+
+function renderSummary(s) {
+  const p = prevSummary;
+  let html = '<div class="wrap"><div class="stats">';
+  html += stat('vor', 'Vorprüfung KW 48', s.vor.count + ' · ' + h(s.vor.minutes), { num: s.vor.minutes, prev: p && p.vor.minutes, isMinutes: true, cls: s.vor.minutes > 26 * 60 ? 'warn' : '', title: 'Abläufe der Vorprüfung, grob geschätzt. Rahmen: Di 24.11. bis Fr 27.11.' });
+  html += stat('nach', 'Nachprüfung rc.0', s.nachTotal.count + ' · ' + h(s.nachTotal.minutes), { num: s.nachTotal.minutes, prev: p && p.nachTotal.minutes, isMinutes: true, cls: s.nachTotal.minutes > 12 * 60 ? 'warn' : '', title: 'Erst an rc.0 Prüfbares, von Fixen Betroffenes und der Smoke-Test. Rahmen: Fr 04.12. und Mo 07.12.' });
+  html += stat('scope', 'Im Umfang', s.inScope + ' <span style="font-weight:400;color:var(--muted);font-size:13px">von ' + s.total + '</span>', { num: s.inScope, prev: p && p.inScope });
+  html += stat('agent', 'Agent', s.agent.count + ' · ' + h(s.agent.minutes), { num: s.agent.minutes, prev: p && p.agent.minutes, isMinutes: true, title: 'Abläufe und grob geschätzte Zeit' });
+  html += stat('human', 'Mensch', s.human.count + ' · ' + h(s.human.minutes), { num: s.human.minutes, prev: p && p.human.minutes, isMinutes: true, title: 'Abläufe und grob geschätzte Zeit' });
+  html += stat('smoke', 'Smoke-Test', s.smoke.count + ' · ' + h(s.smoke.minutes), { num: s.smoke.count, prev: p && p.smoke.count });
+  html += stat('conf', 'Konflikte', s.conflicts.length, { num: s.conflicts.length, prev: p && p.conflicts.length, cls: s.conflicts.length ? 'bad' : '' });
+  html += stat('warn', 'Warnungen', s.warnings.length + s.timeWarnings.length, { num: s.warnings.length + s.timeWarnings.length, prev: p && p.warnings.length + p.timeWarnings.length, cls: s.warnings.length + s.timeWarnings.length ? 'warn' : '' });
+  html += stat('q', 'Offene Fragen', s.questions.length, { num: s.questions.length, prev: p && p.questions.length });
+  html += stat('chg', 'Geändert', s.changed, { num: s.changed, prev: p && p.changed, title: 'Abläufe, die vom Entwurf abweichen' });
+  html += '</div><div class="last"><span>';
+  if (state.last) {
+    const names = state.last.ids.map((id) => M.byId[id].title);
+    html += 'Zuletzt: <b>' + esc(state.last.label) + '</b>';
+    if (names.length) html += ' · betrifft ' + (names.length > 4 ? names.length + ' Abläufe' : names.map(esc).join(', '));
+  } else if (s.changed) {
+    html += 'Stand aus dem Link geladen: ' + s.changed + ' Abläufe weichen vom Entwurf ab („nur geänderte“ zeigt sie).';
+  } else {
+    html += 'Noch nichts geändert. Klick dich durch die Prüfliste oder starte einen Durchgang.';
+  }
+  html += '</span><span class="stat-actions"><button class="btn small" data-act="copyLink">Link kopieren</button><button class="btn small" data-act="resetAll">Alles auf Entwurf</button></span></div></div>';
+  document.getElementById('summary').innerHTML = html;
+}
+
+// ---------- tabs ----------
+function renderTabs(s) {
+  const tabs = [
+    ['list', 'Prüfliste', ITEMS.length],
+    ['prework', 'Schnitt in Prüf-Klärungen', null],
+    ['recheck', 'Nachprüfung an rc.0', null],
+    ['issues', 'Konflikte und Fragen', s.conflicts.length + s.warnings.length + s.timeWarnings.length + s.questions.length, s.conflicts.length > 0],
+    ['markdown', 'Als Antwort für #1328', null],
+  ];
+  document.getElementById('tabs').innerHTML = tabs.map(([k, label, cnt, bad]) =>
+    '<button class="tab" role="tab" aria-selected="' + (view.tab === k) + '" data-act="tab" data-tab="' + k + '">' + label + (cnt != null ? '<span class="cnt' + (bad ? ' bad' : '') + '">' + cnt + '</span>' : '') + '</button>'
+  ).join('');
+}
+
+// ---------- tab: checklist ----------
+function seg(id, field, options, current, proposal) {
+  return '<span class="seg">' + options.map(([value, label]) =>
+    '<button data-act="set" data-id="' + id + '" data-field="' + field + '" data-value="' + value + '" aria-pressed="' + (current === value) + '"' + (proposal === value ? ' class="prop" title="Vorschlag"' : '') + '>' + label + '</button>'
+  ).join('') + '</span>';
+}
+
+function rowHtml(it) {
+  const d = state.decisions[it.id];
+  const p = M.proposalOf(it);
+  const conflicts = M.conflictsOf(it, d);
+  const warnings = M.warningsOf(it, d);
+  const changed = M.isChanged(it, d);
+  const out = !M.inScope(d);
+  const just = state.last && state.last.ids.includes(it.id);
+  const open = view.open.has(it.id);
+  let tags = '';
+  tags += it.kind === 'new' ? '<span class="tag w1">neu in 4.5</span>' : it.kind === 'patch' ? '<span class="tag w3" title="4.4.0 final, 4.4.1, 4.4.2 bzw. 1.3.1: an den Instanzen noch nicht gelaufen">neu an den Instanzen</span>' : '<span class="tag w2">Bestand</span>';
+  if (it.pending) tags += '<span class="tag pend" title="Am 23.11. offen, kommt nur, wenn bis zum Stichtag 03.12. gemergt">PR offen: ' + esc(it.pending) + '</span>';
+  if (it.rcOnly) tags += '<span class="tag pend" title="Entsteht erst mit rc.0 (#1218)">erst mit rc.0</span>';
+  if (!out) tags += '<span class="tag st-' + d.stage + '">' + M.STAGE[d.stage] + '</span>';
+  if (it.inst) tags += '<span class="tag need">nur ' + esc(it.inst) + '</span>';
+  if (it.ticket) tags += '<a class="tag changed" href="https://github.com/ECCdigital/tickets/issues/' + it.ticket + '" target="_blank">Vorarbeit #' + it.ticket + '</a>';
+  for (const n of it.needs) tags += '<span class="tag need">' + esc(M.NEEDS[n].label) + '</span>';
+  if (it.question && !out) tags += '<span class="tag q" title="' + esc(it.question) + '">Frage offen</span>';
+  if (changed) tags += '<span class="tag changed">geändert</span>';
+
+  let html = '<div class="row' + (out ? ' out' : '') + (conflicts.length ? ' conflict' : '') + (just ? ' just' : '') + '" id="row-' + it.id + '">';
+  html += '<div class="row-top"><div class="row-name"><span class="risk ' + it.risk + '" title="Blocker-Risiko ' + it.risk + (it.riskWhy ? ': ' + esc(it.riskWhy) : '') + '"></span>';
+  html += '<button class="title" data-act="toggleOpen" data-id="' + it.id + '">' + fmt(it.title) + '</button>' + tags + '</div>';
+  html += '<div class="controls">';
+  html += seg(it.id, 'depth', M.DEPTHS.map((x) => [x.key, x.short]), d.depth, p.depth);
+  if (!out) {
+    html += seg(it.id, 'stage', [['vor', 'Vor'], ['nach', 'Nach']], d.stage, p.stage);
+    html += seg(it.id, 'who', [['agent', 'Agent'], ['human', 'Mensch']], d.who, p.who);
+    html += '<select data-act="setSelect" data-id="' + it.id + '" data-field="where" title="Wo">' +
+      Object.entries(M.WHERE).map(([k, l]) => '<option value="' + k + '"' + (d.where === k ? ' selected' : '') + '>' + l + (p.where === k ? ' ·' : '') + '</option>').join('') + '</select>';
+    html += '<label class="chk"><input type="checkbox" data-act="setCheck" data-id="' + it.id + '" data-field="smoke"' + (d.smoke ? ' checked' : '') + '> Smoke-Test</label>';
+  }
+  html += '</div></div>';
+  if (conflicts.length || warnings.length) {
+    html += '<div class="alerts">' + conflicts.map((c) => '<div class="alert c">Konflikt: ' + esc(c) + '</div>').join('') + warnings.map((w) => '<div class="alert w">Warnung: ' + esc(w) + '</div>').join('') + '</div>';
+  }
+  if (open) {
+    html += '<div class="details">';
+    html += '<div class="k">Wie</div><div>' + fmt(it.how) + '</div>';
+    html += '<div class="k">Warum so</div><div>' + fmt(it.why) + '</div>';
+    html += '<div class="k">Blocker-Risiko</div><div>' + it.risk + (it.riskWhy ? ': ' + fmt(it.riskWhy) : '') + '</div>';
+    if (it.question) html += '<div class="k">Offene Frage</div><div>' + fmt(it.question) + '</div>';
+    if (it.pending) html += '<div class="k">PRs offen</div><div>' + esc(it.pending) + ': kommt nur, wenn bis Do 03.12. gemergt. Sonst entfällt der Ablauf.</div>';
+    html += '<div class="k">Vorschlag</div><div>' + M.DEPTH[p.depth].label + (M.inScope(p) ? ' · ' + M.STAGE[p.stage] + ' · ' + M.WHO[p.who] + ' · ' + M.WHERE[p.where] + (p.smoke ? ' · im Smoke-Test' : '') : '') +
+      (changed ? ' <button class="btn small" data-act="resetItem" data-id="' + it.id + '">Auf Vorschlag zurück</button>' : '') + '</div>';
+    html += '<div class="k">Notiz</div><div><input type="text" data-act="setNote" data-id="' + it.id + '" value="' + esc(d.note) + '" placeholder="Kommt in die Antwort für #1328"></div>';
+    html += '</div>';
+  }
+  return html + '</div>';
+}
+
+function matchesFilter(it) {
+  const d = state.decisions[it.id];
+  if (view.who !== 'all' && !(M.inScope(d) && d.who === view.who)) return false;
+  if (view.stage !== 'all' && !(M.inScope(d) && d.stage === view.stage)) return false;
+  if (view.risk === 'hoch' && it.risk !== 'hoch') return false;
+  if (view.risk === 'hochmittel' && it.risk === 'niedrig') return false;
+  if (view.onlyChanged && !M.isChanged(it, d)) return false;
+  if (view.onlyNew && it.kind === 'core') return false;
+  if (view.onlyFlagged && !(M.conflictsOf(it, d).length || M.warningsOf(it, d).length || (it.question && M.inScope(d)))) return false;
+  if (view.q) {
+    const hay = (it.title + ' ' + it.how + ' ' + it.why + ' ' + areaTitle(it.area)).toLowerCase();
+    if (!hay.includes(view.q.toLowerCase())) return false;
+  }
+  return true;
+}
+
+function renderList() {
+  let html = '<div class="filters">';
+  html += '<label>Wer <select data-act="view" data-key="who"><option value="all">alle</option><option value="agent"' + (view.who === 'agent' ? ' selected' : '') + '>Agent</option><option value="human"' + (view.who === 'human' ? ' selected' : '') + '>Mensch</option></select></label>';
+  html += '<label>Stufe <select data-act="view" data-key="stage"><option value="all">beide</option><option value="vor"' + (view.stage === 'vor' ? ' selected' : '') + '>Vorprüfung</option><option value="nach"' + (view.stage === 'nach' ? ' selected' : '') + '>Nachprüfung</option></select></label>';
+  html += '<label>Risiko <select data-act="view" data-key="risk"><option value="all">alle</option><option value="hoch"' + (view.risk === 'hoch' ? ' selected' : '') + '>nur hoch</option><option value="hochmittel"' + (view.risk === 'hochmittel' ? ' selected' : '') + '>hoch und mittel</option></select></label>';
+  html += '<label><input type="checkbox" data-act="viewCheck" data-key="onlyFlagged"' + (view.onlyFlagged ? ' checked' : '') + '> mit Konflikt, Warnung oder Frage</label>';
+  html += '<label><input type="checkbox" data-act="viewCheck" data-key="onlyChanged"' + (view.onlyChanged ? ' checked' : '') + '> nur geänderte</label>';
+  html += '<label><input type="checkbox" data-act="viewCheck" data-key="onlyNew"' + (view.onlyNew ? ' checked' : '') + '> nur neu (4.5 oder an den Instanzen)</label>';
+  html += '<input type="search" data-act="search" placeholder="Suchen …" value="' + esc(view.q) + '">';
+  html += '<button class="btn small" data-act="openAll">Alle aufklappen</button><button class="btn small" data-act="closeAll">Alle zuklappen</button>';
+  html += '</div>';
+  html += '<p class="legend">Punkt = Blocker-Risiko (rot hoch, gelb mittel, grau niedrig). Unterstrichener Knopf und „·“ in der Auswahl = Vorschlag. Titel anklicken für Wie, Warum und Notiz.</p>';
+  let shown = 0;
+  for (const a of AREAS) {
+    const its = ITEMS.filter((it) => it.area === a.key && matchesFilter(it));
+    if (!its.length) continue;
+    shown += its.length;
+    const all = ITEMS.filter((it) => it.area === a.key);
+    const scope = all.filter((it) => M.inScope(state.decisions[it.id]));
+    const mins = scope.reduce((m, it) => m + M.DEPTH[state.decisions[it.id].depth].minutes, 0);
+    html += '<section class="area"><div class="area-head"><h3>' + esc(a.title) + '</h3>';
+    if (a.added) html += '<span class="added">Vorschlag: nicht in der Frage von #1328</span>';
+    html += '<span class="meta">' + scope.length + ' von ' + all.length + ' im Umfang · ≈ ' + h(mins) + '</span>';
+    html += '<span class="acts"><button class="btn small" data-act="areaDepth" data-area="' + a.key + '" data-value="smoke">Bereich nur Smoke</button><button class="btn small" data-act="areaDepth" data-area="' + a.key + '" data-value="skip">Bereich streichen</button><button class="btn small" data-act="areaReset" data-area="' + a.key + '">Bereich auf Vorschlag</button></span></div>';
+    html += its.map(rowHtml).join('') + '</section>';
+  }
+  if (!shown) html += '<p class="note">Kein Ablauf passt zu den Filtern.</p>';
+  return html;
+}
+
+// ---------- tab: prework ----------
+function renderPrework() {
+  const groups = M.prework(state, view.groupBy);
+  let html = '<p class="note">Die Karte #1324 sagt: Aus der Prüfliste entstehen die Prüf-Klärungen der Vorprüfung, die Nachprüfung an rc.0 ist eine eigene Klärung. So sähe der Schnitt mit dem heutigen Stand aus, erst die Vorprüfung, dann die Nachprüfung. Eine Karte = eine Klärung. ibus, Testsuiten und Upgrade an den Dumps sind schon Klärungen (#1326, #1327, #1330).</p>';
+  html += '<div class="filters"><span class="seg"><button data-act="groupBy" data-value="area" aria-pressed="' + (view.groupBy === 'area') + '">je Bereich</button><button data-act="groupBy" data-value="person" aria-pressed="' + (view.groupBy === 'person') + '">je Person und Ort</button></span><span class="legend" style="margin:0">' + groups.length + ' Vorarbeiten</span></div>';
+  html += '<div class="groups">';
+  for (const g of groups) {
+    const who = [...g.who].map((w) => M.WHO[w]).join(' und ');
+    html += '<div class="group"><h4>' + esc(g.title) + '</h4><div class="meta">' + g.entries.length + ' Abläufe · ≈ ' + h(g.minutes) + (view.groupBy === 'area' ? ' · ' + who : '') + '</div><ul>';
+    for (const e of g.entries) {
+      const extra = view.groupBy === 'area' ? M.WHO[e.d.who] + ' · ' + M.WHERE[e.d.where] : areaTitle(e.item.area);
+      html += '<li><button class="link" data-act="goto" data-id="' + e.item.id + '">' + fmt(e.item.title) + '</button> <span class="m">' + M.DEPTH[e.d.depth].label + ' · ' + esc(extra) + '</span></li>';
+    }
+    html += '</ul></div>';
+  }
+  return html + '</div>';
+}
+
+// ---------- tab: recheck ----------
+function renderRecheck() {
+  const r = M.recheck(state);
+  const li = (e, extra) => '<li><button class="link" data-act="goto" data-id="' + e.item.id + '">' + fmt(e.item.title) + '</button> <span class="m">' + extra(e) + '</span></li>';
+  let html = '<p class="note">Die Nachprüfung an rc.0 (Fr 04.12. und Mo 07.12.) prüft, was erst dann geht, in seiner Tiefe, dazu die Bereiche, die ein Fix seit der Vorprüfung berührt hat, und den Smoke-Test (je ≈ ' + M.SMOKE_MINUTES + ' min). Ein Fix nach rc.0 ergibt rc.1 und noch eine Runde aus betroffenen Bereichen und Smoke-Test. Welche Bereiche berühren Fixe?</p>';
+  html += '<div class="area-picks">' + AREAS.map((a) => '<label><input type="checkbox" data-act="recheckArea" data-area="' + a.key + '"' + (state.recheckAreas.includes(a.key) ? ' checked' : '') + '> ' + esc(a.title) + '</label>').join('') + '</div>';
+  html += '<div class="stats" style="margin-bottom:14px">' +
+    '<div class="stat' + (r.minutes > 12 * 60 ? ' warn' : '') + '"><div class="k">Nachprüfung</div><div class="v">' + (r.later.length + r.affected.length + r.smoke.length) + ' · ' + h(r.minutes) + '</div></div>' +
+    '<div class="stat"><div class="k">Erst an rc.0</div><div class="v">' + r.later.length + '</div></div>' +
+    '<div class="stat"><div class="k">Von Fixen betroffen</div><div class="v">' + r.affected.length + '</div></div>' +
+    '<div class="stat"><div class="k">Smoke-Test</div><div class="v">' + r.smoke.length + '</div></div></div>';
+  html += '<div class="groups">';
+  html += '<div class="group"><h4>Erst an rc.0 prüfbar</h4><ul>' + (r.later.length ? r.later.map((e) => li(e, (x) => M.DEPTH[x.d.depth].label + ' · ' + M.WHO[x.d.who] + ' · ' + M.WHERE[x.d.where] + (x.item.pending ? ' · PR offen' : ''))).join('') : '<li class="m">Nichts.</li>') + '</ul></div>';
+  html += '<div class="group"><h4>Von Fixen betroffen</h4><ul>' + (r.affected.length ? r.affected.map((e) => li(e, (x) => M.DEPTH[x.d.depth].label + ' · ' + M.WHO[x.d.who] + ' · ' + M.WHERE[x.d.where])).join('') : '<li class="m">Noch kein Bereich gewählt.</li>') + '</ul></div>';
+  html += '<div class="group"><h4>Smoke-Test</h4><ul>' + r.smoke.map((e) => li(e, (x) => M.WHO[x.d.who] + ' · ' + M.WHERE[x.d.where])).join('') + '</ul></div>';
+  return html + '</div>';
+}
+
+// ---------- tab: issues ----------
+function renderIssues(s) {
+  const li = (cls, e, prefix) => '<li class="' + cls + '">' + prefix + ' <button class="link" data-act="goto" data-id="' + e.item.id + '">' + fmt(e.item.title) + '</button>: ' + fmt(e.text) + '</li>';
+  let html = '<h3>Zeit</h3><ul class="issue-list">' + (s.timeWarnings.length ? s.timeWarnings.map((t) => '<li class="w">' + fmt(t) + '</li>').join('') : '<li>Beide Stufen passen in ihren Rahmen.</li>') + '</ul>';
+  html += '<h3>Konflikte <span class="legend">(Regeln von ibus und der Karte #1324 verletzt)</span></h3><ul class="issue-list">' + (s.conflicts.length ? s.conflicts.map((e) => li('c', e, '')).join('') : '<li>Keine.</li>') + '</ul>';
+  html += '<h3>Warnungen</h3><ul class="issue-list">' + (s.warnings.length ? s.warnings.map((e) => li('w', e, '')).join('') : '<li>Keine.</li>') + '</ul>';
+  html += '<h3>Offene Fragen <span class="legend">(nur Abläufe im Umfang)</span></h3><ul class="issue-list">' + (s.questions.length ? s.questions.map((e) => li('q', e, '')).join('') : '<li>Keine.</li>') + '</ul>';
+  return html;
+}
+
+// ---------- tab: markdown ----------
+function renderMarkdown() {
+  const today = new Date().toLocaleDateString('de-DE');
+  return '<p class="note">Die Prüfliste mit deinen Änderungen als Markdown, zum Einfügen als Antwort in #1328. Der Link oben hält denselben Stand.</p>' +
+    '<p><button class="btn primary" data-act="copyMd">Markdown kopieren</button></p><textarea class="md" id="md" readonly>' + esc(M.toMarkdown(state, today)) + '</textarea>';
+}
+
+// ---------- render ----------
+function render() {
+  const s = M.summarize(state);
+  renderSummary(s);
+  renderWalkthroughs();
+  renderTabs(s);
+  const v = document.getElementById('view');
+  v.innerHTML = view.tab === 'list' ? renderList()
+    : view.tab === 'prework' ? renderPrework()
+    : view.tab === 'recheck' ? renderRecheck()
+    : view.tab === 'issues' ? renderIssues(s)
+    : renderMarkdown();
+}
+
+function gotoItem(id) {
+  view.tab = 'list';
+  view.open.add(id);
+  Object.assign(view, { who: 'all', stage: 'all', risk: 'all', onlyFlagged: false, onlyChanged: false, onlyNew: false, q: '' });
+  render();
+  const el = document.getElementById('row-' + id);
+  if (el) el.scrollIntoView({ block: 'center' });
+}
+
+function copy(text, btn) {
+  const done = () => { const t = btn.textContent; btn.textContent = 'Kopiert'; setTimeout(() => (btn.textContent = t), 1200); };
+  if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, () => prompt('Zum Kopieren:', text));
+  else prompt('Zum Kopieren:', text);
+}
+
+// ---------- events ----------
+const DEPTH_LABEL = (k) => M.DEPTH[k].label;
+document.addEventListener('click', (ev) => {
+  const el = ev.target.closest('[data-act]');
+  if (!el || el.disabled) return;
+  const { act, id, field, value } = el.dataset;
+  switch (act) {
+    case 'set': {
+      const it = M.byId[id];
+      const label = it.title + ': ' + (field === 'depth' ? 'Tiefe → ' + DEPTH_LABEL(value) : field === 'stage' ? 'Stufe → ' + M.STAGE[value] : 'Wer → ' + M.WHO[value]);
+      dispatch({ type: 'set', id, field, value, label });
+      break;
+    }
+    case 'resetItem': dispatch({ type: 'resetItem', id, label: M.byId[id].title + ': auf Vorschlag zurück' }); break;
+    case 'resetAll': dispatch({ type: 'resetAll', label: 'Alles auf den Entwurf zurückgesetzt' }); break;
+    case 'areaDepth':
+      dispatch({ type: 'bulk', label: areaTitle(el.dataset.area) + ': alles → ' + DEPTH_LABEL(value),
+        changes: ITEMS.filter((it) => it.area === el.dataset.area && (value === 'skip' || M.inScope(state.decisions[it.id]))).map((it) => ({ id: it.id, field: 'depth', value })) });
+      break;
+    case 'areaReset': {
+      const changes = [];
+      for (const it of ITEMS.filter((x) => x.area === el.dataset.area)) {
+        const p = M.proposalOf(it);
+        for (const f of ['depth', 'who', 'where', 'stage', 'smoke']) changes.push({ id: it.id, field: f, value: p[f] });
+      }
+      dispatch({ type: 'bulk', label: areaTitle(el.dataset.area) + ': auf Vorschlag zurück', changes });
+      break;
+    }
+    case 'toggleOpen': view.open.has(id) ? view.open.delete(id) : view.open.add(id); render(); break;
+    case 'openAll': ITEMS.forEach((it) => view.open.add(it.id)); render(); break;
+    case 'closeAll': view.open.clear(); render(); break;
+    case 'tab': view.tab = el.dataset.tab; render(); break;
+    case 'groupBy': view.groupBy = value; render(); break;
+    case 'goto': gotoItem(id); break;
+    case 'copyLink': copy(location.href, el); break;
+    case 'copyMd': copy(document.getElementById('md').value, el); break;
+    case 'wtPick': view.wt = { scenario: +el.dataset.i, step: -1 }; render(); break;
+    case 'wtStart':
+      view.wt.step = 0;
+      dispatch({ type: 'resetAll', label: 'Durchgang „' + SCENARIOS[view.wt.scenario].title + '“ gestartet: Entwurf geladen' });
+      break;
+    case 'wtStep': {
+      const st = SCENARIOS[view.wt.scenario].steps[+el.dataset.i];
+      view.wt.step++;
+      if (st.tab) view.tab = st.tab;
+      dispatch(st.run());
+      break;
+    }
+  }
+});
+
+document.addEventListener('change', (ev) => {
+  const el = ev.target.closest('[data-act]');
+  if (!el) return;
+  const { act, id, field, key } = el.dataset;
+  const it = id && M.byId[id];
+  switch (act) {
+    case 'setSelect': dispatch({ type: 'set', id, field, value: el.value, label: it.title + ': Wo → ' + M.WHERE[el.value] }); break;
+    case 'setCheck': dispatch({ type: 'set', id, field, value: el.checked, label: it.title + (el.checked ? ': in den Smoke-Test' : ': aus dem Smoke-Test') }); break;
+    case 'setNote': dispatch({ type: 'set', id, field: 'note', value: el.value.trim(), label: it.title + ': Notiz' }); break;
+    case 'view': view[key] = el.value; render(); break;
+    case 'viewCheck': view[key] = el.checked; render(); break;
+    case 'recheckArea': {
+      const areas = el.checked ? state.recheckAreas.concat(el.dataset.area) : state.recheckAreas.filter((a) => a !== el.dataset.area);
+      dispatch({ type: 'setRecheckAreas', areas, label: 'Nachprüfung: ' + (areas.length ? areas.map(areaTitle).join(', ') : 'kein Bereich') });
+      break;
+    }
+  }
+});
+
+document.addEventListener('input', (ev) => {
+  if (ev.target.dataset.act !== 'search') return;
+  view.q = ev.target.value;
+  const pos = ev.target.selectionStart;
+  render();
+  const s = document.querySelector('[data-act="search"]');
+  s.focus();
+  s.setSelectionRange(pos, pos);
+});
+
+render();
+</script>
+</body>
+</html>
