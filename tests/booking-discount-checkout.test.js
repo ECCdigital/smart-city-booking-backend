@@ -156,6 +156,42 @@ describe("ItemCheckoutService booking discount pricing", function () {
     assert.strictEqual(await service.freeBookingAllowed(), true);
     assert.strictEqual(await service.userPriceEur(), 100);
   });
+
+  it("gives each user their own discount when checkouts share a request cache", async function () {
+    sinon
+      .stub(MembershipManager, "getMembershipByTenantAndUserID")
+      .callsFake(async (tenantId, userId) => ({
+        tenantId,
+        userId,
+        roles: userId === USER_ID ? ["role-member"] : [],
+      }));
+    const bookable = discountBookable({
+      bookingDiscounts: {
+        users: [],
+        roles: [{ roleId: "role-member", discountPercent: 50 }],
+      },
+    });
+    const requestCache = new Map();
+    const checkoutOf = async (user) => {
+      const service = new ItemCheckoutService({
+        user,
+        tenantId: TENANT_ID,
+        timeBegin: Date.now(),
+        timeEnd: Date.now() + 3600000,
+        bookableId: bookable.id,
+        amount: 1,
+        requestCache,
+      });
+      await service.init(bookable);
+      return service;
+    };
+
+    const member = await checkoutOf(USER_ID);
+    const other = await checkoutOf("user-2");
+
+    assert.strictEqual(await member.bookingDiscountPercent(), 50);
+    assert.strictEqual(await other.bookingDiscountPercent(), 0);
+  });
 });
 
 describe("BookingCheckout.createBooking — manual create ignores booking discounts", function () {

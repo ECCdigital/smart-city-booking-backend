@@ -1,0 +1,192 @@
+# swagger/routes/bookable-occupancy.yaml
+
+/api/{tenant}/bookables/occupancy:
+  post:
+    tags:
+      - Bookables
+    summary: Occupancy and price of many bookables in one period
+    description: |
+      Checks each bookable as `GET /api/{tenant}/bookables/{id}/occupancy`
+      does (all checks of the checkout for one unit in the period) and, where
+      it is available, adds the price of the period as
+      `POST /api/{tenant}/checkout/validateItem` answers it. Made for the
+      storefront's search with a period: one request per tenant instead of
+      two per bookable.
+
+      Public (`bookable.readPublic`): bookables outside the reach of the
+      request, such as ones the public cannot see, are left out of the
+      answer. At most 100 ids per request.
+
+      Limited per client IP in bookables, not requests: each distinct id
+      counts once, 2000 per 5 minutes
+      (`RATE_LIMIT_PERIOD_OCCUPANCY_PER_IP`). A request refused with `400`
+      or `429` counts nothing.
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - bookableIds
+              - timeBegin
+              - timeEnd
+            properties:
+              bookableIds:
+                type: array
+                minItems: 1
+                maxItems: 100
+                items:
+                  type: string
+              timeBegin:
+                type: number
+                description: Begin of the period, epoch milliseconds
+              timeEnd:
+                type: number
+                description: End of the period, epoch milliseconds, after `timeBegin`
+    responses:
+      "200":
+        description: One entry per bookable found
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                properties:
+                  bookableId:
+                    type: string
+                  title:
+                    type: string
+                    nullable: true
+                  isAvailable:
+                    type: boolean
+                  totalCapacity:
+                    type: number
+                    nullable: true
+                  booked:
+                    type: number
+                    nullable: true
+                  remaining:
+                    type: number
+                    nullable: true
+                  reason:
+                    type: string
+                    description: |
+                      Present where a check refused the period: the type of
+                      that check. The parent or child
+                      that refused is not named, it may be one the request
+                      cannot reach. `error`: the checks could not run (an
+                      external provider failed, the tenant lacks the app a
+                      provider needs), so nothing is known about the period.
+                    enum:
+                      - permission
+                      - availability
+                      - parent-availability
+                      - opening-hours
+                      - booking-duration
+                      - event-date
+                      - event-seats
+                      - child-bookings
+                      - max-booking-date
+                      - insufficient-lead-time
+                      - time-in-past
+                      - time-relation
+                      - price-category
+                      - max-amount
+                      - block-period
+                      - time-period
+                      - error
+                  price:
+                    type: object
+                    nullable: true
+                    description: Price of one unit in the period; null where unavailable or no price can be found
+                    properties:
+                      regularPriceEur:
+                        type: number
+                      userPriceEur:
+                        type: number
+                      regularGrossPriceEur:
+                        type: number
+                      userGrossPriceEur:
+                        type: number
+                      freeBookingAllowed:
+                        type: boolean
+                      bookingDiscountPercent:
+                        type: number
+      "400":
+        description: |
+          `invalid_period_occupancy_request`: no ids, more than 100, or no
+          valid period
+        content:
+          application/json:
+            schema:
+              type: object
+              description: The body of the central error handler.
+              properties:
+                error:
+                  type: string
+                  example: BadRequestError
+                code:
+                  type: string
+                  example: invalid_period_occupancy_request
+                statusCode:
+                  type: integer
+                  example: 400
+                params:
+                  type: object
+                  additionalProperties: true
+      "429":
+        description: |
+          `too_many_requests`: the ids of this request do not fit into what
+          is left of the client IP's 2000 bookables per 5 minutes
+          (`RATE_LIMIT_PERIOD_OCCUPANCY_PER_IP`); no bookable is checked.
+          `Retry-After` (seconds) and `params.retryAfterSeconds` say when
+          they fit.
+        headers:
+          Retry-After:
+            description: Seconds until the ids of the request fit
+            schema:
+              type: integer
+        content:
+          application/json:
+            schema:
+              type: object
+              description: The body of the central error handler.
+              properties:
+                error:
+                  type: string
+                  example: TooManyRequestsError
+                code:
+                  type: string
+                  example: too_many_requests
+                statusCode:
+                  type: integer
+                  example: 429
+                params:
+                  type: object
+                  properties:
+                    retryAfterSeconds:
+                      type: integer
+      "500":
+        description: "`internal_error`: the bookables could not be read"
+        content:
+          application/json:
+            schema:
+              type: object
+              description: The body of the central error handler.
+              properties:
+                error:
+                  type: string
+                  example: InternalError
+                code:
+                  type: string
+                  example: internal_error
+                statusCode:
+                  type: integer
+                  example: 500
+                params:
+                  type: object
+                  additionalProperties: true

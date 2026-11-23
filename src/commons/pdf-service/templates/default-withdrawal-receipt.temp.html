@@ -1,146 +1,151 @@
+<!--MAILBLOCKS:v=1;b64=W3sidHlwZSI6InJvdyIsImNvbHVtbnMiOlt7IndpZHRoIjoxMiwiYmxvY2tzIjpbeyJ0eXBlIjoicmF3SHRtbCIsImh0bWwiOiI8ZGl2IGNsYXNzPVwibWV0YVwiPldpZGVycnVmYmVsZWdudW1tZXI6IHt7d2l0aGRyYXdhbE51bWJlcn19PGJyIC8+QnVjaHVuZ3NudW1tZXI6IHt7Ym9va2luZ0lkfX08YnIgLz57eyNpZiBoYXNPcmlnaW5hbERvY3VtZW50fX1VcnNwcsO8bmdsaWNoZSBSZWNobnVuZ3NudW1tZXI6IHt7b3JpZ2luYWxJbnZvaWNlTnVtYmVyfX08YnIgLz57ey9pZn19e3tsb2NhdGlvbn19LCB7e3dpdGhkcmF3YWxEYXRlfX08L2Rpdj4iLCJpZCI6Ijk5OWIzOGMyLWFmZGYtNDQ3Mi1iZDM0LTY5YzVmNmY3NmI2ZCJ9LHsidHlwZSI6InJhd0h0bWwiLCJodG1sIjoiPGRpdj57e3tpbnZvaWNlQWRkcmVzc319fTwvZGl2PiIsImlkIjoiYWJhMzY1OTgtNWIyMi00NDg5LWIyZDMtYzViNGZjNmRkMzM3In0seyJ0eXBlIjoiaGVhZGluZyIsInRleHQiOiJXaWRlcnJ1ZmJlbGVnIiwibGV2ZWwiOjEsImFsaWduIjoibGVmdCIsImlkIjoiZTJkMDJkMzItMWQ0NC00NDNiLWI3MjAtMDMxZGI5MjFlYmE0In0seyJ0eXBlIjoidGV4dCIsImh0bWwiOiI8cD5TZWhyIGdlZWhydGUgRGFtZW4gdW5kIEhlcnJlbiw8YnIgLz48YnIgLz5oaWVybWl0IGJlc3TDpHRpZ2VuIHdpciBJaHJlbiBXaWRlcnJ1ZiBkZXIgQnVjaHVuZyA8c3Ryb25nPjxzcGFuIGRhdGEtdmFyaWFibGU9XCJib29raW5nSWRcIiBkYXRhLXRyaXBsZT1cImZhbHNlXCIgZGF0YS1sYWJlbD1cIkJ1Y2h1bmdzLUlEXCIgY2xhc3M9XCJtYWlsLXZhcmlhYmxlLWNoaXBcIiBjb250ZW50ZWRpdGFibGU9XCJmYWxzZVwiPnt7Ym9va2luZ0lkfX08L3NwYW4+PC9zdHJvbmc+LiBEdXJjaCBkZW4gV2lkZXJydWYgZW50c3RlaGVuIElobmVuIGtlaW5lIEtvc3Rlbi48L3A+IiwiYWxpZ24iOiJsZWZ0IiwiaWQiOiIyYmRiMmUyMy0xYTI2LTRkNmMtYWViZi1lOWY3NjM1ZWIwYzgifSx7InR5cGUiOiJyYXdIdG1sIiwiaHRtbCI6IjxkaXYgY2xhc3M9XCJjYW5jZWxsYXRpb24tbm90ZVwiPjxzdHJvbmc+V2lkZXJydWYgYW5nZW5vbW1lbiBhbTo8L3N0cm9uZz4ge3t3aXRoZHJhd2FsRGF0ZX19PC9kaXY+IiwiaWQiOiI0NjEzNDI1OS0xMTNiLTQ3Y2MtYmY3Ni1jMDk2ZjE1NzNhODYifSx7InR5cGUiOiJyYXdIdG1sIiwiaHRtbCI6Int7I2lmIGFscmVhZHlQYWlkfX08ZGl2IGNsYXNzPVwicmVmdW5kLW5vdGVcIj5EZXIgYmVyZWl0cyBnZXphaGx0ZSBCZXRyYWcgaW4gSMO2aGUgdm9uIDxzdHJvbmc+e3tyZWZ1bmRBbW91bnR9fTwvc3Ryb25nPiB3aXJkIElobmVuIHZvbGxzdMOkbmRpZyBlcnN0YXR0ZXQuPC9kaXY+e3tlbHNlfX17eyNpZiBoYXNPcmlnaW5hbERvY3VtZW50fX08cD5EaWUgUmVjaG51bmcgbWl0IGRlciBOdW1tZXIgPHN0cm9uZz57e29yaWdpbmFsSW52b2ljZU51bWJlcn19PC9zdHJvbmc+IHZvbSB7e29yaWdpbmFsSW52b2ljZURhdGV9fSB3aXJkIGRhbWl0IHZvbGxzdMOkbmRpZyBhdWZnZWhvYmVuOyBkZXIgUmVjaG51bmdzYmV0cmFnIGluIEjDtmhlIHZvbiA8c3Ryb25nPnt7cmVmdW5kQW1vdW50fX08L3N0cm9uZz4gZW50ZsOkbGx0LjwvcD57e2Vsc2V9fTxwPkRlciBlaW5nZXRyYWdlbmUgUmVjaG51bmdzYmV0cmFnIGluIEjDtmhlIHZvbiA8c3Ryb25nPnt7cmVmdW5kQW1vdW50fX08L3N0cm9uZz4gZW50ZsOkbGx0LjwvcD57ey9pZn19e3svaWZ9fSIsImlkIjoiYjM5NDVmZjItYjdmOC00ODM5LWJjNWYtM2Y3ZTE3NTYzOTQxIn0seyJ0eXBlIjoicmF3SHRtbCIsImh0bWwiOiJ7e3ttYWluQ29udGVudH19fSIsImlkIjoiZWY0ZjYyZWItMTRiNy00YzhlLTlhZmItYmZiOGI4ZWM3YzgyIn0seyJ0eXBlIjoidGV4dCIsImh0bWwiOiI8cD5CZWkgUsO8Y2tmcmFnZW4genUgZGllc2VtIFdpZGVycnVmYmVsZWcgd2VuZGVuIFNpZSBzaWNoIGJpdHRlIHVudGVyIEFuZ2FiZSBkZXIgV2lkZXJydWZiZWxlZ251bW1lciA8c3Ryb25nPjxzcGFuIGRhdGEtdmFyaWFibGU9XCJ3aXRoZHJhd2FsTnVtYmVyXCIgZGF0YS10cmlwbGU9XCJmYWxzZVwiIGRhdGEtbGFiZWw9XCJXaWRlcnJ1ZmJlbGVnbnVtbWVyXCIgY2xhc3M9XCJtYWlsLXZhcmlhYmxlLWNoaXBcIiBjb250ZW50ZWRpdGFibGU9XCJmYWxzZVwiPnt7d2l0aGRyYXdhbE51bWJlcn19PC9zcGFuPjwvc3Ryb25nPiBhbiB1bnMuPC9wPiIsImFsaWduIjoibGVmdCIsImlkIjoiYjU1NTI5OWEtN2E4MS00OGQ5LWIzY2UtNWJhMjk5NzRhYjE1In0seyJ0eXBlIjoidGV4dCIsImh0bWwiOiI8cCBzdHlsZT1cImNvbG9yOiM4ODg7Zm9udC1zaXplOjEycHg7XCI+RGllc2VzIFNjaHJlaWJlbiB3dXJkZSBtYXNjaGluZWxsIGVyc3RlbGx0IHVuZCBpc3Qgb2huZSBVbnRlcnNjaHJpZnQgZ8O8bHRpZy48L3A+IiwiYWxpZ24iOiJsZWZ0IiwiaWQiOiJmYTgzNzdjYy00MWYwLTRlOTctYjU1Ny1lNWFiYjQ3MGFlZTgifV19XSwiaWQiOiJjNzcxNWJlNy0yN2RmLTRkNzUtYWRlYy0yZWRlZGZmZDM1M2UifV0=-->
 <!doctype html>
 <html lang="de">
   <head>
     <meta charset="utf-8" />
-    <title>{{ title }}</title>
+    <title>Widerrufbeleg {{withdrawalNumber}}</title>
     <style>
-      body {
-        margin: 0;
-      }
-      .invoice-box {
-        font-size: 12px;
-        line-height: 16px;
-        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-        padding-bottom: 20px;
-      }
-      .invoice-box table {
-        width: 100%;
-        line-height: inherit;
-        text-align: left;
-        border-collapse: collapse;
-      }
-      .invoice-box table td,
-      .invoice-box table th {
-        padding: 5px;
-        vertical-align: top;
-      }
-      .invoice-box table tr.heading td {
-        background: #eee;
-        border-bottom: 1px solid #ddd;
-        font-weight: bold;
-      }
-      /* Position tables ({{{mainContent}}}) use table.pdf-items styling from PRINT_CSS */
-      .header {
-        font-weight: bold;
-        font-size: x-large;
-        padding-bottom: 20px;
-      }
-      .header-address {
-        text-align: left;
-        padding-bottom: 20px;
-      }
-      .details {
-        line-height: 14px;
-        font-size: 10px;
-        text-align: right;
-      }
-      .information {
-        padding-top: 10px;
-        padding-bottom: 10px;
-        line-height: 20px;
-        font-size: 12px;
-        text-align: left;
-      }
-      .cancellation-note {
-        margin-top: 10px;
-        padding: 10px;
-        border-left: 4px solid #c0392b;
-        background: #fdecea;
-        font-size: 12px;
-        line-height: 18px;
-      }
-      .refund-note {
-        margin-top: 10px;
-        padding: 10px;
-        border-left: 4px solid #2e7d32;
-        background: #eaf5ea;
-        font-size: 12px;
-        line-height: 18px;
-      }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #222; font-size: 14px; line-height: 1.5; padding: 1cm; }
+      h1, h2, h3 { color: #1976d2; }
+      table { border-collapse: collapse; }
+      .meta { text-align: right; font-size: 12px; color: #666; margin-bottom: 16px; }
+      .info-box { padding: 12px; background: #f9f9f9; border-radius: 4px; margin: 12px 0; }
+      .cancellation-note { margin-top: 10px; padding: 10px; border-left: 4px solid #c0392b; background: #fdecea; font-size: 12px; line-height: 18px; }
+      .refund-note { margin-top: 10px; padding: 10px; border-left: 4px solid #2e7d32; background: #eaf5ea; font-size: 12px; line-height: 18px; }
+      .booking-detail, .booked-items { width: 100%; }
+      .booking-detail td, .booking-detail th,
+      .booked-items td, .booked-items th { padding: 8px; border-bottom: 1px solid #ddd; }
+      
+  table.pdf-items { width: 100%; border-collapse: collapse; }
+  table.pdf-items--summary td {
+    padding: 3px 6px;
+    font-size: 10px;
+    line-height: 1.4;
+    vertical-align: top;
+    border-bottom: 1px solid #ddd;
+  }
+  table.pdf-items--summary td.label { width: 40%; color: #333; }
+  table.pdf-items--summary td.value { text-align: right; }
+  table.pdf-items--summary tr.totals td { font-weight: bold; }
+  table.pdf-items--summary tr.objects td.value { line-height: 1.5; }
+  table.pdf-items--summary tr.booking-sep td {
+    border-top: 2px solid #bbb;
+    padding-top: 6px;
+    border-bottom: none;
+  }
+  table.pdf-items--compact th,
+  table.pdf-items--compact td {
+    padding: 2px 6px;
+    font-size: 9px;
+    line-height: 1.4;
+    vertical-align: top;
+    border: none;
+    text-align: left;
+  }
+  table.pdf-items--compact thead th {
+    background: #eee;
+    border-bottom: 1px solid #bbb;
+    font-weight: bold;
+  }
+  table.pdf-items--compact tbody tr.item:nth-child(even) td { background: #f5f5f5; }
+  table.pdf-items--compact .num { text-align: right; white-space: nowrap; }
+  table.pdf-items--compact td.sub {
+    color: #555;
+    font-size: 8px;
+    padding-top: 0;
+    padding-bottom: 4px;
+  }
+  table.pdf-items--compact tr.coupon td { color: #555; }
+  table.pdf-items--compact tr.totals-sub td {
+    padding-top: 4px;
+    border-top: 2px solid #000;
+    text-align: right;
+    color: #444;
+  }
+  table.pdf-items--compact tr.brutto td {
+    font-weight: bold;
+    font-size: 10px;
+    border-bottom: 2px solid #000;
+    padding-bottom: 4px;
+    background: none;
+    text-align: right;
+  }
+  table.pdf-items--compact tr.brutto td:first-child,
+  table.pdf-items--compact tr.totals-sub td:first-child { text-align: left; }
+  table.pdf-items--compact tr.meta td {
+    font-size: 10px;
+    color: #444;
+    background: none;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 4px;
+  }
+  table.pdf-items--detailed th,
+  table.pdf-items--detailed td {
+    padding: 4px 6px;
+    font-size: 10px;
+    line-height: 1.4;
+    vertical-align: top;
+    border: none;
+    text-align: left;
+  }
+  table.pdf-items--detailed thead th {
+    background: #eee;
+    border-bottom: 1px solid #bbb;
+    font-weight: bold;
+  }
+  table.pdf-items--detailed tbody tr.item:nth-child(even) td { background: #f5f5f5; }
+  table.pdf-items--detailed .num { text-align: right; white-space: nowrap; }
+  .pdf-booking-meta {
+    font-size: 10px;
+    color: #666;
+    line-height: 1.6;
+    margin: 0 0 8px;
+  }
+  table.pdf-items--detailed td.sub {
+    color: #555;
+    font-size: 9px;
+    padding-top: 0;
+    padding-bottom: 6px;
+  }
+  table.pdf-items--detailed ul.item-list {
+    margin: 4px 0 0;
+    padding-left: 18px;
+  }
+  table.pdf-items--detailed tr.coupon td { color: #555; }
+  table.pdf-items--detailed tr.netto td {
+    padding-top: 8px;
+    border-top: 2px solid #000;
+  }
+  table.pdf-items--detailed tr.netto td,
+  table.pdf-items--detailed tr.mwst td,
+  table.pdf-items--detailed tr.brutto td { text-align: right; }
+  table.pdf-items--detailed tr.netto td:first-child,
+  table.pdf-items--detailed tr.mwst td:first-child,
+  table.pdf-items--detailed tr.brutto td:first-child { text-align: left; }
+  table.pdf-items--detailed tr.brutto td {
+    font-weight: bold;
+    border-bottom: 2px solid #000;
+    padding-bottom: 4px;
+  }
+
     </style>
   </head>
   <body>
     <template data-pdf-footer>
-      <div style="display: flex; justify-content: space-between; width: 100%">
-        <span>{{ title }} {{ withdrawalNumber }}</span>
-        <span>{{> pdfPageNumbers }}</span>
+      <div data-pdf-wrapper style="width: 100%; font-size: 8px; color: #666; padding: 0 10mm;">
+        <div style="display: flex; justify-content: space-between"><span>{{title}} {{withdrawalNumber}}</span><span>Seite <span class="pageNumber"></span> von <span class="totalPages"></span></span></div>
       </div>
     </template>
-
-    <div class="invoice-box">
-      <table>
-        <tr>
-          <td>
-            <div class="header">Smart City Booking</div>
-            <div class="header-address">{{{invoiceAddress}}}</div>
-          </td>
-          <td>
-            <div class="details">
-              Widerrufbelegnummer: {{withdrawalNumber}} <br />
-              Buchungsnummer: {{bookingId}} <br />
-              {{#if hasOriginalDocument}}
-              Ursprüngliche Rechnungsnummer: {{originalInvoiceNumber}} <br />
-              {{/if}}
-              <br />
-              {{location}}, {{withdrawalDate}}
-            </div>
-          </td>
-        </tr>
-      </table>
-      <div class="information">
-        <span style="font-size: larger; font-weight: bolder">{{ title }}</span>
-        <p>
-          Sehr geehrte Damen und Herren,<br /><br />
-          hiermit bestätigen wir Ihren Widerruf der Buchung
-          <strong>{{bookingId}}</strong>. Durch den Widerruf entstehen Ihnen
-          keine Kosten.
-        </p>
-        <div class="cancellation-note">
-          <strong>Widerruf angenommen am:</strong> {{withdrawalDate}}
-        </div>
-        {{#if alreadyPaid}}
-        <div class="refund-note">
-          Der bereits gezahlte Betrag in Höhe von
-          <strong>{{refundAmount}}</strong> wird Ihnen vollständig erstattet.
-        </div>
-        {{else}} {{#if hasOriginalDocument}}
-        <p>
-          Die Rechnung mit der Nummer
-          <strong>{{originalInvoiceNumber}}</strong> vom
-          {{originalInvoiceDate}} wird damit vollständig aufgehoben; der
-          Rechnungsbetrag in Höhe von <strong>{{refundAmount}}</strong>
-          entfällt.
-        </p>
-        {{else}}
-        <p>
-          Der eingetragene Rechnungsbetrag in Höhe von
-          <strong>{{refundAmount}}</strong> entfällt.
-        </p>
-        {{/if}} {{/if}}
-      </div>
-
-      {{{ mainContent }}}
-
-      <div class="information">
-        Bei Rückfragen zu diesem Widerrufbeleg wenden Sie sich bitte unter
-        Angabe der Widerrufbelegnummer <strong>{{withdrawalNumber}}</strong>
-        an uns.
-      </div>
-
-      <div class="information">
-        Dieses Schreiben wurde maschinell erstellt und ist ohne Unterschrift
-        gültig.
-      </div>
-    </div>
+<div style="font-family:inherit; color:#222222; line-height:1.5; font-size:16px;">
+<div style=""><table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%; border-collapse:collapse;"><tr><td style="vertical-align:top; width:100%;" width="100%"><div class="meta">Widerrufbelegnummer: {{withdrawalNumber}}<br>Buchungsnummer: {{bookingId}}<br>{{#if hasOriginalDocument}}Ursprüngliche Rechnungsnummer: {{originalInvoiceNumber}}<br>{{/if}}{{location}}, {{withdrawalDate}}</div>
+<div>{{{invoiceAddress}}}</div>
+<h1 style="margin:0 0 12px; color:#222222; text-align:left; font-size:26px; line-height:1.3;">Widerrufbeleg</h1>
+<div style="text-align:left; color:#222222; font-size:16px; line-height:1.5;"><p>Sehr geehrte Damen und Herren,<br><br>hiermit bestätigen wir Ihren Widerruf der Buchung <strong>{{bookingId}}</strong>. Durch den Widerruf entstehen Ihnen keine Kosten.</p></div>
+<div class="cancellation-note"><strong>Widerruf angenommen am:</strong> {{withdrawalDate}}</div>
+{{#if alreadyPaid}}<div class="refund-note">Der bereits gezahlte Betrag in Höhe von <strong>{{refundAmount}}</strong> wird Ihnen vollständig erstattet.</div>{{else}}{{#if hasOriginalDocument}}<p>Die Rechnung mit der Nummer <strong>{{originalInvoiceNumber}}</strong> vom {{originalInvoiceDate}} wird damit vollständig aufgehoben; der Rechnungsbetrag in Höhe von <strong>{{refundAmount}}</strong> entfällt.</p>{{else}}<p>Der eingetragene Rechnungsbetrag in Höhe von <strong>{{refundAmount}}</strong> entfällt.</p>{{/if}}{{/if}}
+{{{mainContent}}}
+<div style="text-align:left; color:#222222; font-size:16px; line-height:1.5;"><p>Bei Rückfragen zu diesem Widerrufbeleg wenden Sie sich bitte unter Angabe der Widerrufbelegnummer <strong>{{withdrawalNumber}}</strong> an uns.</p></div>
+<div style="text-align:left; color:#222222; font-size:16px; line-height:1.5;"><p style="color:#888;font-size:12px;">Dieses Schreiben wurde maschinell erstellt und ist ohne Unterschrift gültig.</p></div></td></tr></table></div>
+</div>
   </body>
 </html>
