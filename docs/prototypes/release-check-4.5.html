@@ -157,7 +157,7 @@
 <div class="proto"><div class="wrap"><b>PROTOTYP zum Wegwerfen</b> · Klärung <a style="color:#a5d8ff" href="https://github.com/ECCdigital/tickets/issues/1328">ECCdigital/tickets#1328</a> zur Karte <a style="color:#a5d8ff" href="https://github.com/ECCdigital/tickets/issues/1324">Release-Prüfung Biletado 4.5.0</a> · Jede Änderung steht in der Adresse dieser Seite: Link kopieren reicht zum Teilen.</div></div>
 
 <header class="wrap">
-  <h1>Prüfliste der Release-Prüfung 4.5.0 – erster Entwurf</h1>
+  <h1>Prüfliste der Release-Prüfung 4.5.0 – Stand 23.11., entschieden</h1>
   <p class="lead"><b>Frage aus #1328:</b> Welche Abläufe prüft die Release-Prüfung von Biletado 4.5.0, wie tief, wer prüft sie (der Agent im Browser auf ibus oder lokal an Dumps, oder ein Mensch), und in welcher Stufe: in der <b>Vorprüfung</b> in KW 48 am Stand vom 24.11. oder erst in der <b>Nachprüfung</b> an rc.0? Unten steht ein Vorschlag für jeden Ablauf, Basis ist die Prüfliste von 4.4. Stell um, was nicht passt. Die Leiste oben zeigt nach jedem Klick Aufwand je Stufe, Konflikte und offene Fragen.</p>
   <div class="tl"><span class="now">Mo 23.11. Prüfliste</span><span>Di 24.11. SHA festhalten, ibus</span><span>Di–Fr KW 48 Vorprüfung</span><span>Do 03.12. Stichtag</span><span>Fr 04.12. rc.0, Nachprüfung</span><span>Mo 07.12. Nachprüfung, Go/No-Go</span><span>ab Di 08.12. Deploy-Abende</span></div>
   <details class="frame">
@@ -223,11 +223,10 @@ const ITEMS = [
     'Dump je Instanz wiederherstellen, Backend vom Stand der Vorprüfung starten: `02-11-2026-cancellation-refund-tiers-in-hours` und `18-11-2026-add-bookable-event-index` laufen, ein zweiter Lauf ändert nichts, Staffeln vorher und nachher vergleichen. Rückweg: `down` der Staffeln, dann das Backend `v4.4.0-rc.4` auf dem Ergebnis.',
     'Die Staffel-Migration ist breaking und der Rückweg rundet ab. Das ist die Klärung „Übersteht der Bestand jeder Instanz das Upgrade …?“.',
     { kind: 'new', ticket: 1330, needs: ['customerData'], riskWhy: 'Jede fehlgeschlagene Migration und ein kaputter Rückweg sind Release-Blocker.' }),
-  I('up-template', 'upgrade', 'Gespeichertes Standard-`cancellationTemplate`: Stornobeleg sagt „0 Kalendertage“', 'hoch', 'flow agent local vor',
+  I('up-template', 'upgrade', 'Gespeichertes Standard-`cancellationTemplate`: Stornobeleg sagt „0 Kalendertage“', 'mittel', 'smoke agent local vor',
     'An der migrierten Kopie eines Dumps einen Mandanten mit gespeichertem Standard-Template finden, 13 h vor Beginn stornieren: Der Beleg zeigt ohne Abhilfe „0 Kalendertage“. Dann die Abhilfe aus `docs/migrations/v4.5-upgrade.md` anwenden (Template ersetzen oder leeren) und erneut stornieren.',
     'Jeder seit 4.4.0 final angelegte Mandant speichert das Template, an den Instanzen also wenige, aber genau die neuen Kunden. Welche es sind, zählt die Klärung zu den Instanzen (#1325).',
-    { kind: 'new', needs: ['customerData'], riskWhy: 'Ein falscher Stornobeleg geht an Kund:innen und lässt sich nicht zurückholen.',
-      question: 'Wendet der Deploy-Abend die Abhilfe per Skript an, oder ändert ein Fix die Migration, sodass sie das Standard-Template selbst ersetzt? Gehört zur Deploy-Bereitschaft, die Prüfung zeigt nur, ob die Abhilfe reicht.' }),
+    { kind: 'new', needs: ['customerData'], riskWhy: 'Entschieden am 23.11.: Die Lücke bleibt und wird bei Bedarf von Hand geschlossen, also kein Release-Blocker. Geprüft wird nur, dass die Abhilfe von Hand reicht.' }),
   I('up-mixed', 'upgrade', 'Gemischte Versionen am Deploy-Abend', 'mittel', 'smoke agent local vor',
     'Lokal Backend 4.5 neben Admin UI `v4.4.0-rc.3` und Storefront `v1.3.0-rc.2`, und umgekehrt: Was sieht ein Kunde in den Minuten bis alle drei laufen? Erwartet laut Upgrade-Hinweis `500` bei Storno bis zur Migration und `400` beim Speichern des Mandanten aus einer alten Admin UI. Dazu: Zeigt eine alte Admin UI den Marker `__stored_secret__` als Klartext?',
     'Laut Upgrade-Hinweis rollen die drei zusammen aus. Wie lange das Fenster wirklich ist und ob der Abend eine Wartungsseite braucht, zeigt nur der Versuch.',
@@ -338,14 +337,14 @@ const ITEMS = [
     'Rolle mit Mitgliedern oder offenen Einladungen löschen: abgelehnt mit Grund, kein stilles Schließen. Ohne Bezug wie vorher.',
     'PR von außen, am 23.11. offen. Ob ablehnen oder aufräumen, entscheidet das Review.',
     { pending: 'BE#396, AU#336' }),
-  I('a-delown', 'admin', 'Buchungen löschen mit `deleteOwn`', 'mittel', 'flow agent ibus nach',
+  I('a-delown', 'admin', 'Buchungen löschen mit `deleteOwn`', 'mittel', 'skip agent ibus nach',
     'Eigene Buchung in jedem Status löschen mit dem Recht zum Löschen, Warnung im Dialog, fremde nicht.',
     'Offen (#635), steht nicht im Spec von #1200.',
-    { pending: 'BE#425, AU#361', question: 'Kommt Buchungen löschen mit `deleteOwn` in 4.5.0? Entscheidet #1200, sonst entfällt der Ablauf.' }),
-  I('a-events', 'admin', 'Veranstaltungsmanagement: Buchungen einer Veranstaltung', 'mittel', 'flow agent ibus nach',
+    { pending: 'BE#425, AU#361', riskWhy: 'Entschieden am 23.11.: nicht in der Prüfliste, steht nicht im Spec von 4.5.0.' }),
+  I('a-events', 'admin', 'Veranstaltungsmanagement: Buchungen einer Veranstaltung', 'mittel', 'skip agent ibus nach',
     'Wer eine Veranstaltung ändern darf, sieht ihre Buchungen, auch ohne Recht auf die Buchungsliste. Editor der Veranstaltung wie bei Angeboten.',
     'Offen (BE#418 zu #1308, AU#356), steht nicht im Spec von #1200.',
-    { pending: 'BE#418, AU#356', question: 'Kommt das Veranstaltungsmanagement in 4.5.0? Entscheidet #1200, sonst entfällt der Ablauf.' }),
+    { pending: 'BE#418, AU#356', riskWhy: 'Entschieden am 23.11.: nicht in der Prüfliste, steht nicht im Spec von 4.5.0.' }),
   I('a-sie', 'admin', 'Anrede mit „Sie“ in der Admin UI', 'niedrig', 'smoke agent ibus vor',
     'Stichprobe: Hinweise zur Blacklist, Einladungsdialog, Vorlagen-Editoren, leere Listen.',
     'Nur Texte (#1183).',
