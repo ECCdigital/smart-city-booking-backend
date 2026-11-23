@@ -686,31 +686,38 @@ class ItemCheckoutService {
       );
     }
 
-    const bookingDurationInMinutes = this.getBilledDuration();
+    const bookingDurationInMinutes = this.getBookingDuration();
+    const billedDurationInMinutes = this.getBilledDuration();
 
+    // The value a Tarif's bounds are checked against.
     let valueToCheck;
     switch (priceType) {
       case "per-hour":
-        valueToCheck = bookingDurationInMinutes / 60;
+        // Started hours count for an hour Tarif only: a Tagespauschale is
+        // not billed by the hour, so its bounds take the minutes as they are.
+        valueToCheck = ({ fixedPrice }) =>
+          (fixedPrice ? bookingDurationInMinutes : billedDurationInMinutes) /
+          60;
         break;
       case "per-day":
-        valueToCheck = bookingDurationInMinutes / 60 / 24;
+        valueToCheck = () => bookingDurationInMinutes / 60 / 24;
         break;
       case "per-item":
-        valueToCheck = this.amount;
+        valueToCheck = () => this.amount;
         break;
       case "per-square-meter":
-        valueToCheck = this.amount;
+        valueToCheck = () => this.amount;
         break;
       default:
         return null;
     }
 
-    const category = priceCategoriesToCheck.find(({ interval }) => {
-      const { start, end } = interval;
+    const category = priceCategoriesToCheck.find((pc) => {
+      const { start, end } = pc.interval;
+      const value = valueToCheck(pc);
       return (
-        (start === null || start === "" || start <= valueToCheck) &&
-        (end === null || end === "" || end >= valueToCheck)
+        (start === null || start === "" || start <= value) &&
+        (end === null || end === "" || end >= value)
       );
     });
 

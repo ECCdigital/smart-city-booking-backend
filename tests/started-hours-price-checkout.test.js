@@ -168,6 +168,18 @@ describe("hour price counting started hours", function () {
     assert.strictEqual(price, 24);
   });
 
+  it("picks a Tagespauschale Tarif by the minutes, not the counted hours", async function () {
+    const bookable = perHourBookable({
+      priceCountStartedHours: true,
+      priceCategories: [
+        category(50, { start: 0, end: 2.5 }, true),
+        category(80, { start: 3, end: null }, true),
+      ],
+    });
+    const price = await priceOf(bookable, at(1, 10), at(1, 12, 10));
+    assert.strictEqual(price, 50);
+  });
+
   it("leaves a Tagespauschale untouched", async function () {
     const price = await priceOf(
       perHourBookable({
