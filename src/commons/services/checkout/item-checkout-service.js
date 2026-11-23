@@ -513,6 +513,28 @@ class ItemCheckoutService {
     return minutes;
   }
 
+  /**
+   * The hours an hour price bills for one day of the booking: by the minute
+   * its share of the booking; with `priceCountStartedHours` the started
+   * hours of the booking that begin on that day, each in full at that day's
+   * Tarif. A started hour across midnight belongs to the day it begins on.
+   */
+  _billedHours(segment) {
+    if (!this.originBookable.priceCountStartedHours) {
+      return this.getBookingDuration(segment.start, segment.end) / 60;
+    }
+    const begin = new Date(this.timeBegin).getTime();
+    const startedHours = this.getBilledDuration() / 60;
+    let hours = 0;
+    for (let hour = 0; hour < startedHours; hour++) {
+      const hourBegin = begin + hour * 3600000;
+      if (hourBegin >= segment.start && hourBegin < segment.end) {
+        hours++;
+      }
+    }
+    return hours;
+  }
+
   async isTimeRelated() {
     return isTimeRelatedBookable(this.originBookable);
   }
@@ -553,25 +575,18 @@ class ItemCheckoutService {
 
   async _internalRegularPriceEur() {
     const segments = this._splitIntoDailySegments();
-    // The rest of a started hour lies at the end of the booking, so the
-    // last day bills it, not every day the booking touches.
-    const startedHourRest =
-      this.getBilledDuration() - this.getBookingDuration();
 
     const prices = [];
 
-    for (const [index, segment] of segments.entries()) {
+    for (const segment of segments) {
       const priceCategory = this.getPriceCategory(segment.start, segment.end);
 
       let multiplier;
       if (!priceCategory?.fixedPrice) {
         switch (this.originBookable.priceType) {
-          case "per-hour": {
-            const rest = index === segments.length - 1 ? startedHourRest : 0;
-            multiplier =
-              (this.getBookingDuration(segment.start, segment.end) + rest) / 60;
+          case "per-hour":
+            multiplier = this._billedHours(segment);
             break;
-          }
           case "per-day":
             multiplier =
               this.getBookingDuration(segment.start, segment.end) / 1440;

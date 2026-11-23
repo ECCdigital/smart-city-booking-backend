@@ -113,6 +113,49 @@ describe("hour price counting started hours", function () {
     assert.strictEqual(price, 10);
   });
 
+  describe("across midnight into another Tarif", function () {
+    // Fri 2026-09-04, Sat 2026-09-05.
+    const FRIDAY = 4;
+    const SATURDAY = 5;
+    const weekdays = (priceEur, saturday) =>
+      perHourBookable({
+        priceCountStartedHours: true,
+        priceCategories: [
+          { ...category(priceEur), weekdays: [1, 2, 3, 4, 5] },
+          { ...saturday, weekdays: [6] },
+        ],
+      });
+
+    it("bills the started hour that begins on Friday at Friday's Tarif, beside Saturday's Tagespauschale", async function () {
+      // 22:30 and 23:30 begin on Friday: 2 × 10 €, Saturday 50 €.
+      const price = await priceOf(
+        weekdays(10, category(50, {}, true)),
+        at(FRIDAY, 22, 30),
+        at(SATURDAY, 0, 10),
+      );
+      assert.strictEqual(price, 70);
+    });
+
+    it("bills no Saturday hour when no started hour begins on Saturday", async function () {
+      const price = await priceOf(
+        weekdays(10, category(20)),
+        at(FRIDAY, 22, 30),
+        at(SATURDAY, 0, 10),
+      );
+      assert.strictEqual(price, 20);
+    });
+
+    it("bills a started hour that begins on Saturday at Saturday's Tarif", async function () {
+      // 23:30 begins on Friday (10 €), 00:30 on Saturday (20 €).
+      const price = await priceOf(
+        weekdays(10, category(20)),
+        at(FRIDAY, 23, 30),
+        at(SATURDAY, 1, 10),
+      );
+      assert.strictEqual(price, 30);
+    });
+  });
+
   it("picks the Tarif by the counted hours", async function () {
     const bookable = perHourBookable({
       priceCountStartedHours: true,
