@@ -1,4 +1,5 @@
 const GroupBookingManager = require("../../../commons/data-managers/group-booking-manager");
+const BookingManager = require("../../../commons/data-managers/booking-manager");
 const bunyan = require("bunyan");
 const { scopeOf } = require("../../../commons/services/authorization");
 const BookingService = require("../../../commons/services/checkout/booking-service");
@@ -14,6 +15,7 @@ const {
 const {
   groupBookingLifecycle,
   bookingDeletion,
+  assertDeletionConfirmed,
   TRANSITION,
   TRIGGER,
 } = require("../../../commons/services/booking-lifecycle");
@@ -696,6 +698,15 @@ class GroupBookingController {
       if (!groupBooking) {
         return GroupBookingController._notFound(res, groupBookingId);
       }
+      // Every member is checked here, before anything is deleted: a
+      // confirmed or paid one makes the series go only with
+      // `?confirmed=true`, whatever the client has loaded.
+      const members = await BookingManager.getBookings(
+        tenantId,
+        groupBooking.bookingIds,
+        scopeOf(req),
+      );
+      assertDeletionConfirmed(members, req.query.confirmed === "true");
       for (const bookingId of groupBooking.bookingIds) {
         await bookingDeletion.remove(tenantId, bookingId);
         await WorkflowService.removeTask(tenantId, bookingId);
@@ -703,6 +714,9 @@ class GroupBookingController {
       await GroupBookingManager.deleteGroupBooking(tenantId, groupBookingId);
       res.status(200).send(groupBooking);
     } catch (error) {
+      if (error instanceof ConflictError) {
+        return ApiResponse.fail(res, error);
+      }
       res.status(500).send({ message: error.message });
     }
   }

@@ -28,6 +28,7 @@ const BookingCheckout = require("../../../commons/services/checkout/booking-chec
 const {
   bookingLifecycle,
   bookingDeletion,
+  assertDeletionConfirmed,
   STATUS,
   TRANSITION,
   TRIGGER,
@@ -468,6 +469,8 @@ class BookingController {
         if (!booking) {
           return BookingController._notFound(response, id);
         }
+        // A confirmed or paid booking goes only with `?confirmed=true`.
+        assertDeletionConfirmed([booking], request.query.confirmed === "true");
 
         await bookingDeletion.remove(tenant, id);
         await WorkflowService.removeTask(tenant, id);
@@ -480,6 +483,9 @@ class BookingController {
         response.sendStatus(400);
       }
     } catch (err) {
+      if (err instanceof ConflictError) {
+        return ApiResponse.fail(response, err);
+      }
       logger.error(err);
       response.status(500).send("Could not remove booking");
     }

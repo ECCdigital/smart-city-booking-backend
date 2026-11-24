@@ -12,7 +12,40 @@
  * the default instance below runs over the production adapters.
  */
 
-const { NotFoundError } = require("../../../errors/BaseError");
+const { NotFoundError, ConflictError } = require("../../../errors/BaseError");
+const { STATUS } = require("./booking-state");
+
+/**
+ * Whether deleting `booking` takes the administration's explicit
+ * confirmation: a confirmed booking, and a paid one (`isPayed` with a
+ * price above 0 EUR), also once cancelled or withdrawn.
+ *
+ * @param {Object} booking
+ * @returns {boolean}
+ */
+function requiresConfirmation(booking) {
+  return (
+    booking?.status === STATUS.CONFIRMED ||
+    (Boolean(booking?.isPayed) && Number(booking?.priceEur) > 0)
+  );
+}
+
+/**
+ * Refuses the deletion of `bookings` unless it was confirmed, where one of
+ * them requires it - a series is checked as a whole, before anything is
+ * deleted.
+ *
+ * @param {Object[]} bookings The bookings to be deleted
+ * @param {boolean} confirmed The confirmation of the request
+ * @throws {ConflictError} `confirmation_required`, naming the bookings
+ */
+function assertDeletionConfirmed(bookings, confirmed) {
+  if (confirmed) return;
+  const bookingIds = bookings.filter(requiresConfirmation).map((b) => b.id);
+  if (bookingIds.length > 0) {
+    throw new ConflictError("confirmation_required", { bookingIds });
+  }
+}
 
 /**
  * @param {Object} adapters The seam (spec part 2, section 10)
@@ -44,4 +77,9 @@ function createBookingDeletion({ store, access, documents }) {
 /** The deletion over the production adapters. */
 const bookingDeletion = createBookingDeletion(require("./adapters"));
 
-module.exports = { createBookingDeletion, bookingDeletion };
+module.exports = {
+  createBookingDeletion,
+  bookingDeletion,
+  requiresConfirmation,
+  assertDeletionConfirmed,
+};

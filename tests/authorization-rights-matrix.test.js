@@ -605,7 +605,8 @@ describe("authorization rights matrix: the core routes by principal, stage and t
     }),
     // Deleting a booking takes a role level: `deleteOwn` reaches the own
     // booking, `deleteAny` every one; a customer without a role deletes none.
-    row("delete", inA(`/bookings/${FX}`), {
+    // Confirmed, as a confirmed or paid booking goes only with the flag.
+    row("delete", inA(`/bookings/${FX}?confirmed=true`), {
       anonymous: 401,
       customer: 403,
       reader: 404,
@@ -614,7 +615,7 @@ describe("authorization rights matrix: the core routes by principal, stage and t
       admin: 200,
       foreignOwner: 403,
     }),
-    row("delete", inA(`/bookings/${BOOKING_OF_READER}`), {
+    row("delete", inA(`/bookings/${BOOKING_OF_READER}?confirmed=true`), {
       anonymous: 401,
       customer: 403,
       reader: 200,

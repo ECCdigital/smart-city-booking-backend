@@ -15,6 +15,7 @@ const {
 const {
   createBookingDeletion,
   bookingDeletion,
+  assertDeletionConfirmed,
 } = require("./booking-deletion");
 const { LifecycleError } = require("./pipeline");
 const { STATUS, TRANSITION, TRIGGER } = require("./booking-state");
@@ -26,6 +27,7 @@ module.exports = {
   groupBookingLifecycle,
   createBookingDeletion,
   bookingDeletion,
+  assertDeletionConfirmed,
   LifecycleError,
   STATUS,
   TRANSITION,
