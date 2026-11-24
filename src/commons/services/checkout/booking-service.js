@@ -319,7 +319,7 @@ class BookingService {
       DOMAIN,
     );
 
-    if (!booking.id) {
+    if (!booking || !booking.id) {
       throw new NotFoundError("booking_not_found", { bookingId });
     }
 
