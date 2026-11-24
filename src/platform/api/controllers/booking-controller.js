@@ -431,7 +431,11 @@ class BookingController {
       const savedBooking = await BookingCheckout.updateBooking(
         tenant,
         booking,
-        { requestBody: request.body, userId: user.id },
+        {
+          requestBody: request.body,
+          userId: user.id,
+          mayDeleteAny: request.reaches?.delete === REACH.ANY,
+        },
       );
 
       await WorkflowService.updateTask(

@@ -654,17 +654,31 @@ async function runUpdateTransition(tenantId, transition, { booking, userId }) {
  * booking moves to the corrected address. A booking of an account, a guest
  * booking and one without a Buchungsweg keep their owner.
  *
+ * The correction never hands the booking to the user who edits it, unless
+ * they may delete every booking anyway: with `deleteOwn` alone, entering
+ * one's own mail would make a foreign booking one's own to delete.
+ *
  * @param {Booking} oldBooking The booking as it is stored
  * @param {string} [mail] The mail of the form
+ * @param {{ editorId?: string|null, mayDeleteAny?: boolean }} [editor] Who
+ *   edits, and whether they may delete every booking of the tenant
  * @returns {string} The owner (`assignedUserId`)
  */
-function ownerAfterEdit(oldBooking, mail) {
+function ownerAfterEdit(
+  oldBooking,
+  mail,
+  { editorId = null, mayDeleteAny = false } = {},
+) {
   const primary = primaryEmailFromMail(mail);
   const corrected =
     oldBooking.bookedVia === BookedVia.ADMIN &&
     primary &&
     primary !== primaryEmailFromMail(oldBooking.mail);
-  return corrected ? primary : oldBooking.assignedUserId;
+  if (!corrected) {
+    return oldBooking.assignedUserId;
+  }
+  const toEditor = primary === primaryEmailFromMail(editorId);
+  return toEditor && !mayDeleteAny ? oldBooking.assignedUserId : primary;
 }
 
 /**
@@ -684,12 +698,13 @@ function ownerAfterEdit(oldBooking, mail) {
  *
  * @param {string} tenantId
  * @param {Object} updatedBooking The booking as the form sends it
- * @param {{ requestBody?: Object, userId?: string|null }} [options] The
+ * @param {{ requestBody?: Object, userId?: string|null, mayDeleteAny?: boolean }} [options] The
  *   form as it was sent, whose three flags the plan reads (the entity
  *   derives its flags from the state it read off them, so "paid but not
  *   confirmed" is not visible on it any more; a caller without a body hands
  *   the entity, which always carries the three, so it speaks in flags),
- *   and the user updating, named at the cancellation the plan runs
+ *   the user updating, named at the cancellation the plan runs, and
+ *   whether they may delete every booking (`ownerAfterEdit`)
  * @returns {Promise<Booking>} The booking as it is stored afterwards
  * @throws {NotFoundError} `booking_not_found`
  * @throws {BadRequestError} `invalid_status_change`, or the code of a
@@ -698,7 +713,7 @@ function ownerAfterEdit(oldBooking, mail) {
 async function updateBooking(
   tenantId,
   updatedBooking,
-  { requestBody = updatedBooking, userId = null } = {},
+  { requestBody = updatedBooking, userId = null, mayDeleteAny = false } = {},
 ) {
   const oldBooking = await BookingManager.getBooking(
     updatedBooking.id,
@@ -733,7 +748,10 @@ async function updateBooking(
   // booking is in, so the checkout prepares it without them.
   const bundleCheckoutService = new BundleCheckoutService(
     {
-      user: ownerAfterEdit(oldBooking, updatedBooking.mail),
+      user: ownerAfterEdit(oldBooking, updatedBooking.mail, {
+        editorId: userId,
+        mayDeleteAny,
+      }),
       tenant: tenantId,
       timeBegin: updatedBooking.timeBegin,
       timeEnd: updatedBooking.timeEnd,

@@ -235,7 +235,7 @@ router.post(
 );
 router.put(
   "/bookings",
-  authorize("booking", "update"),
+  authorize("booking", "update", { also: ["delete"] }),
   BookingController.updateBooking,
 );
 // The warning before the manual booking or a changed mail of a booking
