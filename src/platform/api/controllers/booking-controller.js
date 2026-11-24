@@ -1358,7 +1358,7 @@ class BookingController {
       query: { lastname },
     } = request;
 
-    if (!tenant || !id || !lastname) {
+    if (!tenant || !id || !lastname || typeof lastname !== "string") {
       logger.warn(`${tenant} -- Missing required parameters.`);
       return response.status(400).send("Missing required parameters.");
     }
@@ -1386,7 +1386,7 @@ class BookingController {
       query: { name },
     } = request;
 
-    if (!tenant || !id || !name) {
+    if (!tenant || !id || !name || typeof name !== "string") {
       logger.warn(`${tenant} -- Missing required parameters.`);
       return response.status(400).send("Missing required parameters.");
     }
@@ -1407,7 +1407,7 @@ class BookingController {
     } catch (err) {
       logger.error(err);
       return response
-        .status(err.code || 500)
+        .status(err.statusCode || 500)
         .send("Could not check booking ownership");
     }
   }
