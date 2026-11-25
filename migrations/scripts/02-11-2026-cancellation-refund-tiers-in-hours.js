@@ -37,32 +37,56 @@ module.exports = {
   },
 
   down: async function (mongoose) {
-    const Tenant = mongoose.model("Tenant");
+    // Read and written through the driver: the Tenant schema no longer knows
+    // `daysBeforeStart` and would drop it.
+    const tenants = mongoose.model("Tenant").collection;
+    const withHours = await tenants
+      .find(
+        { "cancellationRefundTiers.hoursBeforeStart": { $exists: true } },
+        { projection: { cancellationRefundTiers: 1 } },
+      )
+      .toArray();
 
-    // A tier of hours that are no whole days falls to the day below.
-    await Tenant.updateMany(
-      { "cancellationRefundTiers.hoursBeforeStart": { $exists: true } },
-      [
-        {
+    const operations = withHours.map((tenant) => ({
+      updateOne: {
+        filter: { _id: tenant._id },
+        update: {
           $set: {
-            cancellationRefundTiers: {
-              $map: {
-                input: "$cancellationRefundTiers",
-                as: "tier",
-                in: {
-                  daysBeforeStart: {
-                    $ifNull: [
-                      "$$tier.daysBeforeStart",
-                      { $floor: { $divide: ["$$tier.hoursBeforeStart", 24] } },
-                    ],
-                  },
-                  refundPercentage: "$$tier.refundPercentage",
-                },
-              },
-            },
+            cancellationRefundTiers: tiersInDays(
+              tenant.cancellationRefundTiers,
+            ),
           },
         },
-      ],
-    );
+      },
+    }));
+    if (operations.length > 0) {
+      await tenants.bulkWrite(operations);
+    }
   },
 };
+
+/**
+ * A tier of hours that are no whole days falls to the day below. Where two
+ * tiers fall to the same day, the one with the most hours stays, so the days
+ * stay unique and the percentages keep falling.
+ *
+ * @param {Array<{ hoursBeforeStart?: number, daysBeforeStart?: number, refundPercentage: number }>} tiers
+ *   The stored tiers, in hours or, not yet migrated, in days
+ * @returns {Array<{ daysBeforeStart: number, refundPercentage: number }>}
+ *   One tier per day, by descending days
+ */
+function tiersInDays(tiers) {
+  const hoursOf = (tier) => tier.hoursBeforeStart ?? tier.daysBeforeStart * 24;
+  const byDay = new Map();
+  for (const tier of [...tiers].sort((a, b) => hoursOf(b) - hoursOf(a))) {
+    const daysBeforeStart =
+      tier.daysBeforeStart ?? Math.floor(tier.hoursBeforeStart / 24);
+    if (!byDay.has(daysBeforeStart)) {
+      byDay.set(daysBeforeStart, {
+        daysBeforeStart,
+        refundPercentage: tier.refundPercentage,
+      });
+    }
+  }
+  return [...byDay.values()];
+}

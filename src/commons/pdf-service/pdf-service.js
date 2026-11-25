@@ -1470,6 +1470,8 @@ class PdfService {
           : "-";
       const tableTotals = PdfService._buildTableTotals(booking, bookingOptions);
       const coupon = PdfService._buildCoupon(booking, bookingOptions);
+      const timeBeforeStart =
+        CancellationRefundService.describeTimeBeforeStart(refundCalculation);
       bruttoEur += tableTotals.bruttoEur;
       vatEur += tableTotals.vatEur;
 
@@ -1485,10 +1487,8 @@ class PdfService {
         brutto: tableTotals.brutto,
         bruttoEur: tableTotals.bruttoEur,
         refundPercentage: refundCalculation?.appliedRefundPercentage,
-        hoursBeforeStart: refundCalculation?.hoursBeforeStart ?? null,
-        daysBeforeStart:
-          CancellationRefundService.describeTimeBeforeStart(refundCalculation)
-            .daysBeforeStart,
+        hoursBeforeStart: timeBeforeStart.hoursBeforeStart,
+        daysBeforeStart: timeBeforeStart.daysBeforeStart,
         coupon,
         items: PdfService._buildItems(booking, allBookables, bookingOptions),
         summaryItems: PdfService._buildSummaryItems(booking, allBookables),
@@ -1514,7 +1514,8 @@ class PdfService {
 
     const timeBeforeStart =
       CancellationRefundService.describeTimeBeforeStart(calculation);
-    const appliedTierHours = calculation.appliedTierHours ?? null;
+    const appliedTier =
+      CancellationRefundService.describeAppliedTier(calculation);
 
     return {
       hoursBeforeStart: timeBeforeStart.hoursBeforeStart,
@@ -1525,15 +1526,11 @@ class PdfService {
           : String(timeBeforeStart.daysBeforeStart),
       timeBeforeStartLabel: timeBeforeStart.label ?? "nicht verfügbar",
       timeBeforeStartText: timeBeforeStart.detailedLabel,
-      appliedTierLabel:
-        CancellationRefundService.describeAppliedTier(calculation),
+      appliedTierLabel: appliedTier.label,
       suggestedRefundPercentage: calculation.suggestedRefundPercentage,
       refundPercentage: calculation.appliedRefundPercentage,
-      appliedTierHours,
-      appliedTierDays:
-        appliedTierHours === null
-          ? calculation.appliedTierDays ?? null
-          : Math.floor(appliedTierHours / 24),
+      appliedTierHours: appliedTier.appliedTierHours,
+      appliedTierDays: appliedTier.appliedTierDays,
       calculationMode,
       adminOverride: calculation.adminOverride,
       isFullRefund: calculation.appliedRefundPercentage === 100,

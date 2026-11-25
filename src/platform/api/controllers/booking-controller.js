@@ -1375,7 +1375,7 @@ class BookingController {
     } catch (err) {
       logger.error(err);
       return response
-        .status(err.code || 500)
+        .status(err.statusCode || 500)
         .send("Could not get public booking status");
     }
   }

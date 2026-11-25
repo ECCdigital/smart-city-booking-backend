@@ -7,6 +7,11 @@ const { Schema } = mongoose;
 const BookableSchema = new Schema(bookableSchemaDefinition);
 
 BookableSchema.index({ tenantId: 1, id: 1 });
+// The tickets of an event: `{tenantId, eventId, type: "ticket"}`.
+BookableSchema.index(
+  { tenantId: 1, eventId: 1, type: 1 },
+  { name: "tenantId_1_eventId_1_type_1" },
+);
 
 /**
  * The iFBS location of the bookable's locker system, read off the locker
