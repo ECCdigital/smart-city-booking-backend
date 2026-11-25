@@ -705,12 +705,11 @@ class BookingController {
     try {
       const tenantId = request.params.tenant;
       const bookingId = request.params.id;
-      const scope = scopeOf(request);
       // The booking within the reach of the request; none there is a 404.
       const booking = await BookingManager.getBooking(
         bookingId,
         tenantId,
-        scope,
+        scopeOf(request),
       );
 
       if (!booking) {
@@ -718,7 +717,7 @@ class BookingController {
       }
 
       const preview =
-        scope.reach === REACH.OWN
+        request.reach === REACH.OWN
           ? await BookingService.getUserCancellationRefundPreview(
               tenantId,
               bookingId,
