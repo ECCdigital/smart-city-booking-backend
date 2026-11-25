@@ -461,6 +461,15 @@ components:
           type: integer
           nullable: true
           description: Whole hours from the calculation to the start of the booking, rounded down; negative once it has begun.
+        timeBeforeStart:
+          type: object
+          nullable: true
+          description: Preview only. The time before the start as a client words it - whole days from one day on, the hours beside them only below three days (else 0), below one day hours. Null without a time span or once the booking has begun.
+          properties:
+            days:
+              type: integer
+            hours:
+              type: integer
         originalAmountEur:
           type: number
           format: double

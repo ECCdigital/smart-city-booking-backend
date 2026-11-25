@@ -83,13 +83,16 @@ class BookingService {
       throw new NotFoundError("booking_not_found", { bookingId });
     }
 
+    const calculation = CancellationRefundService.calculate({
+      tenant,
+      booking,
+      origin: CANCELLATION_ORIGINS.ADMIN,
+    });
     return {
       bookingId,
-      ...CancellationRefundService.calculate({
-        tenant,
-        booking,
-        origin: CANCELLATION_ORIGINS.ADMIN,
-      }),
+      ...calculation,
+      timeBeforeStart:
+        CancellationRefundService.timeBeforeStartParts(calculation),
     };
   }
 
@@ -120,7 +123,13 @@ class BookingService {
       origin: CANCELLATION_ORIGINS.USER,
     });
 
-    return CancellationRefundService.toCustomerPreview(calculation, bookingId);
+    // The time before the start in days and hours, worded by the client
+    // in its language; the rule stays here.
+    return {
+      ...CancellationRefundService.toCustomerPreview(calculation, bookingId),
+      timeBeforeStart:
+        CancellationRefundService.timeBeforeStartParts(calculation),
+    };
   }
 
   static async getPublicCancellationRefundPreview(tenantId, bookingId, name) {

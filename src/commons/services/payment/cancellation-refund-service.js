@@ -214,6 +214,26 @@ class CancellationRefundService {
    *   below three days in days and hours ("1 Tag und 22 Stunden"); both
    *   `null` without a time span
    */
+  /**
+   * The time before the start as numbers, by the rule of `detailedLabel`:
+   * whole days from one day on, the hours beside them only below three
+   * days (else 0), below one day hours. For a client that words it in its
+   * own language. `null` without a time span or once the booking has begun.
+   *
+   * @param {Object} calculation A calculation, preview or stored audit
+   * @returns {{ days: number, hours: number }|null}
+   */
+  static timeBeforeStartParts(calculation) {
+    const hours = calculation?.hoursBeforeStart;
+    if (Number.isFinite(hours)) {
+      return hours < 0 ? null : detailedTimeBeforeStart(hours);
+    }
+    const legacyDays = calculation?.daysBeforeStart;
+    return Number.isFinite(legacyDays) && legacyDays >= 0
+      ? { days: legacyDays, hours: 0 }
+      : null;
+  }
+
   static describeTimeBeforeStart(calculation) {
     const hours = calculation?.hoursBeforeStart;
     if (Number.isFinite(hours)) {
@@ -226,16 +246,16 @@ class CancellationRefundService {
         };
       }
       const days = Math.floor(hours / HOURS_PER_DAY);
-      const rest = hours % HOURS_PER_DAY;
       const label =
         hours >= HOURS_PER_DAY ? formatDays(days) : formatHours(hours);
+      const detailed = detailedTimeBeforeStart(hours);
       return {
         hoursBeforeStart: hours,
         daysBeforeStart: days,
         label,
         detailedLabel:
-          hours >= HOURS_PER_DAY && hours < 3 * HOURS_PER_DAY && rest > 0
-            ? `${formatDays(days)} und ${formatHours(rest)}`
+          detailed.days > 0 && detailed.hours > 0
+            ? `${formatDays(detailed.days)} und ${formatHours(detailed.hours)}`
             : label,
       };
     }
@@ -400,6 +420,15 @@ class CancellationRefundService {
       hasCancellationFee: cancellationFeeEur > 0,
     };
   }
+}
+
+/** Days from one day on, the hours beside them only below three days. */
+function detailedTimeBeforeStart(hours) {
+  if (hours < HOURS_PER_DAY) return { days: 0, hours };
+  return {
+    days: Math.floor(hours / HOURS_PER_DAY),
+    hours: hours < 3 * HOURS_PER_DAY ? hours % HOURS_PER_DAY : 0,
+  };
 }
 
 function formatDays(days, dative = false) {
