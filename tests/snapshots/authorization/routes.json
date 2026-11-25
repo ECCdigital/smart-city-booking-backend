@@ -1482,9 +1482,9 @@
   "DELETE /api/:tenant/bookings/:id": {
     "anonymous": 401,
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
-    "roleHolder": 200,
-    "tenantOwner": 200,
-    "instanceOwner": 200,
+    "roleHolder": 409,
+    "tenantOwner": 409,
+    "instanceOwner": 409,
     "expiredToken": 401
   },
   "GET /api/:tenant/bookings/:ids/status": {
@@ -1746,9 +1746,9 @@
   "DELETE /api/:tenant/group-bookings/:id": {
     "anonymous": 401,
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
-    "roleHolder": 200,
-    "tenantOwner": 200,
-    "instanceOwner": 200,
+    "roleHolder": 409,
+    "tenantOwner": 409,
+    "instanceOwner": 409,
     "expiredToken": 401
   },
   "POST /api/:tenant/group-bookings/:id/receipt": {

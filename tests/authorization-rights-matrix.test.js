@@ -603,11 +603,22 @@ describe("authorization rights matrix: the core routes by principal, stage and t
       admin: [],
       foreignOwner: [],
     }),
-    // Deleting a booking is the administration's alone, own or not.
-    row("delete", inA(`/bookings/${FX}`), {
+    // Deleting a booking takes a role level: `deleteOwn` reaches the own
+    // booking, `deleteAny` every one; a customer without a role deletes none.
+    // Confirmed, as a confirmed or paid booking goes only with the flag.
+    row("delete", inA(`/bookings/${FX}?confirmed=true`), {
       anonymous: 401,
       customer: 403,
-      reader: 403,
+      reader: 404,
+      staff: 200,
+      owner: 200,
+      admin: 200,
+      foreignOwner: 403,
+    }),
+    row("delete", inA(`/bookings/${BOOKING_OF_READER}?confirmed=true`), {
+      anonymous: 401,
+      customer: 403,
+      reader: 200,
       staff: 200,
       owner: 200,
       admin: 200,
