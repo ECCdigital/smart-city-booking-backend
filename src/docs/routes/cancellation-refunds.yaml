@@ -91,7 +91,7 @@
         content:
           application/json:
             schema:
-              oneOf:
+              anyOf:
                 - $ref: "#/components/schemas/CancellationRefundCalculation"
                 - $ref: "#/components/schemas/CustomerCancellationRefundPreview"
       "401":

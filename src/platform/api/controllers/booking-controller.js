@@ -696,7 +696,7 @@ class BookingController {
 
   /**
    * The refund preview of a cancellation. Under `own` it is the customer's
-   * preview of their own withdrawal - the tiers, as `cancelBooking` stores
+   * preview of cancelling their own booking - the tiers, as `cancelBooking` stores
    * them, in the customer's form - and refused where the customer may not
    * cancel (403 `booking_user_cancellation_disabled`). Under `any` it is the
    * administration's, which reads a request as its rejection.

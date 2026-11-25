@@ -44,7 +44,7 @@ const SECOND_DECISIONS = {};
  *   - `?includePrivate` on the public event calendar, the one place a
  *     reach beyond `public` is asked for on a public route - stays
  *   - the refund preview of a booking: under `own` the customer's
- *     preview of their own withdrawal, the tiers, under `any` the
+ *     preview of cancelling their own booking, the tiers, under `any` the
  *     administration's, a request as its rejection (tickets#1360) - stays
  */
 const REACH_BRANCHES = {

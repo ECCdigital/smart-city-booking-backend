@@ -1,7 +1,7 @@
 /**
- * The refund preview a signed-in customer gets before withdrawing their own
+ * The refund preview a signed-in customer gets before cancelling their own
  * request (ECCdigital/tickets#1360): the tiers of the tenant, as the
- * withdrawal itself stores them, in the customer's form of the preview. The
+ * cancellation itself stores them, in the customer's form of the preview. The
  * administration keeps its preview, which reads a request as its rejection.
  * Seen through the HTTP form, over the lifecycle harness.
  */
@@ -100,7 +100,7 @@ describe("the refund preview of a customer's own request", function () {
     );
   });
 
-  it("is what the customer's withdrawal stores", async function () {
+  it("is what the customer's cancellation stores", async function () {
     const id = await ownRequest();
 
     const res = await preview(id, CUSTOMER);
