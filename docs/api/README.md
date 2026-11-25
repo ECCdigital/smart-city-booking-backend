@@ -264,7 +264,7 @@ Public JSON bookable responses under `/json/:tenant/bookables` and `/json/:tenan
 
 ### GET /api/:tenant/bookings/:id/cancellation-refund-preview
 
-Returns the current policy proposal for an administrator. **Requires JWT and booking update permission.**
+Returns the refund preview of cancelling the booking. **Requires JWT and booking cancel permission.** For an administrator (reach `any`) it is the current policy proposal; a request (status `requested`) is previewed as its rejection, a full refund. For the signed-in customer cancelling their own booking (reach `own`) it is the customer-safe preview of `POST /bookings/:id/cancel`: the tenant's tiers, also for a request, as the public and the hook preview answer it; `403 booking_user_cancellation_disabled` where the booking's policy is not user-cancellable.
 
 ### GET /api/:tenant/bookings/:id/cancellation-refund-preview/public?name=
 

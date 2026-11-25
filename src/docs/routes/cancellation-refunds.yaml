@@ -68,9 +68,16 @@
       - Bookings
     summary: Preview a booking cancellation refund
     description: |
-      Returns the current tenant-policy refund proposed to an administrator.
-      For a request (status `requested`) it is the rejection: a full refund,
-      outside the tiers, with `rejection: true`.
+      With the reach `any` (`manageBookings.updateAny`) it is the current
+      tenant-policy refund proposed to an administrator. For a request
+      (status `requested`) it is the rejection: a full refund, outside the
+      tiers, with `rejection: true`.
+
+      With the reach `own` it is the signed-in customer's preview of
+      cancelling their own booking (`POST /bookings/{bookingId}/cancel`):
+      the tenant's tiers, also for a request, in the customer-safe form
+      without `origin`, `rejection` and `cancelledByUserId`, the same as
+      the public and the hook preview.
     security:
       - bearerAuth: []
     parameters:
@@ -78,15 +85,23 @@
       - $ref: "#/components/parameters/CancellationBookingIdParam"
     responses:
       "200":
-        description: Current refund preview
+        description: >-
+          Current refund preview: the calculation under the reach `any`,
+          the customer-safe preview under `own`
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CancellationRefundCalculation"
+              anyOf:
+                - $ref: "#/components/schemas/CancellationRefundCalculation"
+                - $ref: "#/components/schemas/CustomerCancellationRefundPreview"
       "401":
         description: Not authenticated
       "403":
-        description: No reach on the route (the JSON form of ForbiddenError)
+        description: >-
+          No reach on the route (the JSON form of ForbiddenError); under the
+          reach `own` also `booking_user_cancellation_disabled` - the
+          booking's policy is not user-cancellable - or
+          `booking_already_rejected`, as plain text
       "404":
         description: Booking not found, or outside the reach of the request
 
@@ -509,6 +524,48 @@ components:
         cancelledByUserId:
           type: string
           nullable: true
+
+    CustomerCancellationRefundPreview:
+      type: object
+      description: |
+        The customer-safe refund preview of the customer's own cancellation:
+        the tenant's tiers, without `origin`, `rejection`, `adminOverride`
+        and `cancelledByUserId`.
+      required:
+        - bookingId
+        - originalAmountEur
+        - suggestedRefundPercentage
+        - appliedRefundPercentage
+        - refundAmountEur
+        - cancellationFeeEur
+      properties:
+        bookingId:
+          type: string
+        originalAmountEur:
+          type: number
+          format: double
+        refundAmountEur:
+          type: number
+          format: double
+        cancellationFeeEur:
+          type: number
+          format: double
+        suggestedRefundPercentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+        appliedRefundPercentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+        hoursBeforeStart:
+          type: integer
+          nullable: true
+          description: Whole hours from the calculation to the start of the booking, rounded down; negative once it has begun.
+        appliedTierHours:
+          type: integer
+          nullable: true
+          description: Threshold of the applied tier in hours.
 
     GroupCancellationRefundPreview:
       type: object

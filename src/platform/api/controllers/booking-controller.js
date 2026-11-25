@@ -694,6 +694,13 @@ class BookingController {
     }
   }
 
+  /**
+   * The refund preview of a cancellation. Under `own` it is the customer's
+   * preview of cancelling their own booking - the tiers, as `cancelBooking` stores
+   * them, in the customer's form - and refused where the customer may not
+   * cancel (403 `booking_user_cancellation_disabled`). Under `any` it is the
+   * administration's, which reads a request as its rejection.
+   */
   static async getCancellationRefundPreview(request, response) {
     try {
       const tenantId = request.params.tenant;
@@ -709,10 +716,16 @@ class BookingController {
         return response.sendStatus(404);
       }
 
-      const preview = await BookingService.getCancellationRefundPreview(
-        tenantId,
-        bookingId,
-      );
+      const preview =
+        request.reach === REACH.OWN
+          ? await BookingService.getUserCancellationRefundPreview(
+              tenantId,
+              bookingId,
+            )
+          : await BookingService.getCancellationRefundPreview(
+              tenantId,
+              bookingId,
+            );
       return response.status(200).send(preview);
     } catch (err) {
       logger.error(err);
