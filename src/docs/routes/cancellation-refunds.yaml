@@ -68,9 +68,16 @@
       - Bookings
     summary: Preview a booking cancellation refund
     description: |
-      Returns the current tenant-policy refund proposed to an administrator.
-      For a request (status `requested`) it is the rejection: a full refund,
-      outside the tiers, with `rejection: true`.
+      With the reach `any` (`manageBookings.updateAny`) it is the current
+      tenant-policy refund proposed to an administrator. For a request
+      (status `requested`) it is the rejection: a full refund, outside the
+      tiers, with `rejection: true`.
+
+      With the reach `own` it is the signed-in customer's preview of
+      cancelling their own booking (`POST /bookings/{bookingId}/cancel`):
+      the tenant's tiers, also for a request, in the customer-safe form
+      without `origin`, `rejection` and `cancelledByUserId`, the same as
+      the public and the hook preview.
     security:
       - bearerAuth: []
     parameters:
@@ -78,15 +85,23 @@
       - $ref: "#/components/parameters/CancellationBookingIdParam"
     responses:
       "200":
-        description: Current refund preview
+        description: >-
+          Current refund preview: the calculation under the reach `any`,
+          the customer-safe preview under `own`
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CancellationRefundCalculation"
+              oneOf:
+                - $ref: "#/components/schemas/CancellationRefundCalculation"
+                - $ref: "#/components/schemas/CustomerCancellationRefundPreview"
       "401":
         description: Not authenticated
       "403":
-        description: No reach on the route (the JSON form of ForbiddenError)
+        description: >-
+          No reach on the route (the JSON form of ForbiddenError); under the
+          reach `own` also `booking_user_cancellation_disabled` - the
+          booking's policy is not user-cancellable - or
+          `booking_already_rejected`, as plain text
       "404":
         description: Booking not found, or outside the reach of the request
 
