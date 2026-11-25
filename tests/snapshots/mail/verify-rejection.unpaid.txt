@@ -62,8 +62,8 @@ Attachments:
       90,38 €
       von
       120,50 €
-      <br />
-      Noch ausstehend: 30,12 €
+        <br />
+        Noch ausstehend: 30,12 €
   </p>
   <p>
     Der endgültige Erstattungsbetrag wird zum Zeitpunkt Ihrer Bestätigung

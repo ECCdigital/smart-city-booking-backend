@@ -207,6 +207,25 @@ describe("mail characterization: every notice as it goes out today", function ()
       );
     });
 
+    it("verification of a cancellation request with a full refund: no line of 0,00 €", async function () {
+      await pin("verify-rejection.full-refund", () =>
+        mail.send(
+          "VERIFY_BOOKING_REJECTION",
+          single("B-1", {
+            hookId: "hook-reject-1",
+            reason: "Termin verschoben",
+            refundPreview: cancellationRefund({
+              refundAmountEur: 120.5,
+              cancellationFeeEur: 0,
+              appliedRefundPercentage: 100,
+              appliedTierHours: 336,
+            }),
+            alreadyPaid: true,
+          }),
+        ),
+      );
+    });
+
     it("verification of a cancellation request of an unpaid booking: what drops and what stays due", async function () {
       await pin("verify-rejection.unpaid", () =>
         mail.send(

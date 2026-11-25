@@ -26,15 +26,19 @@
       {{priceFormatted refundAmountEur}}
       von
       {{priceFormatted originalAmountEur}}
-      <br />
-      Einbehaltener Betrag: {{priceFormatted cancellationFeeEur}}
+      {{#if hasCancellationFee}}
+        <br />
+        Einbehaltener Betrag: {{priceFormatted cancellationFeeEur}}
+      {{/if}}
     {{else}}
       Entfallener Betrag:
       {{priceFormatted refundAmountEur}}
       von
       {{priceFormatted originalAmountEur}}
-      <br />
-      Noch ausstehend: {{priceFormatted cancellationFeeEur}}
+      {{#if hasCancellationFee}}
+        <br />
+        Noch ausstehend: {{priceFormatted cancellationFeeEur}}
+      {{/if}}
     {{/if}}
   </p>
   <p>
