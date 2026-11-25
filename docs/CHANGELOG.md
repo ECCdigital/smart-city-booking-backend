@@ -7,6 +7,10 @@ Every release `v<major>.<minor>.<patch>` is tagged on its branch `version/<major
 
 ## [Unreleased]
 
+### Added
+
+- Card style of the sign-in pages in the instance branding ([ECCdigital/tickets#1365](https://github.com/ECCdigital/tickets/issues/1365)): `branding.authCardStyle` is `glass` (by default, as before) or `solid`, checked by `PUT /api/instances`. The Theme Bundle carries it, `glass` while `branding.active` is off; a missing field reads as `glass`, no migration
+
 ### Security
 
 - Stored secrets are write only ([ECCdigital/tickets#569](https://github.com/ECCdigital/tickets/issues/569)): tenant and instance answers carry `__stored_secret__` instead of a stored mail password, Graph or Keycloak client secret, card auth token and the secrets of GiroCockpit, pmPayment, ePayBL, Nuki, Salto KS, iFBS and Pareva. A save that hands the marker back keeps the secret, an empty value removes it. The marker keeps a secret only while the server and account it is bound to stay the same (`secrets` of each application class): otherwise a save answers `400 secret_required` (a tenant's mail secret left out of the body counts as the marker) and an access connection test `missing_secret`. Salto KS no longer takes a stored secret for an empty field. Needs the Admin UI with ECCdigital/tickets#569. OpenAPI updated

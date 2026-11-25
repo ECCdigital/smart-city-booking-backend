@@ -54,6 +54,7 @@ describe("Appearance in the instance branding", function () {
           },
           header: "secondary",
           authLogoSize: "lg",
+          authCardStyle: "solid",
         }),
       );
       expect(res.status).to.equal(200);
@@ -68,6 +69,7 @@ describe("Appearance in the instance branding", function () {
       });
       expect(bundle.body.header).to.equal("secondary");
       expect(bundle.body.authLogoSize).to.equal("lg");
+      expect(bundle.body.authCardStyle).to.equal("solid");
     });
 
     it("delivers the defaults while the branding is switched off, and keeps the stored values", async function () {
@@ -83,6 +85,7 @@ describe("Appearance in the instance branding", function () {
           },
           header: "neutral",
           authLogoSize: "md",
+          authCardStyle: "solid",
         }),
       );
       expect(res.status).to.equal(200);
@@ -95,6 +98,7 @@ describe("Appearance in the instance branding", function () {
         theme: null,
         header: "primary",
         authLogoSize: "sm",
+        authCardStyle: "glass",
       });
 
       const instance = await h.api().get("/api/instances").set(h.as(ADMIN));
@@ -102,6 +106,7 @@ describe("Appearance in the instance branding", function () {
         active: false,
         header: "neutral",
         authLogoSize: "md",
+        authCardStyle: "solid",
       });
       expect(instance.body.branding.theme.colors.accent).to.equal("#f59e0b");
     });
@@ -134,6 +139,12 @@ describe("Appearance in the instance branding", function () {
         "the logo size",
         (branding) => {
           branding.authLogoSize = "md";
+        },
+      ],
+      [
+        "the card style",
+        (branding) => {
+          branding.authCardStyle = "solid";
         },
       ],
     ]) {
@@ -220,6 +231,15 @@ describe("Appearance in the instance branding", function () {
           field: "branding.authLogoSize",
           code: "invalid_enum",
           params: { allowed: ["sm", "md", "lg"] },
+        },
+      ],
+      [
+        "an unknown card style",
+        { authCardStyle: "frosted" },
+        {
+          field: "branding.authCardStyle",
+          code: "invalid_enum",
+          params: { allowed: ["glass", "solid"] },
         },
       ],
     ]) {
