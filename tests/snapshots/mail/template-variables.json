@@ -89,6 +89,15 @@
     "snippets": ["booking-cancel"]
   },
   {
+    "name": "alreadyPaid",
+    "label": "Bereits bezahlt",
+    "description": "Wahr, wenn die Buchung vor der Stornierung bezahlt war; sonst entfällt der Erstattungsbetrag und der Einbehalt ist noch zu zahlen",
+    "kind": "flag",
+    "expr": "{{#if alreadyPaid}}...{{else}}...{{/if}}",
+    "sample": true,
+    "snippets": ["booking-cancel"]
+  },
+  {
     "name": "timeBeforeStartLabel",
     "label": "Zeit bis Beginn",
     "description": "Zeit bis zum Buchungsbeginn zum Berechnungszeitpunkt als Text: ab einem Tag in ganzen Tagen (z. B. „10 Tage“), darunter in Stunden (z. B. „13 Stunden“)",

@@ -157,6 +157,16 @@ function templateVariableCatalog({ tenantId }) {
       snippets: BOOKING_CANCEL_SNIPPETS,
     },
     {
+      name: "alreadyPaid",
+      label: "Bereits bezahlt",
+      description:
+        "Wahr, wenn die Buchung vor der Stornierung bezahlt war; sonst entfällt der Erstattungsbetrag und der Einbehalt ist noch zu zahlen",
+      kind: "flag",
+      expr: "{{#if alreadyPaid}}...{{else}}...{{/if}}",
+      sample: true,
+      snippets: BOOKING_CANCEL_SNIPPETS,
+    },
+    {
       name: "timeBeforeStartLabel",
       label: "Zeit bis Beginn",
       description:

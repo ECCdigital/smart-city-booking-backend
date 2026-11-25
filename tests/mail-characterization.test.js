@@ -184,6 +184,30 @@ describe("mail characterization: every notice as it goes out today", function ()
       );
     });
 
+    for (const [variant, cancelledFrom] of [
+      ["paid", "confirmed"],
+      ["unpaid", "payment_due"],
+    ]) {
+      it(`cancellation in the default text, ${variant}: refund and retained, or what drops and what stays due`, async function () {
+        given({
+          tenant: tenant({ mailSnippets: {} }),
+          bookings: [
+            booking({
+              id: "B-cancelled",
+              status: "cancelled",
+              cancellationRefund: cancellationRefund({ cancelledFrom }),
+            }),
+          ],
+        });
+        await pin(`booking-cancel.default.${variant}`, () =>
+          mail.send(
+            "BOOKING_CANCEL",
+            single("B-cancelled", { reason: "Der Saal wird renoviert." }),
+          ),
+        );
+      });
+    }
+
     it("rejection: the reason, no document", async function () {
       await pin("booking-rejection", () =>
         mail.send(

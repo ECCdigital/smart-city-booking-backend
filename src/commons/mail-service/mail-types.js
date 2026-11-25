@@ -116,12 +116,15 @@ const MailType = Object.freeze({
     includeQRCode: false,
     sendBCC: true,
     addRejectionLink: false,
-    // The refund is the one recorded at the first booking.
+    // The refund is the one recorded at the first booking; paid where it
+    // was cancelled from `confirmed`, as the cancellation document reads it.
     templateData: ({ reason }, { bookings }) => ({
       cancelReason: reason,
       ...CancellationRefundService.toMailTemplateData(
         bookings[0].cancellationRefund,
       ),
+      alreadyPaid:
+        bookings[0].cancellationRefund?.cancelledFrom === STATUS.CONFIRMED,
     }),
   },
 
