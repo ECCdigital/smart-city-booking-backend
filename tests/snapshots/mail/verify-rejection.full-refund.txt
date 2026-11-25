@@ -55,8 +55,8 @@ Attachments:
 
   <p>
     <strong>Voraussichtliche Erstattungsstufe</strong>:
-    bis 14 Tage vor Beginn mit 100&nbsp;%
-    Rückerstattung
+      bis 14 Tage vor Beginn mit 100&nbsp;%
+      Rückerstattung
     <br />
       Rückerstattung des bezahlten Betrags:
       120,50 €
@@ -64,8 +64,9 @@ Attachments:
       120,50 €
   </p>
   <p>
-    Der endgültige Erstattungsbetrag wird zum Zeitpunkt Ihrer Bestätigung
-    berechnet.
+    Der endgültige
+    Erstattungsbetrag
+    wird zum Zeitpunkt Ihrer Bestätigung berechnet.
   </p>
 
 <p>

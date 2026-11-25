@@ -18,8 +18,14 @@
 {{#if hasRefundPreview}}
   <p>
     <strong>Voraussichtliche Erstattungsstufe</strong>:
-    {{#if appliedTierLabel}}{{appliedTierLabel}} mit {{/if}}{{refundPercentage}}&nbsp;%
-    Rückerstattung
+    {{#if alreadyPaid}}
+      {{#if appliedTierLabel}}{{appliedTierLabel}} mit {{/if}}{{refundPercentage}}&nbsp;%
+      Rückerstattung
+    {{else}}
+      {{#if appliedTierLabel}}{{appliedTierLabel}}, es{{else}}Es{{/if}}
+      entfallen
+      {{refundPercentage}}&nbsp;% des Betrags
+    {{/if}}
     <br />
     {{#if alreadyPaid}}
       Rückerstattung des bezahlten Betrags:
@@ -42,8 +48,9 @@
     {{/if}}
   </p>
   <p>
-    Der endgültige Erstattungsbetrag wird zum Zeitpunkt Ihrer Bestätigung
-    berechnet.
+    Der endgültige
+    {{#if alreadyPaid}}Erstattungsbetrag{{else}}Betrag{{/if}}
+    wird zum Zeitpunkt Ihrer Bestätigung berechnet.
   </p>
 {{/if}}
 

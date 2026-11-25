@@ -55,8 +55,9 @@ Attachments:
 
   <p>
     <strong>Voraussichtliche Erstattungsstufe</strong>:
-    bis 14 Tage vor Beginn mit 75&nbsp;%
-    Rückerstattung
+      bis 14 Tage vor Beginn, es
+      entfallen
+      75&nbsp;% des Betrags
     <br />
       Entfallener Betrag:
       90,38 €
@@ -66,8 +67,9 @@ Attachments:
         Noch ausstehend: 30,12 €
   </p>
   <p>
-    Der endgültige Erstattungsbetrag wird zum Zeitpunkt Ihrer Bestätigung
-    berechnet.
+    Der endgültige
+    Betrag
+    wird zum Zeitpunkt Ihrer Bestätigung berechnet.
   </p>
 
 <p>
