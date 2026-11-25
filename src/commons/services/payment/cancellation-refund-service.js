@@ -396,7 +396,7 @@ class CancellationRefundService {
       hoursBeforeStart: timeBeforeStart.hoursBeforeStart,
       daysBeforeStart: timeBeforeStart.daysBeforeStart,
       timeBeforeStartLabel: timeBeforeStart.label,
-      appliedTierLabel: this.describeAppliedTier(calculation),
+      appliedTierLabel: this.describeAppliedTier(calculation).label,
       hasCancellationFee: cancellationFeeEur > 0,
     };
   }

@@ -510,6 +510,28 @@ describe("CancellationRefundService", function () {
     assert.strictEqual(mailData.appliedTierLabel, "bis 36 Stunden vor Beginn");
   });
 
+  it("names no tier for the mail where none applies", function () {
+    const base = {
+      originalAmountEur: 100,
+      refundAmountEur: 25,
+      cancellationFeeEur: 75,
+      appliedRefundPercentage: 25,
+      hoursBeforeStart: 50,
+    };
+
+    for (const calculation of [
+      base,
+      { ...base, appliedTierHours: 36, origin: CANCELLATION_ORIGINS.SYSTEM },
+      { ...base, appliedTierHours: 36, adminOverride: true },
+    ]) {
+      assert.strictEqual(
+        CancellationRefundService.toMailTemplateData(calculation)
+          .appliedTierLabel,
+        null,
+      );
+    }
+  });
+
   it("marks zero-amount bookings as without refund preview", function () {
     const mailData = CancellationRefundService.toMailTemplateData({
       originalAmountEur: 0,
