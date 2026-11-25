@@ -43,10 +43,13 @@ const SECOND_DECISIONS = {};
  *     projection (the projections themselves are the managers', ADR 0003)
  *   - `?includePrivate` on the public event calendar, the one place a
  *     reach beyond `public` is asked for on a public route - stays
+ *   - the refund preview of a booking: under `own` the customer's
+ *     preview of cancelling their own booking, the tiers, under `any` the
+ *     administration's, a request as its rejection (tickets#1360) - stays
  */
 const REACH_BRANCHES = {
   platform: {
-    "api/controllers/booking-controller.js": { reach: 3 }, // stays: ?public=true
+    "api/controllers/booking-controller.js": { reach: 4 }, // stays: ?public=true, refund preview
     "api/controllers/ical-controller.js": { readsRecords: 1 }, // stays: ?includePrivate
     "api/controllers/role-controller.js": { reach: 1 }, // 05
   },
