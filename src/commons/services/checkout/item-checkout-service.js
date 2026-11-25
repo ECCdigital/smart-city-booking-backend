@@ -551,6 +551,42 @@ class ItemCheckoutService {
     return Math.round((end - start) / 60000);
   }
 
+  /**
+   * The booking's minutes as its price counts them: with
+   * `priceCountStartedHours` an hour price counts every started hour in
+   * full, otherwise the minutes are taken as they are.
+   */
+  getBilledDuration() {
+    const minutes = this.getBookingDuration();
+    const { priceType, priceCountStartedHours } = this.originBookable;
+    if (priceType === "per-hour" && priceCountStartedHours) {
+      return Math.ceil(minutes / 60) * 60;
+    }
+    return minutes;
+  }
+
+  /**
+   * The hours an hour price bills for one day of the booking: by the minute
+   * its share of the booking; with `priceCountStartedHours` the started
+   * hours of the booking that begin on that day, each in full at that day's
+   * Tarif. A started hour across midnight belongs to the day it begins on.
+   */
+  _billedHours(segment) {
+    if (!this.originBookable.priceCountStartedHours) {
+      return this.getBookingDuration(segment.start, segment.end) / 60;
+    }
+    const begin = new Date(this.timeBegin).getTime();
+    const startedHours = this.getBilledDuration() / 60;
+    let hours = 0;
+    for (let hour = 0; hour < startedHours; hour++) {
+      const hourBegin = begin + hour * 3600000;
+      if (hourBegin >= segment.start && hourBegin < segment.end) {
+        hours++;
+      }
+    }
+    return hours;
+  }
+
   async isTimeRelated() {
     return isTimeRelatedBookable(this.originBookable);
   }
@@ -605,8 +641,7 @@ class ItemCheckoutService {
       if (!priceCategory?.fixedPrice) {
         switch (this.originBookable.priceType) {
           case "per-hour":
-            multiplier =
-              this.getBookingDuration(segment.start, segment.end) / 60;
+            multiplier = this._billedHours(segment);
             break;
           case "per-day":
             multiplier =
@@ -715,30 +750,37 @@ class ItemCheckoutService {
     }
 
     const bookingDurationInMinutes = this.getBookingDuration();
+    const billedDurationInMinutes = this.getBilledDuration();
 
+    // The value a Tarif's bounds are checked against.
     let valueToCheck;
     switch (priceType) {
       case "per-hour":
-        valueToCheck = bookingDurationInMinutes / 60;
+        // Started hours count for an hour Tarif only: a Tagespauschale is
+        // not billed by the hour, so its bounds take the minutes as they are.
+        valueToCheck = ({ fixedPrice }) =>
+          (fixedPrice ? bookingDurationInMinutes : billedDurationInMinutes) /
+          60;
         break;
       case "per-day":
-        valueToCheck = bookingDurationInMinutes / 60 / 24;
+        valueToCheck = () => bookingDurationInMinutes / 60 / 24;
         break;
       case "per-item":
-        valueToCheck = this.amount;
+        valueToCheck = () => this.amount;
         break;
       case "per-square-meter":
-        valueToCheck = this.amount;
+        valueToCheck = () => this.amount;
         break;
       default:
         return null;
     }
 
-    const category = priceCategoriesToCheck.find(({ interval }) => {
-      const { start, end } = interval;
+    const category = priceCategoriesToCheck.find((pc) => {
+      const { start, end } = pc.interval;
+      const value = valueToCheck(pc);
       return (
-        (start === null || start === "" || start <= valueToCheck) &&
-        (end === null || end === "" || end >= valueToCheck)
+        (start === null || start === "" || start <= value) &&
+        (end === null || end === "" || end >= value)
       );
     });
 
