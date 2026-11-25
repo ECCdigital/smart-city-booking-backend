@@ -60,7 +60,7 @@ describe("the refund preview of a customer's own request", function () {
   const api = () => h.api();
 
   /** A request of the customer for 100 €, beginning in 32 hours. */
-  async function request(bookableId = "request-room") {
+  async function ownRequest(bookableId = "request-room") {
     const timeBegin = Date.now() + 32 * HOUR;
     const res = await api()
       .post(`/api/v2/${TENANT}/checkout`)
@@ -81,7 +81,7 @@ describe("the refund preview of a customer's own request", function () {
       .set(h.as(who));
 
   it("is the tiers for the customer, in the customer's form", async function () {
-    const id = await request();
+    const id = await ownRequest();
 
     const res = await preview(id, CUSTOMER);
 
@@ -101,7 +101,7 @@ describe("the refund preview of a customer's own request", function () {
   });
 
   it("is what the customer's withdrawal stores", async function () {
-    const id = await request();
+    const id = await ownRequest();
 
     const res = await preview(id, CUSTOMER);
     const cancelled = await api()
@@ -124,7 +124,7 @@ describe("the refund preview of a customer's own request", function () {
   });
 
   it("stays the rejection in full for the administration", async function () {
-    const id = await request();
+    const id = await ownRequest();
 
     const res = await preview(id, ADMIN);
 
@@ -140,7 +140,7 @@ describe("the refund preview of a customer's own request", function () {
   });
 
   it("refuses a booking the customer may not cancel: 403 booking_user_cancellation_disabled", async function () {
-    const id = await request("fixed-room");
+    const id = await ownRequest("fixed-room");
 
     const res = await preview(id, CUSTOMER);
 

@@ -525,6 +525,48 @@ components:
           type: string
           nullable: true
 
+    CustomerCancellationRefundPreview:
+      type: object
+      description: |
+        The customer-safe refund preview of the customer's own cancellation:
+        the tenant's tiers, without `origin`, `rejection`, `adminOverride`
+        and `cancelledByUserId`.
+      required:
+        - bookingId
+        - originalAmountEur
+        - suggestedRefundPercentage
+        - appliedRefundPercentage
+        - refundAmountEur
+        - cancellationFeeEur
+      properties:
+        bookingId:
+          type: string
+        originalAmountEur:
+          type: number
+          format: double
+        refundAmountEur:
+          type: number
+          format: double
+        cancellationFeeEur:
+          type: number
+          format: double
+        suggestedRefundPercentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+        appliedRefundPercentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+        hoursBeforeStart:
+          type: integer
+          nullable: true
+          description: Whole hours from the calculation to the start of the booking, rounded down; negative once it has begun.
+        appliedTierHours:
+          type: integer
+          nullable: true
+          description: Threshold of the applied tier in hours.
+
     GroupCancellationRefundPreview:
       type: object
       properties:
