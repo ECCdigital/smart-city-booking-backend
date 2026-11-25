@@ -225,7 +225,6 @@ describe("mail characterization: every notice as it goes out today", function ()
             hookId: "hook-reject-1",
             reason: "Termin verschoben",
             refundPreview: cancellationRefund({ appliedTierHours: 336 }),
-            alreadyPaid: true,
           }),
         ),
       );
@@ -244,13 +243,13 @@ describe("mail characterization: every notice as it goes out today", function ()
               appliedRefundPercentage: 100,
               appliedTierHours: 336,
             }),
-            alreadyPaid: true,
           }),
         ),
       );
     });
 
     it("verification of a cancellation request of an unpaid booking: what drops and what stays due", async function () {
+      given({ bookings: [booking({ status: "payment_due" })] });
       await pin("verify-rejection.unpaid", () =>
         mail.send(
           "VERIFY_BOOKING_REJECTION",

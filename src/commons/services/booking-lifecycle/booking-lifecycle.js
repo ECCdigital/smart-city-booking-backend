@@ -622,7 +622,6 @@ function createBookingLifecycle(adapters) {
         hookId: hook.id,
         reason,
         refundPreview,
-        alreadyPaid: status === STATUS.CONFIRMED,
       }),
     ]);
   }
