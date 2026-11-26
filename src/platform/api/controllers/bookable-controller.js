@@ -2,6 +2,7 @@ const {
   BookableManager,
 } = require("../../../commons/data-managers/bookable-manager");
 const EventManager = require("../../../commons/data-managers/event-manager");
+const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const { Bookable } = require("../../../commons/entities/bookable/bookable");
 const { v4: uuidv4 } = require("uuid");
 const AccessPointManager = require("../../../commons/data-managers/access-point-manager");
@@ -120,7 +121,9 @@ class BookableController {
   /**
    * `GET /bookables/public/:id`: the bookable within the reach of the
    * request - what the public reaches by a direct link (ADR 0003), the
-   * staff's whole - or a 404 that names no reason (spec §5.2).
+   * staff's whole - or a 404 that names no reason (spec §5.2). It carries
+   * the tenant's refund scale as `cancellationRefundTiers`, as the JSON
+   * interface does, so the checkout can show the cancellation terms.
    */
   static async getPublicBookable(request, response, next) {
     const tenant = request.params.tenant;
@@ -156,7 +159,11 @@ class BookableController {
       const [withDetails] = await withLockerDetails(tenant, [
         bookable.withResolvedMediaUrls(),
       ]);
-      response.status(200).send(withDetails);
+      const owner = await TenantManager.getTenant(tenant, scopeOf(request));
+      response.status(200).send({
+        ...withDetails,
+        cancellationRefundTiers: owner?.cancellationRefundTiers || [],
+      });
     } catch (err) {
       if (err instanceof BaseError) {
         return next(err);

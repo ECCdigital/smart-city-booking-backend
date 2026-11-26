@@ -65,6 +65,7 @@ describe("BookableController public routes resolve media references", () => {
 
   it("getPublicBookable serves absolute imgUrl and image urls for media references", async () => {
     sinon.stub(BookableManager, "getBookable").resolves(mediaBookable());
+    sinon.stub(TenantManager, "getTenant").resolves({ id: "tenant-1" });
 
     const response = createMockResponse();
     await BookableController.getPublicBookable(
