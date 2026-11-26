@@ -1,0 +1,50 @@
+{{!
+  The money of a cancellation, fixed in every cancellation mail below the
+  booking details: not part of the tenant's text, so no stored text can
+  leave it out. A paid booking tells what comes back, an unpaid one what
+  drops away and what is still due.
+}}
+{{#with cancellationSettlement}}
+  <h2>Status</h2>
+  <p>
+    {{#if alreadyPaid}}
+      <strong>Bereits bezahlt</strong>:
+      {{priceFormatted originalAmountEur}}
+      <br />
+      Erstattung:
+      {{priceFormatted refundAmountEur}}
+      ({{refundPercentage}}&nbsp;%)
+      {{#if hasCancellationFee}}
+        <br />
+        Einbehaltener Betrag: {{priceFormatted cancellationFeeEur}}
+      {{/if}}
+    {{else}}
+      <strong>Noch nicht bezahlt</strong>
+      <br />
+      Entfallener Betrag:
+      {{priceFormatted refundAmountEur}}
+      von
+      {{priceFormatted originalAmountEur}}
+      ({{refundPercentage}}&nbsp;%)
+      {{#if hasCancellationFee}}
+        <br />
+        Noch ausstehend: {{priceFormatted cancellationFeeEur}}
+      {{/if}}
+    {{/if}}
+  </p>
+  <p>
+    {{#if alreadyPaid}}
+      {{#if refundAmountEur}}
+        Sie bekommen {{priceFormatted refundAmountEur}} zurück.
+      {{else}}
+        Sie bekommen nichts zurück.
+      {{/if}}
+    {{else}}
+      {{#if hasCancellationFee}}
+        Ein Betrag von {{priceFormatted cancellationFeeEur}} ist noch zu zahlen.
+      {{else}}
+        Es fallen für Sie keine Kosten an.
+      {{/if}}
+    {{/if}}
+  </p>
+{{/with}}

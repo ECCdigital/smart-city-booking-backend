@@ -378,7 +378,12 @@ async function render(
   const addRejectionLink = resolve(mailType.addRejectionLink, ctx);
   const withParticipationLink = Boolean(mailType.showsParticipationLink);
   // The payment link is the wrapper's and, on top, a variable of the overrides.
-  const { paymentUrl = null, ...extra } = templateData;
+  // The settlement is the wrapper's alone, not a variable of the overrides.
+  const {
+    paymentUrl = null,
+    cancellationSettlement = null,
+    ...extra
+  } = templateData;
   const { cancelReason = null, rejectionReason = null } = extra;
 
   const variables = overrideVariables({
@@ -416,6 +421,7 @@ async function render(
     paymentUrl,
     cancelReason,
     rejectionReason,
+    cancellationSettlement,
     showFooter: tenant.mailShowSupportFooter !== false,
     supportEmail: tenant.mail,
     messageAfter,

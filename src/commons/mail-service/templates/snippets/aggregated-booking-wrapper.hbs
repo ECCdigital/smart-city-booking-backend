@@ -1,4 +1,4 @@
-{{{message}}}<br />
+{{{message}}}{{#unless cancelReason}}<br />{{/unless}}
 
 {{#if cancelReason}}
   <p>
@@ -42,4 +42,7 @@
     <a href="{{withdrawalUrl}}" rel="noopener">E-Mail mit Ihrem Widerruf</a>.
     Wir prüfen dann Ihr Anliegen und melden uns bei Ihnen.
   </p>
+{{/if}}
+{{#if cancellationSettlement}}
+  {{> cancellationSettlement}}
 {{/if}}

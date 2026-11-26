@@ -41,7 +41,7 @@ Attachments: ST-1.pdf
     <p>Ihre Buchung im Stadthalle Musterstadt wurde storniert.</p><p>Wir erstatten 90,38 € von 120,50 € (75 %, 14 Tage vor Beginn).</p><p>Einbehalt: 30,12 €</p>
     
   </div>
-<br />
+
 
   <p>
     <strong>Hinweis zur Stornierung</strong>:
@@ -96,6 +96,21 @@ Attachments: ST-1.pdf
 
 
 
+
+    <h2>Status</h2>
+    <p>
+        <strong>Bereits bezahlt</strong>:
+        120,50 €
+        <br />
+        Erstattung:
+        90,38 €
+        (75&nbsp;%)
+          <br />
+          Einbehaltener Betrag: 30,12 €
+    </p>
+    <p>
+          Sie bekommen 90,38 € zurück.
+    </p>
 
       
         <hr />

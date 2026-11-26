@@ -118,14 +118,23 @@ const MailType = Object.freeze({
     addRejectionLink: false,
     // The refund is the one recorded at the first booking; paid where it
     // was cancelled from `confirmed`, as the cancellation document reads it.
-    templateData: ({ reason }, { bookings }) => ({
-      cancelReason: reason,
-      ...CancellationRefundService.toMailTemplateData(
+    // `cancellationSettlement` is the wrapper's fixed block of the money,
+    // below the booking details, whatever text the tenant stored.
+    templateData: ({ reason }, { bookings }) => {
+      const refund = CancellationRefundService.toMailTemplateData(
         bookings[0].cancellationRefund,
-      ),
-      alreadyPaid:
-        bookings[0].cancellationRefund?.cancelledFrom === STATUS.CONFIRMED,
-    }),
+      );
+      const alreadyPaid =
+        bookings[0].cancellationRefund?.cancelledFrom === STATUS.CONFIRMED;
+      return {
+        cancelReason: reason,
+        ...refund,
+        alreadyPaid,
+        cancellationSettlement: refund.hasRefundPreview
+          ? { ...refund, alreadyPaid }
+          : null,
+      };
+    },
   },
 
   // The confirmation of a withdrawal the staff accepted; not a

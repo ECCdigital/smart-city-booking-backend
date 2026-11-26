@@ -40,19 +40,9 @@ Attachments:
   <div style="">
     <p>Die nachfolgende Buchung wurde storniert:</p>
 
-  <p>
-      <strong>Entfallener Betrag</strong>:
-      90,38 €
-      von
-      120,50 €
-      (75&nbsp;%)
-        <br />
-        Noch ausstehend: 30,12 €
-  </p>
-
     
   </div>
-<br />
+
 
   <p>
     <strong>Hinweis zur Stornierung</strong>:
@@ -107,6 +97,22 @@ Attachments:
 
 
 
+
+    <h2>Status</h2>
+    <p>
+        <strong>Noch nicht bezahlt</strong>
+        <br />
+        Entfallener Betrag:
+        90,38 €
+        von
+        120,50 €
+        (75&nbsp;%)
+          <br />
+          Noch ausstehend: 30,12 €
+    </p>
+    <p>
+          Ein Betrag von 30,12 € ist noch zu zahlen.
+    </p>
 
       
         <hr />

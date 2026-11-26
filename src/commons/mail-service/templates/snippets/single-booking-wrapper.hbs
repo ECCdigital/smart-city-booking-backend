@@ -1,4 +1,4 @@
-{{{message}}}<br />
+{{{message}}}{{#unless cancelReason}}<br />{{/unless}}
 
 {{#if cancelReason}}
   <p>
@@ -73,4 +73,6 @@
 {{#if qrContent}}
   <br />
   {{{qrContent}}}
+{{/if}}{{#if cancellationSettlement}}
+  {{> cancellationSettlement}}
 {{/if}}

@@ -41,7 +41,7 @@ Attachments: ST-2.pdf
     <p>Ihre Buchung im Stadthalle Musterstadt wurde storniert.</p>
     
   </div>
-<br />
+
 
   <p>
     <strong>Hinweis zur Stornierung</strong>:

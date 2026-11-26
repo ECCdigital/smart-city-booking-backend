@@ -1,4 +1,6 @@
 const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
 const Handlebars = require("handlebars");
 const bunyan = require("bunyan");
 const TenantManager = require("../data-managers/tenant-manager");
@@ -33,6 +35,15 @@ Handlebars.registerPartial(
     <a href="mailto:{{supportEmail}}">kontaktieren</a>.
   </p>
 `,
+);
+
+// The money of a cancellation, below the booking details of both wrappers.
+Handlebars.registerPartial(
+  "cancellationSettlement",
+  fs.readFileSync(
+    path.join(__dirname, "templates", "cancellation-settlement.hbs"),
+    "utf-8",
+  ),
 );
 
 const logger = bunyan.createLogger({
