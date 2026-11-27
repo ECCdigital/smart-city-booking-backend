@@ -28,6 +28,10 @@ const HEADER_COLORS = Object.freeze(["neutral", "primary", "secondary"]);
 // The sizes of the logo on the sign-in pages.
 const AUTH_LOGO_SIZES = Object.freeze(["sm", "md", "lg"]);
 
+// The surface of the cards on the sign-in pages: translucent and blurred over
+// the Background, or opaque.
+const AUTH_CARD_STYLES = Object.freeze(["glass", "solid"]);
+
 // The sizes of a footer logo, and how many logos the footer holds.
 const FOOTER_LOGO_SIZES = Object.freeze(["sm", "md", "lg"]);
 const MAX_FOOTER_LOGOS = 12;
@@ -46,6 +50,7 @@ function defaultBranding() {
     },
     header: "primary",
     authLogoSize: "sm",
+    authCardStyle: "glass",
     footerLogos: [],
     // The system font; see `branding-font.js`.
     font: null,
@@ -276,6 +281,7 @@ function normalizeBranding(branding) {
   checkAccent(branding, errors, path);
   checkEnum(branding, "header", HEADER_COLORS, errors, path);
   checkEnum(branding, "authLogoSize", AUTH_LOGO_SIZES, errors, path);
+  checkEnum(branding, "authCardStyle", AUTH_CARD_STYLES, errors, path);
   const logoDark = readMediaReference(
     branding.logoDark,
     errors,

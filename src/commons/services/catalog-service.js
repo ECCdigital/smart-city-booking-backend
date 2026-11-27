@@ -101,20 +101,21 @@ function activeLogoDark(branding) {
 
 /**
  * The appearance settings of the branding the Theme Bundle delivers beside the
- * theme: the header and the logo size of the sign-in pages. Like the theme
- * they follow `branding.active`, but where the theme goes out as null these go
- * out as their defaults, so the storefront always reads a value. The stored
- * values stay untouched.
+ * theme: the header, the logo size and the card style of the sign-in pages.
+ * Like the theme they follow `branding.active`, but where the theme goes out
+ * as null these go out as their defaults, so the storefront always reads a
+ * value. The stored values stay untouched.
  *
  * @param {?Object} branding - The instance branding.
- * @returns {{header: string, authLogoSize: string}} The settings in force.
+ * @returns {{header: string, authLogoSize: string, authCardStyle: string}}
+ *   The settings in force.
  */
 function activeAppearance(branding) {
-  const { header, authLogoSize } = withBrandingDefaults(
+  const { header, authLogoSize, authCardStyle } = withBrandingDefaults(
     branding?.active ? branding : null,
   );
 
-  return { header, authLogoSize };
+  return { header, authLogoSize, authCardStyle };
 }
 
 /**
