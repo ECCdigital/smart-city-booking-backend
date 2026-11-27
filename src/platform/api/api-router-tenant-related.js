@@ -300,6 +300,11 @@ router.put(
   authorize("booking", "update"),
   BookingController.setRefundState,
 );
+router.put(
+  "/bookings/:id/payment-state",
+  authorize("booking", "update"),
+  BookingController.setPaymentState,
+);
 router.get(
   "/bookings/:id/cancellation-refund-preview",
   authorize("booking", "cancel"),

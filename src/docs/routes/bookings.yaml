@@ -463,6 +463,55 @@
           state: it is not cancelled, was cancelled unpaid or without a
           refund amount, or was cancelled before this feature
 
+/api/{tenant}/bookings/{bookingId}/payment-state:
+  put:
+    tags:
+      - Bookings
+    summary: Set the payment state of a cancelled booking
+    description: |
+      A booking cancelled before it was paid, with a cancellation fee above
+      zero, carries a payment state at its refund audit,
+      `cancellationRefund.paymentState`: `open` from the cancellation on,
+      `completed` once the administration has received the fee. This route
+      sets it by hand. `completed` records `paymentCompletedAt` and
+      `paymentCompletedByUserId` (a repeated `completed` keeps the first
+      mark), `open` drops both. The booking's state stays; a reinstatement
+      removes the payment state with the refund audit. Needs
+      `manageBookings.updateAny`. Under the reach `own` a booking is
+      answered without it.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/BookingTenantParam"
+      - $ref: "#/components/parameters/BookingIdParam"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [paymentState]
+            properties:
+              paymentState:
+                type: string
+                enum: [open, completed]
+    responses:
+      "200":
+        description: The booking as stored, with the payment state
+      "400":
+        description: "`invalid_payment_state` - `paymentState` is neither `open` nor `completed`"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Missing booking management permission
+      "404":
+        description: "`booking_not_found`"
+      "409":
+        description: >-
+          `payment_state_not_applicable` - the booking carries no payment
+          state: it is not cancelled, was cancelled after its payment or
+          without a fee, or was cancelled before this feature
+
 components:
   parameters:
     BookingTenantParam:

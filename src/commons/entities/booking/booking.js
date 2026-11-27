@@ -296,9 +296,9 @@ class Booking {
   }
 
   /**
-   * Drops the refund state (glossary "Erstattungsstand") for a reader who
-   * is not the administration: the booker gets the refund audit, never
-   * whether the refund was paid out.
+   * Drops the refund state (glossary "Erstattungsstand") and the payment
+   * state for a reader who is not the administration: the booker gets the
+   * refund audit, never whether the refund was paid out or the fee received.
    * @returns {Booking} this (for chaining)
    */
   hideRefundState() {
@@ -307,6 +307,9 @@ class Booking {
       delete audit.refundState;
       delete audit.refundCompletedAt;
       delete audit.refundCompletedByUserId;
+      delete audit.paymentState;
+      delete audit.paymentCompletedAt;
+      delete audit.paymentCompletedByUserId;
       this.cancellationRefund = audit;
     }
     return this;

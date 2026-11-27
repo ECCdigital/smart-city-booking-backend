@@ -454,26 +454,70 @@ class BookingManager {
     { refundState, completedAt, completedByUserId = null },
     scope,
   ) {
+    return BookingManager._setSettlementState(
+      "refund",
+      tenantId,
+      bookingId,
+      { state: refundState, completedAt, completedByUserId },
+      scope,
+    );
+  }
+
+  /**
+   * Sets the payment state of a booking that carries one - the fee an
+   * unpaid booking owes after its cancellation - as `setRefundState` does
+   * the refund state.
+   *
+   * @param {string} tenantId Tenant ID
+   * @param {string} bookingId Booking ID
+   * @param {{ paymentState: string, completedAt?: number, completedByUserId?: string|null }} state
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller writes under (ADR 0002)
+   * @returns {Promise<Booking|null>} The booking as written, or null
+   */
+  static async setPaymentState(
+    tenantId,
+    bookingId,
+    { paymentState, completedAt, completedByUserId = null },
+    scope,
+  ) {
+    return BookingManager._setSettlementState(
+      "payment",
+      tenantId,
+      bookingId,
+      { state: paymentState, completedAt, completedByUserId },
+      scope,
+    );
+  }
+
+  /**
+   * The one write of `setRefundState` and `setPaymentState`: the fields
+   * `<kind>State`, `<kind>CompletedAt` and `<kind>CompletedByUserId` of the
+   * refund audit.
+   */
+  static async _setSettlementState(
+    kind,
+    tenantId,
+    bookingId,
+    { state, completedAt, completedByUserId },
+    scope,
+  ) {
+    const stateField = `cancellationRefund.${kind}State`;
     const completion = {
-      "cancellationRefund.refundCompletedAt": completedAt,
-      "cancellationRefund.refundCompletedByUserId": completedByUserId,
+      [`cancellationRefund.${kind}CompletedAt`]: completedAt,
+      [`cancellationRefund.${kind}CompletedByUserId`]: completedByUserId,
     };
     const rawBooking = await BookingModel.findOneAndUpdate(
       {
         id: bookingId,
         tenantId: tenantId,
-        "cancellationRefund.refundState": { $exists: true, $ne: refundState },
+        [stateField]: { $exists: true, $ne: state },
         ...condition(scope),
       },
-      refundState === REFUND_STATE.COMPLETED
-        ? {
-            $set: {
-              "cancellationRefund.refundState": refundState,
-              ...completion,
-            },
-          }
+      state === REFUND_STATE.COMPLETED
+        ? { $set: { [stateField]: state, ...completion } }
         : {
-            $set: { "cancellationRefund.refundState": refundState },
+            $set: { [stateField]: state },
             $unset: Object.fromEntries(
               Object.keys(completion).map((field) => [field, ""]),
             ),

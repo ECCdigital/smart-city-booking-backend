@@ -93,6 +93,15 @@ const cancellationRefundSchema = cancellationAuditSchema.clone().add({
   },
   refundCompletedAt: { type: Double, default: undefined },
   refundCompletedByUserId: { type: String, default: undefined },
+  // The fee an unpaid booking still owes after its cancellation: `open`
+  // until the administration marks it paid, present only where one is owed.
+  paymentState: {
+    type: String,
+    enum: Object.values(REFUND_STATE),
+    default: undefined,
+  },
+  paymentCompletedAt: { type: Double, default: undefined },
+  paymentCompletedByUserId: { type: String, default: undefined },
 });
 
 const attachmentSchemaDefinition = {

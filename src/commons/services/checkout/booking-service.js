@@ -482,11 +482,70 @@ class BookingService {
     scope,
   ) {
     CancellationRefundService.validateRefundState(refundState);
-
-    const booking = await BookingManager.setRefundState(
+    return this._setSettlementState(
+      {
+        write: (...args) => BookingManager.setRefundState(...args),
+        field: "refundState",
+        conflict: "refund_state_not_applicable",
+      },
       tenantId,
       bookingId,
-      { refundState, completedAt: Date.now(), completedByUserId: userId },
+      { refundState, userId },
+      scope,
+    );
+  }
+
+  /**
+   * Sets the payment state of a cancelled booking: the administration marks
+   * the fee an unpaid booking still owes as received, with the moment and
+   * the person, or takes that back. No lifecycle transition.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {{ paymentState: string, userId?: string|null }} state
+   * @param {{reach: string, userId?: string|null}} scope The route's reach
+   * @returns {Promise<Booking>} The booking as written
+   * @throws {BadRequestError} `invalid_payment_state`
+   * @throws {NotFoundError} `booking_not_found`
+   * @throws {ConflictError} `payment_state_not_applicable` for a booking
+   *   that carries no payment state
+   */
+  static async setPaymentState(
+    tenantId,
+    bookingId,
+    { paymentState, userId = null },
+    scope,
+  ) {
+    CancellationRefundService.validatePaymentState(paymentState);
+    return this._setSettlementState(
+      {
+        write: (...args) => BookingManager.setPaymentState(...args),
+        field: "paymentState",
+        conflict: "payment_state_not_applicable",
+      },
+      tenantId,
+      bookingId,
+      { paymentState, userId },
+      scope,
+    );
+  }
+
+  /**
+   * The one flow of `setRefundState` and `setPaymentState`: the write, and
+   * where it matched nothing, whether the booking is missing, already in
+   * that state - the first mark stands - or carries no such state.
+   */
+  static async _setSettlementState(
+    { write, field, conflict },
+    tenantId,
+    bookingId,
+    { userId, ...state },
+    scope,
+  ) {
+    const booking = await write(
+      tenantId,
+      bookingId,
+      { ...state, completedAt: Date.now(), completedByUserId: userId },
       scope,
     );
     if (booking) {
@@ -501,11 +560,10 @@ class BookingService {
     if (!existing) {
       throw new NotFoundError("booking_not_found", { bookingId });
     }
-    // Already in that state: nothing was written, the first mark stands.
-    if (existing.cancellationRefund?.refundState === refundState) {
+    if (existing.cancellationRefund?.[field] === state[field]) {
       return existing;
     }
-    throw new ConflictError("refund_state_not_applicable", { bookingId });
+    throw new ConflictError(conflict, { bookingId });
   }
 
   /**

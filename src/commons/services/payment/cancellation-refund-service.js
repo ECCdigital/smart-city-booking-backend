@@ -104,10 +104,27 @@ class CancellationRefundService {
   }
 
   /**
+   * Whether the customer still owes the share kept: a booking cancelled
+   * before it was paid, with a fee above zero.
+   *
+   * @param {Object} calculation What `calculate` answered
+   * @param {string} cancelledFrom The state the booking is cancelled from
+   * @returns {boolean}
+   */
+  static isPaymentDue(calculation, cancelledFrom) {
+    return (
+      !!cancelledFrom &&
+      cancelledFrom !== STATUS.CONFIRMED &&
+      (Number(calculation?.cancellationFeeEur) || 0) > 0
+    );
+  }
+
+  /**
    * The refund audit a booking carries from its cancellation on: the
    * calculation, the state it was cancelled from where it is cancelled
    * (glossary "Wiederherstellung" returns to it; a rejected request has
-   * none) or withdrawn, and the open refund state where a refund is due.
+   * none) or withdrawn, the open refund state where a refund is due and
+   * the open payment state where the fee of an unpaid booking is owed.
    *
    * @param {Object} calculation What `calculate` answered
    * @param {{ status: string, cancelledFrom: string }} transition The state
@@ -123,6 +140,10 @@ class CancellationRefundService {
       ...(this.isRefundDue(calculation, cancelledFrom) && {
         refundState: REFUND_STATE.OPEN,
       }),
+      ...(status === STATUS.CANCELLED &&
+        this.isPaymentDue(calculation, cancelledFrom) && {
+          paymentState: REFUND_STATE.OPEN,
+        }),
     };
   }
 
@@ -131,8 +152,32 @@ class CancellationRefundService {
    * @throws {BadRequestError} `invalid_refund_state` unless it is one
    */
   static validateRefundState(refundState) {
-    if (!Object.values(REFUND_STATE).includes(refundState)) {
-      throw new BadRequestError("invalid_refund_state", { refundState });
+    this._validateSettlementState("refund", refundState);
+  }
+
+  /**
+   * The payment state takes the refund state's values: `open` while the
+   * fee is owed, `completed` once the administration marks it paid.
+   *
+   * @param {*} paymentState The value a request names as payment state
+   * @throws {BadRequestError} `invalid_payment_state` unless it is one
+   */
+  static validatePaymentState(paymentState) {
+    this._validateSettlementState("payment", paymentState);
+  }
+
+  /**
+   * The one check of `validateRefundState` and `validatePaymentState`: a
+   * value of `REFUND_STATE`, or `invalid_<kind>_state`.
+   *
+   * @param {"refund"|"payment"} kind
+   * @param {*} state The value a request names
+   */
+  static _validateSettlementState(kind, state) {
+    if (!Object.values(REFUND_STATE).includes(state)) {
+      throw new BadRequestError(`invalid_${kind}_state`, {
+        [`${kind}State`]: state,
+      });
     }
   }
 

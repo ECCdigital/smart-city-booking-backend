@@ -671,18 +671,45 @@ class BookingController {
    * 409 `refund_state_not_applicable` for a booking without a refund state.
    */
   static async setRefundState(request, response) {
+    return BookingController._setSettlementState("refund", request, response);
+  }
+
+  /**
+   * Sets the payment state of a cancelled booking: the body names
+   * `paymentState`, `completed` once the fee an unpaid booking still owes
+   * is received, `open` to take that back. Answers the booking; 409
+   * `payment_state_not_applicable` for a booking without a payment state.
+   */
+  static async setPaymentState(request, response) {
+    return BookingController._setSettlementState("payment", request, response);
+  }
+
+  /**
+   * The one handler of `setRefundState` and `setPaymentState`: the body
+   * names `<kind>State`, the service writes it with the caller as the
+   * person who marked it.
+   *
+   * @param {"refund"|"payment"} kind
+   */
+  static async _setSettlementState(kind, request, response) {
+    const field = `${kind}State`;
     try {
       const { tenant, id } = request.params;
       const { user } = request;
 
-      const booking = await BookingService.setRefundState(
+      const set =
+        kind === "refund"
+          ? BookingService.setRefundState
+          : BookingService.setPaymentState;
+      const booking = await set.call(
+        BookingService,
         tenant,
         id,
-        { refundState: request.body?.refundState, userId: user?.id },
+        { [field]: request.body?.[field], userId: user?.id },
         scopeOf(request),
       );
       logger.info(
-        `${tenant} -- refund of booking ${id} set to ${booking.cancellationRefund.refundState} by user ${user?.id}`,
+        `${tenant} -- ${kind} state of booking ${id} set to ${booking.cancellationRefund[field]} by user ${user?.id}`,
       );
       return response.status(200).send(booking);
     } catch (err) {
@@ -690,7 +717,7 @@ class BookingController {
         return ApiResponse.fail(response, err);
       }
       logger.error(err);
-      return response.status(500).send("Could not set refund state");
+      return response.status(500).send(`Could not set ${kind} state`);
     }
   }
 
