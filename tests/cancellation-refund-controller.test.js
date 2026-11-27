@@ -9,6 +9,7 @@ const {
 const BookingManager = require("../src/commons/data-managers/booking-manager");
 const GroupBookingManager = require("../src/commons/data-managers/group-booking-manager");
 const BookingService = require("../src/commons/services/checkout/booking-service");
+const { ForbiddenError } = require("../src/errors/BaseError");
 
 function response(sandbox) {
   return {
@@ -90,6 +91,70 @@ describe("cancellation refund controllers", function () {
       reach: "own",
       userId: "erika",
     });
+  });
+
+  it("answers the customer's preview under the reach own", async function () {
+    const booking = { id: "booking-1", tenantId: "tenant-1" };
+    const preview = {
+      bookingId: "booking-1",
+      appliedRefundPercentage: 50,
+      appliedTierHours: 24,
+    };
+    sandbox.stub(BookingManager, "getBooking").resolves(booking);
+    const userPreview = sandbox
+      .stub(BookingService, "getUserCancellationRefundPreview")
+      .resolves(preview);
+    const adminPreview = sandbox.stub(
+      BookingService,
+      "getCancellationRefundPreview",
+    );
+    const res = response(sandbox);
+
+    await BookingController.getCancellationRefundPreview(
+      {
+        params: { tenant: "tenant-1", id: "booking-1" },
+        user: { id: "erika" },
+        reach: "own",
+        principal: { userId: "erika" },
+      },
+      res,
+    );
+
+    assert.strictEqual(res.status.calledWith(200), true);
+    assert.strictEqual(res.send.calledWith(preview), true);
+    assert.deepStrictEqual(userPreview.firstCall.args, [
+      "tenant-1",
+      "booking-1",
+    ]);
+    assert.strictEqual(adminPreview.called, false);
+  });
+
+  it("refuses the customer's preview of a booking they may not cancel", async function () {
+    sandbox
+      .stub(BookingManager, "getBooking")
+      .resolves({ id: "booking-1", tenantId: "tenant-1" });
+    sandbox.stub(BookingService, "getUserCancellationRefundPreview").rejects(
+      new ForbiddenError("booking_user_cancellation_disabled", {
+        bookingId: "booking-1",
+      }),
+    );
+    const res = response(sandbox);
+
+    await BookingController.getCancellationRefundPreview(
+      {
+        params: { tenant: "tenant-1", id: "booking-1" },
+        user: { id: "erika" },
+        reach: "own",
+        principal: { userId: "erika" },
+      },
+      res,
+    );
+
+    assert.strictEqual(res.status.calledWith(403), true);
+    assert.strictEqual(
+      res.send.calledWith("booking_user_cancellation_disabled"),
+      true,
+    );
   });
 
   it("rejects an invalid single-booking admin override", async function () {
